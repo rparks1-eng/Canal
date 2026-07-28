@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Crypto from "expo-crypto";
 
 import type {
   StoredScene,
@@ -293,14 +294,7 @@ function normalizePlayerSession(
 }
 
 function createId(): string {
-  return (
-    "player-" +
-    Date.now().toString(36) +
-    "-" +
-    Math.random()
-      .toString(36)
-      .slice(2, 8)
-  );
+  return `player-${Crypto.randomUUID()}`;
 }
 
 async function getCurrentPlayerOwnerId(): Promise<string> {

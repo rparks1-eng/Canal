@@ -42,6 +42,32 @@ import type {
   StoredScene,
 } from "../lib/scenes";
 
+let mockCryptoIdSequence =
+  0;
+
+jest.mock(
+  "expo-crypto",
+  () => ({
+    randomUUID:
+      jest.fn(
+        () => {
+          mockCryptoIdSequence +=
+            1;
+
+          return (
+            "00000000-0000-4000-8000-" +
+            mockCryptoIdSequence
+              .toString(16)
+              .padStart(
+                12,
+                "0",
+              )
+          );
+        },
+      ),
+  }),
+);
+
 jest.mock(
   "../lib/supabase",
   () => ({
@@ -189,6 +215,12 @@ describe(
           elapsedSeconds: 0,
           trackElapsedSeconds: 0,
         });
+
+        expect(
+          session.id,
+        ).toMatch(
+          /^player-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        );
 
         await expect(
           readPlayerSession(),
