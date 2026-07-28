@@ -241,6 +241,216 @@ assert.match(
   /EXPO_PUBLIC_SPOTIFY_CLIENT_ID=abcdef1234567890abcdef1234567890/,
 );
 
+assert.equal(
+  fs.statSync(
+    path.join(
+      recoveryTarget,
+      ".env.local",
+    ),
+  ).mode &
+    0o777,
+  0o600,
+);
+
+const recoveryReplacementTarget =
+  fs.mkdtempSync(
+    path.join(
+      os.tmpdir(),
+      "canal-config-replacement-target-",
+    ),
+  );
+
+fs.writeFileSync(
+  path.join(
+    recoveryReplacementTarget,
+    ".env.local",
+  ),
+  [
+    "KEEP_EXISTING_CONFIGURATION=true",
+    "EXPO_PUBLIC_SPOTIFY_CLIENT_ID=invalid-client-id-with-a-long-stale-tail",
+    "KEEP_TRAILING_CONFIGURATION=true",
+    "",
+  ].join(
+    "\n",
+  ),
+  {
+    mode: 0o666,
+  },
+);
+
+const recoveryReplacementResult =
+  spawnSync(
+    process.execPath,
+    [
+      recoveryScript,
+      recoveryReplacementTarget,
+      recoverySource,
+    ],
+    {
+      encoding: "utf8",
+      env: baseEnvironment,
+    },
+  );
+
+assert.equal(
+  recoveryReplacementResult.status,
+  0,
+  recoveryReplacementResult.stderr,
+);
+
+assert.equal(
+  fs.readFileSync(
+    path.join(
+      recoveryReplacementTarget,
+      ".env.local",
+    ),
+    "utf8",
+  ),
+  [
+    "KEEP_EXISTING_CONFIGURATION=true",
+    `EXPO_PUBLIC_SPOTIFY_CLIENT_ID=${recoveredClientId}`,
+    "KEEP_TRAILING_CONFIGURATION=true",
+    "",
+  ].join(
+    "\n",
+  ),
+);
+
+assert.equal(
+  fs.statSync(
+    path.join(
+      recoveryReplacementTarget,
+      ".env.local",
+    ),
+  ).mode &
+    0o777,
+  0o600,
+);
+
+assert.equal(
+  `${recoveryReplacementResult.stdout}${recoveryReplacementResult.stderr}`.includes(
+    recoveredClientId,
+  ),
+  false,
+);
+
+const symlinkTarget =
+  fs.mkdtempSync(
+    path.join(
+      os.tmpdir(),
+      "canal-config-symlink-target-",
+    ),
+  );
+
+const symlinkVictim =
+  path.join(
+    symlinkTarget,
+    "shared-environment",
+  );
+
+const symlinkSentinel =
+  "KEEP_EXISTING_CONFIGURATION=true\n";
+
+fs.writeFileSync(
+  symlinkVictim,
+  symlinkSentinel,
+);
+
+fs.symlinkSync(
+  symlinkVictim,
+  path.join(
+    symlinkTarget,
+    ".env.local",
+  ),
+);
+
+const symlinkRecoveryResult =
+  spawnSync(
+    process.execPath,
+    [
+      recoveryScript,
+      symlinkTarget,
+      recoverySource,
+    ],
+    {
+      encoding: "utf8",
+      env: baseEnvironment,
+    },
+  );
+
+assert.notEqual(
+  symlinkRecoveryResult.status,
+  0,
+);
+
+assert.match(
+  symlinkRecoveryResult.stderr,
+  /symbolic .env.local link/,
+);
+
+assert.equal(
+  fs.readFileSync(
+    symlinkVictim,
+    "utf8",
+  ),
+  symlinkSentinel,
+);
+
+assert.equal(
+  `${symlinkRecoveryResult.stdout}${symlinkRecoveryResult.stderr}`.includes(
+    recoveredClientId,
+  ),
+  false,
+);
+
+const recoveryCreationTarget =
+  fs.mkdtempSync(
+    path.join(
+      os.tmpdir(),
+      "canal-config-creation-target-",
+    ),
+  );
+
+const recoveryCreationResult =
+  spawnSync(
+    process.execPath,
+    [
+      recoveryScript,
+      recoveryCreationTarget,
+      recoverySource,
+    ],
+    {
+      encoding: "utf8",
+      env: baseEnvironment,
+    },
+  );
+
+assert.equal(
+  recoveryCreationResult.status,
+  0,
+  recoveryCreationResult.stderr,
+);
+
+assert.equal(
+  fs.readFileSync(
+    path.join(
+      recoveryCreationTarget,
+      ".env.local",
+    ),
+    "utf8",
+  ).match(
+    /^EXPO_PUBLIC_SPOTIFY_CLIENT_ID=/gm,
+  )?.length,
+  1,
+);
+
+assert.equal(
+  `${recoveryCreationResult.stdout}${recoveryCreationResult.stderr}`.includes(
+    recoveredClientId,
+  ),
+  false,
+);
+
 console.log(
   "Canal configuration preflight tests passed.",
 );

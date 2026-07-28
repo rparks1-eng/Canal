@@ -2,6 +2,9 @@
 
 const fs =
   require("node:fs");
+const {
+  Buffer,
+} = require("node:buffer");
 const os =
   require("node:os");
 const path =
@@ -184,41 +187,134 @@ const targetFile =
     ".env.local",
   );
 
-const currentContents =
-  fs.existsSync(
-    targetFile,
-  )
-    ? fs.readFileSync(
-        targetFile,
-        "utf8",
-      )
-    : "";
+const targetFlags =
+  fs.constants.O_RDWR |
+  fs.constants.O_CREAT |
+  (
+    fs.constants
+      .O_NOFOLLOW ??
+    0
+  );
 
-const clientIdLine =
-  `EXPO_PUBLIC_SPOTIFY_CLIENT_ID=${recoveredClientId}`;
+let targetDescriptor;
 
-const updatedContents =
-  /^EXPO_PUBLIC_SPOTIFY_CLIENT_ID\s*=.*$/m.test(
-    currentContents,
-  )
-    ? currentContents.replace(
-        /^EXPO_PUBLIC_SPOTIFY_CLIENT_ID\s*=.*$/m,
-        clientIdLine,
-      )
-    : `${
-        currentContents.replace(
-          /\s*$/,
-          "",
+try {
+  targetDescriptor =
+    fs.openSync(
+      targetFile,
+      targetFlags,
+      0o600,
+    );
+} catch (error) {
+  if (
+    error &&
+    typeof error ===
+      "object" &&
+    error.code ===
+      "ELOOP"
+  ) {
+    console.error(
+      "Refusing to recover Spotify configuration through a symbolic .env.local link.",
+    );
+
+    process.exit(1);
+  }
+
+  throw error;
+}
+
+try {
+  const targetStats =
+    fs.fstatSync(
+      targetDescriptor,
+    );
+
+  if (
+    !targetStats.isFile()
+  ) {
+    throw new Error(
+      "Canal's .env.local path must be a regular file.",
+    );
+  }
+
+  fs.fchmodSync(
+    targetDescriptor,
+    0o600,
+  );
+
+  const currentContents =
+    fs.readFileSync(
+      targetDescriptor,
+      "utf8",
+    );
+
+  const clientIdLine =
+    `EXPO_PUBLIC_SPOTIFY_CLIENT_ID=${recoveredClientId}`;
+
+  const updatedContents =
+    /^EXPO_PUBLIC_SPOTIFY_CLIENT_ID\s*=.*$/m.test(
+      currentContents,
+    )
+      ? currentContents.replace(
+          /^EXPO_PUBLIC_SPOTIFY_CLIENT_ID\s*=.*$/m,
+          clientIdLine,
         )
-      }\n${clientIdLine}\n`;
+      : `${
+          currentContents.replace(
+            /\s*$/,
+            "",
+          )
+        }\n${clientIdLine}\n`;
 
-fs.writeFileSync(
-  targetFile,
-  updatedContents,
-  {
-    mode: 0o600,
-  },
-);
+  const updatedBuffer =
+    Buffer.from(
+      updatedContents,
+      "utf8",
+    );
+
+  let bytesWritten =
+    0;
+
+  while (
+    bytesWritten <
+    updatedBuffer.length
+  ) {
+    const nextWrite =
+      fs.writeSync(
+        targetDescriptor,
+        updatedBuffer,
+        bytesWritten,
+        updatedBuffer.length -
+          bytesWritten,
+        bytesWritten,
+      );
+
+    if (
+      nextWrite ===
+      0
+    ) {
+      throw new Error(
+        "Canal could not finish writing .env.local.",
+      );
+    }
+
+    bytesWritten +=
+      nextWrite;
+  }
+
+  fs.ftruncateSync(
+    targetDescriptor,
+    updatedBuffer.length,
+  );
+
+  fs.fsyncSync(
+    targetDescriptor,
+  );
+} finally {
+  fs.closeSync(
+    targetDescriptor,
+  );
+}
 
 console.log(
   `Recovered Canal's Spotify client ID from ${recoveredFrom}.`,
