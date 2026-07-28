@@ -1,10 +1,18 @@
 import {
   mergeActivityItems,
+  recordActivity,
 } from "../lib/relationships";
+import {
+  mockStorage,
+} from "./helpers/async-storage-mock";
 
 describe(
   "activity synchronization",
   () => {
+    beforeEach(() => {
+      mockStorage.clear();
+    });
+
     it(
       "deduplicates cloud and device activity while preferring cloud state",
       () => {
@@ -67,6 +75,30 @@ describe(
           syncStatus:
             "synced",
         });
+      },
+    );
+
+    it(
+      "keeps the local fallback when cloud services are not configured",
+      async () => {
+        const activity =
+          await recordActivity({
+            type: "scene",
+            title:
+              "Created Focus",
+            description:
+              "Saved locally.",
+          });
+
+        expect(
+          activity.syncStatus,
+        ).toBeUndefined();
+
+        expect(
+          mockStorage.has(
+            "@canal/activity",
+          ),
+        ).toBe(true);
       },
     );
   },
