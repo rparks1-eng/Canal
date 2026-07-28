@@ -43,6 +43,59 @@ resolve_expo_cmd() {
   fi
 }
 
+read_public_env() {
+  local key="$1"
+  local shell_value="${!key:-}"
+
+  if [[ -n "$shell_value" ]]; then
+    printf '%s' "$shell_value"
+    return
+  fi
+
+  local env_file
+  for env_file in "$ROOT_DIR/.env.local" "$ROOT_DIR/.env"; do
+    if [[ -f "$env_file" ]]; then
+      awk -v key="$key" '
+        index($0, key "=") == 1 {
+          value = substr($0, length(key) + 2)
+          sub(/\r$/, "", value)
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+          if (
+            (substr(value, 1, 1) == "\"" && substr(value, length(value), 1) == "\"") ||
+            (substr(value, 1, 1) == "\047" && substr(value, length(value), 1) == "\047")
+          ) {
+            value = substr(value, 2, length(value) - 2)
+          }
+          print value
+          exit
+        }
+      ' "$env_file"
+      return
+    fi
+  done
+}
+
+validate_supabase_env() {
+  local supabase_url
+  local supabase_key
+
+  supabase_url="$(read_public_env EXPO_PUBLIC_SUPABASE_URL)"
+  supabase_key="$(read_public_env EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY)"
+
+  if [[ "$supabase_url" != https://*.supabase.co ]]; then
+    echo "Canal configuration is incomplete." >&2
+    echo "Set EXPO_PUBLIC_SUPABASE_URL in $ROOT_DIR/.env.local." >&2
+    exit 1
+  fi
+
+  if [[ "$supabase_key" != sb_publishable_* && "$supabase_key" != eyJ* ]]; then
+    echo "Canal configuration is incomplete." >&2
+    echo "Set EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY in $ROOT_DIR/.env.local." >&2
+    echo "Use a publishable or legacy anon key, never a secret or service-role key." >&2
+    exit 1
+  fi
+}
+
 run_doctor() {
   npx expo-doctor
 }
@@ -51,6 +104,7 @@ resolve_expo_cmd
 
 case "$MODE" in
   start|run)
+    validate_supabase_env
     exec "${EXPO_CMD[@]}" start
     ;;
   --ios|ios)
@@ -59,6 +113,7 @@ case "$MODE" in
       echo "Use './script/build_and_run.sh --web' in this environment." >&2
       exit 1
     fi
+    validate_supabase_env
     exec "${EXPO_CMD[@]}" start --ios
     ;;
   --build-ios|build-ios)
@@ -66,18 +121,23 @@ case "$MODE" in
       echo "Build iOS Simulator requires macOS with Xcode and Apple Simulator installed." >&2
       exit 1
     fi
+    validate_supabase_env
     exec "${EXPO_CMD[@]}" run:ios
     ;;
   --android|android)
+    validate_supabase_env
     exec "${EXPO_CMD[@]}" start --android
     ;;
   --web|web)
+    validate_supabase_env
     exec "${EXPO_CMD[@]}" start --web
     ;;
   --dev-client|dev-client)
+    validate_supabase_env
     exec "${EXPO_CMD[@]}" start --dev-client
     ;;
   --tunnel|tunnel)
+    validate_supabase_env
     exec "${EXPO_CMD[@]}" start --tunnel
     ;;
   --export-web|export-web)
