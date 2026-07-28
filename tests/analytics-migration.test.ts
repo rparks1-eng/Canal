@@ -112,6 +112,18 @@ describe(
         expect(
           migration,
         ).toMatch(
+          /occurred_at >= created_at - interval '7 days'[\s\S]*occurred_at <= created_at [+] interval '5 minutes'/i,
+        );
+
+        expect(
+          migration,
+        ).not.toMatch(
+          /analytics_events_client_time_check[\s\S]{0,300}occurred_at >= now[(][)]/i,
+        );
+
+        expect(
+          migration,
+        ).toMatch(
           /cron[.]schedule[\s\S]*canal-analytics-retention[\s\S]*delete from public[.]analytics_events[\s\S]*expires_at <= now[(][)]/i,
         );
       },

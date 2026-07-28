@@ -259,12 +259,20 @@ function ensureAuthListener(): void {
       _event,
       session,
     ) => {
-      authGeneration +=
-        1;
-
-      observedUserId =
+      const nextUserId =
         session?.user.id ??
         null;
+
+      if (
+        nextUserId !==
+        observedUserId
+      ) {
+        authGeneration +=
+          1;
+
+        observedUserId =
+          nextUserId;
+      }
     },
   );
 }
@@ -685,10 +693,15 @@ async function readQueue(
         parsedValue,
       )
     ) {
+      await writeQueue(
+        [],
+      );
+
       return [];
     }
 
-    return parsedValue
+    const normalizedQueue =
+      parsedValue
       .map(
         (item) =>
           normalizeQueuedEvent(
@@ -703,7 +716,22 @@ async function readQueue(
           QueuedAnalyticsEvent =>
           item !== null,
       );
+
+    if (
+      normalizedQueue.length !==
+      parsedValue.length
+    ) {
+      await writeQueue(
+        normalizedQueue,
+      );
+    }
+
+    return normalizedQueue;
   } catch {
+    await writeQueue(
+      [],
+    );
+
     return [];
   }
 }
@@ -758,17 +786,26 @@ async function isCloudDeletionPending(
 }
 
 async function removeQueuedEventsForUser(
-  userId: string,
+  account:
+    AnalyticsAccount,
 ): Promise<void> {
   const queue =
     await readQueue();
+
+  await assertAnalyticsAccount(
+    account,
+  );
 
   await writeQueue(
     queue.filter(
       (event) =>
         event.userId !==
-        userId,
+        account.userId,
     ),
+  );
+
+  await assertAnalyticsAccount(
+    account,
   );
 }
 
@@ -1179,21 +1216,29 @@ export async function readAnalyticsControlState(): Promise<AnalyticsControlState
       const queue =
         await readQueue();
 
+      const enabled =
+        await readConsent(
+          account.userId,
+        );
+
+      const pendingCloudDeletion =
+        await isCloudDeletionPending(
+          account.userId,
+        );
+
+      await assertAnalyticsAccount(
+        account,
+      );
+
       return {
-        enabled:
-          await readConsent(
-            account.userId,
-          ),
+        enabled,
         queuedEventCount:
           queue.filter(
             (event) =>
               event.userId ===
               account.userId,
           ).length,
-        pendingCloudDeletion:
-          await isCloudDeletionPending(
-            account.userId,
-          ),
+        pendingCloudDeletion,
       };
     },
   );
@@ -1217,6 +1262,10 @@ export async function setAnalyticsConsent(
       );
 
       if (!enabled) {
+        await assertAnalyticsAccount(
+          account,
+        );
+
         await AsyncStorage.setItem(
           consentKey(
             account.userId,
@@ -1224,8 +1273,16 @@ export async function setAnalyticsConsent(
           "disabled",
         );
 
+        await assertAnalyticsAccount(
+          account,
+        );
+
         await removeQueuedEventsForUser(
-          account.userId,
+          account,
+        );
+
+        await assertAnalyticsAccount(
+          account,
         );
 
         await AsyncStorage.setItem(
@@ -1233,6 +1290,10 @@ export async function setAnalyticsConsent(
             account.userId,
           ),
           "pending",
+        );
+
+        await assertAnalyticsAccount(
+          account,
         );
 
         const cloudDeleted =
@@ -1249,7 +1310,15 @@ export async function setAnalyticsConsent(
               account.userId,
             ),
           );
+
+          await assertAnalyticsAccount(
+            account,
+          );
         }
+
+        await assertAnalyticsAccount(
+          account,
+        );
 
         return {
           enabled:
@@ -1270,6 +1339,10 @@ export async function setAnalyticsConsent(
         await isCloudDeletionPending(
           account.userId,
         );
+
+      await assertAnalyticsAccount(
+        account,
+      );
 
       if (deletionPending) {
         const cloudDeleted =
@@ -1300,6 +1373,10 @@ export async function setAnalyticsConsent(
             account.userId,
           ),
         );
+
+        await assertAnalyticsAccount(
+          account,
+        );
       }
 
       if (
@@ -1318,6 +1395,10 @@ export async function setAnalyticsConsent(
           account.userId,
         ),
         "enabled",
+      );
+
+      await assertAnalyticsAccount(
+        account,
       );
 
       return {
@@ -1346,8 +1427,16 @@ export async function deleteOwnAnalyticsEvents(): Promise<AnalyticsConsentResult
 
   return serializeAnalyticsOperation(
     async () => {
+      await assertAnalyticsAccount(
+        account,
+      );
+
       await removeQueuedEventsForUser(
-        account.userId,
+        account,
+      );
+
+      await assertAnalyticsAccount(
+        account,
       );
 
       await AsyncStorage.setItem(
@@ -1355,6 +1444,10 @@ export async function deleteOwnAnalyticsEvents(): Promise<AnalyticsConsentResult
           account.userId,
         ),
         "pending",
+      );
+
+      await assertAnalyticsAccount(
+        account,
       );
 
       const cloudDeleted =
@@ -1371,13 +1464,23 @@ export async function deleteOwnAnalyticsEvents(): Promise<AnalyticsConsentResult
             account.userId,
           ),
         );
+
+        await assertAnalyticsAccount(
+          account,
+        );
       }
 
+      const enabled =
+        await readConsent(
+          account.userId,
+        );
+
+      await assertAnalyticsAccount(
+        account,
+      );
+
       return {
-        enabled:
-          await readConsent(
-            account.userId,
-          ),
+        enabled,
         queuedEventCount:
           0,
         pendingCloudDeletion:

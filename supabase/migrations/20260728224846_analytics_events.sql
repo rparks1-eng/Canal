@@ -101,8 +101,8 @@ create table if not exists public.analytics_events (
 
   constraint analytics_events_client_time_check
     check (
-      occurred_at >= now() - interval '7 days' and
-      occurred_at <= now() + interval '5 minutes'
+      occurred_at >= created_at - interval '7 days' and
+      occurred_at <= created_at + interval '5 minutes'
     ),
 
   constraint analytics_events_retention_check

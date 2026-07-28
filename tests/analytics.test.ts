@@ -6,6 +6,8 @@ import {
   jest,
 } from "@jest/globals";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import {
   deleteOwnAnalyticsEvents,
   normalizeAnalyticsEventInput,
@@ -20,6 +22,7 @@ import {
 } from "../lib/supabase";
 
 import {
+  mockAsyncStorage,
   mockStorage,
 } from "./helpers/async-storage-mock";
 
@@ -149,6 +152,16 @@ describe(
   () => {
     beforeEach(() => {
       mockStorage.clear();
+
+      mockAsyncStorage.getItem.mockImplementation(
+        async (
+          key: string,
+        ) =>
+          mockStorage.get(
+            key,
+          ) ??
+          null,
+      );
 
       currentUserId =
         USER_A;
@@ -435,6 +448,83 @@ describe(
     );
 
     it(
+      "physically removes expired queued events from device storage",
+      async () => {
+        insertError = {
+          message:
+            "offline",
+        };
+
+        await setAnalyticsConsent(
+          true,
+        );
+
+        await recordAnalyticsEvent({
+          name:
+            "snapshot_published",
+        });
+
+        const queueKey =
+          Array.from(
+            mockStorage.keys(),
+          ).find(
+            (key) =>
+              key.includes(
+                "/queue",
+              ),
+          );
+
+        expect(
+          queueKey,
+        ).toBeDefined();
+
+        const queue =
+          JSON.parse(
+            mockStorage.get(
+              queueKey!,
+            )!,
+          ) as
+            {
+              occurredAt:
+                string;
+            }[];
+
+        queue[0].occurredAt =
+          new Date(
+            Date.now() -
+              8 *
+                24 *
+                60 *
+                60 *
+                1000,
+          ).toISOString();
+
+        mockStorage.set(
+          queueKey!,
+          JSON.stringify(
+            queue,
+          ),
+        );
+
+        expect(
+          (
+            await readAnalyticsControlState()
+          ).queuedEventCount,
+        ).toBe(
+          0,
+        );
+
+        expect(
+          mockStorage.has(
+            queueKey!,
+          ),
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+    it(
       "purges local events and requests owner-scoped cloud deletion on opt-out",
       async () => {
         insertError = {
@@ -592,6 +682,126 @@ describe(
           ).accepted,
         ).toBe(
           false,
+        );
+      },
+    );
+
+    it(
+      "does not treat a same-user token refresh as an account change",
+      async () => {
+        await setAnalyticsConsent(
+          true,
+        );
+
+        authCallback?.(
+          "TOKEN_REFRESHED",
+          {
+            user: {
+              id:
+                USER_A,
+            },
+          },
+        );
+
+        expect(
+          (
+            await recordAnalyticsEvent({
+              name:
+                "snapshot_published",
+            })
+          ).reason,
+        ).toBe(
+          "delivered",
+        );
+      },
+    );
+
+    it.each([
+      [
+        "read",
+        () =>
+          readAnalyticsControlState(),
+      ],
+      [
+        "enable",
+        () =>
+          setAnalyticsConsent(
+            true,
+          ),
+      ],
+      [
+        "delete",
+        () =>
+          deleteOwnAnalyticsEvents(),
+      ],
+    ])(
+      "rejects a deferred %s operation after the account changes",
+      async (
+        _operationName,
+        operation,
+      ) => {
+        const priorReadCount =
+          jest.mocked(
+            AsyncStorage.getItem,
+          ).mock.calls.length;
+
+        let releaseRead:
+          (
+            value:
+              string | null,
+          ) => void =
+            () => undefined;
+
+        const deferredRead =
+          new Promise<
+            string | null
+          >(
+            (resolve) => {
+              releaseRead =
+                resolve;
+            },
+          );
+
+        jest.mocked(
+          AsyncStorage.getItem,
+        ).mockImplementationOnce(
+          async () =>
+            deferredRead,
+        );
+
+        const pendingOperation =
+          operation();
+
+        while (
+          jest.mocked(
+            AsyncStorage.getItem,
+          ).mock.calls.length ===
+          priorReadCount
+        ) {
+          await Promise.resolve();
+        }
+
+        currentUserId =
+          USER_B;
+
+        authCallback?.(
+          "SIGNED_IN",
+          {
+            user: {
+              id:
+                USER_B,
+            },
+          },
+        );
+
+        releaseRead(
+          null,
+        );
+
+        await expect(
+          pendingOperation,
+        ).rejects.toThrow(
+          /account changed/i,
         );
       },
     );
