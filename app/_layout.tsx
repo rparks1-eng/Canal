@@ -340,6 +340,14 @@ function CanalNavigator() {
       />
 
       <Stack.Screen
+        name="collections/new"
+      />
+
+      <Stack.Screen
+        name="collections/[collectionId]"
+      />
+
+      <Stack.Screen
         name="scene-preview"
       />
 

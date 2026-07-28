@@ -54,6 +54,14 @@ import type {
 } from "../../lib/recovery-issue";
 
 import {
+  listPublicSceneCollections,
+} from "../../lib/scene-collections";
+
+import type {
+  SceneCollectionSummary,
+} from "../../lib/scene-collections";
+
+import {
   loadProfileConnectionSummary,
 } from "../../lib/profile-social";
 
@@ -217,6 +225,14 @@ function CreatorProfileScreenContent(
     >([]);
 
   const [
+    collections,
+    setCollections,
+  ] =
+    useState<
+      SceneCollectionSummary[]
+    >([]);
+
+  const [
     profileResolved,
     setProfileResolved,
   ] = useState(false);
@@ -239,6 +255,11 @@ function CreatorProfileScreenContent(
   const [
     snapshotsResolved,
     setSnapshotsResolved,
+  ] = useState(false);
+
+  const [
+    collectionsResolved,
+    setCollectionsResolved,
   ] = useState(false);
 
   const [
@@ -277,6 +298,14 @@ function CreatorProfileScreenContent(
   const [
     snapshotError,
     setSnapshotError,
+  ] =
+    useState<unknown | null>(
+      null,
+    );
+
+  const [
+    collectionError,
+    setCollectionError,
   ] =
     useState<unknown | null>(
       null,
@@ -361,6 +390,12 @@ function CreatorProfileScreenContent(
               null,
             );
             setFollowBusy(
+              false,
+            );
+            setCollections(
+              [],
+            );
+            setCollectionsResolved(
               false,
             );
 
@@ -494,10 +529,55 @@ function CreatorProfileScreenContent(
                   },
                 );
 
+            const collectionLoad =
+              (
+                sessionError
+                  ? Promise.reject(
+                      sessionError,
+                    )
+                  : listPublicSceneCollections(
+                      userId,
+                    )
+              )
+                .then(
+                  (
+                    nextCollections,
+                  ) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setCollections(
+                      nextCollections,
+                    );
+                    setCollectionsResolved(
+                      true,
+                    );
+                    setCollectionError(
+                      null,
+                    );
+                  },
+                )
+                .catch(
+                  (error: unknown) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setCollectionsResolved(
+                      true,
+                    );
+                    setCollectionError(
+                      error,
+                    );
+                  },
+                );
+
             await Promise.all([
               profileLoad,
               snapshotLoad,
               connectionLoad,
+              collectionLoad,
             ]);
 
             if (isCurrent()) {
@@ -588,6 +668,25 @@ function CreatorProfileScreenContent(
       [
         connectivityStatus,
         snapshotError,
+      ],
+    );
+
+  const collectionIssue =
+    useMemo(
+      () =>
+        collectionError
+          ? classifyRecoveryIssue(
+              collectionError,
+              {
+                service:
+                  "canal",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        collectionError,
+        connectivityStatus,
       ],
     );
 
@@ -1206,6 +1305,154 @@ function CreatorProfileScreenContent(
                 styles.sectionTitle
               }
             >
+              Scene Collections
+            </Text>
+
+            <Text
+              style={
+                styles.sceneCount
+              }
+            >
+              {(
+                !collectionsResolved ||
+                collectionIssue
+              ) &&
+              collections.length ===
+                0
+                ? "—"
+                : collections.length}
+            </Text>
+          </View>
+
+          {collectionIssue ? (
+            <RecoveryNotice
+              busy={
+                loading
+              }
+              issue={
+                collectionIssue
+              }
+              onAction={() =>
+                recoverRead(
+                  collectionIssue,
+                )
+              }
+            />
+          ) : null}
+
+          {collections.length >
+          0 ? (
+            <View
+              style={
+                styles.collectionList
+              }
+            >
+              {collections.map(
+                (collection) => (
+                  <Pressable
+                    key={
+                      collection.id
+                    }
+                    accessibilityLabel={`Open ${collection.title} Scene collection`}
+                    accessibilityRole="button"
+                    onPress={() =>
+                      router.push({
+                        pathname:
+                          "/collections/[collectionId]",
+
+                        params: {
+                          collectionId:
+                            collection.id,
+                        },
+                      } as never)
+                    }
+                    style={
+                      styles.collectionCard
+                    }
+                  >
+                    <View
+                      style={
+                        styles.collectionCopy
+                      }
+                    >
+                      <Text
+                        numberOfLines={
+                          1
+                        }
+                        style={
+                          styles.collectionTitle
+                        }
+                      >
+                        {
+                          collection.title
+                        }
+                      </Text>
+
+                      <Text
+                        numberOfLines={
+                          2
+                        }
+                        style={
+                          styles.collectionDescription
+                        }
+                      >
+                        {collection.description ||
+                          "A curated set of public Scenes."}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.collectionMeta
+                        }
+                      >
+                        {
+                          collection.sceneCount
+                        }{" "}
+                        {collection.sceneCount ===
+                        1
+                          ? "Scene"
+                          : "Scenes"}
+                      </Text>
+                    </View>
+
+                    <Text
+                      style={
+                        styles.collectionArrow
+                      }
+                    >
+                      ›
+                    </Text>
+                  </Pressable>
+                ),
+              )}
+            </View>
+          ) : collectionsResolved &&
+            !collectionIssue ? (
+            <View
+              style={
+                styles.emptyCard
+              }
+            >
+              <Text
+                style={
+                  styles.emptyText
+                }
+              >
+                This creator has no public Scene collections.
+              </Text>
+            </View>
+          ) : null}
+
+          <View
+            style={
+              styles.sectionHeader
+            }
+          >
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
               Public Scenes
             </Text>
 
@@ -1613,6 +1860,56 @@ const styles =
       color: "#F47A24",
       fontSize: 13,
       fontWeight: "900",
+    },
+
+    collectionList: {
+      gap: 10,
+    },
+
+    collectionCard: {
+      minHeight: 86,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      borderWidth: 1,
+      borderColor:
+        "#EEE5DE",
+      borderRadius: 19,
+      backgroundColor:
+        "#FFFFFF",
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+
+    collectionCopy: {
+      flex: 1,
+    },
+
+    collectionTitle: {
+      color: "#1B1B1B",
+      fontSize: 15,
+      fontWeight: "900",
+    },
+
+    collectionDescription: {
+      color: "#6F6862",
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 4,
+    },
+
+    collectionMeta: {
+      color: "#F47A24",
+      fontSize: 9,
+      fontWeight: "900",
+      marginTop: 7,
+    },
+
+    collectionArrow: {
+      color: "#F47A24",
+      fontSize: 26,
+      marginLeft: 12,
     },
 
     list: {

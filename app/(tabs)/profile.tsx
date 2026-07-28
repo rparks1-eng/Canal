@@ -56,6 +56,14 @@ import type {
 } from "../../lib/playlist-exports";
 
 import {
+  listOwnSceneCollections,
+} from "../../lib/scene-collections";
+
+import type {
+  SceneCollectionSummary,
+} from "../../lib/scene-collections";
+
+import {
   loadProfileConnectionSummary,
 } from "../../lib/profile-social";
 
@@ -267,6 +275,14 @@ function ProfileScreenContent() {
     >([]);
 
   const [
+    collections,
+    setCollections,
+  ] =
+    useState<
+      SceneCollectionSummary[]
+    >([]);
+
+  const [
     sceneDataResolved,
     setSceneDataResolved,
   ] = useState(false);
@@ -274,6 +290,11 @@ function ProfileScreenContent() {
   const [
     snapshotDataResolved,
     setSnapshotDataResolved,
+  ] = useState(false);
+
+  const [
+    collectionDataResolved,
+    setCollectionDataResolved,
   ] = useState(false);
 
   const [
@@ -325,6 +346,14 @@ function ProfileScreenContent() {
   const [
     snapshotError,
     setSnapshotError,
+  ] =
+    useState<unknown | null>(
+      null,
+    );
+
+  const [
+    collectionError,
+    setCollectionError,
   ] =
     useState<unknown | null>(
       null,
@@ -399,7 +428,13 @@ function ProfileScreenContent() {
             setPlaylistExports(
               [],
             );
+            setCollections(
+              [],
+            );
             setSocialDataResolved(
+              false,
+            );
+            setCollectionDataResolved(
               false,
             );
 
@@ -637,11 +672,56 @@ function ProfileScreenContent() {
                   },
                 );
 
+            const collectionLoad =
+              (
+                user
+                  ? listOwnSceneCollections()
+                  : Promise.reject(
+                      new Error(
+                        "Sign in to refresh your Scene collections.",
+                      ),
+                    )
+              )
+                .then(
+                  (
+                    nextCollections,
+                  ) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setCollections(
+                      nextCollections,
+                    );
+                    setCollectionDataResolved(
+                      true,
+                    );
+                    setCollectionError(
+                      null,
+                    );
+                  },
+                )
+                .catch(
+                  (error: unknown) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setCollectionDataResolved(
+                      true,
+                    );
+                    setCollectionError(
+                      error,
+                    );
+                  },
+                );
+
             await Promise.all([
               profileLoad,
               sceneLoad,
               snapshotLoad,
               socialLoad,
+              collectionLoad,
             ]);
 
             if (isCurrent()) {
@@ -783,6 +863,25 @@ function ProfileScreenContent() {
       [
         connectivityStatus,
         snapshotError,
+      ],
+    );
+
+  const collectionIssue =
+    useMemo(
+      () =>
+        collectionError
+          ? classifyRecoveryIssue(
+              collectionError,
+              {
+                service:
+                  "canal",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        collectionError,
+        connectivityStatus,
       ],
     );
 
@@ -1697,6 +1796,177 @@ function ProfileScreenContent() {
 
             <View
               style={
+                styles.collectionSectionHeader
+              }
+            >
+              <View
+                style={
+                  styles.collectionSectionCopy
+                }
+              >
+                <Text
+                  style={
+                    styles.snapshotSectionTitle
+                  }
+                >
+                  Scene Collections
+                </Text>
+
+                <Text
+                  style={
+                    styles.snapshotSectionSubtitle
+                  }
+                >
+                  Curate ordered sets of your public Scenes.
+                </Text>
+              </View>
+
+              <Pressable
+                accessibilityLabel="Create a Scene collection"
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push(
+                    "/collections/new" as never,
+                  )
+                }
+                style={
+                  styles.collectionCreateButton
+                }
+              >
+                <Text
+                  style={
+                    styles.collectionCreateText
+                  }
+                >
+                  New
+                </Text>
+              </Pressable>
+            </View>
+
+            {collectionIssue ? (
+              <RecoveryNotice
+                busy={
+                  loading
+                }
+                issue={
+                  collectionIssue
+                }
+                onAction={() =>
+                  recoverRead(
+                    collectionIssue,
+                  )
+                }
+              />
+            ) : null}
+
+            {collections.length >
+            0 ? (
+              <View
+                style={
+                  styles.collectionList
+                }
+              >
+                {collections.map(
+                  (collection) => (
+                    <Pressable
+                      key={
+                        collection.id
+                      }
+                      accessibilityLabel={`Open ${collection.title} Scene collection`}
+                      accessibilityRole="button"
+                      onPress={() =>
+                        router.push({
+                          pathname:
+                            "/collections/[collectionId]",
+
+                          params: {
+                            collectionId:
+                              collection.id,
+                          },
+                        } as never)
+                      }
+                      style={
+                        styles.collectionCard
+                      }
+                    >
+                      <View
+                        style={
+                          styles.collectionCopy
+                        }
+                      >
+                        <Text
+                          numberOfLines={
+                            1
+                          }
+                          style={
+                            styles.collectionTitle
+                          }
+                        >
+                          {
+                            collection.title
+                          }
+                        </Text>
+
+                        <Text
+                          numberOfLines={
+                            2
+                          }
+                          style={
+                            styles.collectionMeta
+                          }
+                        >
+                          {
+                            collection.sceneCount
+                          }{" "}
+                          {collection.sceneCount ===
+                          1
+                            ? "Scene"
+                            : "Scenes"}{" "}
+                          ·{" "}
+                          {collection.isPublic
+                            ? "Public"
+                            : "Draft"}
+                        </Text>
+                      </View>
+
+                      <Text
+                        style={
+                          styles.collectionArrow
+                        }
+                      >
+                        ›
+                      </Text>
+                    </Pressable>
+                  ),
+                )}
+              </View>
+            ) : collectionDataResolved &&
+              !collectionIssue ? (
+              <View
+                style={
+                  styles.snapshotEmpty
+                }
+              >
+                <Text
+                  style={
+                    styles.snapshotEmptyTitle
+                  }
+                >
+                  No Scene collections
+                </Text>
+
+                <Text
+                  style={
+                    styles.snapshotEmptyText
+                  }
+                >
+                  Group your public Scenes into a shareable, ordered collection.
+                </Text>
+              </View>
+            ) : null}
+
+            <View
+              style={
                 styles.snapshotSectionHeader
               }
             >
@@ -2502,6 +2772,82 @@ const styles =
       backgroundColor:
         "#F0ECE8",
       marginVertical: 17,
+    },
+
+    collectionSectionHeader: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      gap: 12,
+      marginTop: 4,
+    },
+
+    collectionSectionCopy: {
+      flex: 1,
+    },
+
+    collectionCreateButton: {
+      minHeight: 38,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 13,
+      backgroundColor:
+        "#F47A24",
+      paddingHorizontal: 16,
+    },
+
+    collectionCreateText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "900",
+    },
+
+    collectionList: {
+      gap: 9,
+    },
+
+    collectionCard: {
+      minHeight: 68,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      borderWidth: 1,
+      borderColor:
+        "#EEE5DE",
+      borderRadius: 18,
+      backgroundColor:
+        "#FFFFFF",
+      paddingHorizontal: 16,
+      paddingVertical: 13,
+    },
+
+    collectionCopy: {
+      flex: 1,
+    },
+
+    collectionTitle: {
+      color: "#1B1B1B",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    collectionMeta: {
+      color: "#817972",
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 4,
+    },
+
+    collectionArrow: {
+      color: "#F47A24",
+      fontSize: 24,
+      marginLeft: 10,
     },
 
     snapshotSectionHeader: {
