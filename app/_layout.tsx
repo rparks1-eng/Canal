@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useState,
 } from "react";
 
 import {
@@ -19,6 +20,17 @@ import {
   useAuth,
 } from "../providers/auth-provider";
 
+import {
+  isOnboardingRequired,
+  ONBOARDING_METADATA_KEY,
+  subscribeToOnboarding,
+} from "../lib/onboarding";
+
+type OnboardingState =
+  | "checking"
+  | "required"
+  | "complete";
+
 function CanalNavigator() {
   const segments =
     useSegments();
@@ -32,8 +44,126 @@ function CanalNavigator() {
   const routeKey =
     segments.join("/");
 
+  const userId =
+    session?.user.id ??
+    null;
+
+  const userEmail =
+    session?.user.email ??
+    null;
+
+  const userCreatedAt =
+    session?.user.created_at ??
+    null;
+
+  const completedOnboardingVersion =
+    session?.user.user_metadata?.[
+      ONBOARDING_METADATA_KEY
+    ];
+
+  const [
+    onboardingState,
+    setOnboardingState,
+  ] =
+    useState<OnboardingState>(
+      "checking",
+    );
+
   useEffect(() => {
     if (loading) {
+      return;
+    }
+
+    if (
+      !userId
+    ) {
+      setOnboardingState(
+        "complete",
+      );
+
+      return;
+    }
+
+    let active =
+      true;
+
+    setOnboardingState(
+      "checking",
+    );
+
+    const unsubscribe =
+      subscribeToOnboarding(
+        userId,
+        (required) => {
+          if (active) {
+            setOnboardingState(
+              required
+                ? "required"
+                : "complete",
+            );
+          }
+        },
+      );
+
+    isOnboardingRequired(
+      userId,
+      userEmail,
+      userCreatedAt,
+      completedOnboardingVersion,
+    )
+      .then(
+        (required) => {
+          if (active) {
+            setOnboardingState(
+              required
+                ? "required"
+                : "complete",
+            );
+          }
+        },
+      )
+      .catch(
+        (error: unknown) => {
+          console.warn(
+            "Canal could not read the first-run onboarding state:",
+            error,
+          );
+
+          /*
+           * Storage failure must not trap an existing
+           * user behind onboarding on every launch.
+           */
+          if (active) {
+            setOnboardingState(
+              "complete",
+            );
+          }
+        },
+      );
+
+    return () => {
+      active =
+        false;
+
+      unsubscribe();
+    };
+  }, [
+    loading,
+    completedOnboardingVersion,
+    userCreatedAt,
+    userEmail,
+    userId,
+  ]);
+
+  useEffect(() => {
+    if (
+      loading ||
+      (
+        session &&
+        onboardingState ===
+          "checking"
+      )
+    ) {
       return;
     }
 
@@ -60,7 +190,42 @@ function CanalNavigator() {
     if (
       session &&
       rootSegment ===
-        "login"
+        "auth"
+    ) {
+      return;
+    }
+
+    const isOnboardingRoute =
+      rootSegment ===
+        "onboarding" ||
+      rootSegment ===
+        "connect-music" ||
+      rootSegment ===
+        "spotify-callback";
+
+    if (
+      session &&
+      onboardingState ===
+        "required" &&
+      !isOnboardingRoute
+    ) {
+      router.replace(
+        "/onboarding" as never,
+      );
+
+      return;
+    }
+
+    if (
+      session &&
+      onboardingState ===
+        "complete" &&
+      (
+        rootSegment ===
+          "login" ||
+        rootSegment ===
+          "onboarding"
+      )
     ) {
       router.replace(
         "/(tabs)" as never,
@@ -68,12 +233,20 @@ function CanalNavigator() {
     }
   }, [
     loading,
+    onboardingState,
     routeKey,
     segments,
     session,
   ]);
 
-  if (loading) {
+  if (
+    loading ||
+    (
+      session &&
+      onboardingState ===
+        "checking"
+    )
+  ) {
     return (
       <View
         style={
@@ -104,6 +277,14 @@ function CanalNavigator() {
     >
       <Stack.Screen
         name="login"
+      />
+
+      <Stack.Screen
+        name="onboarding"
+      />
+
+      <Stack.Screen
+        name="connect-music"
       />
 
       <Stack.Screen

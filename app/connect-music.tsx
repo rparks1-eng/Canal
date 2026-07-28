@@ -1,6 +1,12 @@
 
 import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
   router,
+  useLocalSearchParams,
 } from "expo-router";
 import {
   ActivityIndicator,
@@ -17,7 +23,34 @@ import {
   useSpotifyConnection,
 } from "../hooks/useSpotifyConnection";
 
+import {
+  isOnboardingRequired,
+  ONBOARDING_METADATA_KEY,
+} from "../lib/onboarding";
+
+import {
+  useAuth,
+} from "../providers/auth-provider";
+
 export default function ConnectMusicScreen() {
+  const params =
+    useLocalSearchParams<{
+      mode?: string;
+    }>();
+
+  const {
+    user,
+  } =
+    useAuth();
+
+  const [
+    onboardingFlow,
+    setOnboardingFlow,
+  ] = useState(
+    params.mode ===
+      "onboarding",
+  );
+
   const {
     profile,
     isLoading,
@@ -34,9 +67,79 @@ export default function ConnectMusicScreen() {
   const spotifyImage =
     profile?.images?.[0]?.url;
 
+  useEffect(() => {
+    if (
+      params.mode ===
+      "onboarding"
+    ) {
+      setOnboardingFlow(
+        true,
+      );
+
+      return;
+    }
+
+    if (!user) {
+      return;
+    }
+
+    let active =
+      true;
+
+    isOnboardingRequired(
+      user.id,
+      user.email,
+      user.created_at,
+      user.user_metadata?.[
+        ONBOARDING_METADATA_KEY
+      ],
+    )
+      .then(
+        (required) => {
+          if (active) {
+            setOnboardingFlow(
+              required,
+            );
+          }
+        },
+      )
+      .catch(
+        (error: unknown) => {
+          console.warn(
+            "Canal could not read the onboarding state on the music connection screen:",
+            error,
+          );
+        },
+      );
+
+    return () => {
+      active =
+        false;
+    };
+  }, [
+    params.mode,
+    user,
+  ]);
+
   function continueToCanal() {
+    if (
+      onboardingFlow
+    ) {
+      router.replace({
+        pathname:
+          "/onboarding",
+
+        params: {
+          step:
+            "shape",
+        },
+      } as never);
+
+      return;
+    }
+
     router.replace(
-      "/(tabs)/home",
+      "/(tabs)" as never,
     );
   }
 
@@ -348,13 +451,18 @@ export default function ConnectMusicScreen() {
                 styles.continueButtonText
               }
             >
-              Continue to Canal
+              {onboardingFlow
+                ? profile
+                  ? "Continue: Shape"
+                  : "Continue without Spotify"
+                : "Continue to Canal"}
             </Text>
           </Pressable>
 
           <Text style={styles.footerText}>
-            You can manage Spotify later
-            from You → Music Services.
+            {onboardingFlow
+              ? "You can connect or change Spotify later from You → Music Services."
+              : "You can manage Spotify later from You → Music Services."}
           </Text>
         </View>
       </View>

@@ -1,50 +1,59 @@
-# Welcome to your Expo app 👋
+# Canal
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Canal is an Expo SDK 54 app for building, refining, saving, exporting, and
+sharing mood and activity Soundscapes.
 
-## Get started
+The primary product loop is Connect, Shape, Export:
 
-1. Install dependencies
+1. Connect an existing music service after signing into Canal.
+2. Shape a Scene with activity, mood, energy, familiarity, duration, and
+   artists.
+3. Refine and save the generated track list.
+4. Export it to the connected service.
+5. Share a Snapshot that links listeners back to Canal.
 
-   ```bash
-   npm install
-   ```
+## Local setup
 
-2. Start the app
+1. Copy `.env.example` to `.env.local` and add the public development values.
+   Do not add provider secrets or private keys.
+2. Install the exact locked dependencies with `npm ci`.
+3. Start the project with `npm start`.
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Useful commands:
 
 ```bash
-npm run reset-project
+npm run ios
+npm run android
+npm run web
+npm run validate
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+`npm run validate` checks Expo dependency compatibility, lint, TypeScript,
+unit tests, public Expo configuration, and a complete static web export.
 
-## Learn more
+## Delivery and release
 
-To learn more about developing your project with Expo, look at the following resources:
+- [Product roadmap](docs/ROADMAP.md)
+- [Combined delivery workflow](docs/DELIVERY_WORKFLOW.md)
+- [Native closed-beta smoke test](docs/DEVICE_SMOKE_TEST.md)
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Automated source checks do not prove that provider dashboards, native deep
+links, signing, or physical-device behavior work. A rebuilt app must pass the
+device smoke test before Phase 1 is considered complete.
 
-## Join the community
+GitHub's dependency review also requires the repository dependency graph.
+After enabling it under repository security settings, add the repository
+variable `DEPENDENCY_GRAPH_ENABLED=true`. Until then, CI reports the security
+gate as unavailable instead of claiming that dependency review passed.
 
-Join our community of developers creating universal apps.
+## Environment variables
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `EXPO_PUBLIC_SPOTIFY_CLIENT_ID`
+- `EXPO_PUBLIC_SPOTIFY_REDIRECT_URI`
+- `EXPO_PUBLIC_CANAL_SHARE_BASE_URL`
+
+Only public client configuration belongs in Expo client variables. Apple
+private keys, MusicKit signing material, Supabase service-role keys, and other
+server credentials do not belong in this repository or client bundle.
