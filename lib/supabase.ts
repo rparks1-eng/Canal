@@ -101,7 +101,7 @@ if (
 export function requireSupabaseConfiguration(): void {
   if (!isSupabaseConfigured) {
     throw new Error(
-      "Supabase is not configured. Add the EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY values to ~/canal/.env, save it, and restart Metro.",
+      "Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY to the project's .env.local file, save it, and fully reload the app.",
     );
   }
 }
