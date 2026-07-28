@@ -336,6 +336,10 @@ function CanalNavigator() {
       />
 
       <Stack.Screen
+        name="scene-collaboration"
+      />
+
+      <Stack.Screen
         name="scene-preview"
       />
 

@@ -414,6 +414,48 @@ export default function LibraryScreen() {
           </Pressable>
         </View>
 
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open Scene collaboration"
+          accessibilityHint="Review collaboration invitations and shared Scenes."
+          onPress={() =>
+            router.push(
+              "/scene-collaboration" as never,
+            )
+          }
+          style={({ pressed }) => [
+            styles.collaborationButton,
+            pressed &&
+              styles.pressed,
+          ]}
+        >
+          <View>
+            <Text
+              style={
+                styles.collaborationTitle
+              }
+            >
+              Scene collaboration
+            </Text>
+
+            <Text
+              style={
+                styles.collaborationText
+              }
+            >
+              Invitations, shared edits, and revision conflicts
+            </Text>
+          </View>
+
+          <Text
+            style={
+              styles.arrow
+            }
+          >
+            ›
+          </Text>
+        </Pressable>
+
         <TextInput
           value={
             query
@@ -886,6 +928,47 @@ const styles =
       color: "#FFFFFF",
       fontSize: 12,
       fontWeight: "900",
+    },
+
+    collaborationButton: {
+      minHeight: 72,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      gap: 14,
+      paddingHorizontal:
+        18,
+      paddingVertical:
+        14,
+      borderWidth: 1,
+      borderColor:
+        "#E7B88F",
+      borderRadius:
+        20,
+      backgroundColor:
+        "#FFF1E5",
+    },
+
+    collaborationTitle: {
+      color:
+        "#7D3A10",
+      fontSize: 15,
+      fontWeight:
+        "900",
+    },
+
+    collaborationText: {
+      marginTop: 3,
+      color:
+        "#7D6656",
+      fontSize: 12,
+    },
+
+    pressed: {
+      opacity: 0.76,
     },
 
     searchInput: {

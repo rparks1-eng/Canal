@@ -69,7 +69,7 @@ without seeing the first account's private data.
   backend. Never embed an Apple private key or long-lived developer token in the app.
 - Move provider-specific behavior behind a music-service adapter so Spotify and Apple
   Music share one Scene workflow.
-- Add invited Scene collaboration with clear ownership and conflict handling.
+- [x] Add invited Scene collaboration with clear ownership and conflict handling.
 - Promote Live Stages from local prototype storage to a synchronized backend after
   the single-user Scene loop is stable.
 

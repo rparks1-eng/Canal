@@ -76,6 +76,10 @@ import {
 } from "../../lib/canal-player";
 
 import {
+  useAuth,
+} from "../../providers/auth-provider";
+
+import {
   useConnectivity,
 } from "../../providers/connectivity-provider";
 
@@ -106,6 +110,11 @@ async function openTrack(
 }
 
 export default function SceneDetailScreen() {
+  const {
+    user,
+  } =
+    useAuth();
+
   const {
     refresh:
       refreshConnectivity,
@@ -798,6 +807,50 @@ export default function SceneDetailScreen() {
               Share the Scene
             </Text>
           </Pressable>
+
+          {scene.libraryType ===
+            "created" &&
+          user?.id ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Manage Scene collaboration"
+              onPress={() =>
+                router.push({
+                  pathname:
+                    "/scene-collaboration",
+
+                  params: {
+                    ownerId:
+                      user.id,
+                    sceneId:
+                      scene.id,
+                  },
+                } as never)
+              }
+              style={({ pressed }) => [
+                styles.actionButton,
+
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                style={
+                  styles.actionTitle
+                }
+              >
+                Collaborate
+              </Text>
+
+              <Text
+                style={
+                  styles.actionText
+                }
+              >
+                Invite an editor
+              </Text>
+            </Pressable>
+          ) : null}
 
           <Pressable
             accessibilityRole="button"
