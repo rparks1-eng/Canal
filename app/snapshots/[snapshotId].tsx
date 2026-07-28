@@ -36,18 +36,24 @@ import {
     saveSoundscape,
     SoundscapeProfile,
 } from "../../lib/soundscape";
+import {
+    snapshotReturnAction,
+} from "../../lib/snapshot-navigation";
 
 function closeSnapshot(): void {
-  if (
-    router.canGoBack()
-  ) {
+  const action =
+    snapshotReturnAction(
+      router.canGoBack(),
+    );
+
+  if (action === "back") {
     router.back();
 
     return;
   }
 
   router.replace(
-    "/snapshots",
+    action,
   );
 }
 
@@ -565,10 +571,9 @@ export default function SnapshotDetailScreen() {
         <View style={styles.header}>
           <Pressable
             accessibilityRole="button"
-            onPress={() =>
-              router.replace(
-                "/snapshots",
-              )
+            accessibilityLabel="Go back"
+            onPress={
+              closeSnapshot
             }
             style={({ pressed }) => [
               styles.headerButton,
