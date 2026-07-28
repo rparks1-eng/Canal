@@ -112,18 +112,29 @@ export default function BlockedUsersScreen() {
         user.username,
       );
 
-      await unblockUser(
-        user.username,
-        user.displayName,
-      );
+      const state =
+        await unblockUser(
+          user.username,
+          user.displayName,
+        );
 
       setBlockedUsers(
         blockedUsers.filter(
           (item) =>
             item.username !==
-            user.username,
+          user.username,
         ),
       );
+
+      if (
+        state.syncStatus ===
+        "pending"
+      ) {
+        Alert.alert(
+          "Saved on this device",
+          "Canal will sync this change to your account when the connection returns.",
+        );
+      }
     } catch (error) {
       console.error(
         "Unable to unblock user:",

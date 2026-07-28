@@ -40,6 +40,23 @@ type ActivityRow = {
   is_read: boolean;
 };
 
+type RelationshipKind =
+  | "following"
+  | "blocked";
+
+type RelationshipRow = {
+  target_username: string;
+  relationship_type:
+    RelationshipKind;
+};
+
+export type RelationshipMutation = {
+  username: string;
+  relationshipType:
+    RelationshipKind;
+  action: "upsert" | "delete";
+};
+
 export type CanalActivityType =
   RelationshipActivityType;
 
@@ -49,6 +66,10 @@ export type CanalActivityItem =
 export type RelationshipState = {
   following: string[];
   blocked: string[];
+  syncStatus?:
+    | "synced"
+    | "pending"
+    | "offline";
 };
 
 export type RecordActivityInput = {
@@ -60,28 +81,109 @@ export type RecordActivityInput = {
 };
 
 export async function readRelationshipState(): Promise<RelationshipState> {
-  const [following, blocked] =
-    await Promise.all([
-      readFollowing(),
-      readBlockedUsers(),
-    ]);
+  const localState =
+    await readLocalRelationshipState();
 
-  return {
-    following,
-    blocked,
-  };
+  if (!isSupabaseConfigured) {
+    return localState;
+  }
+
+  try {
+    const userId =
+      await currentUserId();
+
+    if (!userId) {
+      return localState;
+    }
+
+    const pendingMutations =
+      await readRelationshipMutations(
+        userId,
+      );
+
+    if (
+      pendingMutations.length >
+      0
+    ) {
+      await flushRelationshipMutations(
+        userId,
+        pendingMutations,
+      );
+    }
+
+    const {
+      data,
+      error,
+    } =
+      await supabase
+        .from(
+          "user_relationships",
+        )
+        .select(
+          "target_username, relationship_type",
+        )
+        .eq("user_id", userId);
+
+    if (error) {
+      throw error;
+    }
+
+    const cloudState =
+      relationshipRowsToState(
+        (data ?? []) as
+          RelationshipRow[],
+      );
+
+    await writeLocalRelationshipState(
+      cloudState,
+      userId,
+    );
+
+    await writeRelationshipMutations(
+      userId,
+      [],
+    );
+
+    return {
+      ...cloudState,
+      syncStatus: "synced",
+    };
+  } catch (error) {
+    console.warn(
+      "Canal relationships are offline; using the device cache:",
+      error,
+    );
+
+    const userId =
+      await relationshipUserId();
+
+    const pending =
+      userId
+        ? await readRelationshipMutations(
+            userId,
+          )
+        : [];
+
+    return {
+      ...localState,
+      syncStatus:
+        pending.length > 0
+          ? "pending"
+          : "offline",
+    };
+  }
 }
 
 export async function readFollowing(): Promise<string[]> {
-  return readStoredStringArray(
-    STORAGE_KEYS.following,
-  );
+  return (
+    await readRelationshipState()
+  ).following;
 }
 
 export async function readBlockedUsers(): Promise<string[]> {
-  return readStoredStringArray(
-    STORAGE_KEYS.blockedUsers,
-  );
+  return (
+    await readRelationshipState()
+  ).blocked;
 }
 
 export async function writeFollowing(
@@ -92,11 +194,15 @@ export async function writeFollowing(
       usernames,
     );
 
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.following,
-    JSON.stringify(
-      normalizedUsernames,
+  const userId =
+    await relationshipUserId();
+
+  await writeStoredStringArray(
+    relationshipStorageKey(
+      STORAGE_KEYS.following,
+      userId,
     ),
+    normalizedUsernames,
   );
 
   return normalizedUsernames;
@@ -110,11 +216,15 @@ export async function writeBlockedUsers(
       usernames,
     );
 
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.blockedUsers,
-    JSON.stringify(
-      normalizedUsernames,
+  const userId =
+    await relationshipUserId();
+
+  await writeStoredStringArray(
+    relationshipStorageKey(
+      STORAGE_KEYS.blockedUsers,
+      userId,
     ),
+    normalizedUsernames,
   );
 
   return normalizedUsernames;
@@ -133,11 +243,11 @@ export async function followUser(
     );
   }
 
-  const [following, blocked] =
-    await Promise.all([
-      readFollowing(),
-      readBlockedUsers(),
-    ]);
+  const {
+    following,
+    blocked,
+  } =
+    await readRelationshipState();
 
   const updatedFollowing =
     Array.from(
@@ -153,16 +263,33 @@ export async function followUser(
         item !== normalizedUsername,
     );
 
-  await Promise.all([
-    writeFollowing(
-      updatedFollowing,
-    ),
+  const syncStatus =
+    await persistRelationshipChange(
+    {
+      following:
+        updatedFollowing,
+      blocked:
+        updatedBlocked,
+    },
+    [
+      {
+        username:
+          normalizedUsername,
+        relationshipType:
+          "following",
+        action: "upsert",
+      },
+      {
+        username:
+          normalizedUsername,
+        relationshipType:
+          "blocked",
+        action: "delete",
+      },
+    ],
+  );
 
-    writeBlockedUsers(
-      updatedBlocked,
-    ),
-
-    recordActivity({
+  await recordActivity({
       type: "follow",
 
       title: `Followed ${
@@ -177,8 +304,7 @@ export async function followUser(
         normalizedUsername,
 
       displayName,
-    }),
-  ]);
+    });
 
   return {
     following:
@@ -186,6 +312,7 @@ export async function followUser(
 
     blocked:
       updatedBlocked,
+    syncStatus,
   };
 }
 
@@ -196,11 +323,11 @@ export async function unfollowUser(
   const normalizedUsername =
     normalizeUsername(username);
 
-  const [following, blocked] =
-    await Promise.all([
-      readFollowing(),
-      readBlockedUsers(),
-    ]);
+  const {
+    following,
+    blocked,
+  } =
+    await readRelationshipState();
 
   const updatedFollowing =
     following.filter(
@@ -208,12 +335,25 @@ export async function unfollowUser(
         item !== normalizedUsername,
     );
 
-  await Promise.all([
-    writeFollowing(
-      updatedFollowing,
-    ),
+  const syncStatus =
+    await persistRelationshipChange(
+    {
+      following:
+        updatedFollowing,
+      blocked,
+    },
+    [
+      {
+        username:
+          normalizedUsername,
+        relationshipType:
+          "following",
+        action: "delete",
+      },
+    ],
+  );
 
-    recordActivity({
+  await recordActivity({
       type: "unfollow",
 
       title: `Unfollowed ${
@@ -228,14 +368,14 @@ export async function unfollowUser(
         normalizedUsername,
 
       displayName,
-    }),
-  ]);
+    });
 
   return {
     following:
       updatedFollowing,
 
     blocked,
+    syncStatus,
   };
 }
 
@@ -252,11 +392,11 @@ export async function blockUser(
     );
   }
 
-  const [following, blocked] =
-    await Promise.all([
-      readFollowing(),
-      readBlockedUsers(),
-    ]);
+  const {
+    following,
+    blocked,
+  } =
+    await readRelationshipState();
 
   const updatedFollowing =
     following.filter(
@@ -272,16 +412,33 @@ export async function blockUser(
       ]),
     );
 
-  await Promise.all([
-    writeFollowing(
-      updatedFollowing,
-    ),
+  const syncStatus =
+    await persistRelationshipChange(
+    {
+      following:
+        updatedFollowing,
+      blocked:
+        updatedBlocked,
+    },
+    [
+      {
+        username:
+          normalizedUsername,
+        relationshipType:
+          "following",
+        action: "delete",
+      },
+      {
+        username:
+          normalizedUsername,
+        relationshipType:
+          "blocked",
+        action: "upsert",
+      },
+    ],
+  );
 
-    writeBlockedUsers(
-      updatedBlocked,
-    ),
-
-    recordActivity({
+  await recordActivity({
       type: "block",
 
       title: `Blocked ${
@@ -296,8 +453,7 @@ export async function blockUser(
         normalizedUsername,
 
       displayName,
-    }),
-  ]);
+    });
 
   return {
     following:
@@ -305,6 +461,7 @@ export async function blockUser(
 
     blocked:
       updatedBlocked,
+    syncStatus,
   };
 }
 
@@ -315,11 +472,11 @@ export async function unblockUser(
   const normalizedUsername =
     normalizeUsername(username);
 
-  const [following, blocked] =
-    await Promise.all([
-      readFollowing(),
-      readBlockedUsers(),
-    ]);
+  const {
+    following,
+    blocked,
+  } =
+    await readRelationshipState();
 
   const updatedBlocked =
     blocked.filter(
@@ -327,12 +484,25 @@ export async function unblockUser(
         item !== normalizedUsername,
     );
 
-  await Promise.all([
-    writeBlockedUsers(
-      updatedBlocked,
-    ),
+  const syncStatus =
+    await persistRelationshipChange(
+    {
+      following,
+      blocked:
+        updatedBlocked,
+    },
+    [
+      {
+        username:
+          normalizedUsername,
+        relationshipType:
+          "blocked",
+        action: "delete",
+      },
+    ],
+  );
 
-    recordActivity({
+  await recordActivity({
       type: "unblock",
 
       title: `Unblocked ${
@@ -347,21 +517,23 @@ export async function unblockUser(
         normalizedUsername,
 
       displayName,
-    }),
-  ]);
+    });
 
   return {
     following,
     blocked:
       updatedBlocked,
+    syncStatus,
   };
 }
 
 export async function isFollowingUser(
   username: string,
 ): Promise<boolean> {
-  const following =
-    await readFollowing();
+  const {
+    following,
+  } =
+    await readRelationshipState();
 
   return following.includes(
     normalizeUsername(username),
@@ -371,8 +543,10 @@ export async function isFollowingUser(
 export async function isBlockedUser(
   username: string,
 ): Promise<boolean> {
-  const blocked =
-    await readBlockedUsers();
+  const {
+    blocked,
+  } =
+    await readRelationshipState();
 
   return blocked.includes(
     normalizeUsername(username),
@@ -959,6 +1133,549 @@ function normalizeActivityRow(
       row.is_read,
     syncStatus: "synced",
   };
+}
+
+async function readLocalRelationshipState(): Promise<RelationshipState> {
+  const userId =
+    await relationshipUserId();
+
+  const [
+    following,
+    blocked,
+  ] =
+    await Promise.all([
+      readStoredStringArray(
+        relationshipStorageKey(
+          STORAGE_KEYS.following,
+          userId,
+        ),
+      ),
+      readStoredStringArray(
+        relationshipStorageKey(
+          STORAGE_KEYS.blockedUsers,
+          userId,
+        ),
+      ),
+    ]);
+
+  return {
+    following:
+      following.filter(
+        (username) =>
+          !blocked.includes(
+            username,
+          ),
+      ),
+    blocked,
+  };
+}
+
+async function writeLocalRelationshipState(
+  state: RelationshipState,
+  userId:
+    string | null,
+): Promise<void> {
+  const blocked =
+    normalizeUsernameArray(
+      state.blocked,
+    );
+
+  const following =
+    normalizeUsernameArray(
+      state.following,
+    ).filter(
+      (username) =>
+        !blocked.includes(
+          username,
+        ),
+    );
+
+  await Promise.all([
+    writeStoredStringArray(
+      relationshipStorageKey(
+        STORAGE_KEYS.following,
+        userId,
+      ),
+      following,
+    ),
+    writeStoredStringArray(
+      relationshipStorageKey(
+        STORAGE_KEYS.blockedUsers,
+        userId,
+      ),
+      blocked,
+    ),
+  ]);
+}
+
+async function persistRelationshipChange(
+  state: RelationshipState,
+  mutations:
+    RelationshipMutation[],
+): Promise<
+  | "synced"
+  | "pending"
+  | undefined
+> {
+  const userId =
+    await relationshipUserId();
+
+  await writeLocalRelationshipState(
+    state,
+    userId,
+  );
+
+  if (
+    !isSupabaseConfigured ||
+    !userId
+  ) {
+    return undefined;
+  }
+
+  const pending =
+    compactRelationshipMutations([
+      ...await readRelationshipMutations(
+        userId,
+      ),
+      ...mutations,
+    ]);
+
+  await writeRelationshipMutations(
+    userId,
+    pending,
+  );
+
+  try {
+    await flushRelationshipMutations(
+      userId,
+      pending,
+    );
+
+    await writeRelationshipMutations(
+      userId,
+      [],
+    );
+
+    return "synced";
+  } catch (error) {
+    console.warn(
+      "Canal saved the relationship change on this device and will retry when online:",
+      error,
+    );
+
+    return "pending";
+  }
+}
+
+export function compactRelationshipMutations(
+  mutations:
+    RelationshipMutation[],
+): RelationshipMutation[] {
+  const compacted =
+    new Map<
+      string,
+      RelationshipMutation
+    >();
+
+  for (const mutation of mutations) {
+    const username =
+      normalizeUsername(
+        mutation.username,
+      );
+
+    if (!username) {
+      continue;
+    }
+
+    const normalizedMutation = {
+      ...mutation,
+      username,
+    };
+
+    if (
+      normalizedMutation.action ===
+      "upsert"
+    ) {
+      const otherType:
+        RelationshipKind =
+          normalizedMutation.relationshipType ===
+          "following"
+            ? "blocked"
+            : "following";
+
+      compacted.set(
+        `${otherType}:${username}`,
+        {
+          username,
+          relationshipType:
+            otherType,
+          action: "delete",
+        },
+      );
+    }
+
+    compacted.set(
+      `${mutation.relationshipType}:${username}`,
+      normalizedMutation,
+    );
+  }
+
+  return Array.from(
+    compacted.values(),
+  ).sort(
+    (first, second) =>
+      first.relationshipType ===
+      second.relationshipType
+        ? first.username.localeCompare(
+            second.username,
+          )
+        : first.relationshipType ===
+            "following"
+          ? -1
+          : 1,
+  );
+}
+
+function relationshipRowsToState(
+  rows: RelationshipRow[],
+): RelationshipState {
+  const following:
+    string[] = [];
+
+  const blocked:
+    string[] = [];
+
+  for (const row of rows) {
+    const username =
+      normalizeUsername(
+        row.target_username,
+      );
+
+    if (!username) {
+      continue;
+    }
+
+    if (
+      row.relationship_type ===
+      "blocked"
+    ) {
+      blocked.push(username);
+    } else if (
+      row.relationship_type ===
+      "following"
+    ) {
+      following.push(username);
+    }
+  }
+
+  const normalizedBlocked =
+    normalizeUsernameArray(
+      blocked,
+    );
+
+  return {
+    following:
+      normalizeUsernameArray(
+        following,
+      ).filter(
+        (username) =>
+          !normalizedBlocked.includes(
+            username,
+          ),
+      ),
+    blocked:
+      normalizedBlocked,
+  };
+}
+
+async function flushRelationshipMutations(
+  userId: string,
+  mutations:
+    RelationshipMutation[],
+): Promise<void> {
+  const upserts =
+    mutations.filter(
+      (mutation) =>
+        mutation.action ===
+        "upsert",
+    );
+
+  if (upserts.length > 0) {
+    const { error } =
+      await supabase
+        .from(
+          "user_relationships",
+        )
+        .upsert(
+          upserts.map(
+            (mutation) => ({
+              user_id: userId,
+              target_username:
+                mutation.username,
+              relationship_type:
+                mutation.relationshipType,
+            }),
+          ),
+          {
+            onConflict:
+              "user_id,target_username",
+          },
+        );
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  for (
+    const relationshipType
+    of [
+      "following",
+      "blocked",
+    ] as const
+  ) {
+    const usernames =
+      mutations
+        .filter(
+          (mutation) =>
+            mutation.action ===
+              "delete" &&
+            mutation.relationshipType ===
+              relationshipType,
+        )
+        .map(
+          (mutation) =>
+            mutation.username,
+        );
+
+    if (usernames.length === 0) {
+      continue;
+    }
+
+    const { error } =
+      await supabase
+        .from(
+          "user_relationships",
+        )
+        .delete()
+        .eq("user_id", userId)
+        .eq(
+          "relationship_type",
+          relationshipType,
+        )
+        .in(
+          "target_username",
+          usernames,
+        );
+
+    if (error) {
+      throw error;
+    }
+  }
+}
+
+async function readRelationshipMutations(
+  userId: string,
+): Promise<RelationshipMutation[]> {
+  const storedValue =
+    await AsyncStorage.getItem(
+      relationshipMutationStorageKey(
+        userId,
+      ),
+    );
+
+  if (!storedValue) {
+    return [];
+  }
+
+  try {
+    const parsedValue: unknown =
+      JSON.parse(storedValue);
+
+    if (!Array.isArray(parsedValue)) {
+      return [];
+    }
+
+    const mutations:
+      RelationshipMutation[] = [];
+
+    for (const value of parsedValue) {
+      if (
+        typeof value !==
+          "object" ||
+        value === null
+      ) {
+        continue;
+      }
+
+      const record =
+        value as Record<
+          string,
+          unknown
+        >;
+
+      const username =
+        typeof record.username ===
+        "string"
+          ? normalizeUsername(
+              record.username,
+            )
+          : "";
+
+      const relationshipType =
+        record.relationshipType;
+
+      const action =
+        record.action;
+
+      if (
+        username &&
+        (
+          relationshipType ===
+            "following" ||
+          relationshipType ===
+            "blocked"
+        ) &&
+        (
+          action === "upsert" ||
+          action === "delete"
+        )
+      ) {
+        mutations.push({
+          username,
+          relationshipType,
+          action,
+        });
+      }
+    }
+
+    return compactRelationshipMutations(
+      mutations,
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function writeRelationshipMutations(
+  userId: string,
+  mutations:
+    RelationshipMutation[],
+): Promise<void> {
+  const key =
+    relationshipMutationStorageKey(
+      userId,
+    );
+
+  if (mutations.length === 0) {
+    await AsyncStorage.removeItem(
+      key,
+    );
+    return;
+  }
+
+  await AsyncStorage.setItem(
+    key,
+    JSON.stringify(
+      compactRelationshipMutations(
+        mutations,
+      ),
+    ),
+  );
+}
+
+async function relationshipUserId(): Promise<
+  string | null
+> {
+  if (!isSupabaseConfigured) {
+    return null;
+  }
+
+  try {
+    const {
+      data: {
+        session,
+      },
+    } =
+      await supabase.auth.getSession();
+
+    return session?.user.id ??
+      null;
+  } catch {
+    return null;
+  }
+}
+
+function relationshipStorageKey(
+  baseKey: string,
+  userId:
+    string | null,
+): string {
+  if (!isSupabaseConfigured) {
+    return baseKey;
+  }
+
+  return `${baseKey}:${userId ?? "anonymous"}`;
+}
+
+function relationshipMutationStorageKey(
+  userId: string,
+): string {
+  return `${STORAGE_KEYS.relationshipMutations}:${userId}`;
+}
+
+async function writeStoredStringArray(
+  key: string,
+  values: string[],
+): Promise<void> {
+  await AsyncStorage.setItem(
+    key,
+    JSON.stringify(
+      normalizeUsernameArray(
+        values,
+      ),
+    ),
+  );
+}
+
+export async function clearRelationships(): Promise<void> {
+  const userId =
+    await relationshipUserId();
+
+  await AsyncStorage.multiRemove([
+    relationshipStorageKey(
+      STORAGE_KEYS.following,
+      userId,
+    ),
+    relationshipStorageKey(
+      STORAGE_KEYS.blockedUsers,
+      userId,
+    ),
+    ...(userId
+      ? [
+          relationshipMutationStorageKey(
+            userId,
+          ),
+        ]
+      : []),
+  ]);
+
+  if (
+    isSupabaseConfigured &&
+    userId
+  ) {
+    const { error } =
+      await supabase
+        .from(
+          "user_relationships",
+        )
+        .delete()
+        .eq("user_id", userId);
+
+    if (error) {
+      throw error;
+    }
+  }
 }
 
 async function readStoredStringArray(

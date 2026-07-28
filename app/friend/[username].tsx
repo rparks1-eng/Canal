@@ -129,19 +129,27 @@ export default function FriendProfileScreen() {
       setIsUpdating(true);
 
       if (isFollowing) {
-        await unfollowUser(
-          user.username,
-          user.displayName,
-        );
+        const state =
+          await unfollowUser(
+            user.username,
+            user.displayName,
+          );
 
         setIsFollowing(false);
-      } else {
-        await followUser(
-          user.username,
-          user.displayName,
+        showPendingRelationshipSync(
+          state.syncStatus,
         );
+      } else {
+        const state =
+          await followUser(
+            user.username,
+            user.displayName,
+          );
 
         setIsFollowing(true);
+        showPendingRelationshipSync(
+          state.syncStatus,
+        );
       }
     } catch (error) {
       console.error(
@@ -193,13 +201,17 @@ export default function FriendProfileScreen() {
     try {
       setIsUpdating(true);
 
-      await blockUser(
-        user.username,
-        user.displayName,
-      );
+      const state =
+        await blockUser(
+          user.username,
+          user.displayName,
+        );
 
       setIsFollowing(false);
       setIsBlocked(true);
+      showPendingRelationshipSync(
+        state.syncStatus,
+      );
     } catch (error) {
       console.error(
         "Unable to block user:",
@@ -226,12 +238,16 @@ export default function FriendProfileScreen() {
     try {
       setIsUpdating(true);
 
-      await unblockUser(
-        user.username,
-        user.displayName,
-      );
+      const state =
+        await unblockUser(
+          user.username,
+          user.displayName,
+        );
 
       setIsBlocked(false);
+      showPendingRelationshipSync(
+        state.syncStatus,
+      );
     } catch (error) {
       console.error(
         "Unable to unblock user:",
@@ -925,6 +941,24 @@ export default function FriendProfileScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function showPendingRelationshipSync(
+  syncStatus:
+    | "synced"
+    | "pending"
+    | "offline"
+    | undefined,
+) {
+  if (
+    syncStatus ===
+    "pending"
+  ) {
+    Alert.alert(
+      "Saved on this device",
+      "Canal will sync this change to your account when the connection returns.",
+    );
+  }
 }
 
 function InformationSection({

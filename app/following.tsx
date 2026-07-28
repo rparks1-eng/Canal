@@ -160,18 +160,29 @@ export default function FollowingScreen() {
         user.username,
       );
 
-      await unfollowUser(
-        user.username,
-        user.displayName,
-      );
+      const state =
+        await unfollowUser(
+          user.username,
+          user.displayName,
+        );
 
       setFollowingUsers(
         followingUsers.filter(
           (item) =>
             item.username !==
-            user.username,
+          user.username,
         ),
       );
+
+      if (
+        state.syncStatus ===
+        "pending"
+      ) {
+        Alert.alert(
+          "Saved on this device",
+          "Canal will sync this change to your account when the connection returns.",
+        );
+      }
     } catch (error) {
       console.error(
         "Unable to unfollow:",
