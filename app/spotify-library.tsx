@@ -233,11 +233,6 @@ function TrackRow(props: {
   track: SpotifyTrack;
   rank?: number;
 }) {
-  const imageUrl =
-    props.track.album
-      ?.images?.[0]?.url ??
-    null;
-
   return (
     <Pressable
       accessibilityRole="button"
@@ -261,33 +256,19 @@ function TrackRow(props: {
         </Text>
       ) : null}
 
-      {imageUrl ? (
-        <Image
-          source={{
-            uri: imageUrl,
-          }}
-          style={{
-            width: 46,
-            height: 46,
-            borderRadius: 8,
-            marginRight: 12,
-          }}
-        />
-      ) : (
-        <View
+      <View
+        style={
+          styles.trackFallback
+        }
+      >
+        <Text
           style={
-            styles.trackFallback
+            styles.fallbackText
           }
         >
-          <Text
-            style={
-              styles.fallbackText
-            }
-          >
-            ♪
-          </Text>
-        </View>
-      )}
+          ♪
+        </Text>
+      </View>
 
       <View style={styles.rowText}>
         <Text

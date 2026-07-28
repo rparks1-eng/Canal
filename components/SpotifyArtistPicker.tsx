@@ -68,7 +68,7 @@ export default function SpotifyArtistPicker({
     const cleanedQuery =
       query.trim();
 
-    if (cleanedQuery.length < 1) {
+    if (cleanedQuery.length < 2) {
       setSearchResults([]);
       setIsSearching(false);
       setAuthorizationError(false);
@@ -87,7 +87,7 @@ export default function SpotifyArtistPicker({
           cleanedQuery,
           requestId,
         );
-      }, 400);
+      }, 600);
 
     return () => {
       clearTimeout(timer);

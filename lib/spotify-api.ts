@@ -1,5 +1,8 @@
 import {
+  assertSpotifyConnectionGuardCurrent,
+  getSpotifyConnectionGeneration,
   spotifyAuthenticatedFetch,
+  SpotifySessionChangedError,
 } from "./spotify-auth";
 
 import type {
@@ -136,14 +139,19 @@ type SpotifyRequestOptions = {
 
   connectionGuard?:
     SpotifyConnectionGuard;
+
+  cacheTtlMs?: number;
 };
 
 type SpotifyErrorPayload = {
+  reason?: string;
+
   error?:
     | string
     | {
         status?: number;
         message?: string;
+        reason?: string;
       };
 
   error_description?: string;
@@ -152,11 +160,13 @@ type SpotifyErrorPayload = {
 export class SpotifyApiError extends Error {
   status: number;
   retryAfterSeconds?: number;
+  reason?: string;
 
   constructor(
     message: string,
     status: number,
     retryAfterSeconds?: number,
+    reason?: string,
   ) {
     super(message);
 
@@ -167,8 +177,37 @@ export class SpotifyApiError extends Error {
 
     this.retryAfterSeconds =
       retryAfterSeconds;
+
+    this.reason =
+      reason;
   }
 }
+
+type SpotifyGetCacheEntry = {
+  connectionGeneration: number;
+  expiresAt: number;
+  value: unknown;
+};
+
+type SpotifyGetInFlight = {
+  connectionGeneration: number;
+  promise: Promise<unknown>;
+};
+
+const DEFAULT_GET_CACHE_TTL_MS =
+  60 * 1000;
+
+const spotifyGetCache =
+  new Map<
+    string,
+    SpotifyGetCacheEntry
+  >();
+
+const spotifyGetInFlight =
+  new Map<
+    string,
+    SpotifyGetInFlight
+  >();
 
 function buildSpotifyUrl(
   path: string,
@@ -227,7 +266,7 @@ function readSpotifyErrorMessage(
   return fallback;
 }
 
-async function spotifyRequest<T>(
+async function performSpotifyRequest<T>(
   path: string,
   options: SpotifyRequestOptions = {},
 ): Promise<T> {
@@ -300,6 +339,25 @@ async function spotifyRequest<T>(
         `Spotify request failed with status ${response.status}.`,
       );
 
+    const spotifyError =
+      (
+        payload as
+          | SpotifyErrorPayload
+          | null
+      )?.error;
+
+    const reason =
+      typeof spotifyError ===
+        "object" &&
+      spotifyError !==
+        null
+        ? spotifyError.reason
+        : (
+            payload as
+              | SpotifyErrorPayload
+              | null
+          )?.reason;
+
     throw new SpotifyApiError(
       message,
       response.status,
@@ -308,10 +366,160 @@ async function spotifyRequest<T>(
       )
         ? retryAfterSeconds
         : undefined,
+      reason,
     );
   }
 
   return payload as T;
+}
+
+async function assertSpotifyRequestCurrent(
+  connectionGeneration: number,
+  connectionGuard?:
+    SpotifyConnectionGuard,
+): Promise<void> {
+  if (connectionGuard) {
+    await assertSpotifyConnectionGuardCurrent(
+      connectionGuard,
+    );
+  }
+
+  if (
+    getSpotifyConnectionGeneration() !==
+    connectionGeneration
+  ) {
+    throw new SpotifySessionChangedError();
+  }
+}
+
+async function spotifyRequest<T>(
+  path: string,
+  options: SpotifyRequestOptions = {},
+): Promise<T> {
+  const method =
+    options.method ??
+    "GET";
+
+  if (
+    method !==
+      "GET" ||
+    options.body !==
+      undefined
+  ) {
+    return performSpotifyRequest<T>(
+      path,
+      options,
+    );
+  }
+
+  const requestUrl =
+    buildSpotifyUrl(
+      path,
+    );
+
+  const connectionGeneration =
+    getSpotifyConnectionGeneration();
+
+  await assertSpotifyRequestCurrent(
+    connectionGeneration,
+    options.connectionGuard,
+  );
+
+  const existingCache =
+    spotifyGetCache.get(
+      requestUrl,
+    );
+
+  if (
+    existingCache &&
+    existingCache
+      .connectionGeneration ===
+      connectionGeneration &&
+    existingCache.expiresAt >
+      Date.now()
+  ) {
+    return existingCache.value as T;
+  }
+
+  const existingRequest =
+    spotifyGetInFlight.get(
+      requestUrl,
+    );
+
+  if (
+    existingRequest &&
+    existingRequest
+      .connectionGeneration ===
+      connectionGeneration
+  ) {
+    const existingValue =
+      await existingRequest
+        .promise as T;
+
+    await assertSpotifyRequestCurrent(
+      connectionGeneration,
+      options.connectionGuard,
+    );
+
+    return existingValue;
+  }
+
+  const request =
+    performSpotifyRequest<T>(
+      requestUrl,
+      options,
+    );
+
+  spotifyGetInFlight.set(
+    requestUrl,
+    {
+      connectionGeneration,
+      promise:
+        request,
+    },
+  );
+
+  try {
+    const value =
+      await request;
+
+    await assertSpotifyRequestCurrent(
+      connectionGeneration,
+      options.connectionGuard,
+    );
+
+    const cacheTtlMs =
+      options.cacheTtlMs ??
+      DEFAULT_GET_CACHE_TTL_MS;
+
+    if (
+      cacheTtlMs >
+      0
+    ) {
+      spotifyGetCache.set(
+        requestUrl,
+        {
+          connectionGeneration,
+          expiresAt:
+            Date.now() +
+            cacheTtlMs,
+          value,
+        },
+      );
+    }
+
+    return value;
+  } finally {
+    if (
+      spotifyGetInFlight.get(
+        requestUrl,
+      )?.promise === request
+    ) {
+      spotifyGetInFlight.delete(
+        requestUrl,
+      );
+    }
+  }
 }
 
 export async function getSpotifyProfile(): Promise<
@@ -324,6 +532,10 @@ export async function getSpotifyProfile(): Promise<
 
 export async function getSpotifyTopArtists(
   limit = 20,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyPage<SpotifyArtist>> {
   const safeLimit =
     Math.min(
@@ -335,11 +547,19 @@ export async function getSpotifyTopArtists(
     SpotifyPage<SpotifyArtist>
   >(
     `/me/top/artists?time_range=medium_term&limit=${safeLimit}`,
+    {
+      connectionGuard:
+        options.connectionGuard,
+    },
   );
 }
 
 export async function getSpotifyTopTracks(
   limit = 20,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyPage<SpotifyTrack>> {
   const safeLimit =
     Math.min(
@@ -351,11 +571,19 @@ export async function getSpotifyTopTracks(
     SpotifyPage<SpotifyTrack>
   >(
     `/me/top/tracks?time_range=medium_term&limit=${safeLimit}`,
+    {
+      connectionGuard:
+        options.connectionGuard,
+    },
   );
 }
 
 export async function getSpotifyRecentlyPlayed(
   limit = 20,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyRecentResponse> {
   const safeLimit =
     Math.min(
@@ -365,11 +593,19 @@ export async function getSpotifyRecentlyPlayed(
 
   return spotifyRequest<SpotifyRecentResponse>(
     `/me/player/recently-played?limit=${safeLimit}`,
+    {
+      connectionGuard:
+        options.connectionGuard,
+    },
   );
 }
 
 export async function getSpotifySavedTracks(
   limit = 20,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<
   SpotifyPage<SpotifySavedTrackItem>
 > {
@@ -383,11 +619,19 @@ export async function getSpotifySavedTracks(
     SpotifyPage<SpotifySavedTrackItem>
   >(
     `/me/tracks?limit=${safeLimit}&offset=0`,
+    {
+      connectionGuard:
+        options.connectionGuard,
+    },
   );
 }
 
 export async function getSpotifyPlaylists(
   limit = 20,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyPage<SpotifyPlaylist>> {
   const safeLimit =
     Math.min(
@@ -399,6 +643,10 @@ export async function getSpotifyPlaylists(
     SpotifyPage<SpotifyPlaylist>
   >(
     `/me/playlists?limit=${safeLimit}&offset=0`,
+    {
+      connectionGuard:
+        options.connectionGuard,
+    },
   );
 }
 
@@ -539,6 +787,10 @@ export async function getSpotifyArtistsByIds(
 export async function searchSpotifyCatalogTracks(
   query: string,
   limit = 10,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyTrack[]> {
   const safeLimit =
     Math.min(
@@ -556,6 +808,14 @@ export async function searchSpotifyCatalogTracks(
       `/search?type=track&limit=${safeLimit}&q=${encodeURIComponent(
         query,
       )}`,
+      {
+        cacheTtlMs:
+          15 *
+          60 *
+          1000,
+        connectionGuard:
+          options.connectionGuard,
+      },
     );
 
   return response.tracks

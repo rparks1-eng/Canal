@@ -153,11 +153,12 @@ describe(
         ).toMatchObject({
           durationMs:
             180_000,
-          imageUrl:
-            expect.stringContaining(
-              "https://example.com/",
-            ),
         });
+
+        expect(
+          result.scene.tracks[0]
+            .imageUrl,
+        ).toBeUndefined();
       },
     );
 

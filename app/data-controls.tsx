@@ -3,6 +3,7 @@ import {
     router,
 } from "expo-router";
 import {
+    useCallback,
     useEffect,
     useState,
 } from "react";
@@ -14,16 +15,27 @@ import {
     ScrollView,
     Share,
     StyleSheet,
+    Switch,
     Text,
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+    deleteOwnAnalyticsEvents,
+    readAnalyticsControlState,
+    setAnalyticsConsent,
+} from "../lib/analytics";
+
+import {
     clearAllCanalData,
     exportCanalData,
     getCanalStorageSummary,
 } from "../lib/data-controls";
+
+import {
+    useAuth,
+} from "../providers/auth-provider";
 
 type StorageSummary = {
   keyCount: number;
@@ -44,6 +56,11 @@ type WebNavigator = {
 };
 
 export default function DataControlsScreen() {
+  const {
+    user,
+  } =
+    useAuth();
+
   const [
     summary,
     setSummary,
@@ -56,12 +73,167 @@ export default function DataControlsScreen() {
     activeAction,
     setActiveAction,
   ] = useState<
-    "export" | "reset" | ""
+    | "analytics"
+    | "delete-analytics"
+    | "export"
+    | "reset"
+    | ""
   >("");
+
+  const [
+    analyticsEnabled,
+    setAnalyticsEnabled,
+  ] = useState(false);
+
+  const [
+    analyticsLoading,
+    setAnalyticsLoading,
+  ] = useState(true);
+
+  const [
+    analyticsQueuedCount,
+    setAnalyticsQueuedCount,
+  ] = useState(0);
+
+  const [
+    analyticsMessage,
+    setAnalyticsMessage,
+  ] = useState("");
+
+  const loadAnalyticsState =
+    useCallback(async () => {
+    if (!user) {
+      setAnalyticsEnabled(
+        false,
+      );
+      setAnalyticsQueuedCount(
+        0,
+      );
+      setAnalyticsLoading(
+        false,
+      );
+
+      return;
+    }
+
+    setAnalyticsLoading(
+      true,
+    );
+
+    try {
+      const state =
+        await readAnalyticsControlState();
+
+      setAnalyticsEnabled(
+        state.enabled,
+      );
+
+      setAnalyticsQueuedCount(
+        state.queuedEventCount,
+      );
+
+      if (
+        state.pendingCloudDeletion
+      ) {
+        setAnalyticsMessage(
+          "Cloud analytics history deletion will retry when Canal reconnects.",
+        );
+      }
+    } catch {
+      setAnalyticsMessage(
+        "Canal could not read the analytics preference. Analytics remain off.",
+      );
+    } finally {
+      setAnalyticsLoading(
+        false,
+      );
+    }
+    }, [
+      user,
+    ]);
 
   useEffect(() => {
     void loadSummary();
-  }, []);
+    void loadAnalyticsState();
+  }, [
+    loadAnalyticsState,
+  ]);
+
+  async function handleAnalyticsToggle(
+    enabled: boolean,
+  ) {
+    setActiveAction(
+      "analytics",
+    );
+
+    setAnalyticsMessage(
+      "",
+    );
+
+    try {
+      const result =
+        await setAnalyticsConsent(
+          enabled,
+        );
+
+      setAnalyticsEnabled(
+        result.enabled,
+      );
+
+      setAnalyticsQueuedCount(
+        result.queuedEventCount,
+      );
+
+      setAnalyticsMessage(
+        result.message,
+      );
+    } catch {
+      setAnalyticsMessage(
+        "Canal could not save the analytics preference. The previous setting is unchanged.",
+      );
+
+      await loadAnalyticsState();
+    } finally {
+      setActiveAction(
+        "",
+      );
+    }
+  }
+
+  async function handleDeleteAnalytics() {
+    setActiveAction(
+      "delete-analytics",
+    );
+
+    setAnalyticsMessage(
+      "",
+    );
+
+    try {
+      const result =
+        await deleteOwnAnalyticsEvents();
+
+      setAnalyticsEnabled(
+        result.enabled,
+      );
+
+      setAnalyticsQueuedCount(
+        result.queuedEventCount,
+      );
+
+      setAnalyticsMessage(
+        result.message,
+      );
+    } catch {
+      setAnalyticsMessage(
+        "Canal could not delete analytics history. Try again when connected.",
+      );
+    } finally {
+      setActiveAction(
+        "",
+      );
+    }
+  }
 
   async function loadSummary() {
     try {
@@ -158,15 +330,15 @@ export default function DataControlsScreen() {
 
   function confirmReset() {
     Alert.alert(
-      "Reset Canal on this device?",
-      "This removes Scenes, Snapshots, Soundscape data, Following, blocked users, activity, settings, Stages, favorites, and Spotify connection data stored by the prototype.",
+      "Clear Canal data on this device?",
+      "This removes Canal data stored on this device and disconnects Spotify. It does not delete your Canal account or cloud Scenes, Snapshots, Stages, profile, relationships, or playlist history.",
       [
         {
           text: "Cancel",
           style: "cancel",
         },
         {
-          text: "Reset Everything",
+            text: "Clear This Device",
           style: "destructive",
           onPress: () => {
             void handleReset();
@@ -185,8 +357,8 @@ export default function DataControlsScreen() {
       await clearAllCanalData();
 
       Alert.alert(
-        "Canal reset",
-        "Local Canal data was removed from this device.",
+        "Device data cleared",
+        "Local Canal data was removed. Your Canal account and cloud data were not deleted.",
         [
           {
             text: "Return to Start",
@@ -269,9 +441,10 @@ export default function DataControlsScreen() {
           <Text
             style={styles.description}
           >
-            Export or remove the
-            prototype data stored
-            locally on this device.
+            Choose whether to share
+            limited usage analytics,
+            export local data, or
+            clear this device.
           </Text>
         </View>
 
@@ -310,6 +483,149 @@ export default function DataControlsScreen() {
             )}{" "}
             of text data
           </Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text
+            style={styles.sectionTitle}
+          >
+            Product analytics
+          </Text>
+
+          <View
+            style={styles.actionCard}
+          >
+            <View
+              style={styles.toggleRow}
+            >
+              <View
+                style={styles.actionCopy}
+              >
+                <Text
+                  style={styles.actionTitle}
+                >
+                  Share limited usage
+                  analytics
+                </Text>
+
+                <Text
+                  style={styles.actionText}
+                >
+                  Off by default. When
+                  enabled, Canal records
+                  milestone names,
+                  retry status, platform,
+                  and bounded failure
+                  categories. It never
+                  includes passwords,
+                  emails, reset links,
+                  tokens, URLs, raw
+                  errors, tracks, or
+                  private Scene and
+                  Snapshot content.
+                </Text>
+              </View>
+
+              <Switch
+                accessibilityLabel="Share limited usage analytics"
+                accessibilityHint="Controls whether Canal records and sends privacy-limited product events."
+                accessibilityState={{
+                  busy:
+                    analyticsLoading ||
+                    activeAction ===
+                      "analytics",
+                  checked:
+                    analyticsEnabled,
+                  disabled:
+                    analyticsLoading ||
+                    activeAction !==
+                      "",
+                }}
+                disabled={
+                  analyticsLoading ||
+                  activeAction !== ""
+                }
+                onValueChange={(
+                  value,
+                ) => {
+                  void handleAnalyticsToggle(
+                    value,
+                  );
+                }}
+                trackColor={{
+                  false:
+                    "#434a45",
+                  true:
+                    "#ff7a1a",
+                }}
+                thumbColor="#ffffff"
+                value={
+                  analyticsEnabled
+                }
+              />
+            </View>
+
+            <Text
+              accessibilityLiveRegion="polite"
+              style={
+                styles.analyticsStatus
+              }
+            >
+              {analyticsLoading
+                ? "Checking analytics preference."
+                : analyticsEnabled
+                  ? `${analyticsQueuedCount} event${analyticsQueuedCount === 1 ? "" : "s"} waiting for delivery. Events expire from the device after seven days and from Canal after 90 days.`
+                  : "Analytics are off. No new analytics events are recorded or queued."}
+            </Text>
+
+            {analyticsMessage ? (
+              <Text
+                accessibilityLiveRegion="polite"
+                style={
+                  styles.analyticsMessage
+                }
+              >
+                {analyticsMessage}
+              </Text>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityHint="Deletes queued events on this device and your existing Canal analytics rows."
+              disabled={
+                analyticsLoading ||
+                activeAction !== ""
+              }
+              onPress={() => {
+                void handleDeleteAnalytics();
+              }}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                (
+                  analyticsLoading ||
+                  activeAction !== ""
+                ) &&
+                  styles.disabled,
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              {activeAction ===
+              "delete-analytics" ? (
+                <ActivityIndicator
+                  color="#ff9a50"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.secondaryButtonText
+                  }
+                >
+                  Delete Analytics History
+                </Text>
+              )}
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -431,16 +747,19 @@ export default function DataControlsScreen() {
                 <Text
                   style={styles.actionTitle}
                 >
-                  Reset Canal
+                  Clear data on this
+                  device
                 </Text>
 
                 <Text
                   style={styles.actionText}
                 >
-                  Removes local
-                  prototype data and
-                  returns the app to a
-                  fresh state.
+                  Removes local caches,
+                  drafts, settings, and
+                  music credentials. It
+                  does not delete your
+                  Canal account or most
+                  cloud data.
                 </Text>
               </View>
             </View>
@@ -472,7 +791,7 @@ export default function DataControlsScreen() {
                     styles.dangerButtonText
                   }
                 >
-                  Reset Everything
+                  Clear This Device
                 </Text>
               )}
             </Pressable>
@@ -487,11 +806,16 @@ export default function DataControlsScreen() {
           />
 
           <Text style={styles.noteText}>
-            This prototype does not yet
-            have a Canal cloud account
-            or server backup. Removing
-            local data cannot currently
-            be undone inside the app.
+            Canal uses Supabase for your
+            account and synchronized
+            profile, Scenes, Snapshots,
+            relationships, playlist
+            history, and Live Stages.
+            Clearing this device is not
+            account deletion. A complete
+            cloud export and account
+            deletion flow remains a
+            release gate.
           </Text>
         </View>
       </ScrollView>
@@ -667,6 +991,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+
   actionTitle: {
     color: "#ffffff",
     fontSize: 16,
@@ -694,6 +1024,34 @@ const styles = StyleSheet.create({
     color: "#17110c",
     fontSize: 14,
     fontWeight: "800",
+  },
+
+  secondaryButton: {
+    minHeight: 49,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#5d3b24",
+    borderRadius: 16,
+    backgroundColor: "#211810",
+  },
+
+  secondaryButtonText: {
+    color: "#ffb078",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  analyticsStatus: {
+    color: "#b7c0ba",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  analyticsMessage: {
+    color: "#ffb078",
+    fontSize: 12,
+    lineHeight: 18,
   },
 
   dangerButton: {

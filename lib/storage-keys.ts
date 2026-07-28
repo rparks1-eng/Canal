@@ -48,6 +48,9 @@ export const STORAGE_KEYS = {
 
   spotifyCachePrefix:
     "@canal/spotify-cache:",
+
+  analyticsQueue:
+    "@canal/analytics/v1/queue",
 } as const;
 
 export const CANAL_STORAGE_PREFIX =

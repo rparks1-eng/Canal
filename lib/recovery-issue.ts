@@ -26,6 +26,7 @@ type ErrorShape = {
   status?: unknown;
   code?: unknown;
   retryAfterSeconds?: unknown;
+  reason?: unknown;
   authorizationInvalid?: unknown;
 };
 
@@ -175,6 +176,14 @@ export function classifyRecoveryIssue(
       shape.retryAfterSeconds,
     );
 
+  const rateLimitReason =
+    typeof shape.reason ===
+      "string"
+      ? shape.reason
+          .trim()
+          .toUpperCase()
+      : "";
+
   if (
     context.service ===
       "spotify" &&
@@ -252,14 +261,22 @@ export function classifyRecoveryIssue(
       title:
         context.service ===
           "spotify"
-          ? "Spotify needs a moment"
+          ? rateLimitReason ===
+              "QUOTA_EXCEEDED"
+            ? "Spotify quota reached"
+            : "Spotify needs a moment"
           : "Canal needs a moment",
       message:
         retryAfterSeconds !==
           undefined &&
         retryAfterSeconds >
           0
-          ? `Try again in about ${formatRetryDelay(
+          ? `${
+              rateLimitReason ===
+                "QUOTA_EXCEEDED"
+                ? "Spotify’s app quota is exhausted. "
+                : ""
+            }Try again in about ${formatRetryDelay(
               retryAfterSeconds,
             )}.`
           : `${

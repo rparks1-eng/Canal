@@ -30,6 +30,12 @@ import {
 } from "../components/recovery-notice";
 
 import {
+  classifyAnalyticsFailure,
+  recordAnalyticsEvent,
+  recordAnalyticsFailure,
+} from "../lib/analytics";
+
+import {
   publishSnapshot as publishToLocalActivity,
 } from "../lib/canal-session";
 
@@ -227,6 +233,11 @@ export default function SceneSnapshotScreen() {
     async (
       refreshBeforePublish = false,
     ): Promise<void> => {
+      const analyticsAttempt =
+        refreshBeforePublish
+          ? "retry" as const
+          : "initial" as const;
+
       if (
         !scene ||
         published ||
@@ -250,6 +261,12 @@ export default function SceneSnapshotScreen() {
             nextStatus ===
             "offline"
           ) {
+            void recordAnalyticsFailure(
+              "snapshot_publish",
+              "offline",
+              analyticsAttempt,
+            );
+
             return;
           }
         }
@@ -282,6 +299,12 @@ export default function SceneSnapshotScreen() {
               });
 
         if (!result.value) {
+          void recordAnalyticsFailure(
+            "snapshot_publish",
+            "service",
+            analyticsAttempt,
+          );
+
           setPublishErrorCause(
             new Error(
               result.warning ||
@@ -298,6 +321,15 @@ export default function SceneSnapshotScreen() {
           result.cloudStatus !==
           "synced"
         ) {
+          void recordAnalyticsFailure(
+            "snapshot_publish",
+            connectivityStatus ===
+              "offline"
+              ? "offline"
+              : "service",
+            analyticsAttempt,
+          );
+
           setPendingSnapshotId(
             result.value.id,
           );
@@ -317,6 +349,13 @@ export default function SceneSnapshotScreen() {
         setPublishErrorCause(
           null,
         );
+
+        void recordAnalyticsEvent({
+          name:
+            "snapshot_published",
+          attempt:
+            analyticsAttempt,
+        });
 
         /*
          * Keep the existing local Activity card as an
@@ -361,6 +400,14 @@ export default function SceneSnapshotScreen() {
           );
         }
       } catch (error) {
+        void recordAnalyticsFailure(
+          "snapshot_publish",
+          classifyAnalyticsFailure(
+            error,
+          ),
+          analyticsAttempt,
+        );
+
         const publishFailure =
           error ??
           new Error(

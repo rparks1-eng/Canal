@@ -1,10 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
-    clearActivity,
-    clearRelationships,
-} from "./relationships";
-import {
     clearSpotifyApiCache,
 } from "./spotify-cache";
 import {
@@ -145,7 +141,5 @@ export async function clearAllCanalData(): Promise<void> {
   await Promise.allSettled([
     clearSpotifySession(),
     clearSpotifyApiCache(),
-    clearActivity(),
-    clearRelationships(),
   ]);
 }

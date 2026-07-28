@@ -17,10 +17,6 @@ import {
 } from "react-native";
 
 import {
-  Image,
-} from "expo-image";
-
-import {
   router,
   useLocalSearchParams,
 } from "expo-router";
@@ -1223,34 +1219,19 @@ export default function NowPlayingScreen() {
           false
         }
       >
-        {currentTrack.imageUrl ? (
-          <Image
-            accessibilityLabel={`${currentTrack.title} artwork`}
-            source={{
-              uri:
-                currentTrack.imageUrl,
-            }}
-            contentFit="cover"
-            transition={180}
-            style={
-              styles.artwork
-            }
-          />
-        ) : (
-          <View style={styles.artwork}>
-            <View style={styles.orbOne} />
-            <View style={styles.orbTwo} />
-            <View style={styles.orbThree} />
+        <View style={styles.artwork}>
+          <View style={styles.orbOne} />
+          <View style={styles.orbTwo} />
+          <View style={styles.orbThree} />
 
-            <Text
-              style={
-                styles.artworkText
-              }
-            >
-              ◉
-            </Text>
-          </View>
-        )}
+          <Text
+            style={
+              styles.artworkText
+            }
+          >
+            ◉
+          </Text>
+        </View>
 
         <Text
           numberOfLines={2}
@@ -1515,34 +1496,20 @@ export default function NowPlayingScreen() {
                     styles.queueRow
                   }
                 >
-                  {track.imageUrl ? (
-                    <Image
-                      accessibilityLabel=""
-                      source={{
-                        uri:
-                          track.imageUrl,
-                      }}
-                      contentFit="cover"
+                  <View
+                    style={[
+                      styles.queueImage,
+                      styles.queueImagePlaceholder,
+                    ]}
+                  >
+                    <Text
                       style={
-                        styles.queueImage
+                        styles.queueImageText
                       }
-                    />
-                  ) : (
-                    <View
-                      style={[
-                        styles.queueImage,
-                        styles.queueImagePlaceholder,
-                      ]}
                     >
-                      <Text
-                        style={
-                          styles.queueImageText
-                        }
-                      >
-                        ♪
-                      </Text>
-                    </View>
-                  )}
+                      ♪
+                    </Text>
+                  </View>
 
                   <Text
                     style={

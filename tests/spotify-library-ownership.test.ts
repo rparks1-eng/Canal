@@ -14,6 +14,11 @@ import {
 import * as spotifyAuth from "../lib/spotify-auth";
 
 import {
+  createSpotifyPlaylist,
+  searchSpotifyCatalogTracks,
+} from "../lib/spotify-api";
+
+import {
   clearSpotifySession,
   getSpotifyConnectionGeneration,
   readSpotifySession,
@@ -34,6 +39,7 @@ import {
   readSpotifyLibrarySnapshot,
   saveSpotifyLibrarySnapshot,
   SPOTIFY_LIBRARY_STORAGE_KEY,
+  syncSpotifyLibrary,
 } from "../lib/spotify-library";
 
 import {
@@ -143,6 +149,11 @@ function createSnapshot(
 function mockResponse(
   status: number,
   payload: unknown,
+  headers:
+    Record<
+      string,
+      string
+    > = {},
 ): Response {
   return {
     ok:
@@ -156,7 +167,13 @@ function mockResponse(
         payload,
       ),
     headers: {
-      get: () =>
+      get: (
+        name: string,
+      ) =>
+        headers[
+          name.toLowerCase()
+        ] ??
+        headers[name] ??
         null,
     },
   } as unknown as Response;
@@ -198,6 +215,8 @@ function createScene(): StoredScene {
           "Pinned Track",
         artist:
           "Canal Artist",
+        spotifyUri:
+          "spotify:track:4uLU6hMCjMI75M1A2tKUQC",
       },
     ],
     visibility:
@@ -826,6 +845,701 @@ describe(
     );
 
     it(
+      "coalesces and caches same-generation Spotify GETs",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            "account-a",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        let releaseFetch:
+          (
+            response: Response,
+          ) => void =
+            () => {};
+
+        const fetchGate =
+          new Promise<Response>(
+            (resolve) => {
+              releaseFetch =
+                resolve;
+            },
+          );
+
+        let signalFetchStarted:
+          () => void =
+            () => {};
+
+        const fetchStarted =
+          new Promise<void>(
+            (resolve) => {
+              signalFetchStarted =
+                resolve;
+            },
+          );
+
+        const fetchMock =
+          jest
+            .spyOn(
+              global,
+              "fetch",
+            )
+            .mockImplementation(
+              () => {
+                signalFetchStarted();
+
+                return fetchGate;
+              },
+            );
+
+        const first =
+          searchSpotifyCatalogTracks(
+            "same-generation-cache",
+          );
+
+        const second =
+          searchSpotifyCatalogTracks(
+            "same-generation-cache",
+          );
+
+        await fetchStarted;
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          1,
+        );
+
+        releaseFetch(
+          mockResponse(
+            200,
+            {
+              tracks: {
+                items: [
+                  {
+                    id:
+                      "cached-track",
+                    name:
+                      "Cached Track",
+                    uri:
+                      "spotify:track:4uLU6hMCjMI75M1A2tKUQC",
+                    artists: [],
+                  },
+                ],
+              },
+            },
+          ),
+        );
+
+        await expect(
+          Promise.all([
+            first,
+            second,
+          ]),
+        ).resolves.toEqual([
+          [
+            expect.objectContaining({
+              id:
+                "cached-track",
+            }),
+          ],
+          [
+            expect.objectContaining({
+              id:
+                "cached-track",
+            }),
+          ],
+        ]);
+
+        await expect(
+          searchSpotifyCatalogTracks(
+            "same-generation-cache",
+          ),
+        ).resolves.toHaveLength(
+          1,
+        );
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          1,
+        );
+      },
+    );
+
+    it(
+      "does not reuse a Spotify GET cache after an account switch",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            "account-a",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        const fetchMock =
+          jest
+            .spyOn(
+              global,
+              "fetch",
+            )
+            .mockResolvedValueOnce(
+              mockResponse(
+                200,
+                {
+                  tracks: {
+                    items: [
+                      {
+                        id:
+                          "account-a-track",
+                        name:
+                          "Account A",
+                        uri:
+                          "spotify:track:4uLU6hMCjMI75M1A2tKUQC",
+                        artists: [],
+                      },
+                    ],
+                  },
+                },
+              ),
+            )
+            .mockResolvedValueOnce(
+              mockResponse(
+                200,
+                {
+                  tracks: {
+                    items: [
+                      {
+                        id:
+                          "account-b-track",
+                        name:
+                          "Account B",
+                        uri:
+                          "spotify:track:0VjIjW4GlUZAMYd2vXMi3b",
+                        artists: [],
+                      },
+                    ],
+                  },
+                },
+              ),
+            );
+
+        await expect(
+          searchSpotifyCatalogTracks(
+            "account-scoped-cache",
+          ),
+        ).resolves.toEqual([
+          expect.objectContaining({
+            id:
+              "account-a-track",
+          }),
+        ]);
+
+        await saveSpotifySession(
+          createSession(
+            "account-b",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        await expect(
+          searchSpotifyCatalogTracks(
+            "account-scoped-cache",
+          ),
+        ).resolves.toEqual([
+          expect.objectContaining({
+            id:
+              "account-b-track",
+          }),
+        ]);
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          2,
+        );
+      },
+    );
+
+    it(
+      "does not reuse an in-flight Spotify GET after an account switch",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            "account-a",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        const responseResolvers:
+          (
+            (
+              response:
+                Response,
+            ) => void
+          )[] = [];
+
+        let signalFirstStarted:
+          () => void =
+            () => {};
+
+        const firstStarted =
+          new Promise<void>(
+            (resolve) => {
+              signalFirstStarted =
+                resolve;
+            },
+          );
+
+        let signalSecondStarted:
+          () => void =
+            () => {};
+
+        const secondStarted =
+          new Promise<void>(
+            (resolve) => {
+              signalSecondStarted =
+                resolve;
+            },
+          );
+
+        const fetchMock =
+          jest
+            .spyOn(
+              global,
+              "fetch",
+            )
+            .mockImplementation(
+              () =>
+                new Promise<Response>(
+                  (resolve) => {
+                    responseResolvers.push(
+                      resolve,
+                    );
+
+                    if (
+                      responseResolvers.length ===
+                      1
+                    ) {
+                      signalFirstStarted();
+                    } else {
+                      signalSecondStarted();
+                    }
+                  },
+                ),
+            );
+
+        const accountARequest =
+          searchSpotifyCatalogTracks(
+            "in-flight-account-isolation",
+          );
+
+        await firstStarted;
+
+        await saveSpotifySession(
+          createSession(
+            "account-b",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        const accountBRequest =
+          searchSpotifyCatalogTracks(
+            "in-flight-account-isolation",
+          );
+
+        await secondStarted;
+
+        responseResolvers[1](
+          mockResponse(
+            200,
+            {
+              tracks: {
+                items: [
+                  {
+                    id:
+                      "account-b-in-flight",
+                    name:
+                      "Account B",
+                    uri:
+                      "spotify:track:0VjIjW4GlUZAMYd2vXMi3b",
+                    artists: [],
+                  },
+                ],
+              },
+            },
+          ),
+        );
+
+        await expect(
+          accountBRequest,
+        ).resolves.toEqual([
+          expect.objectContaining({
+            id:
+              "account-b-in-flight",
+          }),
+        ]);
+
+        responseResolvers[0](
+          mockResponse(
+            200,
+            {
+              tracks: {
+                items: [
+                  {
+                    id:
+                      "account-a-in-flight",
+                    name:
+                      "Account A",
+                    uri:
+                      "spotify:track:4uLU6hMCjMI75M1A2tKUQC",
+                    artists: [],
+                  },
+                ],
+              },
+            },
+          ),
+        );
+
+        await expect(
+          accountARequest,
+        ).rejects.toThrow(
+          "connection changed",
+        );
+
+        await expect(
+          searchSpotifyCatalogTracks(
+            "in-flight-account-isolation",
+          ),
+        ).resolves.toEqual([
+          expect.objectContaining({
+            id:
+              "account-b-in-flight",
+          }),
+        ]);
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          2,
+        );
+      },
+    );
+
+    it(
+      "never caches or coalesces Spotify writes",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            "account-a",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        let playlistNumber =
+          0;
+
+        const fetchMock =
+          jest
+            .spyOn(
+              global,
+              "fetch",
+            )
+            .mockImplementation(
+              async () => {
+                playlistNumber +=
+                  1;
+
+                return mockResponse(
+                  201,
+                  {
+                    id:
+                      `playlist-${playlistNumber}`,
+                    name:
+                      "Quota-safe playlist",
+                    uri:
+                      `spotify:playlist:${playlistNumber}`,
+                  },
+                );
+              },
+            );
+
+        const [
+          first,
+          second,
+        ] =
+          await Promise.all([
+            createSpotifyPlaylist({
+              name:
+                "Quota-safe playlist",
+            }),
+            createSpotifyPlaylist({
+              name:
+                "Quota-safe playlist",
+            }),
+          ]);
+
+        expect(
+          first.id,
+        ).toBe(
+          "playlist-1",
+        );
+
+        expect(
+          second.id,
+        ).toBe(
+          "playlist-2",
+        );
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          2,
+        );
+      },
+    );
+
+    it(
+      "bounds a library sync to five guarded Spotify reads",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            "account-a",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        const fetchMock =
+          jest
+            .spyOn(
+              global,
+              "fetch",
+            )
+            .mockImplementation(
+              async (
+                input,
+              ) => {
+                const url =
+                  String(input);
+
+                if (
+                  url.includes(
+                    "/recently-played",
+                  )
+                ) {
+                  return mockResponse(
+                    200,
+                    {
+                      items: [],
+                    },
+                  );
+                }
+
+                return mockResponse(
+                  200,
+                  {
+                    items: [],
+                  },
+                );
+              },
+            );
+
+        await expect(
+          syncSpotifyLibrary(),
+        ).resolves.toMatchObject({
+          profile: {
+            id:
+              "account-a",
+          },
+          playlistTracks: [],
+          discoveryTracks: [],
+        });
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          5,
+        );
+
+        const requestedUrls =
+          fetchMock.mock.calls.map(
+            ([input]) =>
+              String(input),
+          );
+
+        expect(
+          requestedUrls,
+        ).toEqual(
+          expect.arrayContaining([
+            expect.stringContaining(
+              "/me/top/artists",
+            ),
+            expect.stringContaining(
+              "/me/top/tracks",
+            ),
+            expect.stringContaining(
+              "/me/player/recently-played",
+            ),
+            expect.stringContaining(
+              "/me/tracks?limit=50&offset=0",
+            ),
+            expect.stringContaining(
+              "/me/playlists?limit=20&offset=0",
+            ),
+          ]),
+        );
+
+        expect(
+          requestedUrls.join(
+            "\n",
+          ),
+        ).not.toMatch(
+          /\/search|\/v1\/artists\?ids=|\/playlists\/[^?]+\/items/,
+        );
+      },
+    );
+
+    it(
+      "honors Retry-After until the connection generation changes",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            "account-a",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        await saveSpotifyLibrarySnapshot(
+          createSnapshot(
+            "account-a",
+          ),
+        );
+
+        const fetchMock =
+          jest
+            .spyOn(
+              global,
+              "fetch",
+            )
+            .mockResolvedValue(
+              mockResponse(
+                429,
+                {
+                  error: {
+                    status:
+                      429,
+                    message:
+                      "Quota exceeded",
+                    reason:
+                      "QUOTA_EXCEEDED",
+                  },
+                },
+                {
+                  "retry-after":
+                    "82800",
+                },
+              ),
+            );
+
+        await expect(
+          syncSpotifyLibrary(),
+        ).rejects.toMatchObject({
+          status:
+            429,
+          reason:
+            "QUOTA_EXCEEDED",
+        });
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          5,
+        );
+
+        const result =
+          await getLatestSpotifyLibrarySnapshot(
+            0,
+          );
+
+        expect(
+          result,
+        ).toMatchObject({
+          refreshed:
+            false,
+          snapshot: {
+            profile: {
+              id:
+                "account-a",
+            },
+          },
+          issue: {
+            kind:
+              "rate-limited",
+            title:
+              "Spotify quota reached",
+          },
+        });
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          5,
+        );
+
+        await saveSpotifySession(
+          createSession(
+            "account-b",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        fetchMock.mockResolvedValue(
+          mockResponse(
+            200,
+            {
+              items: [],
+            },
+          ),
+        );
+
+        await expect(
+          syncSpotifyLibrary(),
+        ).resolves.toMatchObject({
+          profile: {
+            id:
+              "account-b",
+          },
+        });
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          10,
+        );
+      },
+    );
+
+    it(
       "pins a taste export through playlist creation and track insertion",
       async () => {
         const accountA =
@@ -922,7 +1636,7 @@ describe(
     );
 
     it(
-      "pins a Scene export across search, playlist creation, and track insertion",
+      "exports a linked Scene with exactly two Spotify writes and no catalog search",
       async () => {
         await saveSpotifySession(
           createSession(
@@ -939,52 +1653,154 @@ describe(
               global,
               "fetch",
             )
-            .mockImplementationOnce(
-              async (
-                _input,
-                init,
-              ) => {
-                expect(
-                  (
-                    init
-                      ?.headers as
-                      Record<
-                        string,
-                        string
-                      >
-                  ).Authorization,
-                ).toBe(
-                  "Bearer access-account-a",
-                );
-
-                return mockResponse(
-                  200,
-                  {
-                    tracks: {
-                      items: [
-                        {
-                          id:
-                            "matched-track",
-                          name:
-                            "Pinned Track",
-                          uri:
-                            "spotify:track:matched-track",
-                          duration_ms:
-                            180_000,
-                          explicit:
-                            false,
-                          artists: [
-                            {
-                              name:
-                                "Canal Artist",
-                            },
-                          ],
-                        },
-                      ],
-                    },
+            .mockResolvedValueOnce(
+              mockResponse(
+                201,
+                {
+                  id:
+                    "scene-playlist",
+                  uri:
+                    "spotify:playlist:scene-playlist",
+                  external_urls: {
+                    spotify:
+                      "https://open.spotify.com/playlist/scene-playlist",
                   },
-                );
-              },
+                },
+              ),
+            )
+            .mockResolvedValueOnce(
+              mockResponse(
+                201,
+                {
+                  snapshot_id:
+                    "snapshot-1",
+                },
+              ),
+            );
+
+        await expect(
+          exportSceneToSpotify(
+            createScene(),
+          ),
+        ).resolves.toMatchObject({
+          playlistId:
+            "scene-playlist",
+          trackCount:
+            1,
+          skippedCount:
+            0,
+        });
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          2,
+        );
+
+        const requestedUrls =
+          fetchMock.mock.calls.map(
+            ([input]) =>
+              String(input),
+          );
+
+        expect(
+          requestedUrls.join(
+            "\n",
+          ),
+        ).not.toContain(
+          "/search",
+        );
+
+        expect(
+          requestedUrls,
+        ).toEqual([
+          expect.stringContaining(
+            "/me/playlists",
+          ),
+          expect.stringContaining(
+            "/playlists/scene-playlist/items",
+          ),
+        ]);
+
+        expect(
+          JSON.parse(
+            String(
+              fetchMock.mock
+                .calls[1][1]
+                ?.body,
+            ),
+          ),
+        ).toEqual({
+          uris: [
+            "spotify:track:4uLU6hMCjMI75M1A2tKUQC",
+          ],
+        });
+      },
+    );
+
+    it(
+      "rejects a legacy Scene without Spotify links before any API request",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            "account-a",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        const fetchMock =
+          jest.spyOn(
+            global,
+            "fetch",
+          );
+
+        const legacyScene = {
+          ...createScene(),
+          tracks: [
+            {
+              id:
+                "legacy-track",
+              title:
+                "Legacy Track",
+              artist:
+                "Canal Artist",
+            },
+          ],
+        };
+
+        await expect(
+          exportSceneToSpotify(
+            legacyScene,
+          ),
+        ).rejects.toThrow(
+          "legacy Scene has no Spotify track links",
+        );
+
+        expect(
+          fetchMock,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      "pins a URI-only Scene export across playlist creation and track insertion",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            "account-a",
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        const fetchMock =
+          jest
+            .spyOn(
+              global,
+              "fetch",
             )
             .mockImplementationOnce(
               async (
@@ -1037,7 +1853,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledTimes(
-          2,
+          1,
         );
       },
     );

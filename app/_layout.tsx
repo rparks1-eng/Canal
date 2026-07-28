@@ -25,6 +25,10 @@ import {
 } from "../providers/connectivity-provider";
 
 import {
+  AnalyticsProvider,
+} from "../providers/analytics-provider";
+
+import {
   isOnboardingRequired,
   ONBOARDING_METADATA_KEY,
   subscribeToOnboarding,
@@ -358,7 +362,9 @@ export default function RootLayout() {
   return (
     <ConnectivityProvider>
       <AuthProvider>
-        <CanalNavigator />
+        <AnalyticsProvider>
+          <CanalNavigator />
+        </AnalyticsProvider>
       </AuthProvider>
     </ConnectivityProvider>
   );

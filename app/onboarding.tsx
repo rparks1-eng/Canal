@@ -30,6 +30,11 @@ import {
 } from "../lib/onboarding";
 
 import {
+  classifyAnalyticsFailure,
+  recordAnalyticsFailure,
+} from "../lib/analytics";
+
+import {
   useAuth,
 } from "../providers/auth-provider";
 
@@ -145,6 +150,13 @@ export default function OnboardingScreen() {
           destination as never,
         );
       } catch (error) {
+        void recordAnalyticsFailure(
+          "onboarding_complete",
+          classifyAnalyticsFailure(
+            error,
+          ),
+        );
+
         setErrorMessage(
           error instanceof Error
             ? error.message

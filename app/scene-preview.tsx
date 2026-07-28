@@ -18,10 +18,6 @@ import {
 } from "react-native";
 
 import {
-  Image,
-} from "expo-image";
-
-import {
   router,
 } from "expo-router";
 
@@ -57,6 +53,12 @@ import {
   getSpotifyLibraryTrackSuggestions,
   searchSpotifySceneTracks,
 } from "../lib/spotify-scene-tools";
+
+import {
+  classifyAnalyticsFailure,
+  recordAnalyticsEvent,
+  recordAnalyticsFailure,
+} from "../lib/analytics";
 
 import {
   createPlayerSession,
@@ -338,8 +340,17 @@ export default function ScenePreviewScreen() {
     );
 
     if (
+      localSuggestions.length >
+      0
+    ) {
+      setSearching(false);
+
+      return;
+    }
+
+    if (
       cleanedQuery.length <
-      2
+      3
     ) {
       setSearching(false);
 
@@ -422,7 +433,7 @@ export default function ScenePreviewScreen() {
           };
 
         void search();
-      }, 280);
+      }, 600);
 
     return () => {
       clearTimeout(timer);
@@ -577,6 +588,10 @@ export default function ScenePreviewScreen() {
   const exportToSpotify =
     async (
       refreshBeforeExport = false,
+      attempt:
+        | "initial"
+        | "retry" =
+          "initial",
     ): Promise<void> => {
       if (
         !result ||
@@ -621,6 +636,12 @@ export default function ScenePreviewScreen() {
             result.scene,
           );
 
+        void recordAnalyticsEvent({
+          name:
+            "scene_export_completed",
+          attempt,
+        });
+
         setPlaylistUrl(
           exportResult
             .playlistUrl,
@@ -638,6 +659,14 @@ export default function ScenePreviewScreen() {
           null,
         );
       } catch (error) {
+        void recordAnalyticsFailure(
+          "scene_export",
+          classifyAnalyticsFailure(
+            error,
+          ),
+          attempt,
+        );
+
         setExportErrorCause(
           () => error,
         );
@@ -692,6 +721,7 @@ export default function ScenePreviewScreen() {
 
       await exportToSpotify(
         true,
+        "retry",
       );
     };
 
@@ -966,11 +996,6 @@ export default function ScenePreviewScreen() {
                           track.id,
                         );
 
-                      const imageUrl =
-                        track.album
-                          ?.images?.[0]
-                          ?.url;
-
                       return (
                         <View
                           key={
@@ -980,32 +1005,20 @@ export default function ScenePreviewScreen() {
                             styles.searchResult
                           }
                         >
-                          {imageUrl ? (
-                            <Image
-                              source={{
-                                uri:
-                                  imageUrl,
-                              }}
+                          <View
+                            style={[
+                              styles.trackImage,
+                              styles.placeholderImage,
+                            ]}
+                          >
+                            <Text
                               style={
-                                styles.trackImage
+                                styles.placeholderText
                               }
-                            />
-                          ) : (
-                            <View
-                              style={[
-                                styles.trackImage,
-                                styles.placeholderImage,
-                              ]}
                             >
-                              <Text
-                                style={
-                                  styles.placeholderText
-                                }
-                              >
-                                ♪
-                              </Text>
-                            </View>
-                          )}
+                              ♪
+                            </Text>
+                          </View>
 
                           <View
                             style={
@@ -1130,12 +1143,6 @@ export default function ScenePreviewScreen() {
                   signal,
                   index,
                 ) => {
-                  const imageUrl =
-                    signal.track
-                      .album
-                      ?.images?.[0]
-                      ?.url;
-
                   return (
                     <View
                       key={
@@ -1145,32 +1152,20 @@ export default function ScenePreviewScreen() {
                         styles.currentTrack
                       }
                     >
-                      {imageUrl ? (
-                        <Image
-                          source={{
-                            uri:
-                              imageUrl,
-                          }}
+                      <View
+                        style={[
+                          styles.trackImage,
+                          styles.placeholderImage,
+                        ]}
+                      >
+                        <Text
                           style={
-                            styles.trackImage
+                            styles.placeholderText
                           }
-                        />
-                      ) : (
-                        <View
-                          style={[
-                            styles.trackImage,
-                            styles.placeholderImage,
-                          ]}
                         >
-                          <Text
-                            style={
-                              styles.placeholderText
-                            }
-                          >
-                            ♪
-                          </Text>
-                        </View>
-                      )}
+                          ♪
+                        </Text>
+                      </View>
 
                       <View
                         style={

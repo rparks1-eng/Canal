@@ -30,6 +30,12 @@ import {
 } from "../components/recovery-notice";
 
 import {
+  classifyAnalyticsFailure,
+  recordAnalyticsEvent,
+  recordAnalyticsFailure,
+} from "../lib/analytics";
+
+import {
   classifyRecoveryIssue,
 } from "../lib/recovery-issue";
 
@@ -286,6 +292,11 @@ export default function PublicSceneScreen() {
         confirmedConnectivityStatus ===
         "offline"
       ) {
+        void recordAnalyticsFailure(
+          "scene_export",
+          "offline",
+        );
+
         setMessage("");
         setErrorMessage("");
 
@@ -325,6 +336,11 @@ export default function PublicSceneScreen() {
             item.scene,
             `A public Canal Scene by ${item.creator.displayName} ${item.creator.handle}.`,
           );
+
+        void recordAnalyticsEvent({
+          name:
+            "scene_export_completed",
+        });
 
         setPlaylistUrl(
           result.playlistUrl,
@@ -370,6 +386,13 @@ export default function PublicSceneScreen() {
           null,
         );
       } catch (error) {
+        void recordAnalyticsFailure(
+          "scene_export",
+          classifyAnalyticsFailure(
+            error,
+          ),
+        );
+
         setExportErrorCause(
           () =>
             error ??

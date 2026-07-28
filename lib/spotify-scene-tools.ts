@@ -1,7 +1,11 @@
 import {
+  addSpotifyItemsToPlaylist,
+  createSpotifyPlaylist,
+  searchSpotifyCatalogTracks,
+} from "./spotify-api";
+
+import {
   requireGuardedSpotifyPlaylistExportSession,
-  SpotifySessionChangedError,
-  spotifyAuthenticatedFetch,
 } from "./spotify-auth";
 
 import type {
@@ -21,8 +25,9 @@ import type {
   SpotifyLibrarySnapshot,
 } from "./spotify-library";
 
-const SPOTIFY_API_BASE =
-  "https://api.spotify.com/v1";
+import {
+  normalizeSpotifyTrackLinks,
+} from "./spotify-track-links";
 
 export type SpotifySceneSearchTrack = {
   id: string;
@@ -30,18 +35,13 @@ export type SpotifySceneSearchTrack = {
   uri: string;
   duration_ms: number;
   explicit: boolean;
-  artists: Array<{
+  artists: {
     id?: string;
     name: string;
-  }>;
+  }[];
   album?: {
     id?: string;
     name?: string;
-    images?: Array<{
-      url: string;
-      height: number | null;
-      width: number | null;
-    }>;
   };
   external_urls?: {
     spotify?: string;
@@ -55,129 +55,6 @@ export type SpotifySceneExportResult = {
   trackCount: number;
   skippedCount: number;
 };
-
-type SpotifyErrorPayload = {
-  error?:
-    | string
-    | {
-        status?: number;
-        message?: string;
-      };
-  error_description?: string;
-};
-
-async function spotifyRequest<T>(
-  path: string,
-  init?: RequestInit,
-  connectionGuard?:
-    SpotifyConnectionGuard,
-): Promise<T> {
-  const response =
-    await spotifyAuthenticatedFetch(
-      `${SPOTIFY_API_BASE}${path}`,
-      {
-        ...init,
-
-        headers: {
-          Accept:
-            "application/json",
-
-          ...(init?.body
-            ? {
-                "Content-Type":
-                  "application/json",
-              }
-            : {}),
-
-        },
-      },
-      connectionGuard,
-    );
-
-  const raw =
-    await response.text();
-
-  let payload:
-    | T
-    | SpotifyErrorPayload
-    | null = null;
-
-  if (raw) {
-    try {
-      payload =
-        JSON.parse(
-          raw,
-        ) as
-          | T
-          | SpotifyErrorPayload;
-    } catch {
-      payload =
-        null;
-    }
-  }
-
-  if (!response.ok) {
-    const errorPayload =
-      payload as
-        | SpotifyErrorPayload
-        | null;
-
-    const nestedMessage =
-      typeof errorPayload
-        ?.error ===
-        "object"
-        ? errorPayload.error
-            .message
-        : undefined;
-
-    const directMessage =
-      typeof errorPayload
-        ?.error ===
-        "string"
-        ? errorPayload.error
-        : undefined;
-
-    if (
-      response.status ===
-      401
-    ) {
-      throw new Error(
-        "Spotify authorization expired. Reconnect Spotify in Music Services.",
-      );
-    }
-
-    if (
-      response.status ===
-      403
-    ) {
-      throw new Error(
-        "Spotify rejected this action. Reconnect Spotify and confirm playlist permissions.",
-      );
-    }
-
-    if (
-      response.status ===
-      429
-    ) {
-      throw new Error(
-        "Spotify is temporarily rate-limiting Canal. Try again shortly.",
-      );
-    }
-
-    throw new Error(
-      nestedMessage ||
-        errorPayload
-          ?.error_description ||
-        directMessage ||
-        `Spotify request failed with status ${response.status}.`,
-    );
-  }
-
-  return (
-    payload ??
-    ({} as T)
-  ) as T;
-}
 
 export async function searchSpotifySceneTracks(
   query: string,
@@ -198,33 +75,57 @@ export async function searchSpotifySceneTracks(
     );
   }
 
-  const result =
-    await spotifyRequest<{
-      tracks?: {
-        items?: Array<
-          SpotifySceneSearchTrack | null
-        >;
-      };
-    }>(
-      `/search?type=track&limit=10&q=${encodeURIComponent(normalized)}`,
-      undefined,
-      connectionGuard,
+  const tracks =
+    await searchSpotifyCatalogTracks(
+      normalized,
+      10,
+      {
+        connectionGuard,
+      },
     );
 
-  return (
-    result.tracks
-      ?.items ??
-    []
-  ).filter(
-    (
-      track,
-    ): track is SpotifySceneSearchTrack =>
-      Boolean(
-        track?.id &&
-          track.name &&
-          track.uri,
-      ),
+  return tracks.map(
+    spotifyTrackToSceneSearchTrack,
   );
+}
+
+function spotifyTrackToSceneSearchTrack(
+  track: SpotifyTrack,
+): SpotifySceneSearchTrack {
+  return {
+    id:
+      track.id,
+    name:
+      track.name,
+    uri:
+      track.uri,
+    duration_ms:
+      track.duration_ms ??
+      210_000,
+    explicit:
+      track.explicit ??
+      false,
+    artists:
+      track.artists.map(
+        (artist) => ({
+          id:
+            artist.id,
+          name:
+            artist.name,
+        }),
+      ),
+    album:
+      track.album
+        ? {
+            id:
+              track.album.id,
+            name:
+              track.album.name,
+          }
+        : undefined,
+    external_urls:
+      track.external_urls,
+  };
 }
 
 export function getSpotifyLibraryTrackSuggestions(
@@ -388,19 +289,6 @@ export function getSpotifyLibraryTrackSuggestions(
                   track.album.id,
                 name:
                   track.album.name,
-                images:
-                  track.album.images?.map(
-                    (image) => ({
-                      url:
-                        image.url,
-                      height:
-                        image.height ??
-                        null,
-                      width:
-                        image.width ??
-                        null,
-                    }),
-                  ),
               }
             : undefined,
         external_urls:
@@ -444,74 +332,7 @@ export function spotifySearchTrackToSceneTrack(
 
     durationMs:
       track.duration_ms,
-
-    imageUrl:
-      track.album
-        ?.images?.[0]
-        ?.url,
   };
-}
-
-function buildTrackSearchQuery(
-  track: SceneTrack,
-): string {
-  return [
-    track.title,
-    track.artist,
-  ]
-    .filter(
-      Boolean,
-    )
-    .join(
-      " ",
-    );
-}
-
-async function resolveSceneTrackUri(
-  track: SceneTrack,
-  connectionGuard:
-    SpotifyConnectionGuard,
-): Promise<string | null> {
-  if (
-    track.spotifyUri
-      ?.startsWith(
-        "spotify:track:",
-      )
-  ) {
-    return track.spotifyUri;
-  }
-
-  const query =
-    buildTrackSearchQuery(
-      track,
-    );
-
-  if (!query) {
-    return null;
-  }
-
-  try {
-    const matches =
-      await searchSpotifySceneTracks(
-        query,
-        connectionGuard,
-      );
-
-    return (
-      matches[0]
-        ?.uri ??
-      null
-    );
-  } catch (error) {
-    if (
-      error instanceof
-      SpotifySessionChangedError
-    ) {
-      throw error;
-    }
-
-    return null;
-  }
 }
 
 export async function exportSceneToSpotify(
@@ -532,30 +353,23 @@ export async function exportSceneToSpotify(
   } =
     await requireGuardedSpotifyPlaylistExportSession();
 
-  const uriResults =
-    await Promise.all(
-      scene.tracks.map(
-        (track) =>
-          resolveSceneTrackUri(
-            track,
-            connectionGuard,
-          ),
-      ),
-    );
-
   const uris =
     Array.from(
       new Set(
-        uriResults.filter(
-          (
-            uri,
-          ): uri is string =>
-            Boolean(
-              uri?.startsWith(
-                "spotify:track:",
-              ),
-            ),
-        ),
+        scene.tracks
+          .map(
+            (track) =>
+              normalizeSpotifyTrackLinks(
+                track.spotifyUri,
+                track.spotifyUrl,
+              ).spotifyUri,
+          )
+          .filter(
+            (
+              uri,
+            ): uri is string =>
+              Boolean(uri),
+          ),
       ),
     );
 
@@ -564,45 +378,29 @@ export async function exportSceneToSpotify(
     0
   ) {
     throw new Error(
-      "Canal could not match any Scene tracks to Spotify.",
+      "This legacy Scene has no Spotify track links to export. Sync Spotify and regenerate the Scene.",
     );
   }
 
   const playlist =
-    await spotifyRequest<{
-      id: string;
-      uri?: string;
-      external_urls?: {
-        spotify?: string;
-      };
-    }>(
-      "/me/playlists",
+    await createSpotifyPlaylist(
       {
-        method:
-          "POST",
-
-        body:
-          JSON.stringify({
-            name:
-              `Canal: ${scene.name}`,
-
-            description:
-              (
-                description ||
-                `A Scene exported from Canal for ${scene.activity || "listening"}.`
-              ).slice(
-                0,
-                300,
-              ),
-
-            public:
-              false,
-
-            collaborative:
-              false,
-          }),
+        name:
+          `Canal: ${scene.name}`,
+        description:
+          (
+            description ||
+            `A Scene exported from Canal for ${scene.activity || "listening"}.`
+          ).slice(
+            0,
+            300,
+          ),
+        isPublic:
+          false,
       },
-      connectionGuard,
+      {
+        connectionGuard,
+      },
     );
 
   if (!playlist.id) {
@@ -611,33 +409,13 @@ export async function exportSceneToSpotify(
     );
   }
 
-  for (
-    let index = 0;
-    index <
-    uris.length;
-    index += 100
-  ) {
-    const chunk =
-      uris.slice(
-        index,
-        index + 100,
-      );
-
-    await spotifyRequest(
-      `/playlists/${encodeURIComponent(playlist.id)}/items`,
-      {
-        method:
-          "POST",
-
-        body:
-          JSON.stringify({
-            uris:
-              chunk,
-          }),
-      },
+  await addSpotifyItemsToPlaylist(
+    playlist.id,
+    uris,
+    {
       connectionGuard,
-    );
-  }
+    },
+  );
 
   return {
     playlistId:

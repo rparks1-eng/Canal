@@ -3,15 +3,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   addSpotifyItemsToPlaylist,
   createSpotifyPlaylist,
-  getAllSpotifyPlaylists,
-  getAllSpotifyPlaylistTracks,
-  getAllSpotifySavedTracks,
-  getSpotifyArtistsByIds,
-  getSpotifyProfile,
+  getSpotifyPlaylists,
   getSpotifyRecentlyPlayed,
+  getSpotifySavedTracks,
   getSpotifyTopArtists,
   getSpotifyTopTracks,
-  searchSpotifyCatalogTracks,
 } from "./spotify-api";
 
 import type {
@@ -92,7 +88,7 @@ export type LatestSpotifyLibraryResult = {
 };
 
 const DEFAULT_LIBRARY_MAX_AGE_MS =
-  6 * 60 * 60 * 1000;
+  24 * 60 * 60 * 1000;
 
 let libraryRefreshPromise:
   Promise<SpotifyLibrarySnapshot> | null =
@@ -107,6 +103,13 @@ let lastLibraryRefreshFailureAt =
 
 let lastLibraryRefreshIssue:
   RecoveryIssue | null =
+    null;
+
+let libraryRefreshCooldownUntil =
+  0;
+
+let libraryRefreshCooldownGeneration:
+  number | null =
     null;
 
 let libraryCacheOperationTail:
@@ -153,6 +156,144 @@ function readErrorMessage(
   }
 
   return "Unknown Spotify error.";
+}
+
+class SpotifyLibraryCooldownError extends Error {
+  status = 429;
+  retryAfterSeconds: number;
+  reason?: string;
+
+  constructor(
+    retryAfterSeconds: number,
+    issue: RecoveryIssue,
+  ) {
+    super(issue.message);
+
+    this.name =
+      "SpotifyLibraryCooldownError";
+
+    this.retryAfterSeconds =
+      retryAfterSeconds;
+
+    this.reason =
+      issue.title ===
+        "Spotify quota reached"
+        ? "QUOTA_EXCEEDED"
+        : undefined;
+  }
+}
+
+function clearLibraryRefreshIssue(): void {
+  lastLibraryRefreshFailureAt =
+    0;
+
+  lastLibraryRefreshIssue =
+    null;
+
+  libraryRefreshCooldownUntil =
+    0;
+
+  libraryRefreshCooldownGeneration =
+    null;
+}
+
+function resetLibraryRefreshIssueForGeneration(
+  connectionGeneration: number,
+): void {
+  if (
+    libraryRefreshCooldownGeneration !==
+      null &&
+    libraryRefreshCooldownGeneration !==
+      connectionGeneration
+  ) {
+    clearLibraryRefreshIssue();
+  }
+}
+
+function rememberLibraryRefreshIssue(
+  issue: RecoveryIssue,
+  connectionGeneration: number,
+): void {
+  const now =
+    Date.now();
+
+  lastLibraryRefreshFailureAt =
+    now;
+
+  lastLibraryRefreshIssue =
+    issue;
+
+  libraryRefreshCooldownGeneration =
+    connectionGeneration;
+
+  libraryRefreshCooldownUntil =
+    now +
+    (
+      issue.kind ===
+        "rate-limited"
+        ? issue.retryAfterMs ??
+          15 *
+            60 *
+            1000
+        : 15 *
+          60 *
+          1000
+    );
+}
+
+function readLibraryRefreshCooldown(
+  connectionGeneration: number,
+): {
+  issue: RecoveryIssue;
+  error:
+    SpotifyLibraryCooldownError;
+} | null {
+  resetLibraryRefreshIssueForGeneration(
+    connectionGeneration,
+  );
+
+  if (
+    !lastLibraryRefreshIssue ||
+    lastLibraryRefreshIssue.kind !==
+      "rate-limited" ||
+    libraryRefreshCooldownGeneration !==
+      connectionGeneration ||
+    libraryRefreshCooldownUntil <=
+      Date.now()
+  ) {
+    if (
+      libraryRefreshCooldownUntil <=
+        Date.now() &&
+      libraryRefreshCooldownGeneration ===
+        connectionGeneration
+    ) {
+      clearLibraryRefreshIssue();
+    }
+
+    return null;
+  }
+
+  const retryAfterSeconds =
+    Math.max(
+      1,
+      Math.ceil(
+        (
+          libraryRefreshCooldownUntil -
+          Date.now()
+        ) /
+          1000,
+      ),
+    );
+
+  return {
+    issue:
+      lastLibraryRefreshIssue,
+    error:
+      new SpotifyLibraryCooldownError(
+        retryAfterSeconds,
+        lastLibraryRefreshIssue,
+      ),
+  };
 }
 
 function isSpotifyAccessFailure(
@@ -264,7 +405,9 @@ function deduplicateTracks(
     ) {
       tracksById.set(
         track.id,
-        track,
+        stripTrackImages(
+          track,
+        ),
       );
     }
   }
@@ -272,6 +415,27 @@ function deduplicateTracks(
   return Array.from(
     tracksById.values(),
   );
+}
+
+function stripTrackImages(
+  track: SpotifyTrack,
+): SpotifyTrack {
+  if (!track.album) {
+    return track;
+  }
+
+  const {
+    images:
+      _images,
+    ...albumWithoutImages
+  } =
+    track.album;
+
+  return {
+    ...track,
+    album:
+      albumWithoutImages,
+  };
 }
 
 async function writeSpotifyLibrarySnapshot(
@@ -407,35 +571,45 @@ function normalizeSpotifyLibrarySnapshot(
       Array.isArray(
         parsed.topTracks,
       )
-        ? parsed.topTracks
+        ? deduplicateTracks(
+            parsed.topTracks,
+          )
         : [],
 
     recentTracks:
       Array.isArray(
         parsed.recentTracks,
       )
-        ? parsed.recentTracks
+        ? deduplicateTracks(
+            parsed.recentTracks,
+          )
         : [],
 
     savedTracks:
       Array.isArray(
         parsed.savedTracks,
       )
-        ? parsed.savedTracks
+        ? deduplicateTracks(
+            parsed.savedTracks,
+          )
         : [],
 
     playlistTracks:
       Array.isArray(
         parsed.playlistTracks,
       )
-        ? parsed.playlistTracks
+        ? deduplicateTracks(
+            parsed.playlistTracks,
+          )
         : [],
 
     discoveryTracks:
       Array.isArray(
         parsed.discoveryTracks,
       )
-        ? parsed.discoveryTracks
+        ? deduplicateTracks(
+            parsed.discoveryTracks,
+          )
         : [],
 
     playlists:
@@ -646,6 +820,13 @@ export async function getLatestSpotifyLibrarySnapshot(
   maxAgeMs =
     DEFAULT_LIBRARY_MAX_AGE_MS,
 ): Promise<LatestSpotifyLibraryResult> {
+  const startingConnectionGeneration =
+    getSpotifyConnectionGeneration();
+
+  resetLibraryRefreshIssueForGeneration(
+    startingConnectionGeneration,
+  );
+
   const cachedCandidate =
     await readSpotifyLibrarySnapshot();
 
@@ -671,11 +852,10 @@ export async function getLatestSpotifyLibrarySnapshot(
         },
       );
 
-    lastLibraryRefreshFailureAt =
-      Date.now();
-
-    lastLibraryRefreshIssue =
-      issue;
+    rememberLibraryRefreshIssue(
+      issue,
+      getSpotifyConnectionGeneration(),
+    );
 
     const availableCached =
       await readSpotifyLibrarySnapshot();
@@ -697,6 +877,10 @@ export async function getLatestSpotifyLibrarySnapshot(
     await isSpotifyConnectionStillCurrent(
       connectionGuard,
     );
+
+  resetLibraryRefreshIssueForGeneration(
+    connectionGuard.connectionGeneration,
+  );
 
   let cached =
     cachedCandidate &&
@@ -731,6 +915,32 @@ export async function getLatestSpotifyLibrarySnapshot(
     };
   }
 
+  const activeCooldown =
+    readLibraryRefreshCooldown(
+      connectionGuard.connectionGeneration,
+    );
+
+  if (
+    activeCooldown &&
+    await isSpotifyConnectionStillCurrent(
+      connectionGuard,
+    )
+  ) {
+    return {
+      snapshot:
+        cached,
+      refreshed:
+        false,
+      warning:
+        cached
+          ? "Using the last Spotify sync while Canal respects Spotify’s retry window."
+          : activeCooldown
+              .issue.message,
+      issue:
+        activeCooldown.issue,
+    };
+  }
+
   if (
     cached &&
     await isSpotifyConnectionStillCurrent(
@@ -755,11 +965,7 @@ export async function getLatestSpotifyLibrarySnapshot(
     const refreshedSnapshot =
       await syncSpotifyLibrary();
 
-    lastLibraryRefreshFailureAt =
-      0;
-
-    lastLibraryRefreshIssue =
-      null;
+    clearLibraryRefreshIssue();
 
     return {
       snapshot:
@@ -767,9 +973,6 @@ export async function getLatestSpotifyLibrarySnapshot(
       refreshed: true,
     };
   } catch (error) {
-    lastLibraryRefreshFailureAt =
-      Date.now();
-
     const issue =
       classifyRecoveryIssue(
         error,
@@ -779,8 +982,15 @@ export async function getLatestSpotifyLibrarySnapshot(
         },
       );
 
-    lastLibraryRefreshIssue =
-      issue;
+    if (
+      getSpotifyConnectionGeneration() ===
+      connectionGuard.connectionGeneration
+    ) {
+      rememberLibraryRefreshIssue(
+        issue,
+        connectionGuard.connectionGeneration,
+      );
+    }
 
     if (
       !(
@@ -819,6 +1029,15 @@ export async function syncSpotifyLibrary(): Promise<
   const connectionGeneration =
     getSpotifyConnectionGeneration();
 
+  const activeCooldown =
+    readLibraryRefreshCooldown(
+      connectionGeneration,
+    );
+
+  if (activeCooldown) {
+    throw activeCooldown.error;
+  }
+
   if (
     libraryRefreshPromise &&
     libraryRefreshGeneration ===
@@ -830,8 +1049,34 @@ export async function syncSpotifyLibrary(): Promise<
   const nextPromise =
     performSpotifyLibrarySync(
       connectionGeneration,
-    ).finally(
-      () => {
+    )
+      .catch(
+        (error: unknown) => {
+          const issue =
+            classifyRecoveryIssue(
+              error,
+              {
+                service:
+                  "spotify",
+              },
+            );
+
+          if (
+            issue.kind ===
+              "rate-limited" &&
+            getSpotifyConnectionGeneration() ===
+              connectionGeneration
+          ) {
+            rememberLibraryRefreshIssue(
+              issue,
+              connectionGeneration,
+            );
+          }
+
+          throw error;
+        },
+      )
+      .finally(() => {
         if (
           libraryRefreshPromise ===
           nextPromise
@@ -842,8 +1087,7 @@ export async function syncSpotifyLibrary(): Promise<
           libraryRefreshGeneration =
             null;
         }
-      },
-    );
+      });
 
   libraryRefreshPromise =
     nextPromise;
@@ -880,36 +1124,43 @@ async function performSpotifyLibrarySync(
   );
 
   const [
-    profileResult,
     topArtistsResult,
     topTracksResult,
     recentResult,
     savedResult,
     playlistsResult,
   ] = await Promise.allSettled([
-    getSpotifyProfile(),
-    getSpotifyTopArtists(20),
-    getSpotifyTopTracks(20),
-    getSpotifyRecentlyPlayed(20),
-    getAllSpotifySavedTracks(),
-    getAllSpotifyPlaylists(),
+    getSpotifyTopArtists(
+      20,
+      {
+        connectionGuard,
+      },
+    ),
+    getSpotifyTopTracks(
+      20,
+      {
+        connectionGuard,
+      },
+    ),
+    getSpotifyRecentlyPlayed(
+      20,
+      {
+        connectionGuard,
+      },
+    ),
+    getSpotifySavedTracks(
+      50,
+      {
+        connectionGuard,
+      },
+    ),
+    getSpotifyPlaylists(
+      20,
+      {
+        connectionGuard,
+      },
+    ),
   ]);
-
-  if (
-    profileResult.status ===
-    "rejected"
-  ) {
-    throw profileResult.reason;
-  }
-
-  if (
-    profileResult.value.id !==
-    syncSession.profile.id
-  ) {
-    throw new Error(
-      "Spotify account changed while Canal was syncing. Sync the current account again.",
-    );
-  }
 
   await assertSpotifyConnectionGuardCurrent(
     connectionGuard,
@@ -1026,9 +1277,11 @@ async function performSpotifyLibrarySync(
   const savedTracks =
     savedResult.status ===
     "fulfilled"
-      ? savedResult.value.map(
-          (item) => item.track,
-        )
+      ? savedResult.value
+          .items.map(
+            (item) =>
+              item.track,
+          )
       : [];
 
   if (
@@ -1046,6 +1299,7 @@ async function performSpotifyLibrarySync(
     playlistsResult.status ===
     "fulfilled"
       ? playlistsResult.value
+          .items
       : [];
 
   if (
@@ -1059,75 +1313,16 @@ async function performSpotifyLibrarySync(
     );
   }
 
-  const playlistTracks:
-    SpotifyTrack[] = [];
-
-  for (
-    const playlist of
-      playlists
-  ) {
-    try {
-      playlistTracks.push(
-        ...(await getAllSpotifyPlaylistTracks(
-          playlist.id,
-        )),
-      );
-    } catch (error) {
-      rethrowSpotifyAccessFailure(
-        error,
-      );
-
-      warnings.push(
-        `Playlist ${playlist.name}: ${readErrorMessage(
-          error,
-        )}`,
-      );
-    }
-  }
-
   const userLibraryTracks =
     deduplicateTracks([
       ...topTracks,
       ...savedTracks,
       ...recentTracks,
-      ...playlistTracks,
     ]);
-
-  const artistIds =
-    userLibraryTracks.flatMap(
-      (track) =>
-        track.artists.map(
-          (artist) =>
-            artist.id,
-        ),
-    );
-
-  let libraryArtists:
-    SpotifyArtist[] = [];
-
-  try {
-    libraryArtists =
-      await getSpotifyArtistsByIds(
-        artistIds,
-      );
-  } catch (error) {
-    rethrowSpotifyAccessFailure(
-      error,
-    );
-
-    warnings.push(
-      `Track genres: ${readErrorMessage(
-        error,
-      )}`,
-    );
-  }
 
   const artistsById =
     new Map(
-      [
-        ...topArtists,
-        ...libraryArtists,
-      ].map(
+      topArtists.map(
         (artist) => [
           artist.id,
           artist,
@@ -1160,77 +1355,16 @@ async function performSpotifyLibrarySync(
   }
 
   const topGenres =
-    buildTopGenres([
-      ...topArtists,
-      ...libraryArtists,
-    ]);
-
-  const userTrackIds =
-    new Set(
-      userLibraryTracks.map(
-        (track) =>
-          track.id,
-      ),
+    buildTopGenres(
+      topArtists,
     );
-
-  const discoveryTracks:
-    SpotifyTrack[] = [];
-
-  for (
-    const genre of
-      topGenres.slice(0, 4)
-  ) {
-    try {
-      const matches =
-        (
-          await searchSpotifyCatalogTracks(
-            `genre:"${genre.name}"`,
-            10,
-          )
-        ).filter(
-          (track) =>
-            !userTrackIds.has(
-              track.id,
-            ),
-        );
-
-      for (
-        const track of
-          matches
-      ) {
-        discoveryTracks.push(
-          track,
-        );
-
-        trackGenres[track.id] =
-          Array.from(
-            new Set([
-              ...(trackGenres[
-                track.id
-              ] ?? []),
-              genre.name,
-            ]),
-          );
-      }
-    } catch (error) {
-      rethrowSpotifyAccessFailure(
-        error,
-      );
-
-      warnings.push(
-        `Discovery for ${genre.name}: ${readErrorMessage(
-          error,
-        )}`,
-      );
-    }
-  }
 
   const snapshot: SpotifyLibrarySnapshot = {
     syncedAt:
       new Date().toISOString(),
 
     profile:
-      profileResult.value,
+      syncSession.profile,
 
     topArtists,
 
@@ -1250,14 +1384,10 @@ async function performSpotifyLibrarySync(
       ),
 
     playlistTracks:
-      deduplicateTracks(
-        playlistTracks,
-      ),
+      [],
 
     discoveryTracks:
-      deduplicateTracks(
-        discoveryTracks,
-      ),
+      [],
 
     playlists,
 
@@ -1277,11 +1407,7 @@ async function performSpotifyLibrarySync(
     },
   );
 
-  lastLibraryRefreshFailureAt =
-    0;
-
-  lastLibraryRefreshIssue =
-    null;
+  clearLibraryRefreshIssue();
 
   return snapshot;
 }

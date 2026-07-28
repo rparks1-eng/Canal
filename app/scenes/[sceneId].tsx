@@ -18,10 +18,6 @@ import {
 } from "react-native";
 
 import {
-  Image,
-} from "expo-image";
-
-import {
   router,
   useFocusEffect,
   useLocalSearchParams,
@@ -34,6 +30,12 @@ import {
 import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
+
+import {
+  classifyAnalyticsFailure,
+  recordAnalyticsEvent,
+  recordAnalyticsFailure,
+} from "../../lib/analytics";
 
 import {
   classifyRecoveryIssue,
@@ -49,13 +51,8 @@ import {
 } from "../../lib/saved-scene-management";
 
 import {
-  addSpotifyItemsToPlaylist,
-  createSpotifyPlaylist,
-} from "../../lib/spotify-api";
-
-import {
-  requireSpotifyPlaylistExportSession,
-} from "../../lib/spotify-auth";
+  exportSceneToSpotify,
+} from "../../lib/spotify-scene-tools";
 
 import {
   deleteScene,
@@ -275,6 +272,10 @@ export default function SceneDetailScreen() {
     async (
       confirmedConnectivityStatus =
         connectivityStatus,
+      attempt:
+        | "initial"
+        | "retry" =
+          "initial",
     ): Promise<void> => {
       if (
         !scene ||
@@ -300,39 +301,6 @@ export default function SceneDetailScreen() {
         return;
       }
 
-      const uris =
-        Array.from(
-          new Set(
-            scene.tracks
-              .map(
-                (track) =>
-                  track.spotifyUri,
-              )
-              .filter(
-                (
-                  uri,
-                ): uri is string =>
-                  typeof uri ===
-                    "string" &&
-                  uri.startsWith(
-                    "spotify:track:",
-                  ),
-              ),
-          ),
-        );
-
-      if (uris.length === 0) {
-        setExportErrorCause(
-          null,
-        );
-
-        setMessage(
-          "This Scene does not contain exportable Spotify tracks.",
-        );
-
-        return;
-      }
-
       exportInFlight.current =
         true;
 
@@ -346,23 +314,17 @@ export default function SceneDetailScreen() {
         const exportAccount =
           await captureScenePlaylistExportAccount();
 
-        await requireSpotifyPlaylistExportSession();
+        const exportResult =
+          await exportSceneToSpotify(
+            scene,
+            `A private Scene created in Canal for ${scene.activity.toLowerCase()}.`,
+          );
 
-        const playlist =
-          await createSpotifyPlaylist({
-            name:
-              `Canal: ${scene.name}`,
-
-            description:
-              `A private Scene created in Canal for ${scene.activity.toLowerCase()}.`,
-
-            isPublic: false,
-          });
-
-        await addSpotifyItemsToPlaylist(
-          playlist.id,
-          uris,
-        );
+        void recordAnalyticsEvent({
+          name:
+            "scene_export_completed",
+          attempt,
+        });
 
         let historyMessage =
           "";
@@ -372,14 +334,14 @@ export default function SceneDetailScreen() {
             scene,
             {
               playlistId:
-                playlist.id,
+                exportResult
+                  .playlistId,
               playlistUrl:
-                playlist
-                  .external_urls
-                  ?.spotify ??
-                null,
+                exportResult
+                  .playlistUrl,
               trackCount:
-                uris.length,
+                exportResult
+                  .trackCount,
             },
             {
               sourceOwnerId:
@@ -413,7 +375,7 @@ export default function SceneDetailScreen() {
         }
 
         setMessage(
-          `Created a Spotify playlist with ${uris.length} tracks.${historyMessage}`,
+          `Created a Spotify playlist with ${exportResult.trackCount} tracks.${historyMessage}`,
         );
 
         setExportErrorCause(
@@ -421,19 +383,27 @@ export default function SceneDetailScreen() {
         );
 
         const url =
-          playlist.external_urls
-            ?.spotify;
+          exportResult
+            .playlistUrl;
 
         if (url) {
           try {
             await openTrack(url);
           } catch {
             setMessage(
-              `Created a Spotify playlist with ${uris.length} tracks. Open Spotify to find it.`,
+              `Created a Spotify playlist with ${exportResult.trackCount} tracks. Open Spotify to find it.`,
             );
           }
         }
       } catch (error) {
+        void recordAnalyticsFailure(
+          "scene_export",
+          classifyAnalyticsFailure(
+            error,
+          ),
+          attempt,
+        );
+
         setExportErrorCause(
           () =>
             error ??
@@ -515,6 +485,7 @@ export default function SceneDetailScreen() {
         ) {
           await exportToSpotify(
             nextStatus,
+            "retry",
           );
         }
       } finally {
@@ -1067,34 +1038,20 @@ export default function SceneDetailScreen() {
                       styles.pressed,
                   ]}
                 >
-                  {track.imageUrl ? (
-                    <Image
-                      accessibilityLabel=""
-                      source={{
-                        uri:
-                          track.imageUrl,
-                      }}
-                      contentFit="cover"
+                  <View
+                    style={[
+                      styles.trackImage,
+                      styles.trackImagePlaceholder,
+                    ]}
+                  >
+                    <Text
                       style={
-                        styles.trackImage
+                        styles.trackNumber
                       }
-                    />
-                  ) : (
-                    <View
-                      style={[
-                        styles.trackImage,
-                        styles.trackImagePlaceholder,
-                      ]}
                     >
-                      <Text
-                        style={
-                          styles.trackNumber
-                        }
-                      >
-                        {index + 1}
-                      </Text>
-                    </View>
-                  )}
+                      {index + 1}
+                    </Text>
+                  </View>
 
                   <View
                     style={

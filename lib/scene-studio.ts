@@ -1615,11 +1615,6 @@ function buildSceneTrack(
         signal.track,
       ),
 
-    imageUrl:
-      signal.track.album
-        ?.images?.[0]
-        ?.url,
-
     intensity:
       signal.intensity,
   };

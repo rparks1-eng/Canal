@@ -1,6 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
+  recordAnalyticsEvent,
+} from "./analytics";
+
+import {
   supabase,
 } from "./supabase";
 
@@ -145,6 +149,11 @@ export async function completeOnboarding(
       error,
     );
   }
+
+  void recordAnalyticsEvent({
+    name:
+      "onboarding_completed",
+  });
 }
 
 export async function isOnboardingRequired(

@@ -1,6 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
+  classifyAnalyticsFailure,
+  recordAnalyticsEvent,
+  recordAnalyticsFailure,
+} from "./analytics";
+
+import {
   normalizeSpotifyTrackLinks,
 } from "./spotify-track-links";
 
@@ -786,9 +792,28 @@ export async function createScene(
       ),
   };
 
-  return upsertScene(
-    scene,
-  );
+  try {
+    const createdScene =
+      await upsertScene(
+        scene,
+      );
+
+    void recordAnalyticsEvent({
+      name:
+        "first_scene_created",
+    });
+
+    return createdScene;
+  } catch (error) {
+    void recordAnalyticsFailure(
+      "scene_create",
+      classifyAnalyticsFailure(
+        error,
+      ),
+    );
+
+    throw error;
+  }
 }
 
 export async function deleteScene(
