@@ -1,0 +1,1495 @@
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+
+import {
+  router,
+} from "expo-router";
+
+import {
+  SafeAreaView,
+} from "react-native-safe-area-context";
+
+import {
+  readGeneratedScenePreview,
+  saveGeneratedSceneToLibrary,
+  writeGeneratedScenePreview,
+} from "../lib/scene-studio";
+
+import type {
+  GeneratedSceneResult,
+} from "../lib/scene-studio";
+
+import {
+  addSpotifyTrackToGeneratedScene,
+  removeTrackFromGeneratedSceneEditor,
+} from "../lib/scene-preview-editor";
+
+import {
+  exportSceneToSpotify,
+  searchSpotifySceneTracks,
+} from "../lib/spotify-scene-tools";
+
+import type {
+  SpotifySceneSearchTrack,
+} from "../lib/spotify-scene-tools";
+
+function safeBack(): void {
+  if (
+    router.canGoBack()
+  ) {
+    router.back();
+
+    return;
+  }
+
+  router.replace(
+    "/scene-studio" as never,
+  );
+}
+
+function artistNames(
+  track: SpotifySceneSearchTrack,
+): string {
+  return track.artists
+    .map(
+      (artist) =>
+        artist.name,
+    )
+    .filter(
+      Boolean,
+    )
+    .join(
+      ", ",
+    );
+}
+
+function durationText(
+  durationMs?: number,
+): string {
+  const totalSeconds =
+    Math.round(
+      (
+        durationMs ??
+        210_000
+      ) /
+        1000,
+    );
+
+  const minutes =
+    Math.floor(
+      totalSeconds /
+        60,
+    );
+
+  const seconds =
+    totalSeconds %
+    60;
+
+  return `${minutes}:${seconds
+    .toString()
+    .padStart(
+      2,
+      "0",
+    )}`;
+}
+
+export default function ScenePreviewScreen() {
+  const [
+    result,
+    setResult,
+  ] =
+    useState<
+      GeneratedSceneResult | null
+    >(
+      null,
+    );
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    query,
+    setQuery,
+  ] = useState("");
+
+  const [
+    searchResults,
+    setSearchResults,
+  ] =
+    useState<
+      SpotifySceneSearchTrack[]
+    >([]);
+
+  const [
+    searching,
+    setSearching,
+  ] = useState(false);
+
+  const [
+    saving,
+    setSaving,
+  ] = useState(false);
+
+  const [
+    exporting,
+    setExporting,
+  ] = useState(false);
+
+  const [
+    playlistUrl,
+    setPlaylistUrl,
+  ] =
+    useState<
+      string | null
+    >(
+      null,
+    );
+
+  const [
+    message,
+    setMessage,
+  ] = useState("");
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
+
+  const load =
+    useCallback(
+      async (): Promise<void> => {
+        setLoading(
+          true,
+        );
+
+        try {
+          const stored =
+            await readGeneratedScenePreview();
+
+          if (!stored) {
+            throw new Error(
+              "No generated Scene was found.",
+            );
+          }
+
+          setResult(
+            stored,
+          );
+        } catch (error) {
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Canal could not open the generated Scene.",
+          );
+        } finally {
+          setLoading(
+            false,
+          );
+        }
+      },
+      [],
+    );
+
+  useEffect(() => {
+    void load();
+  }, [
+    load,
+  ]);
+
+  const includedIds =
+    useMemo(
+      () =>
+        new Set(
+          result?.trackSignals.map(
+            (signal) =>
+              signal.track.id,
+          ) ??
+            [],
+        ),
+      [
+        result,
+      ],
+    );
+
+  const persistResult =
+    async (
+      next: GeneratedSceneResult,
+    ): Promise<void> => {
+      await writeGeneratedScenePreview(
+        next,
+      );
+
+      setResult(
+        next,
+      );
+    };
+
+  const runSearch =
+    async (): Promise<void> => {
+      if (searching) {
+        return;
+      }
+
+      setSearching(
+        true,
+      );
+
+      setMessage("");
+      setErrorMessage("");
+
+      try {
+        setSearchResults(
+          await searchSpotifySceneTracks(
+            query,
+          ),
+        );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not search Spotify.",
+        );
+      } finally {
+        setSearching(
+          false,
+        );
+      }
+    };
+
+  const addTrack =
+    async (
+      track: SpotifySceneSearchTrack,
+    ): Promise<void> => {
+      if (!result) {
+        return;
+      }
+
+      try {
+        const next =
+          addSpotifyTrackToGeneratedScene(
+            result,
+            track,
+          );
+
+        await persistResult(
+          next,
+        );
+
+        setMessage(
+          `"${track.name}" was added to the Scene.`,
+        );
+
+        setErrorMessage("");
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not add this track.",
+        );
+      }
+    };
+
+  const removeTrack =
+    async (
+      trackId: string,
+    ): Promise<void> => {
+      if (!result) {
+        return;
+      }
+
+      try {
+        const next =
+          removeTrackFromGeneratedSceneEditor(
+            result,
+            trackId,
+          );
+
+        await persistResult(
+          next,
+        );
+
+        setMessage(
+          "Track removed from the Scene.",
+        );
+
+        setErrorMessage("");
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not remove this track.",
+        );
+      }
+    };
+
+  const save =
+    async (): Promise<void> => {
+      if (
+        !result ||
+        saving
+      ) {
+        return;
+      }
+
+      setSaving(
+        true,
+      );
+
+      setMessage("");
+      setErrorMessage("");
+
+      try {
+        await writeGeneratedScenePreview(
+          result,
+        );
+
+        await saveGeneratedSceneToLibrary(
+          result,
+        );
+
+        setMessage(
+          `"${result.scene.name}" was saved to your Library.`,
+        );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not save this Scene.",
+        );
+      } finally {
+        setSaving(
+          false,
+        );
+      }
+    };
+
+  const exportToSpotify =
+    async (): Promise<void> => {
+      if (
+        !result ||
+        exporting
+      ) {
+        return;
+      }
+
+      setExporting(
+        true,
+      );
+
+      setMessage("");
+      setErrorMessage("");
+      setPlaylistUrl(
+        null,
+      );
+
+      try {
+        const exportResult =
+          await exportSceneToSpotify(
+            result.scene,
+          );
+
+        setPlaylistUrl(
+          exportResult
+            .playlistUrl,
+        );
+
+        setMessage(
+          `Exported ${exportResult.trackCount} track${exportResult.trackCount === 1 ? "" : "s"} to your Spotify. ${
+            exportResult.skippedCount > 0
+              ? `${exportResult.skippedCount} unmatched track${exportResult.skippedCount === 1 ? " was" : "s were"} skipped.`
+              : ""
+          }`,
+        );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not export this Scene to Spotify.",
+        );
+      } finally {
+        setExporting(
+          false,
+        );
+      }
+    };
+
+  if (loading) {
+    return (
+      <SafeAreaView
+        style={
+          styles.safeArea
+        }
+      >
+        <View
+          style={
+            styles.loading
+          }
+        >
+          <ActivityIndicator
+            size="large"
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView
+      style={
+        styles.safeArea
+      }
+      edges={[
+        "top",
+        "bottom",
+      ]}
+    >
+      <View
+        style={
+          styles.header
+        }
+      >
+        <Pressable
+          accessibilityRole="button"
+          onPress={
+            safeBack
+          }
+          style={
+            styles.backButton
+          }
+        >
+          <Text
+            style={
+              styles.backText
+            }
+          >
+            ‹
+          </Text>
+        </Pressable>
+
+        <Text
+          style={
+            styles.headerTitle
+          }
+        >
+          Edit Scene
+        </Text>
+
+        <View
+          style={
+            styles.headerSpacer
+          }
+        />
+      </View>
+
+      <ScrollView
+        contentContainerStyle={
+          styles.content
+        }
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={
+          false
+        }
+      >
+        {result ? (
+          <>
+            <View
+              style={
+                styles.hero
+              }
+            >
+              <Text
+                style={
+                  styles.eyebrow
+                }
+              >
+                GENERATED SCENE
+              </Text>
+
+              <Text
+                style={
+                  styles.sceneName
+                }
+              >
+                {result.scene.name}
+              </Text>
+
+              <Text
+                style={
+                  styles.sceneMeta
+                }
+              >
+                {result.scene.activity}{" "}
+                ·{" "}
+                {result.estimatedDurationMinutes}{" "}
+                min ·{" "}
+                {result.trackSignals.length}{" "}
+                tracks
+              </Text>
+            </View>
+
+            {message ? (
+              <View
+                style={
+                  styles.successBox
+                }
+              >
+                <Text
+                  style={
+                    styles.successText
+                  }
+                >
+                  {message}
+                </Text>
+
+                {playlistUrl ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() =>
+                      void Linking.openURL(
+                        playlistUrl,
+                      )
+                    }
+                    style={
+                      styles.openSpotifyButton
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.openSpotifyText
+                      }
+                    >
+                      Open Playlist in Spotify
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
+            {errorMessage ? (
+              <View
+                style={
+                  styles.errorBox
+                }
+              >
+                <Text
+                  style={
+                    styles.errorText
+                  }
+                >
+                  {errorMessage}
+                </Text>
+
+                {errorMessage.includes(
+                  "connect",
+                ) ||
+                errorMessage.includes(
+                  "authorization",
+                ) ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() =>
+                      router.push(
+                        "/music-services" as never,
+                      )
+                    }
+                    style={
+                      styles.musicServicesButton
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.musicServicesText
+                      }
+                    >
+                      Open Music Services
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
+            <View
+              style={
+                styles.searchCard
+              }
+            >
+              <Text
+                style={
+                  styles.sectionTitle
+                }
+              >
+                Add real songs
+              </Text>
+
+              <Text
+                style={
+                  styles.sectionSubtitle
+                }
+              >
+                Search the connected Spotify account, then add tracks directly to this Scene.
+              </Text>
+
+              <View
+                style={
+                  styles.searchRow
+                }
+              >
+                <TextInput
+                  value={
+                    query
+                  }
+                  onChangeText={
+                    setQuery
+                  }
+                  onSubmitEditing={() =>
+                    void runSearch()
+                  }
+                  placeholder="Song, artist, or album"
+                  placeholderTextColor="#9A938C"
+                  returnKeyType="search"
+                  style={
+                    styles.searchInput
+                  }
+                />
+
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={
+                    searching
+                  }
+                  onPress={() =>
+                    void runSearch()
+                  }
+                  style={
+                    styles.searchButton
+                  }
+                >
+                  {searching ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#FFFFFF"
+                    />
+                  ) : (
+                    <Text
+                      style={
+                        styles.searchButtonText
+                      }
+                    >
+                      Search
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+
+              {searchResults.length >
+              0 ? (
+                <View
+                  style={
+                    styles.searchResults
+                  }
+                >
+                  {searchResults.map(
+                    (track) => {
+                      const included =
+                        includedIds.has(
+                          track.id,
+                        );
+
+                      const imageUrl =
+                        track.album
+                          ?.images?.[0]
+                          ?.url;
+
+                      return (
+                        <View
+                          key={
+                            track.id
+                          }
+                          style={
+                            styles.searchResult
+                          }
+                        >
+                          {imageUrl ? (
+                            <Image
+                              source={{
+                                uri:
+                                  imageUrl,
+                              }}
+                              style={
+                                styles.trackImage
+                              }
+                            />
+                          ) : (
+                            <View
+                              style={[
+                                styles.trackImage,
+                                styles.placeholderImage,
+                              ]}
+                            >
+                              <Text
+                                style={
+                                  styles.placeholderText
+                                }
+                              >
+                                ♪
+                              </Text>
+                            </View>
+                          )}
+
+                          <View
+                            style={
+                              styles.resultText
+                            }
+                          >
+                            <Text
+                              numberOfLines={
+                                1
+                              }
+                              style={
+                                styles.trackTitle
+                              }
+                            >
+                              {track.name}
+                            </Text>
+
+                            <Text
+                              numberOfLines={
+                                1
+                              }
+                              style={
+                                styles.trackArtist
+                              }
+                            >
+                              {artistNames(
+                                track,
+                              )}{" "}
+                              ·{" "}
+                              {durationText(
+                                track.duration_ms,
+                              )}
+                            </Text>
+                          </View>
+
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={
+                              included
+                            }
+                            onPress={() =>
+                              void addTrack(
+                                track,
+                              )
+                            }
+                            style={[
+                              styles.addButton,
+
+                              included &&
+                                styles.includedButton,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.addText,
+
+                                included &&
+                                  styles.includedText,
+                              ]}
+                            >
+                              {included
+                                ? "Added"
+                                : "Add"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      );
+                    },
+                  )}
+                </View>
+              ) : null}
+            </View>
+
+            <View
+              style={
+                styles.trackCard
+              }
+            >
+              <View
+                style={
+                  styles.trackHeader
+                }
+              >
+                <View>
+                  <Text
+                    style={
+                      styles.sectionTitle
+                    }
+                  >
+                    Current mix
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.sectionSubtitle
+                    }
+                  >
+                    Remove any track before saving or exporting.
+                  </Text>
+                </View>
+
+                <Text
+                  style={
+                    styles.trackCount
+                  }
+                >
+                  {result.trackSignals.length}
+                </Text>
+              </View>
+
+              {result.trackSignals.map(
+                (
+                  signal,
+                  index,
+                ) => {
+                  const imageUrl =
+                    signal.track
+                      .album
+                      ?.images?.[0]
+                      ?.url;
+
+                  return (
+                    <View
+                      key={
+                        `${signal.track.id}-${index}`
+                      }
+                      style={
+                        styles.currentTrack
+                      }
+                    >
+                      {imageUrl ? (
+                        <Image
+                          source={{
+                            uri:
+                              imageUrl,
+                          }}
+                          style={
+                            styles.trackImage
+                          }
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.trackImage,
+                            styles.placeholderImage,
+                          ]}
+                        >
+                          <Text
+                            style={
+                              styles.placeholderText
+                            }
+                          >
+                            ♪
+                          </Text>
+                        </View>
+                      )}
+
+                      <View
+                        style={
+                          styles.resultText
+                        }
+                      >
+                        <Text
+                          numberOfLines={
+                            1
+                          }
+                          style={
+                            styles.trackTitle
+                          }
+                        >
+                          {signal.track.name}
+                        </Text>
+
+                        <Text
+                          numberOfLines={
+                            1
+                          }
+                          style={
+                            styles.trackArtist
+                          }
+                        >
+                          {signal.track
+                            .artists
+                            .map(
+                              (artist) =>
+                                artist.name,
+                            )
+                            .join(
+                              ", ",
+                            )}{" "}
+                          ·{" "}
+                          {durationText(
+                            signal.track
+                              .duration_ms,
+                          )}
+                        </Text>
+                      </View>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() =>
+                          void removeTrack(
+                            signal.track.id,
+                          )
+                        }
+                        style={
+                          styles.removeButton
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.removeText
+                          }
+                        >
+                          Remove
+                        </Text>
+                      </Pressable>
+                    </View>
+                  );
+                },
+              )}
+            </View>
+
+            <View
+              style={
+                styles.actions
+              }
+            >
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.replace({
+                    pathname:
+                      "/scene-studio",
+
+                    params: {
+                      resume:
+                        "1",
+
+                      mode:
+                        "edit",
+                    },
+                  } as never)
+                }
+                style={
+                  styles.secondaryButton
+                }
+              >
+                <Text
+                  style={
+                    styles.secondaryText
+                  }
+                >
+                  Edit Mood and Activity
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={
+                  saving
+                }
+                onPress={() =>
+                  void save()
+                }
+                style={
+                  styles.primaryButton
+                }
+              >
+                {saving ? (
+                  <ActivityIndicator
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.primaryText
+                    }
+                  >
+                    Save Scene
+                  </Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={
+                  exporting
+                }
+                onPress={() =>
+                  void exportToSpotify()
+                }
+                style={
+                  styles.spotifyButton
+                }
+              >
+                {exporting ? (
+                  <ActivityIndicator
+                    color="#07130B"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.spotifyText
+                    }
+                  >
+                    Export Final Mix to Spotify
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </>
+        ) : (
+          <View
+            style={
+              styles.errorBox
+            }
+          >
+            <Text
+              style={
+                styles.errorText
+              }
+            >
+              {errorMessage ||
+                "No generated Scene was found."}
+            </Text>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                router.replace(
+                  "/scene-studio" as never,
+                )
+              }
+              style={
+                styles.musicServicesButton
+              }
+            >
+              <Text
+                style={
+                  styles.musicServicesText
+                }
+              >
+                Open Scene Studio
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles =
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor:
+        "#FFF9F4",
+    },
+
+    loading: {
+      flex: 1,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+    },
+
+    header: {
+      flexDirection: "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 12,
+    },
+
+    backButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    backText: {
+      color: "#1B1B1B",
+      fontSize: 34,
+      lineHeight: 36,
+    },
+
+    headerTitle: {
+      color: "#1B1B1B",
+      fontSize: 16,
+      fontWeight: "900",
+    },
+
+    headerSpacer: {
+      width: 42,
+    },
+
+    content: {
+      paddingHorizontal: 20,
+      paddingBottom: 45,
+      gap: 14,
+    },
+
+    hero: {
+      backgroundColor:
+        "#FFFFFF",
+      borderRadius: 22,
+      padding: 19,
+    },
+
+    eyebrow: {
+      color: "#F47A24",
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+
+    sceneName: {
+      color: "#1B1B1B",
+      fontSize: 24,
+      fontWeight: "900",
+      marginTop: 7,
+    },
+
+    sceneMeta: {
+      color: "#746D67",
+      fontSize: 12,
+      marginTop: 6,
+    },
+
+    successBox: {
+      backgroundColor:
+        "#EAF9EF",
+      borderRadius: 16,
+      padding: 14,
+    },
+
+    successText: {
+      color: "#1D7138",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    errorBox: {
+      backgroundColor:
+        "#FFF0EF",
+      borderRadius: 16,
+      padding: 14,
+    },
+
+    errorText: {
+      color: "#A62E27",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    openSpotifyButton: {
+      alignSelf:
+        "flex-start",
+      borderRadius: 11,
+      backgroundColor:
+        "#1ED760",
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      marginTop: 10,
+    },
+
+    openSpotifyText: {
+      color: "#07130B",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+
+    musicServicesButton: {
+      alignSelf:
+        "flex-start",
+      borderRadius: 11,
+      backgroundColor:
+        "#FFFFFF",
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      marginTop: 10,
+    },
+
+    musicServicesText: {
+      color: "#A62E27",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+
+    searchCard: {
+      backgroundColor:
+        "#FFFFFF",
+      borderRadius: 22,
+      padding: 17,
+    },
+
+    sectionTitle: {
+      color: "#1B1B1B",
+      fontSize: 18,
+      fontWeight: "900",
+    },
+
+    sectionSubtitle: {
+      color: "#817972",
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 4,
+    },
+
+    searchRow: {
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 13,
+    },
+
+    searchInput: {
+      flex: 1,
+      minHeight: 48,
+      borderWidth: 1,
+      borderColor:
+        "#E2DAD4",
+      borderRadius: 14,
+      color: "#1B1B1B",
+      paddingHorizontal: 13,
+    },
+
+    searchButton: {
+      minWidth: 76,
+      borderRadius: 14,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#F47A24",
+    },
+
+    searchButtonText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "900",
+    },
+
+    searchResults: {
+      marginTop: 10,
+    },
+
+    searchResult: {
+      flexDirection: "row",
+      alignItems:
+        "center",
+      borderTopWidth: 1,
+      borderTopColor:
+        "#F0ECE8",
+      paddingVertical: 10,
+    },
+
+    trackImage: {
+      width: 47,
+      height: 47,
+      borderRadius: 10,
+      marginRight: 10,
+    },
+
+    placeholderImage: {
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#F0ECE8",
+    },
+
+    placeholderText: {
+      color: "#918981",
+      fontSize: 18,
+    },
+
+    resultText: {
+      flex: 1,
+    },
+
+    trackTitle: {
+      color: "#292522",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    trackArtist: {
+      color: "#817972",
+      fontSize: 10,
+      marginTop: 4,
+    },
+
+    addButton: {
+      minWidth: 54,
+      minHeight: 35,
+      borderRadius: 11,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#F47A24",
+      marginLeft: 8,
+    },
+
+    includedButton: {
+      backgroundColor:
+        "#ECE7E3",
+    },
+
+    addText: {
+      color: "#FFFFFF",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+
+    includedText: {
+      color: "#837B74",
+    },
+
+    trackCard: {
+      backgroundColor:
+        "#FFFFFF",
+      borderRadius: 22,
+      padding: 17,
+    },
+
+    trackHeader: {
+      flexDirection: "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      marginBottom: 8,
+    },
+
+    trackCount: {
+      color: "#F47A24",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    currentTrack: {
+      flexDirection: "row",
+      alignItems:
+        "center",
+      borderTopWidth: 1,
+      borderTopColor:
+        "#F0ECE8",
+      paddingVertical: 10,
+    },
+
+    removeButton: {
+      borderWidth: 1,
+      borderColor:
+        "#E4B8B4",
+      borderRadius: 10,
+      paddingHorizontal: 9,
+      paddingVertical: 8,
+      marginLeft: 7,
+    },
+
+    removeText: {
+      color: "#A62E27",
+      fontSize: 9,
+      fontWeight: "900",
+    },
+
+    actions: {
+      gap: 10,
+    },
+
+    secondaryButton: {
+      minHeight: 50,
+      borderWidth: 1,
+      borderColor:
+        "#DAD2CC",
+      borderRadius: 16,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    secondaryText: {
+      color: "#625B55",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    primaryButton: {
+      minHeight: 53,
+      borderRadius: 17,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#F47A24",
+    },
+
+    primaryText: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    spotifyButton: {
+      minHeight: 53,
+      borderRadius: 17,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#1ED760",
+    },
+
+    spotifyText: {
+      color: "#07130B",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+  });

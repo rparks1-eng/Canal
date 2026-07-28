@@ -1,0 +1,546 @@
+import {
+  useState,
+} from "react";
+
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+
+import {
+  router,
+} from "expo-router";
+
+import {
+  SafeAreaView,
+} from "react-native-safe-area-context";
+
+import {
+  completePasswordRecoveryFromLink,
+  requestPasswordReset,
+} from "../../lib/canal-auth";
+
+export default function ForgotPasswordScreen() {
+  const [
+    email,
+    setEmail,
+  ] = useState("");
+
+  const [
+    recoveryLink,
+    setRecoveryLink,
+  ] = useState("");
+
+  const [
+    sending,
+    setSending,
+  ] = useState(false);
+
+  const [
+    opening,
+    setOpening,
+  ] = useState(false);
+
+  const [
+    message,
+    setMessage,
+  ] = useState("");
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
+
+  const submit =
+    async (): Promise<void> => {
+      if (sending) {
+        return;
+      }
+
+      setSending(
+        true,
+      );
+
+      setMessage("");
+      setErrorMessage("");
+
+      try {
+        await requestPasswordReset(
+          email,
+        );
+
+        setMessage(
+          "Reset email sent. Use the newest email. On a real iPhone, tap its button. In the iOS Simulator, copy the complete link from the email and paste it below.",
+        );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not send the reset email.",
+        );
+      } finally {
+        setSending(
+          false,
+        );
+      }
+    };
+
+  const openPastedLink =
+    async (): Promise<void> => {
+      if (opening) {
+        return;
+      }
+
+      setOpening(
+        true,
+      );
+
+      setMessage("");
+      setErrorMessage("");
+
+      try {
+        await completePasswordRecoveryFromLink(
+          recoveryLink,
+        );
+
+        router.replace({
+          pathname:
+            "/auth/reset-password",
+
+          params: {
+            verified:
+              "1",
+          },
+        } as never);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not verify the password-reset link.",
+        );
+      } finally {
+        setOpening(
+          false,
+        );
+      }
+    };
+
+  const goBack =
+    (): void => {
+      router.replace(
+        "/login" as never,
+      );
+    };
+
+  return (
+    <SafeAreaView
+      style={
+        styles.safeArea
+      }
+      edges={[
+        "top",
+        "bottom",
+      ]}
+    >
+      <KeyboardAvoidingView
+        style={
+          styles.flex
+        }
+        behavior={
+          Platform.OS ===
+          "ios"
+            ? "padding"
+            : undefined
+        }
+      >
+        <ScrollView
+          contentContainerStyle={
+            styles.content
+          }
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={
+            false
+          }
+        >
+          <Pressable
+            accessibilityRole="button"
+            onPress={
+              goBack
+            }
+            style={
+              styles.backButton
+            }
+          >
+            <Text
+              style={
+                styles.backText
+              }
+            >
+              ‹
+            </Text>
+          </Pressable>
+
+          <Text
+            style={
+              styles.title
+            }
+          >
+            Reset your password
+          </Text>
+
+          <Text
+            style={
+              styles.subtitle
+            }
+          >
+            Enter the email used for your Canal account.
+          </Text>
+
+          <Text
+            style={
+              styles.label
+            }
+          >
+            Account email
+          </Text>
+
+          <TextInput
+            value={
+              email
+            }
+            onChangeText={
+              setEmail
+            }
+            placeholder="you@example.com"
+            placeholderTextColor="#9A938C"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={
+              false
+            }
+            textContentType="emailAddress"
+            style={
+              styles.input
+            }
+          />
+
+          <Pressable
+            accessibilityRole="button"
+            disabled={
+              sending
+            }
+            onPress={() =>
+              void submit()
+            }
+            style={[
+              styles.primaryButton,
+
+              sending &&
+                styles.disabled,
+            ]}
+          >
+            {sending ? (
+              <ActivityIndicator
+                color="#FFFFFF"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.primaryButtonText
+                }
+              >
+                Send Reset Email
+              </Text>
+            )}
+          </Pressable>
+
+          <View
+            style={
+              styles.simulatorCard
+            }
+          >
+            <Text
+              style={
+                styles.simulatorTitle
+              }
+            >
+              Testing in iOS Simulator
+            </Text>
+
+            <Text
+              style={
+                styles.simulatorText
+              }
+            >
+              A link clicked on your Mac cannot automatically open the fake iPhone. Copy the complete password-reset link from the newest email, then paste it here.
+            </Text>
+
+            <TextInput
+              value={
+                recoveryLink
+              }
+              onChangeText={
+                setRecoveryLink
+              }
+              placeholder="Paste the complete https:// link"
+              placeholderTextColor="#9A938C"
+              autoCapitalize="none"
+              autoCorrect={
+                false
+              }
+              multiline
+              style={[
+                styles.input,
+                styles.linkInput,
+              ]}
+            />
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={
+                opening ||
+                !recoveryLink.trim()
+              }
+              onPress={() =>
+                void openPastedLink()
+              }
+              style={[
+                styles.secondaryButton,
+
+                (
+                  opening ||
+                  !recoveryLink.trim()
+                ) &&
+                  styles.disabled,
+              ]}
+            >
+              {opening ? (
+                <ActivityIndicator
+                  color="#F47A24"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.secondaryButtonText
+                  }
+                >
+                  Verify Reset Link
+                </Text>
+              )}
+            </Pressable>
+          </View>
+
+          {message ? (
+            <View
+              style={
+                styles.messageBox
+              }
+            >
+              <Text
+                style={
+                  styles.messageText
+                }
+              >
+                {message}
+              </Text>
+            </View>
+          ) : null}
+
+          {errorMessage ? (
+            <View
+              style={
+                styles.errorBox
+              }
+            >
+              <Text
+                style={
+                  styles.errorText
+                }
+              >
+                {errorMessage}
+              </Text>
+            </View>
+          ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles =
+  StyleSheet.create({
+    flex: {
+      flex: 1,
+    },
+
+    safeArea: {
+      flex: 1,
+      backgroundColor:
+        "#FFF9F4",
+    },
+
+    content: {
+      flexGrow: 1,
+      paddingHorizontal: 22,
+      paddingTop: 10,
+      paddingBottom: 40,
+    },
+
+    backButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    backText: {
+      color: "#1B1B1B",
+      fontSize: 34,
+      lineHeight: 36,
+    },
+
+    title: {
+      color: "#181818",
+      fontSize: 29,
+      fontWeight: "900",
+      marginTop: 34,
+    },
+
+    subtitle: {
+      color: "#6C655F",
+      fontSize: 14,
+      lineHeight: 21,
+      marginTop: 8,
+      marginBottom: 22,
+    },
+
+    label: {
+      color: "#5E5752",
+      fontSize: 11,
+      fontWeight: "800",
+      marginBottom: 7,
+    },
+
+    input: {
+      minHeight: 51,
+      borderWidth: 1,
+      borderColor:
+        "#E2DAD4",
+      borderRadius: 15,
+      backgroundColor:
+        "#FFFFFF",
+      color: "#1B1B1B",
+      fontSize: 15,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+
+    primaryButton: {
+      minHeight: 53,
+      borderRadius: 17,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#F47A24",
+      marginTop: 14,
+    },
+
+    primaryButtonText: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "900",
+    },
+
+    simulatorCard: {
+      backgroundColor:
+        "#FFFFFF",
+      borderRadius: 20,
+      padding: 17,
+      marginTop: 24,
+    },
+
+    simulatorTitle: {
+      color: "#1B1B1B",
+      fontSize: 16,
+      fontWeight: "900",
+    },
+
+    simulatorText: {
+      color: "#6C655F",
+      fontSize: 12,
+      lineHeight: 19,
+      marginTop: 7,
+      marginBottom: 13,
+    },
+
+    linkInput: {
+      minHeight: 88,
+      textAlignVertical:
+        "top",
+    },
+
+    secondaryButton: {
+      minHeight: 49,
+      borderWidth: 1,
+      borderColor:
+        "#F47A24",
+      borderRadius: 15,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      marginTop: 12,
+    },
+
+    secondaryButtonText: {
+      color: "#F47A24",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    messageBox: {
+      backgroundColor:
+        "#EAF9EF",
+      borderRadius: 15,
+      padding: 14,
+      marginTop: 16,
+    },
+
+    messageText: {
+      color: "#1D7138",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    errorBox: {
+      backgroundColor:
+        "#FFF0EF",
+      borderRadius: 15,
+      padding: 14,
+      marginTop: 16,
+    },
+
+    errorText: {
+      color: "#A62E27",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    disabled: {
+      opacity: 0.45,
+    },
+  });

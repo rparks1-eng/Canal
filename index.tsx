@@ -1,0 +1,937 @@
+import { Ionicons } from "@expo/vector-icons";
+import {
+  router,
+  useFocusEffect,
+} from "expo-router";
+import {
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import {
+  shareSnapshot,
+} from "../../lib/canal-share";
+import {
+  deleteSnapshot,
+  readSnapshots,
+  Snapshot,
+  SnapshotVisibility,
+} from "../../lib/snapshots";
+
+type SnapshotFilter =
+  | "all"
+  | SnapshotVisibility;
+
+const FILTERS: {
+  key: SnapshotFilter;
+  label: string;
+}[] = [
+  {
+    key: "all",
+    label: "All",
+  },
+  {
+    key: "public",
+    label: "Public",
+  },
+  {
+    key: "private",
+    label: "Private",
+  },
+];
+
+export default function SnapshotsScreen() {
+  const [
+    snapshots,
+    setSnapshots,
+  ] = useState<Snapshot[]>([]);
+
+  const [query, setQuery] =
+    useState("");
+
+  const [
+    activeFilter,
+    setActiveFilter,
+  ] =
+    useState<SnapshotFilter>(
+      "all",
+    );
+
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [
+    deletingSnapshotId,
+    setDeletingSnapshotId,
+  ] = useState("");
+
+  const loadSnapshots =
+    useCallback(async () => {
+      try {
+        setIsLoading(true);
+
+        const storedSnapshots =
+          await readSnapshots();
+
+        setSnapshots(
+          storedSnapshots,
+        );
+      } catch (error) {
+        console.error(
+          "Unable to load Snapshots:",
+          error,
+        );
+
+        Alert.alert(
+          "Unable to load",
+          "Canal could not load your Snapshots.",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadSnapshots();
+    }, [loadSnapshots]),
+  );
+
+  const visibleSnapshots =
+    useMemo(() => {
+      const normalizedQuery =
+        query.trim().toLowerCase();
+
+      return snapshots
+        .filter((snapshot) =>
+          activeFilter === "all"
+            ? true
+            : snapshot.visibility ===
+              activeFilter,
+        )
+        .filter((snapshot) => {
+          if (!normalizedQuery) {
+            return true;
+          }
+
+          return [
+            snapshot.sceneName,
+            snapshot.trackTitle,
+            snapshot.trackArtist,
+            snapshot.note,
+            snapshot.mood,
+          ].some((value) =>
+            value
+              ?.toLowerCase()
+              .includes(
+                normalizedQuery,
+              ),
+          );
+        });
+    }, [
+      activeFilter,
+      query,
+      snapshots,
+    ]);
+
+  async function handleShare(
+    snapshot: Snapshot,
+  ) {
+    try {
+      const result =
+        await shareSnapshot(
+          snapshot,
+        );
+
+      if (
+        result.method ===
+        "clipboard"
+      ) {
+        Alert.alert(
+          "Snapshot copied",
+          "The Snapshot was copied to your clipboard.",
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        "Unable to share",
+        error instanceof Error
+          ? error.message
+          : "Canal could not share this Snapshot.",
+      );
+    }
+  }
+
+  function confirmDelete(
+    snapshot: Snapshot,
+  ) {
+    Alert.alert(
+      "Delete this Snapshot?",
+      `The moment from ${snapshot.sceneName} will be removed.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void handleDelete(
+              snapshot.id,
+            );
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleDelete(
+    snapshotId: string,
+  ) {
+    try {
+      setDeletingSnapshotId(
+        snapshotId,
+      );
+
+      await deleteSnapshot(
+        snapshotId,
+      );
+
+      setSnapshots(
+        snapshots.filter(
+          (snapshot) =>
+            snapshot.id !==
+            snapshotId,
+        ),
+      );
+    } catch (error) {
+      console.error(
+        "Unable to delete Snapshot:",
+        error,
+      );
+
+      Alert.alert(
+        "Unable to delete",
+        "Canal could not delete this Snapshot.",
+      );
+    } finally {
+      setDeletingSnapshotId("");
+    }
+  }
+
+  return (
+    <SafeAreaView
+      style={styles.screen}
+    >
+      <ScrollView
+        contentContainerStyle={
+          styles.page
+        }
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={
+          false
+        }
+      >
+        <View style={styles.header}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(tabs)");
+            }
+          }}
+            style={({ pressed }) => [
+              styles.headerButton,
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <Text
+              style={styles.backText}
+            >
+              ‹ You
+            </Text>
+          </Pressable>
+
+          <Text
+            style={
+              styles.headerTitle
+            }
+          >
+            Snapshots
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              router.push(
+                "/soundscape",
+              )
+            }
+            style={({ pressed }) => [
+              styles.headerButton,
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.headerAction
+              }
+            >
+              Soundscape
+            </Text>
+          </Pressable>
+        </View>
+
+        <View>
+          <Text style={styles.eyebrow}>
+            MOMENTS
+          </Text>
+
+          <Text style={styles.heading}>
+            Your Snapshots.
+          </Text>
+
+          <Text
+            style={styles.description}
+          >
+            Saved tracks, moods, notes,
+            and Scene moments.
+          </Text>
+        </View>
+
+        <View
+          style={styles.searchBox}
+        >
+          <Ionicons
+            name="search-outline"
+            size={20}
+            color="#8f9891"
+          />
+
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search Snapshots"
+            placeholderTextColor="#777f79"
+            style={styles.searchInput}
+          />
+
+          {query ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                setQuery("")
+              }
+            >
+              <Ionicons
+                name="close-circle"
+                size={20}
+                color="#777f79"
+              />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View
+          style={styles.filterRow}
+        >
+          {FILTERS.map(
+            (filter) => {
+              const selected =
+                activeFilter ===
+                filter.key;
+
+              const count =
+                filter.key === "all"
+                  ? snapshots.length
+                  : snapshots.filter(
+                      (snapshot) =>
+                        snapshot.visibility ===
+                        filter.key,
+                    ).length;
+
+              return (
+                <Pressable
+                  key={filter.key}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    selected,
+                  }}
+                  onPress={() =>
+                    setActiveFilter(
+                      filter.key,
+                    )
+                  }
+                  style={({ pressed }) => [
+                    styles.filterButton,
+                    selected &&
+                      styles.selectedFilter,
+                    pressed &&
+                      styles.pressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      selected &&
+                        styles.selectedFilterText,
+                    ]}
+                  >
+                    {filter.label}
+                  </Text>
+
+                  <Text
+                    style={[
+                      styles.filterCount,
+                      selected &&
+                        styles.selectedFilterText,
+                    ]}
+                  >
+                    {count}
+                  </Text>
+                </Pressable>
+              );
+            },
+          )}
+        </View>
+
+        {isLoading ? (
+          <View
+            style={styles.centered}
+          >
+            <ActivityIndicator
+              size="large"
+              color="#ff7a1a"
+            />
+          </View>
+        ) : visibleSnapshots.length ===
+          0 ? (
+          <View
+            style={styles.emptyCard}
+          >
+            <Ionicons
+              name="camera-outline"
+              size={32}
+              color="#ff9a50"
+            />
+
+            <Text
+              style={styles.emptyTitle}
+            >
+              No Snapshots found
+            </Text>
+
+            <Text
+              style={styles.emptyText}
+            >
+              Open a Scene or Stage and
+              capture a music moment.
+            </Text>
+          </View>
+        ) : (
+          <View
+            style={styles.snapshotList}
+          >
+            {visibleSnapshots.map(
+              (snapshot) => (
+                <View
+                  key={snapshot.id}
+                  style={
+                    styles.snapshotCard
+                  }
+                >
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() =>
+                      router.push({
+                        pathname:
+                          "/snapshots/[snapshotId]",
+
+                        params: {
+                          snapshotId:
+                            snapshot.id,
+                        },
+                      })
+                    }
+                    style={({ pressed }) => [
+                      styles.snapshotMain,
+                      pressed &&
+                        styles.pressed,
+                    ]}
+                  >
+                    <View
+                      style={
+                        styles.snapshotIcon
+                      }
+                    >
+                      <Ionicons
+                        name="camera-outline"
+                        size={24}
+                        color="#ff9a50"
+                      />
+                    </View>
+
+                    <View
+                      style={
+                        styles.snapshotCopy
+                      }
+                    >
+                      <View
+                        style={
+                          styles.snapshotTitleRow
+                        }
+                      >
+                        <Text
+                          numberOfLines={1}
+                          style={
+                            styles.snapshotTitle
+                          }
+                        >
+                          {
+                            snapshot.sceneName
+                          }
+                        </Text>
+
+                        <Ionicons
+                          name={
+                            snapshot.visibility ===
+                            "public"
+                              ? "globe-outline"
+                              : "lock-closed-outline"
+                          }
+                          size={13}
+                          color={
+                            snapshot.visibility ===
+                            "public"
+                              ? "#9ff3b5"
+                              : "#8f9891"
+                          }
+                        />
+                      </View>
+
+                      <Text
+                        numberOfLines={1}
+                        style={
+                          styles.trackText
+                        }
+                      >
+                        {snapshot.trackTitle
+                          ? `${snapshot.trackTitle}${
+                              snapshot.trackArtist
+                                ? ` · ${snapshot.trackArtist}`
+                                : ""
+                            }`
+                          : "Scene moment"}
+                      </Text>
+
+                      <Text
+                        numberOfLines={1}
+                        style={
+                          styles.moodText
+                        }
+                      >
+                        {snapshot.mood ||
+                          formatDate(
+                            snapshot.createdAt,
+                          )}
+                      </Text>
+                    </View>
+
+                    <Ionicons
+                      name="chevron-forward"
+                      size={19}
+                      color="#717a73"
+                    />
+                  </Pressable>
+
+                  <View
+                    style={
+                      styles.actionRow
+                    }
+                  >
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        void handleShare(
+                          snapshot,
+                        );
+                      }}
+                      style={({ pressed }) => [
+                        styles.cardAction,
+                        pressed &&
+                          styles.pressed,
+                      ]}
+                    >
+                      <Ionicons
+                        name="share-social-outline"
+                        size={17}
+                        color="#ff9a50"
+                      />
+
+                      <Text
+                        style={
+                          styles.cardActionText
+                        }
+                      >
+                        Share
+                      </Text>
+                    </Pressable>
+
+                    <View
+                      style={
+                        styles.actionDivider
+                      }
+                    />
+
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={
+                        deletingSnapshotId ===
+                        snapshot.id
+                      }
+                      onPress={() =>
+                        confirmDelete(
+                          snapshot,
+                        )
+                      }
+                      style={({ pressed }) => [
+                        styles.cardAction,
+                        deletingSnapshotId ===
+                          snapshot.id &&
+                          styles.disabled,
+                        pressed &&
+                          styles.pressed,
+                      ]}
+                    >
+                      {deletingSnapshotId ===
+                      snapshot.id ? (
+                        <ActivityIndicator
+                          size="small"
+                          color="#ff9187"
+                        />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name="trash-outline"
+                            size={17}
+                            color="#ff9187"
+                          />
+
+                          <Text
+                            style={
+                              styles.deleteText
+                            }
+                          >
+                            Delete
+                          </Text>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              ),
+            )}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function formatDate(
+  value: string,
+): string {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return "";
+  }
+
+  return date.toLocaleDateString(
+    undefined,
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    },
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#0d100e",
+  },
+
+  page: {
+    paddingHorizontal: 22,
+    paddingTop: 10,
+    paddingBottom: 42,
+    gap: 21,
+  },
+
+  header: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  headerButton: {
+    width: 91,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+
+  backText: {
+    color: "#c5cbc6",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  headerTitle: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  headerAction: {
+    color: "#ff9a50",
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "right",
+  },
+
+  eyebrow: {
+    marginBottom: 8,
+    color: "#ff9a50",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  },
+
+  heading: {
+    color: "#ffffff",
+    fontSize: 30,
+    fontWeight: "700",
+  },
+
+  description: {
+    marginTop: 10,
+    color: "#aeb6b0",
+    fontSize: 15,
+    lineHeight: 22,
+  },
+
+  searchBox: {
+    minHeight: 53,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: "#303833",
+    borderRadius: 17,
+    backgroundColor: "#171c19",
+  },
+
+  searchInput: {
+    flex: 1,
+    color: "#ffffff",
+    fontSize: 14,
+  },
+
+  filterRow: {
+    flexDirection: "row",
+    gap: 9,
+  },
+
+  filterButton: {
+    minHeight: 42,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#39413c",
+    borderRadius: 15,
+    backgroundColor: "#171c19",
+  },
+
+  selectedFilter: {
+    borderColor: "#ff7a1a",
+    backgroundColor: "#211810",
+  },
+
+  filterText: {
+    color: "#8f9891",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  filterCount: {
+    color: "#8f9891",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  selectedFilterText: {
+    color: "#ff9a50",
+  },
+
+  centered: {
+    minHeight: 230,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  emptyCard: {
+    alignItems: "center",
+    gap: 10,
+    padding: 25,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "#3c4540",
+    borderRadius: 22,
+  },
+
+  emptyTitle: {
+    color: "#ffffff",
+    fontSize: 19,
+    fontWeight: "700",
+  },
+
+  emptyText: {
+    color: "#8f9891",
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+  },
+
+  snapshotList: {
+    gap: 13,
+  },
+
+  snapshotCard: {
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#303833",
+    borderRadius: 20,
+    backgroundColor: "#171c19",
+  },
+
+  snapshotMain: {
+    minHeight: 99,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+  },
+
+  snapshotIcon: {
+    width: 58,
+    height: 58,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    borderRadius: 19,
+    backgroundColor: "#2b1d14",
+  },
+
+  snapshotCopy: {
+    flex: 1,
+    paddingRight: 8,
+  },
+
+  snapshotTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+
+  snapshotTitle: {
+    flex: 1,
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  trackText: {
+    marginTop: 6,
+    color: "#c5cbc6",
+    fontSize: 11,
+  },
+
+  moodText: {
+    marginTop: 6,
+    color: "#8f9891",
+    fontSize: 10,
+  },
+
+  actionRow: {
+    minHeight: 48,
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: "#303833",
+  },
+
+  cardAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  cardActionText: {
+    color: "#ff9a50",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  deleteText: {
+    color: "#ff9187",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  actionDivider: {
+    width: 1,
+    backgroundColor: "#303833",
+  },
+
+  disabled: {
+    opacity: 0.5,
+  },
+
+  pressed: {
+    opacity: 0.72,
+    transform: [
+      {
+        scale: 0.99,
+      },
+    ],
+  },
+});
