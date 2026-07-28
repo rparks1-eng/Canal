@@ -16,6 +16,11 @@ icon = "run"
 command = "./script/build_and_run.sh --ios"
 
 [[actions]]
+name = "Build iOS Simulator"
+icon = "tool"
+command = "./script/build_and_run.sh --build-ios"
+
+[[actions]]
 name = "Run Web"
 icon = "run"
 command = "./script/build_and_run.sh --web"

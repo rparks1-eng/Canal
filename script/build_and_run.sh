@@ -19,6 +19,8 @@ usage: ./script/build_and_run.sh [mode]
 Modes:
   start, run        Start the Expo dev server
   --ios, ios        Start Expo and open the iOS Simulator
+  --build-ios, build-ios
+                    Build and install Canal in the iOS Simulator
   --android, android
                     Start Expo and open Android
   --web, web        Start Expo for web
@@ -58,6 +60,13 @@ case "$MODE" in
       exit 1
     fi
     exec "${EXPO_CMD[@]}" start --ios
+    ;;
+  --build-ios|build-ios)
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+      echo "Build iOS Simulator requires macOS with Xcode and Apple Simulator installed." >&2
+      exit 1
+    fi
+    exec "${EXPO_CMD[@]}" run:ios
     ;;
   --android|android)
     exec "${EXPO_CMD[@]}" start --android
