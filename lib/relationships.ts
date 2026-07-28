@@ -1,6 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "./storage-keys";
+import {
+  isSupabaseConfigured,
+  supabase,
+} from "./supabase";
 
 export type RelationshipActivityType =
   | "follow"
@@ -22,6 +26,18 @@ export type RelationshipActivity = {
   displayName?: string;
   createdAt: string;
   isRead: boolean;
+  syncStatus?: "pending" | "synced";
+};
+
+type ActivityRow = {
+  id: string;
+  type: RelationshipActivityType;
+  title: string;
+  description: string;
+  username: string | null;
+  display_name: string | null;
+  created_at: string;
+  is_read: boolean;
 };
 
 export type CanalActivityType =
@@ -366,13 +382,92 @@ export async function isBlockedUser(
 export async function readActivity(): Promise<
   CanalActivityItem[]
 > {
+  const localActivities =
+    await readLocalActivity();
+
+  if (!isSupabaseConfigured) {
+    return localActivities;
+  }
+
+  try {
+    const userId =
+      await currentUserId();
+
+    if (!userId) {
+      return localActivities;
+    }
+
+    const pending =
+      localActivities.filter(
+        (item) =>
+          item.syncStatus ===
+          "pending",
+      );
+
+    if (pending.length > 0) {
+      await upsertCloudActivity(
+        userId,
+        pending,
+      );
+    }
+
+    const {
+      data,
+      error,
+    } =
+      await supabase
+        .from("activity_events")
+        .select(
+          "id, type, title, description, username, display_name, created_at, is_read",
+        )
+        .eq("user_id", userId)
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(200);
+
+    if (error) {
+      throw error;
+    }
+
+    const cloudActivities =
+      ((data ?? []) as ActivityRow[])
+        .map(normalizeActivityRow);
+
+    const merged =
+      mergeActivityItems(
+        cloudActivities,
+        localActivities,
+      );
+
+    await writeActivity(merged);
+
+    return merged;
+  } catch (error) {
+    console.warn(
+      "Canal activity is offline; using the device cache:",
+      error,
+    );
+
+    return localActivities;
+  }
+}
+
+async function readLocalActivity(): Promise<
+  CanalActivityItem[]
+> {
+  const storageKey =
+    await activityStorageKey();
+
   const currentValue =
     await AsyncStorage.getItem(
-      STORAGE_KEYS.activity,
+      storageKey,
     );
 
   const legacyValue =
-    currentValue
+    currentValue ||
+    storageKey !==
+      STORAGE_KEYS.activity
       ? null
       : await AsyncStorage.getItem(
           STORAGE_KEYS.legacyReadActivity,
@@ -406,14 +501,8 @@ export async function readActivity(): Promise<
       }
     }
 
-    return activities.sort(
-      (first, second) =>
-        getTimestamp(
-          second.createdAt,
-        ) -
-        getTimestamp(
-          first.createdAt,
-        ),
+    return sortActivity(
+      activities,
     );
   } catch {
     return [];
@@ -461,6 +550,10 @@ export async function recordActivity(
         new Date().toISOString(),
 
       isRead: false,
+      syncStatus:
+        isSupabaseConfigured
+          ? "pending"
+          : undefined,
     };
 
   const updatedActivities = [
@@ -472,6 +565,38 @@ export async function recordActivity(
     updatedActivities,
   );
 
+  if (isSupabaseConfigured) {
+    try {
+      const userId =
+        await currentUserId();
+
+      if (userId) {
+        await upsertCloudActivity(
+          userId,
+          [activity],
+        );
+
+        activity.syncStatus =
+          "synced";
+
+        await writeActivity(
+          updatedActivities.map(
+            (item) =>
+              item.id ===
+              activity.id
+                ? activity
+                : item,
+          ),
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "Canal saved activity on this device and will retry cloud sync:",
+        error,
+      );
+    }
+  }
+
   return activity;
 }
 
@@ -479,8 +604,11 @@ export async function writeActivity(
   activities:
     CanalActivityItem[],
 ): Promise<void> {
+  const storageKey =
+    await activityStorageKey();
+
   await AsyncStorage.setItem(
-    STORAGE_KEYS.activity,
+    storageKey,
     JSON.stringify(
       activities,
     ),
@@ -503,6 +631,41 @@ export async function markActivityRead(
         : activity,
     ),
   );
+
+  if (isSupabaseConfigured) {
+    try {
+      const userId =
+        await currentUserId();
+
+      if (userId) {
+        const { error } =
+          await supabase
+            .from(
+              "activity_events",
+            )
+            .update({
+              is_read: true,
+            })
+            .eq(
+              "user_id",
+              userId,
+            )
+            .eq(
+              "id",
+              activityId,
+            );
+
+        if (error) {
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.warn(
+        "Canal could not mark cloud activity as read:",
+        error,
+      );
+    }
+  }
 }
 
 export async function markAllActivityRead(): Promise<void> {
@@ -517,13 +680,69 @@ export async function markAllActivityRead(): Promise<void> {
       }),
     ),
   );
+
+  if (isSupabaseConfigured) {
+    try {
+      const userId =
+        await currentUserId();
+
+      if (userId) {
+        const { error } =
+          await supabase
+            .from(
+              "activity_events",
+            )
+            .update({
+              is_read: true,
+            })
+            .eq(
+              "user_id",
+              userId,
+            );
+
+        if (error) {
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.warn(
+        "Canal could not mark cloud activity as read:",
+        error,
+      );
+    }
+  }
 }
 
 export async function clearActivity(): Promise<void> {
+  const storageKey =
+    await activityStorageKey();
+
   await AsyncStorage.multiRemove([
-    STORAGE_KEYS.activity,
-    STORAGE_KEYS.legacyReadActivity,
+    storageKey,
+    ...(storageKey ===
+    STORAGE_KEYS.activity
+      ? [
+          STORAGE_KEYS.legacyReadActivity,
+        ]
+      : []),
   ]);
+
+  if (isSupabaseConfigured) {
+    const userId =
+      await currentUserId();
+
+    if (userId) {
+      const { error } =
+        await supabase
+          .from("activity_events")
+          .delete()
+          .eq("user_id", userId);
+
+      if (error) {
+        throw error;
+      }
+    }
+  }
 }
 
 function normalizeActivity(
@@ -585,6 +804,160 @@ function normalizeActivity(
 
     isRead:
       record.isRead === true,
+
+    syncStatus:
+      record.syncStatus ===
+      "pending"
+        ? "pending"
+        : record.syncStatus ===
+            "synced"
+          ? "synced"
+          : undefined,
+  };
+}
+
+export function mergeActivityItems(
+  primary: CanalActivityItem[],
+  secondary: CanalActivityItem[],
+): CanalActivityItem[] {
+  const merged =
+    new Map<
+      string,
+      CanalActivityItem
+    >();
+
+  for (const item of [
+    ...secondary,
+    ...primary,
+  ]) {
+    merged.set(item.id, item);
+  }
+
+  return sortActivity(
+    Array.from(
+      merged.values(),
+    ),
+  ).slice(0, 200);
+}
+
+function sortActivity(
+  activities: CanalActivityItem[],
+): CanalActivityItem[] {
+  return [...activities].sort(
+    (first, second) =>
+      getTimestamp(
+        second.createdAt,
+      ) -
+      getTimestamp(
+        first.createdAt,
+      ),
+  );
+}
+
+async function activityStorageKey(): Promise<string> {
+  if (!isSupabaseConfigured) {
+    return STORAGE_KEYS.activity;
+  }
+
+  try {
+    const {
+      data: {
+        session,
+      },
+    } =
+      await supabase.auth.getSession();
+
+    const userId =
+      session?.user.id;
+
+    return userId
+      ? `${STORAGE_KEYS.activity}:${userId}`
+      : STORAGE_KEYS.activity;
+  } catch {
+    return STORAGE_KEYS.activity;
+  }
+}
+
+async function currentUserId(): Promise<
+  string | null
+> {
+  const {
+    data: {
+      user,
+    },
+    error,
+  } =
+    await supabase.auth.getUser();
+
+  if (error) {
+    throw error;
+  }
+
+  return user?.id ?? null;
+}
+
+async function upsertCloudActivity(
+  userId: string,
+  activities: CanalActivityItem[],
+): Promise<void> {
+  const { error } =
+    await supabase
+      .from("activity_events")
+      .upsert(
+        activities.map(
+          (item) => ({
+            user_id: userId,
+            id: item.id,
+            type: item.type,
+            title: item.title,
+            description:
+              item.description,
+            username:
+              item.username ??
+              null,
+            display_name:
+              item.displayName ??
+              null,
+            created_at:
+              item.createdAt,
+            is_read:
+              item.isRead,
+          }),
+        ),
+        {
+          onConflict:
+            "user_id,id",
+        },
+      );
+
+  if (error) {
+    throw error;
+  }
+}
+
+function normalizeActivityRow(
+  row: ActivityRow,
+): CanalActivityItem {
+  return {
+    id: row.id,
+    type:
+      readActivityType(
+        row.type,
+      ),
+    title: row.title,
+    description:
+      row.description,
+    username:
+      row.username ??
+      undefined,
+    displayName:
+      row.display_name ??
+      undefined,
+    createdAt:
+      row.created_at,
+    isRead:
+      row.is_read,
+    syncStatus: "synced",
   };
 }
 

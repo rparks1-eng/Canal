@@ -214,8 +214,8 @@ export default function ActivityScreen() {
             style={styles.description}
           >
             Follow, block, share, and
-            creation actions stored on
-            this device appear here.
+            creation actions sync across
+            your signed-in devices.
           </Text>
         </View>
 
@@ -356,6 +356,20 @@ export default function ActivityScreen() {
                         item.createdAt,
                       )}
                     </Text>
+
+                    {item.syncStatus ===
+                    "pending" ? (
+                      <Text
+                        accessibilityLabel="Waiting to sync when Canal is online"
+                        style={
+                          styles.pendingText
+                        }
+                      >
+                        Saved on this
+                        device · Waiting
+                        for connection
+                      </Text>
+                    ) : null}
                   </View>
 
                   {item.username ? (
@@ -594,6 +608,13 @@ const styles = StyleSheet.create({
     color: "#aeb6b0",
     fontSize: 15,
     lineHeight: 22,
+  },
+
+  pendingText: {
+    marginTop: 5,
+    color: "#ffb27a",
+    fontSize: 11,
+    fontWeight: "700",
   },
 
   centered: {
