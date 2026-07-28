@@ -19,6 +19,8 @@ usage: ./script/build_and_run.sh [mode]
 Modes:
   start, run        Start the Expo dev server
   --ios, ios        Start Expo and open the iOS Simulator
+  --ios-clean, ios-clean
+                    Clear the Metro cache, then open the iOS Simulator
   --build-ios, build-ios
                     Build and install Canal in the iOS Simulator
   --android, android
@@ -115,6 +117,15 @@ case "$MODE" in
     fi
     validate_supabase_env
     exec "${EXPO_CMD[@]}" start --ios
+    ;;
+  --ios-clean|ios-clean)
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+      echo "Run iOS requires macOS with Xcode and Apple Simulator installed." >&2
+      echo "Use './script/build_and_run.sh --web' in this environment." >&2
+      exit 1
+    fi
+    validate_supabase_env
+    exec "${EXPO_CMD[@]}" start --clear --ios
     ;;
   --build-ios|build-ios)
     if [[ "$(uname -s)" != "Darwin" ]]; then
