@@ -11,7 +11,7 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
-    "launcher:test": "bash -n script/build_and_run.sh && node script/validate_public_env.test.cjs",
+    "launcher:test": "bash -n script/build_and_run.sh && node script/validate_public_env.test.cjs && node script/build_and_run.test.cjs",
     "dependencies:check": "expo install --check",
     "config:check": "expo config --type public --json",
     "web:export": "expo export --platform web --clear",

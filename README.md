@@ -63,6 +63,10 @@ After moving to a fresh clone,
 `./script/build_and_run.sh --recover-spotify-config` can safely copy the public
 client ID from a known older local Canal folder without printing it.
 
+`./script/build_and_run.sh --ios-clean` automatically selects and boots an
+installed iPhone Simulator before opening Canal. If no iOS runtime is
+installed, add one under Xcode > Settings > Components.
+
 Canal uses one native Spotify callback:
 `com.raishawnparks.canal.spotify://callback`. Add that exact redirect URI to
 the Canal application in the Spotify Developer Dashboard. The optional
