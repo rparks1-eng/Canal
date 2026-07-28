@@ -10,6 +10,9 @@ export const STORAGE_KEYS = {
   blockedUsers:
     "@canal/blocked-users",
 
+  relationshipMutations:
+    "@canal/relationship-mutations",
+
   settings:
     "@canal/settings",
 

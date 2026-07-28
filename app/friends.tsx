@@ -145,10 +145,11 @@ export default function FriendsScreen() {
       );
 
       if (isFollowing) {
-        await unfollowUser(
-          user.username,
-          user.displayName,
-        );
+        const state =
+          await unfollowUser(
+            user.username,
+            user.displayName,
+          );
 
         setFollowing(
           following.filter(
@@ -157,11 +158,16 @@ export default function FriendsScreen() {
               user.username,
           ),
         );
-      } else {
-        await followUser(
-          user.username,
-          user.displayName,
+
+        showPendingRelationshipSync(
+          state.syncStatus,
         );
+      } else {
+        const state =
+          await followUser(
+            user.username,
+            user.displayName,
+          );
 
         setFollowing(
           Array.from(
@@ -170,6 +176,10 @@ export default function FriendsScreen() {
               user.username,
             ]),
           ),
+        );
+
+        showPendingRelationshipSync(
+          state.syncStatus,
         );
       }
     } catch (error) {
@@ -603,6 +613,24 @@ export default function FriendsScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function showPendingRelationshipSync(
+  syncStatus:
+    | "synced"
+    | "pending"
+    | "offline"
+    | undefined,
+) {
+  if (
+    syncStatus ===
+    "pending"
+  ) {
+    Alert.alert(
+      "Saved on this device",
+      "Canal will sync this change to your account when the connection returns.",
+    );
+  }
 }
 
 const styles = StyleSheet.create({

@@ -31,7 +31,7 @@ without seeing the first account's private data.
 
 ## Phase 2: retention and social proof
 
-- Replace remaining local-only relationship and activity data with Supabase tables
+- [x] Replace remaining local-only relationship and activity data with Supabase tables
   and row-level security.
 - Add a public Snapshot feed and profile Snapshot grid.
 - Add explicit empty, offline, reconnect, and permission-recovery states.
