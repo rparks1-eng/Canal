@@ -30,10 +30,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Use Node.js 20.19
+      - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20.19.x
+          node-version: 22.x
           cache: npm
 
       - name: Install dependencies
@@ -44,7 +44,9 @@ jobs:
 
   dependency-review:
     name: Dependency review
-    if: github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'pull_request' &&
+      vars.DEPENDENCY_GRAPH_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -56,3 +58,16 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
+
+  dependency-review-unavailable:
+    name: Dependency review unavailable
+    if: >-
+      github.event_name == 'pull_request' &&
+      vars.DEPENDENCY_GRAPH_ENABLED != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Report repository security gate
+        run: |
+          echo "::warning::Dependency review did not run. Enable the repository dependency graph, then set the DEPENDENCY_GRAPH_ENABLED repository variable to true."

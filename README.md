@@ -41,6 +41,11 @@ Automated source checks do not prove that provider dashboards, native deep
 links, signing, or physical-device behavior work. A rebuilt app must pass the
 device smoke test before Phase 1 is considered complete.
 
+GitHub's dependency review also requires the repository dependency graph.
+After enabling it under repository security settings, add the repository
+variable `DEPENDENCY_GRAPH_ENABLED=true`. Until then, CI reports the security
+gate as unavailable instead of claiming that dependency review passed.
+
 ## Environment variables
 
 - `EXPO_PUBLIC_SUPABASE_URL`
