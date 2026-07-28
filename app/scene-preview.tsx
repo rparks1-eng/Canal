@@ -30,6 +30,14 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
+
+import {
   readGeneratedScenePreview,
   saveGeneratedSceneToLibrary,
   writeGeneratedScenePreview,
@@ -65,6 +73,10 @@ import {
 import type {
   SpotifyLibrarySnapshot,
 } from "../lib/spotify-library";
+
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
 
 function safeBack(): void {
   if (
@@ -127,6 +139,14 @@ function durationText(
 }
 
 export default function ScenePreviewScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const [
     result,
     setResult,
@@ -198,8 +218,19 @@ export default function ScenePreviewScreen() {
     setErrorMessage,
   ] = useState("");
 
+  const [
+    exportErrorCause,
+    setExportErrorCause,
+  ] =
+    useState<unknown>(
+      null,
+    );
+
   const searchRequestId =
     useRef(0);
+
+  const exportInFlight =
+    useRef(false);
 
   const load =
     useCallback(
@@ -281,6 +312,10 @@ export default function ScenePreviewScreen() {
     );
 
   useEffect(() => {
+    setExportErrorCause(
+      null,
+    );
+
     const cleanedQuery =
       query.trim();
 
@@ -418,6 +453,10 @@ export default function ScenePreviewScreen() {
         return;
       }
 
+      setExportErrorCause(
+        null,
+      );
+
       try {
         const next =
           addSpotifyTrackToGeneratedScene(
@@ -450,6 +489,10 @@ export default function ScenePreviewScreen() {
       if (!result) {
         return;
       }
+
+      setExportErrorCause(
+        null,
+      );
 
       try {
         const next =
@@ -491,6 +534,9 @@ export default function ScenePreviewScreen() {
 
       setMessage("");
       setErrorMessage("");
+      setExportErrorCause(
+        null,
+      );
 
       try {
         await writeGeneratedScenePreview(
@@ -529,25 +575,47 @@ export default function ScenePreviewScreen() {
     };
 
   const exportToSpotify =
-    async (): Promise<void> => {
+    async (
+      refreshBeforeExport = false,
+    ): Promise<void> => {
       if (
         !result ||
-        exporting
+        exportInFlight.current
       ) {
         return;
       }
+
+      exportInFlight.current =
+        true;
 
       setExporting(
         true,
       );
 
-      setMessage("");
-      setErrorMessage("");
-      setPlaylistUrl(
-        null,
-      );
-
       try {
+        if (
+          refreshBeforeExport
+        ) {
+          const nextStatus =
+            await refreshConnectivity();
+
+          if (
+            nextStatus ===
+            "offline"
+          ) {
+            return;
+          }
+        }
+
+        setMessage("");
+        setErrorMessage("");
+        setExportErrorCause(
+          null,
+        );
+        setPlaylistUrl(
+          null,
+        );
+
         const exportResult =
           await exportSceneToSpotify(
             result.scene,
@@ -565,17 +633,66 @@ export default function ScenePreviewScreen() {
               : ""
           }`,
         );
+
+        setExportErrorCause(
+          null,
+        );
       } catch (error) {
+        setExportErrorCause(
+          () => error,
+        );
+
         setErrorMessage(
           error instanceof Error
             ? error.message
             : "Canal could not export this Scene to Spotify.",
         );
       } finally {
+        exportInFlight.current =
+          false;
+
         setExporting(
           false,
         );
       }
+    };
+
+  const exportRecoveryIssue =
+    useMemo(
+      () =>
+        exportErrorCause
+          ? classifyRecoveryIssue(
+              exportErrorCause,
+              {
+                service:
+                  "spotify",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        connectivityStatus,
+        exportErrorCause,
+      ],
+    );
+
+  const recoverExport =
+    async (): Promise<void> => {
+      if (
+        exportRecoveryIssue
+          ?.action ===
+        "reconnect-spotify"
+      ) {
+        router.push(
+          "/music-services" as never,
+        );
+
+        return;
+      }
+
+      await exportToSpotify(
+        true,
+      );
     };
 
   if (loading) {
@@ -730,7 +847,19 @@ export default function ScenePreviewScreen() {
               </View>
             ) : null}
 
-            {errorMessage ? (
+            {exportRecoveryIssue ? (
+              <RecoveryNotice
+                busy={
+                  exporting
+                }
+                issue={
+                  exportRecoveryIssue
+                }
+                onAction={
+                  recoverExport
+                }
+              />
+            ) : errorMessage ? (
               <View
                 style={
                   styles.errorBox

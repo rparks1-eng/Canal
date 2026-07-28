@@ -46,12 +46,14 @@ type RelationshipKind =
 
 type RelationshipRow = {
   target_username: string;
+  target_user_id?: string | null;
   relationship_type:
     RelationshipKind;
 };
 
 export type RelationshipMutation = {
   username: string;
+  targetUserId?: string;
   relationshipType:
     RelationshipKind;
   action: "upsert" | "delete";
@@ -81,24 +83,38 @@ export type RecordActivityInput = {
 };
 
 export async function readRelationshipState(): Promise<RelationshipState> {
+  const expectedUserId =
+    await relationshipUserId();
+
+  return readRelationshipStateForUser(
+    expectedUserId,
+  );
+}
+
+async function readRelationshipStateForUser(
+  expectedUserId: string | null,
+): Promise<RelationshipState> {
   const localState =
-    await readLocalRelationshipState();
+    await readLocalRelationshipState(
+      expectedUserId,
+    );
 
   if (!isSupabaseConfigured) {
     return localState;
   }
 
   try {
-    const userId =
-      await currentUserId();
+    await assertExpectedUser(
+      expectedUserId,
+    );
 
-    if (!userId) {
+    if (!expectedUserId) {
       return localState;
     }
 
     const pendingMutations =
       await readRelationshipMutations(
-        userId,
+        expectedUserId,
       );
 
     if (
@@ -106,10 +122,14 @@ export async function readRelationshipState(): Promise<RelationshipState> {
       0
     ) {
       await flushRelationshipMutations(
-        userId,
+        expectedUserId,
         pendingMutations,
       );
     }
+
+    await assertExpectedUser(
+      expectedUserId,
+    );
 
     const {
       data,
@@ -120,13 +140,20 @@ export async function readRelationshipState(): Promise<RelationshipState> {
           "user_relationships",
         )
         .select(
-          "target_username, relationship_type",
+          "target_username, target_user_id, relationship_type",
         )
-        .eq("user_id", userId);
+        .eq(
+          "user_id",
+          expectedUserId,
+        );
 
     if (error) {
       throw error;
     }
+
+    await assertExpectedUser(
+      expectedUserId,
+    );
 
     const cloudState =
       relationshipRowsToState(
@@ -136,11 +163,15 @@ export async function readRelationshipState(): Promise<RelationshipState> {
 
     await writeLocalRelationshipState(
       cloudState,
-      userId,
+      expectedUserId,
+    );
+
+    await assertExpectedUser(
+      expectedUserId,
     );
 
     await writeRelationshipMutations(
-      userId,
+      expectedUserId,
       [],
     );
 
@@ -149,18 +180,27 @@ export async function readRelationshipState(): Promise<RelationshipState> {
       syncStatus: "synced",
     };
   } catch (error) {
+    if (
+      isAccountChangedError(
+        error,
+      )
+    ) {
+      throw error;
+    }
+
     console.warn(
       "Canal relationships are offline; using the device cache:",
       error,
     );
 
-    const userId =
-      await relationshipUserId();
+    await assertExpectedUser(
+      expectedUserId,
+    );
 
     const pending =
-      userId
+      expectedUserId
         ? await readRelationshipMutations(
-            userId,
+            expectedUserId,
           )
         : [];
 
@@ -197,6 +237,10 @@ export async function writeFollowing(
   const userId =
     await relationshipUserId();
 
+  await assertExpectedUser(
+    userId,
+  );
+
   await writeStoredStringArray(
     relationshipStorageKey(
       STORAGE_KEYS.following,
@@ -219,6 +263,10 @@ export async function writeBlockedUsers(
   const userId =
     await relationshipUserId();
 
+  await assertExpectedUser(
+    userId,
+  );
+
   await writeStoredStringArray(
     relationshipStorageKey(
       STORAGE_KEYS.blockedUsers,
@@ -233,6 +281,7 @@ export async function writeBlockedUsers(
 export async function followUser(
   username: string,
   displayName?: string,
+  targetUserId?: string,
 ): Promise<RelationshipState> {
   const normalizedUsername =
     normalizeUsername(username);
@@ -243,11 +292,23 @@ export async function followUser(
     );
   }
 
+  const expectedUserId =
+    await relationshipUserId();
+
+  const resolvedTargetUserId =
+    targetUserId ??
+    await resolveTargetProfileId(
+      normalizedUsername,
+      expectedUserId,
+    );
+
   const {
     following,
     blocked,
   } =
-    await readRelationshipState();
+    await readRelationshipStateForUser(
+      expectedUserId,
+    );
 
   const updatedFollowing =
     Array.from(
@@ -275,6 +336,12 @@ export async function followUser(
       {
         username:
           normalizedUsername,
+        ...(resolvedTargetUserId
+          ? {
+              targetUserId:
+                resolvedTargetUserId,
+            }
+          : {}),
         relationshipType:
           "following",
         action: "upsert",
@@ -282,14 +349,21 @@ export async function followUser(
       {
         username:
           normalizedUsername,
+        ...(resolvedTargetUserId
+          ? {
+              targetUserId:
+                resolvedTargetUserId,
+            }
+          : {}),
         relationshipType:
           "blocked",
         action: "delete",
       },
     ],
+    expectedUserId,
   );
 
-  await recordActivity({
+  await recordActivityForUser({
       type: "follow",
 
       title: `Followed ${
@@ -304,7 +378,7 @@ export async function followUser(
         normalizedUsername,
 
       displayName,
-    });
+    }, expectedUserId);
 
   return {
     following:
@@ -319,15 +393,28 @@ export async function followUser(
 export async function unfollowUser(
   username: string,
   displayName?: string,
+  targetUserId?: string,
 ): Promise<RelationshipState> {
   const normalizedUsername =
     normalizeUsername(username);
+
+  const expectedUserId =
+    await relationshipUserId();
+
+  const resolvedTargetUserId =
+    targetUserId ??
+    await resolveTargetProfileId(
+      normalizedUsername,
+      expectedUserId,
+    );
 
   const {
     following,
     blocked,
   } =
-    await readRelationshipState();
+    await readRelationshipStateForUser(
+      expectedUserId,
+    );
 
   const updatedFollowing =
     following.filter(
@@ -346,14 +433,21 @@ export async function unfollowUser(
       {
         username:
           normalizedUsername,
+        ...(resolvedTargetUserId
+          ? {
+              targetUserId:
+                resolvedTargetUserId,
+            }
+          : {}),
         relationshipType:
           "following",
         action: "delete",
       },
     ],
+    expectedUserId,
   );
 
-  await recordActivity({
+  await recordActivityForUser({
       type: "unfollow",
 
       title: `Unfollowed ${
@@ -368,7 +462,7 @@ export async function unfollowUser(
         normalizedUsername,
 
       displayName,
-    });
+    }, expectedUserId);
 
   return {
     following:
@@ -382,6 +476,7 @@ export async function unfollowUser(
 export async function blockUser(
   username: string,
   displayName?: string,
+  targetUserId?: string,
 ): Promise<RelationshipState> {
   const normalizedUsername =
     normalizeUsername(username);
@@ -392,11 +487,23 @@ export async function blockUser(
     );
   }
 
+  const expectedUserId =
+    await relationshipUserId();
+
+  const resolvedTargetUserId =
+    targetUserId ??
+    await resolveTargetProfileId(
+      normalizedUsername,
+      expectedUserId,
+    );
+
   const {
     following,
     blocked,
   } =
-    await readRelationshipState();
+    await readRelationshipStateForUser(
+      expectedUserId,
+    );
 
   const updatedFollowing =
     following.filter(
@@ -424,6 +531,12 @@ export async function blockUser(
       {
         username:
           normalizedUsername,
+        ...(resolvedTargetUserId
+          ? {
+              targetUserId:
+                resolvedTargetUserId,
+            }
+          : {}),
         relationshipType:
           "following",
         action: "delete",
@@ -431,14 +544,21 @@ export async function blockUser(
       {
         username:
           normalizedUsername,
+        ...(resolvedTargetUserId
+          ? {
+              targetUserId:
+                resolvedTargetUserId,
+            }
+          : {}),
         relationshipType:
           "blocked",
         action: "upsert",
       },
     ],
+    expectedUserId,
   );
 
-  await recordActivity({
+  await recordActivityForUser({
       type: "block",
 
       title: `Blocked ${
@@ -453,7 +573,7 @@ export async function blockUser(
         normalizedUsername,
 
       displayName,
-    });
+    }, expectedUserId);
 
   return {
     following:
@@ -468,15 +588,28 @@ export async function blockUser(
 export async function unblockUser(
   username: string,
   displayName?: string,
+  targetUserId?: string,
 ): Promise<RelationshipState> {
   const normalizedUsername =
     normalizeUsername(username);
+
+  const expectedUserId =
+    await relationshipUserId();
+
+  const resolvedTargetUserId =
+    targetUserId ??
+    await resolveTargetProfileId(
+      normalizedUsername,
+      expectedUserId,
+    );
 
   const {
     following,
     blocked,
   } =
-    await readRelationshipState();
+    await readRelationshipStateForUser(
+      expectedUserId,
+    );
 
   const updatedBlocked =
     blocked.filter(
@@ -495,14 +628,21 @@ export async function unblockUser(
       {
         username:
           normalizedUsername,
+        ...(resolvedTargetUserId
+          ? {
+              targetUserId:
+                resolvedTargetUserId,
+            }
+          : {}),
         relationshipType:
           "blocked",
         action: "delete",
       },
     ],
+    expectedUserId,
   );
 
-  await recordActivity({
+  await recordActivityForUser({
       type: "unblock",
 
       title: `Unblocked ${
@@ -517,7 +657,7 @@ export async function unblockUser(
         normalizedUsername,
 
       displayName,
-    });
+    }, expectedUserId);
 
   return {
     following,
@@ -556,18 +696,32 @@ export async function isBlockedUser(
 export async function readActivity(): Promise<
   CanalActivityItem[]
 > {
+  const expectedUserId =
+    await relationshipUserId();
+
+  return readActivityForUser(
+    expectedUserId,
+  );
+}
+
+async function readActivityForUser(
+  expectedUserId: string | null,
+): Promise<CanalActivityItem[]> {
   const localActivities =
-    await readLocalActivity();
+    await readLocalActivityForUser(
+      expectedUserId,
+    );
 
   if (!isSupabaseConfigured) {
     return localActivities;
   }
 
   try {
-    const userId =
-      await currentUserId();
+    await assertExpectedUser(
+      expectedUserId,
+    );
 
-    if (!userId) {
+    if (!expectedUserId) {
       return localActivities;
     }
 
@@ -579,11 +733,19 @@ export async function readActivity(): Promise<
       );
 
     if (pending.length > 0) {
+      await assertExpectedUser(
+        expectedUserId,
+      );
+
       await upsertCloudActivity(
-        userId,
+        expectedUserId,
         pending,
       );
     }
+
+    await assertExpectedUser(
+      expectedUserId,
+    );
 
     const {
       data,
@@ -594,7 +756,10 @@ export async function readActivity(): Promise<
         .select(
           "id, type, title, description, username, display_name, created_at, is_read",
         )
-        .eq("user_id", userId)
+        .eq(
+          "user_id",
+          expectedUserId,
+        )
         .order("created_at", {
           ascending: false,
         })
@@ -614,24 +779,41 @@ export async function readActivity(): Promise<
         localActivities,
       );
 
-    await writeActivity(merged);
+    await writeActivityForUser(
+      merged,
+      expectedUserId,
+    );
 
     return merged;
   } catch (error) {
+    if (
+      isAccountChangedError(
+        error,
+      )
+    ) {
+      throw error;
+    }
+
     console.warn(
       "Canal activity is offline; using the device cache:",
       error,
+    );
+
+    await assertExpectedUser(
+      expectedUserId,
     );
 
     return localActivities;
   }
 }
 
-async function readLocalActivity(): Promise<
-  CanalActivityItem[]
-> {
+async function readLocalActivityForUser(
+  expectedUserId: string | null,
+): Promise<CanalActivityItem[]> {
   const storageKey =
-    await activityStorageKey();
+    activityStorageKey(
+      expectedUserId,
+    );
 
   const currentValue =
     await AsyncStorage.getItem(
@@ -692,8 +874,23 @@ export async function readActivityItems(): Promise<
 export async function recordActivity(
   input: RecordActivityInput,
 ): Promise<CanalActivityItem> {
+  const expectedUserId =
+    await relationshipUserId();
+
+  return recordActivityForUser(
+    input,
+    expectedUserId,
+  );
+}
+
+async function recordActivityForUser(
+  input: RecordActivityInput,
+  expectedUserId: string | null,
+): Promise<CanalActivityItem> {
   const activities =
-    await readActivity();
+    await readActivityForUser(
+      expectedUserId,
+    );
 
   const activity:
     CanalActivityItem = {
@@ -735,25 +932,31 @@ export async function recordActivity(
     ...activities,
   ].slice(0, 200);
 
-  await writeActivity(
+  await writeActivityForUser(
     updatedActivities,
+    expectedUserId,
   );
 
   if (isSupabaseConfigured) {
     try {
-      const userId =
-        await currentUserId();
+      await assertExpectedUser(
+        expectedUserId,
+      );
 
-      if (userId) {
+      if (expectedUserId) {
         await upsertCloudActivity(
-          userId,
+          expectedUserId,
           [activity],
+        );
+
+        await assertExpectedUser(
+          expectedUserId,
         );
 
         activity.syncStatus =
           "synced";
 
-        await writeActivity(
+        await writeActivityForUser(
           updatedActivities.map(
             (item) =>
               item.id ===
@@ -761,9 +964,18 @@ export async function recordActivity(
                 ? activity
                 : item,
           ),
+          expectedUserId,
         );
       }
     } catch (error) {
+      if (
+        isAccountChangedError(
+          error,
+        )
+      ) {
+        throw error;
+      }
+
       console.warn(
         "Canal saved activity on this device and will retry cloud sync:",
         error,
@@ -778,8 +990,28 @@ export async function writeActivity(
   activities:
     CanalActivityItem[],
 ): Promise<void> {
+  const expectedUserId =
+    await relationshipUserId();
+
+  await writeActivityForUser(
+    activities,
+    expectedUserId,
+  );
+}
+
+async function writeActivityForUser(
+  activities:
+    CanalActivityItem[],
+  expectedUserId: string | null,
+): Promise<void> {
+  await assertExpectedUser(
+    expectedUserId,
+  );
+
   const storageKey =
-    await activityStorageKey();
+    activityStorageKey(
+      expectedUserId,
+    );
 
   await AsyncStorage.setItem(
     storageKey,
@@ -792,10 +1024,15 @@ export async function writeActivity(
 export async function markActivityRead(
   activityId: string,
 ): Promise<void> {
-  const activities =
-    await readActivity();
+  const expectedUserId =
+    await relationshipUserId();
 
-  await writeActivity(
+  const activities =
+    await readActivityForUser(
+      expectedUserId,
+    );
+
+  await writeActivityForUser(
     activities.map((activity) =>
       activity.id === activityId
         ? {
@@ -804,14 +1041,16 @@ export async function markActivityRead(
           }
         : activity,
     ),
+    expectedUserId,
   );
 
   if (isSupabaseConfigured) {
     try {
-      const userId =
-        await currentUserId();
+      await assertExpectedUser(
+        expectedUserId,
+      );
 
-      if (userId) {
+      if (expectedUserId) {
         const { error } =
           await supabase
             .from(
@@ -822,7 +1061,7 @@ export async function markActivityRead(
             })
             .eq(
               "user_id",
-              userId,
+              expectedUserId,
             )
             .eq(
               "id",
@@ -834,6 +1073,14 @@ export async function markActivityRead(
         }
       }
     } catch (error) {
+      if (
+        isAccountChangedError(
+          error,
+        )
+      ) {
+        throw error;
+      }
+
       console.warn(
         "Canal could not mark cloud activity as read:",
         error,
@@ -843,24 +1090,31 @@ export async function markActivityRead(
 }
 
 export async function markAllActivityRead(): Promise<void> {
-  const activities =
-    await readActivity();
+  const expectedUserId =
+    await relationshipUserId();
 
-  await writeActivity(
+  const activities =
+    await readActivityForUser(
+      expectedUserId,
+    );
+
+  await writeActivityForUser(
     activities.map(
       (activity) => ({
         ...activity,
         isRead: true,
       }),
     ),
+    expectedUserId,
   );
 
   if (isSupabaseConfigured) {
     try {
-      const userId =
-        await currentUserId();
+      await assertExpectedUser(
+        expectedUserId,
+      );
 
-      if (userId) {
+      if (expectedUserId) {
         const { error } =
           await supabase
             .from(
@@ -871,7 +1125,7 @@ export async function markAllActivityRead(): Promise<void> {
             })
             .eq(
               "user_id",
-              userId,
+              expectedUserId,
             );
 
         if (error) {
@@ -879,6 +1133,14 @@ export async function markAllActivityRead(): Promise<void> {
         }
       }
     } catch (error) {
+      if (
+        isAccountChangedError(
+          error,
+        )
+      ) {
+        throw error;
+      }
+
       console.warn(
         "Canal could not mark cloud activity as read:",
         error,
@@ -888,8 +1150,17 @@ export async function markAllActivityRead(): Promise<void> {
 }
 
 export async function clearActivity(): Promise<void> {
+  const expectedUserId =
+    await relationshipUserId();
+
+  await assertExpectedUser(
+    expectedUserId,
+  );
+
   const storageKey =
-    await activityStorageKey();
+    activityStorageKey(
+      expectedUserId,
+    );
 
   await AsyncStorage.multiRemove([
     storageKey,
@@ -902,15 +1173,19 @@ export async function clearActivity(): Promise<void> {
   ]);
 
   if (isSupabaseConfigured) {
-    const userId =
-      await currentUserId();
+    await assertExpectedUser(
+      expectedUserId,
+    );
 
-    if (userId) {
+    if (expectedUserId) {
       const { error } =
         await supabase
           .from("activity_events")
           .delete()
-          .eq("user_id", userId);
+          .eq(
+            "user_id",
+            expectedUserId,
+          );
 
       if (error) {
         throw error;
@@ -1028,46 +1303,128 @@ function sortActivity(
   );
 }
 
-async function activityStorageKey(): Promise<string> {
+function activityStorageKey(
+  userId: string | null,
+): string {
   if (!isSupabaseConfigured) {
     return STORAGE_KEYS.activity;
   }
 
-  try {
-    const {
-      data: {
-        session,
-      },
-    } =
-      await supabase.auth.getSession();
+  return userId
+    ? `${STORAGE_KEYS.activity}:${userId}`
+    : STORAGE_KEYS.activity;
+}
 
-    const userId =
-      session?.user.id;
+class RelationshipAccountChangedError extends Error {
+  readonly code =
+    "CANAL_RELATIONSHIP_ACCOUNT_CHANGED";
 
-    return userId
-      ? `${STORAGE_KEYS.activity}:${userId}`
-      : STORAGE_KEYS.activity;
-  } catch {
-    return STORAGE_KEYS.activity;
+  constructor() {
+    super(
+      "The signed-in Canal account changed while relationship data was loading. Please try again.",
+    );
+
+    this.name =
+      "RelationshipAccountChangedError";
   }
 }
 
-async function currentUserId(): Promise<
-  string | null
-> {
-  const {
-    data: {
-      user,
-    },
-    error,
-  } =
-    await supabase.auth.getUser();
+function isAccountChangedError(
+  error: unknown,
+): error is RelationshipAccountChangedError {
+  return (
+    error instanceof
+      RelationshipAccountChangedError ||
+    (
+      typeof error ===
+        "object" &&
+      error !==
+        null &&
+      "code" in error &&
+      (
+        error as {
+          code?: unknown;
+        }
+      ).code ===
+        "CANAL_RELATIONSHIP_ACCOUNT_CHANGED"
+    )
+  );
+}
 
-  if (error) {
-    throw error;
+async function assertExpectedUser(
+  expectedUserId: string | null,
+): Promise<void> {
+  if (!isSupabaseConfigured) {
+    return;
   }
 
-  return user?.id ?? null;
+  const actualUserId =
+    await relationshipUserId();
+
+  if (
+    actualUserId !==
+    expectedUserId
+  ) {
+    throw new RelationshipAccountChangedError();
+  }
+}
+
+async function resolveTargetProfileId(
+  username: string,
+  expectedUserId: string | null,
+): Promise<string | undefined> {
+  if (!isSupabaseConfigured) {
+    return undefined;
+  }
+
+  try {
+    await assertExpectedUser(
+      expectedUserId,
+    );
+
+    const {
+      data,
+      error,
+    } =
+      await supabase
+        .from(
+          "profiles",
+        )
+        .select(
+          "id",
+        )
+        .eq(
+          "handle",
+          normalizeUsername(
+            username,
+          ),
+        )
+        .maybeSingle();
+
+    if (
+      error ||
+      typeof data?.id !==
+        "string"
+    ) {
+      return undefined;
+    }
+
+    await assertExpectedUser(
+      expectedUserId,
+    );
+
+    return data.id;
+  } catch (error) {
+    if (
+      isAccountChangedError(
+        error,
+      )
+    ) {
+      throw error;
+    }
+
+    return undefined;
+  }
 }
 
 async function upsertCloudActivity(
@@ -1135,10 +1492,9 @@ function normalizeActivityRow(
   };
 }
 
-async function readLocalRelationshipState(): Promise<RelationshipState> {
-  const userId =
-    await relationshipUserId();
-
+async function readLocalRelationshipState(
+  userId: string | null,
+): Promise<RelationshipState> {
   const [
     following,
     blocked,
@@ -1212,22 +1568,24 @@ async function persistRelationshipChange(
   state: RelationshipState,
   mutations:
     RelationshipMutation[],
+  expectedUserId: string | null,
 ): Promise<
   | "synced"
   | "pending"
   | undefined
 > {
-  const userId =
-    await relationshipUserId();
+  await assertExpectedUser(
+    expectedUserId,
+  );
 
   await writeLocalRelationshipState(
     state,
-    userId,
+    expectedUserId,
   );
 
   if (
     !isSupabaseConfigured ||
-    !userId
+    !expectedUserId
   ) {
     return undefined;
   }
@@ -1235,29 +1593,45 @@ async function persistRelationshipChange(
   const pending =
     compactRelationshipMutations([
       ...await readRelationshipMutations(
-        userId,
+        expectedUserId,
       ),
       ...mutations,
     ]);
 
+  await assertExpectedUser(
+    expectedUserId,
+  );
+
   await writeRelationshipMutations(
-    userId,
+    expectedUserId,
     pending,
   );
 
   try {
     await flushRelationshipMutations(
-      userId,
+      expectedUserId,
       pending,
     );
 
+    await assertExpectedUser(
+      expectedUserId,
+    );
+
     await writeRelationshipMutations(
-      userId,
+      expectedUserId,
       [],
     );
 
     return "synced";
   } catch (error) {
+    if (
+      isAccountChangedError(
+        error,
+      )
+    ) {
+      throw error;
+    }
+
     console.warn(
       "Canal saved the relationship change on this device and will retry when online:",
       error,
@@ -1290,7 +1664,50 @@ export function compactRelationshipMutations(
     const normalizedMutation = {
       ...mutation,
       username,
+      ...(mutation.targetUserId
+        ? {
+            targetUserId:
+              mutation.targetUserId,
+          }
+        : {}),
     };
+
+    const identity =
+      normalizedMutation
+        .targetUserId
+        ? `id:${normalizedMutation.targetUserId}`
+        : `username:${username}`;
+
+    if (
+      normalizedMutation
+        .targetUserId
+    ) {
+      for (
+        const relationshipType
+        of [
+          "following",
+          "blocked",
+        ] as const
+      ) {
+        const existing =
+          compacted.get(
+            `${relationshipType}:${identity}`,
+          );
+
+        if (existing) {
+          compacted.set(
+            `${relationshipType}:${identity}`,
+            {
+              ...existing,
+              username,
+              targetUserId:
+                normalizedMutation
+                  .targetUserId,
+            },
+          );
+        }
+      }
+    }
 
     if (
       normalizedMutation.action ===
@@ -1304,9 +1721,17 @@ export function compactRelationshipMutations(
             : "following";
 
       compacted.set(
-        `${otherType}:${username}`,
+        `${otherType}:${identity}`,
         {
           username,
+          ...(normalizedMutation
+            .targetUserId
+            ? {
+                targetUserId:
+                  normalizedMutation
+                    .targetUserId,
+              }
+            : {}),
           relationshipType:
             otherType,
           action: "delete",
@@ -1315,7 +1740,7 @@ export function compactRelationshipMutations(
     }
 
     compacted.set(
-      `${mutation.relationshipType}:${username}`,
+      `${mutation.relationshipType}:${identity}`,
       normalizedMutation,
     );
   }
@@ -1393,6 +1818,115 @@ async function flushRelationshipMutations(
   mutations:
     RelationshipMutation[],
 ): Promise<void> {
+  for (
+    const relationshipType
+    of [
+      "following",
+      "blocked",
+    ] as const
+  ) {
+    const deletions =
+      mutations.filter(
+        (mutation) =>
+          mutation.action ===
+            "delete" &&
+          mutation.relationshipType ===
+            relationshipType,
+      );
+
+    if (deletions.length === 0) {
+      continue;
+    }
+
+    const targetUserIds =
+      deletions
+        .map(
+          (mutation) =>
+            mutation.targetUserId,
+        )
+        .filter(
+          (
+            targetUserId,
+          ): targetUserId is string =>
+            Boolean(
+              targetUserId,
+            ),
+        );
+
+    const usernames =
+      deletions
+        .filter(
+          (mutation) =>
+            !mutation.targetUserId,
+        )
+        .map(
+          (mutation) =>
+            mutation.username,
+        );
+
+    if (targetUserIds.length > 0) {
+      await assertExpectedUser(
+        userId,
+      );
+
+      const {
+        error,
+      } =
+        await supabase
+          .from(
+            "user_relationships",
+          )
+          .delete()
+          .eq(
+            "user_id",
+            userId,
+          )
+          .eq(
+            "relationship_type",
+            relationshipType,
+          )
+          .in(
+            "target_user_id",
+            targetUserIds,
+          );
+
+      if (error) {
+        throw error;
+      }
+    }
+
+    if (usernames.length > 0) {
+      await assertExpectedUser(
+        userId,
+      );
+
+      const {
+        error,
+      } =
+        await supabase
+          .from(
+            "user_relationships",
+          )
+          .delete()
+          .eq(
+            "user_id",
+            userId,
+          )
+          .eq(
+            "relationship_type",
+            relationshipType,
+          )
+          .in(
+            "target_username",
+            usernames,
+          );
+
+      if (error) {
+        throw error;
+      }
+    }
+  }
+
   const upserts =
     mutations.filter(
       (mutation) =>
@@ -1400,7 +1934,62 @@ async function flushRelationshipMutations(
         "upsert",
     );
 
+  const stableUpsertTargetUserIds =
+    Array.from(
+      new Set(
+        upserts
+          .map(
+            (mutation) =>
+              mutation
+                .targetUserId,
+          )
+          .filter(
+            (
+              targetUserId,
+            ): targetUserId is string =>
+              Boolean(
+                targetUserId,
+              ),
+          ),
+      ),
+    );
+
+  if (
+    stableUpsertTargetUserIds
+      .length >
+    0
+  ) {
+    await assertExpectedUser(
+      userId,
+    );
+
+    const {
+      error,
+    } =
+      await supabase
+        .from(
+          "user_relationships",
+        )
+        .delete()
+        .eq(
+          "user_id",
+          userId,
+        )
+        .in(
+          "target_user_id",
+          stableUpsertTargetUserIds,
+        );
+
+    if (error) {
+      throw error;
+    }
+  }
+
   if (upserts.length > 0) {
+    await assertExpectedUser(
+      userId,
+    );
+
     const { error } =
       await supabase
         .from(
@@ -1412,6 +2001,9 @@ async function flushRelationshipMutations(
               user_id: userId,
               target_username:
                 mutation.username,
+              target_user_id:
+                mutation.targetUserId ??
+                null,
               relationship_type:
                 mutation.relationshipType,
             }),
@@ -1427,51 +2019,6 @@ async function flushRelationshipMutations(
     }
   }
 
-  for (
-    const relationshipType
-    of [
-      "following",
-      "blocked",
-    ] as const
-  ) {
-    const usernames =
-      mutations
-        .filter(
-          (mutation) =>
-            mutation.action ===
-              "delete" &&
-            mutation.relationshipType ===
-              relationshipType,
-        )
-        .map(
-          (mutation) =>
-            mutation.username,
-        );
-
-    if (usernames.length === 0) {
-      continue;
-    }
-
-    const { error } =
-      await supabase
-        .from(
-          "user_relationships",
-        )
-        .delete()
-        .eq("user_id", userId)
-        .eq(
-          "relationship_type",
-          relationshipType,
-        )
-        .in(
-          "target_username",
-          usernames,
-        );
-
-    if (error) {
-      throw error;
-    }
-  }
 }
 
 async function readRelationshipMutations(
@@ -1528,6 +2075,13 @@ async function readRelationshipMutations(
       const action =
         record.action;
 
+      const targetUserId =
+        typeof record.targetUserId ===
+        "string"
+          ? record.targetUserId
+              .trim()
+          : "";
+
       if (
         username &&
         (
@@ -1543,6 +2097,11 @@ async function readRelationshipMutations(
       ) {
         mutations.push({
           username,
+          ...(targetUserId
+            ? {
+                targetUserId,
+              }
+            : {}),
           relationshipType,
           action,
         });

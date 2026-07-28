@@ -1,6 +1,8 @@
+import * as Crypto from "expo-crypto";
+
 import {
+  normalizeStoredScene,
   readScenes,
-  upsertScene,
 } from "./scenes";
 
 import type {
@@ -13,6 +15,12 @@ import {
   supabase,
 } from "./supabase";
 
+import {
+  assertSceneCacheOwner,
+  capturePreparedSceneCacheOwner,
+  writeScenesForSceneCacheOwner,
+} from "./scene-sync";
+
 type ProfileRow = {
   id: string;
   display_name: string | null;
@@ -21,6 +29,8 @@ type ProfileRow = {
   favorite_activities: string | null;
   avatar_url: string | null;
   is_public: boolean | null;
+  is_verified: boolean | null;
+  is_canal: boolean | null;
 };
 
 type SceneRow = {
@@ -48,6 +58,8 @@ export type PublicCanalProfile = {
   favoriteActivities: string;
   avatarUrl: string | null;
   isPublic: boolean;
+  isVerified: boolean;
+  isCanal: boolean;
 };
 
 export type PublicCanalScene = {
@@ -100,6 +112,14 @@ function normalizeProfile(
     isPublic:
       row?.is_public !==
       false,
+
+    isVerified:
+      row?.is_verified ===
+        true,
+
+    isCanal:
+      row?.is_canal ===
+        true,
   };
 }
 
@@ -128,32 +148,32 @@ function normalizeScene(
     return null;
   }
 
-  return {
-    ...(payload as StoredScene),
+  const scene =
+    normalizeStoredScene({
+      ...payload,
+      id:
+        row.id,
+      ownerId:
+        row.user_id,
+      visibility:
+        payload.visibility ===
+        "public"
+          ? "public"
+          : "private",
+      libraryType:
+        payload.libraryType ||
+        "created",
+      createdAt:
+        row.created_at ||
+        payload.createdAt ||
+        new Date().toISOString(),
+      updatedAt:
+        row.updated_at ||
+        payload.updatedAt ||
+        new Date().toISOString(),
+    });
 
-    id:
-      row.id,
-
-    visibility:
-      payload.visibility ===
-      "public"
-        ? "public"
-        : "private",
-
-    libraryType:
-      payload.libraryType ||
-      "created",
-
-    createdAt:
-      row.created_at ||
-      payload.createdAt ||
-      new Date().toISOString(),
-
-    updatedAt:
-      row.updated_at ||
-      payload.updatedAt ||
-      new Date().toISOString(),
-  };
+  return scene;
 }
 
 async function currentUserId(): Promise<string> {
@@ -217,7 +237,7 @@ async function loadProfiles(
         "profiles",
       )
       .select(
-        "id, display_name, handle, bio, favorite_activities, avatar_url, is_public",
+        "id, display_name, handle, bio, favorite_activities, avatar_url, is_public, is_verified, is_canal",
       )
       .in(
         "id",
@@ -241,25 +261,6 @@ async function loadProfiles(
         row.id,
       ),
     );
-  }
-
-  for (
-    const userId of
-      uniqueIds
-  ) {
-    if (
-      !profiles.has(
-        userId,
-      )
-    ) {
-      profiles.set(
-        userId,
-        normalizeProfile(
-          null,
-          userId,
-        ),
-      );
-    }
   }
 
   return profiles;
@@ -379,7 +380,16 @@ export async function loadExploreScenes(): Promise<
             row,
           );
 
-        if (!scene) {
+        const creator =
+          profiles.get(
+            row.user_id,
+          );
+
+        if (
+          !scene ||
+          !creator ||
+          !creator.isPublic
+        ) {
           return null;
         }
 
@@ -393,13 +403,7 @@ export async function loadExploreScenes(): Promise<
           scene,
 
           creator:
-            profiles.get(
-              row.user_id,
-            ) ||
-            normalizeProfile(
-              null,
-              row.user_id,
-            ),
+            creator,
 
           updatedAt:
             row.updated_at,
@@ -445,7 +449,7 @@ export async function loadPublicProfile(
           "profiles",
         )
         .select(
-          "id, display_name, handle, bio, favorite_activities, avatar_url, is_public",
+          "id, display_name, handle, bio, favorite_activities, avatar_url, is_public, is_verified, is_canal",
         )
         .eq(
           "id",
@@ -497,13 +501,30 @@ export async function loadPublicProfile(
     );
   }
 
+  if (
+    !profileResult.data
+  ) {
+    throw new Error(
+      "This profile is unavailable or private.",
+    );
+  }
+
   const profile =
     normalizeProfile(
       profileResult.data as
-        | ProfileRow
-        | null,
+        ProfileRow,
       userId,
     );
+
+  if (
+    !profile.isPublic &&
+    viewerId !==
+      userId
+  ) {
+    throw new Error(
+      "This profile is unavailable or private.",
+    );
+  }
 
   const scenes =
     (
@@ -603,7 +624,7 @@ export async function loadPublicScene(
           "profiles",
         )
         .select(
-          "id, display_name, handle, bio, favorite_activities, avatar_url, is_public",
+          "id, display_name, handle, bio, favorite_activities, avatar_url, is_public, is_verified, is_canal",
         )
         .eq(
           "id",
@@ -624,6 +645,14 @@ export async function loadPublicScene(
     );
   }
 
+  if (
+    profileResult.error
+  ) {
+    throw new Error(
+      `Canal could not load this Scene's creator: ${profileResult.error.message}`,
+    );
+  }
+
   const row =
     sceneResult.data as
       | SceneRow
@@ -632,6 +661,19 @@ export async function loadPublicScene(
   if (!row) {
     throw new Error(
       "This Scene is unavailable or private.",
+    );
+  }
+
+  const profileRow =
+    profileResult.data as
+      | ProfileRow
+      | null;
+
+  if (
+    !profileRow
+  ) {
+    throw new Error(
+      "This Scene's creator is unavailable or private.",
     );
   }
 
@@ -659,9 +701,7 @@ export async function loadPublicScene(
 
     creator:
       normalizeProfile(
-        profileResult.data as
-          | ProfileRow
-          | null,
+        profileRow,
         ownerId,
       ),
 
@@ -679,39 +719,31 @@ export async function loadPublicScene(
   };
 }
 
-function savedCopyId(
+export async function savedSceneCopyId(
   ownerId: string,
   sceneId: string,
-): string {
-  const normalizedSceneId =
-    sceneId
-      .replace(
-        /[^a-zA-Z0-9_-]/g,
-        "",
-      )
-      .slice(
-        0,
-        80,
-      );
+): Promise<string> {
+  const digest =
+    await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm
+        .SHA256,
+      JSON.stringify([
+        ownerId,
+        sceneId,
+      ]),
+    );
 
-  return [
-    "saved",
-    ownerId.slice(
-      0,
-      8,
-    ),
-    normalizedSceneId ||
-      Date.now().toString(
-        36,
-      ),
-  ].join("-");
+  return `saved-${digest}`;
 }
 
 export async function savePublicSceneToLibrary(
   publicScene: PublicCanalScene,
 ): Promise<StoredScene> {
+  const sceneCacheOwner =
+    await capturePreparedSceneCacheOwner();
+
   const userId =
-    await currentUserId();
+    sceneCacheOwner.userId;
 
   if (
     userId ===
@@ -734,14 +766,24 @@ export async function savePublicSceneToLibrary(
   const now =
     new Date().toISOString();
 
+  const copyId =
+    await savedSceneCopyId(
+      publicScene.ownerId,
+      publicScene.sceneId,
+    );
+
+  await assertSceneCacheOwner(
+    sceneCacheOwner,
+  );
+
   const copy: StoredScene = {
     ...publicScene.scene,
 
     id:
-      savedCopyId(
-        publicScene.ownerId,
-        publicScene.sceneId,
-      ),
+      copyId,
+
+    ownerId:
+      userId,
 
     libraryType:
       "saved",
@@ -780,35 +822,26 @@ export async function savePublicSceneToLibrary(
       now,
   };
 
+  await assertSceneCacheOwner(
+    sceneCacheOwner,
+  );
+
   const {
     error: savedError,
   } =
-    await supabase
-      .from(
-        "saved_scenes",
-      )
-      .upsert(
-        {
-          user_id:
-            userId,
-
-          source_user_id:
-            publicScene.ownerId,
-
-          source_scene_id:
-            publicScene.sceneId,
-
-          payload:
-            publicScene.scene,
-
-          created_at:
-            now,
-        },
-        {
-          onConflict:
-            "user_id,source_user_id,source_scene_id",
-        },
-      );
+    await supabase.rpc(
+      "save_public_scene_to_library",
+      {
+        source_owner_id_value:
+          publicScene.ownerId,
+        source_scene_id_value:
+          publicScene.sceneId,
+        saved_copy_id_value:
+          copy.id,
+        saved_copy_payload:
+          copy,
+      },
+    );
 
   if (savedError) {
     throw new Error(
@@ -816,8 +849,27 @@ export async function savePublicSceneToLibrary(
     );
   }
 
-  await upsertScene(
-    copy,
+  await assertSceneCacheOwner(
+    sceneCacheOwner,
+  );
+
+  const localScenes =
+    await readScenes();
+
+  await assertSceneCacheOwner(
+    sceneCacheOwner,
+  );
+
+  await writeScenesForSceneCacheOwner(
+    sceneCacheOwner,
+    [
+      copy,
+      ...localScenes.filter(
+        (scene) =>
+          scene.id !==
+          copy.id,
+      ),
+    ],
   );
 
   return copy;
@@ -827,11 +879,18 @@ export async function setOwnSceneVisibility(
   sceneId: string,
   visibility: SceneVisibility,
 ): Promise<StoredScene> {
+  const sceneCacheOwner =
+    await capturePreparedSceneCacheOwner();
+
   const userId =
-    await currentUserId();
+    sceneCacheOwner.userId;
 
   const scenes =
     await readScenes();
+
+  await assertSceneCacheOwner(
+    sceneCacheOwner,
+  );
 
   const scene =
     scenes.find(
@@ -864,8 +923,8 @@ export async function setOwnSceneVisibility(
       new Date().toISOString(),
   };
 
-  await upsertScene(
-    updated,
+  await assertSceneCacheOwner(
+    sceneCacheOwner,
   );
 
   const {
@@ -903,9 +962,24 @@ export async function setOwnSceneVisibility(
 
   if (error) {
     throw new Error(
-      `Canal changed the local Scene but could not update its cloud visibility: ${error.message}`,
+      `Canal could not update the Scene's cloud visibility: ${error.message}`,
     );
   }
+
+  await assertSceneCacheOwner(
+    sceneCacheOwner,
+  );
+
+  await writeScenesForSceneCacheOwner(
+    sceneCacheOwner,
+    scenes.map(
+      (candidate) =>
+        candidate.id ===
+        updated.id
+          ? updated
+          : candidate,
+    ),
+  );
 
   return updated;
 }

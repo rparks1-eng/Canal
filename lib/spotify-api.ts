@@ -3,6 +3,7 @@ import {
 } from "./spotify-auth";
 
 import type {
+  SpotifyConnectionGuard,
   SpotifyImage,
   SpotifyProfile,
 } from "./spotify-auth";
@@ -132,6 +133,9 @@ type SpotifyRequestOptions = {
     | "DELETE";
 
   body?: unknown;
+
+  connectionGuard?:
+    SpotifyConnectionGuard;
 };
 
 type SpotifyErrorPayload = {
@@ -229,31 +233,32 @@ async function spotifyRequest<T>(
 ): Promise<T> {
   const response =
     await spotifyAuthenticatedFetch(
-    buildSpotifyUrl(path),
-    {
-      method:
-        options.method ??
-        "GET",
+      buildSpotifyUrl(path),
+      {
+        method:
+          options.method ??
+          "GET",
 
-      headers: {
-        Accept:
-          "application/json",
+        headers: {
+          Accept:
+            "application/json",
 
-        ...(options.body !== undefined
-          ? {
-              "Content-Type":
-                "application/json",
-            }
-          : {}),
+          ...(options.body !== undefined
+            ? {
+                "Content-Type":
+                  "application/json",
+              }
+            : {}),
+        },
+
+        body:
+          options.body !== undefined
+            ? JSON.stringify(
+                options.body,
+              )
+            : undefined,
       },
-
-      body:
-        options.body !== undefined
-          ? JSON.stringify(
-              options.body,
-            )
-          : undefined,
-    },
+      options.connectionGuard,
     );
 
   if (
@@ -508,9 +513,9 @@ export async function getSpotifyArtistsByIds(
 
     const response =
       await spotifyRequest<{
-        artists?: Array<
+        artists?: (
           SpotifyArtist | null
-        >;
+        )[];
       }>(
         `/artists?ids=${encodeURIComponent(
           batch.join(","),
@@ -564,6 +569,10 @@ export async function createSpotifyPlaylist(
     description?: string;
     isPublic?: boolean;
   },
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyPlaylist> {
   return spotifyRequest<SpotifyPlaylist>(
     "/me/playlists",
@@ -581,6 +590,9 @@ export async function createSpotifyPlaylist(
           input.isPublic ??
           false,
       },
+
+      connectionGuard:
+        options.connectionGuard,
     },
   );
 }
@@ -588,6 +600,10 @@ export async function createSpotifyPlaylist(
 export async function addSpotifyItemsToPlaylist(
   playlistId: string,
   uris: string[],
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<void> {
   const uniqueUris =
     Array.from(
@@ -631,6 +647,9 @@ export async function addSpotifyItemsToPlaylist(
         body: {
           uris: batch,
         },
+
+        connectionGuard:
+          options.connectionGuard,
       },
     );
   }

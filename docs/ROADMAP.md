@@ -73,6 +73,14 @@ without seeing the first account's private data.
 - Promote Live Stages from local prototype storage to a synchronized backend after
   the single-user Scene loop is stable.
 
+An implementation draft for synchronized Live Stages may be developed ahead of this
+sequence, but it remains behind the Supabase migration, multi-account Realtime,
+moderation, native-device, and Phase 1 release gates. The roadmap item stays incomplete
+until those gates pass. Release readiness also requires block enforcement, retained
+moderation evidence, chat abuse limits and reporting, host moderation controls, bounded
+track payloads, associated native/universal invite links, and disabled public Realtime
+channel access.
+
 ## Phase 4: creator and event products
 
 - Creator-branded Snapshot templates and public Scene collections

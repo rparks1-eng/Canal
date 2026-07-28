@@ -45,7 +45,7 @@ export default function NotFoundScreen() {
           accessibilityRole="button"
           onPress={() =>
             router.replace(
-              "/(tabs)/home",
+              "/(tabs)",
             )
           }
           style={({ pressed }) => [

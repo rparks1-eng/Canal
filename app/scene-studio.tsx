@@ -30,6 +30,22 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../hooks/use-reconnect-reload";
+
+import type {
+  RecoveryIssue,
+} from "../lib/recovery-issue";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
+
+import {
   clearSceneStudioDraft,
   DEFAULT_SCENE_STUDIO_DRAFT,
   generateSceneFromSpotify,
@@ -56,6 +72,7 @@ import type {
 
 import {
   getLatestSpotifyLibrarySnapshot,
+  syncSpotifyLibrary,
 } from "../lib/spotify-library";
 
 import type {
@@ -65,6 +82,10 @@ import type {
 import {
   createPlayerSession,
 } from "../lib/canal-player";
+
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
 
 const DURATION_OPTIONS = [
   15,
@@ -250,6 +271,14 @@ function freshSceneStudioDraft(): SceneStudioDraft {
 }
 
 export default function SceneStudioScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const sceneModeParams =
     useLocalSearchParams<{
       mode?: string;
@@ -294,6 +323,11 @@ export default function SceneStudioScreen() {
   ] = useState(false);
 
   const [
+    syncingLibrary,
+    setSyncingLibrary,
+  ] = useState(false);
+
+  const [
     errorMessage,
     setErrorMessage,
   ] =
@@ -306,6 +340,14 @@ export default function SceneStudioScreen() {
     setLibraryWarning,
   ] =
     useState<string | null>(
+      null,
+    );
+
+  const [
+    libraryIssue,
+    setLibraryIssue,
+  ] =
+    useState<RecoveryIssue | null>(
       null,
     );
 
@@ -355,6 +397,11 @@ export default function SceneStudioScreen() {
               latestLibrary.warning ??
                 null,
             );
+
+            setLibraryIssue(
+              latestLibrary.issue ??
+                null,
+            );
           } catch (error) {
             if (active) {
               setErrorMessage(
@@ -379,6 +426,78 @@ export default function SceneStudioScreen() {
       shouldResumeSceneDraft,
     ]),
   );
+
+  const retrySpotifyLibrary =
+    useCallback(
+      async (): Promise<void> => {
+        setSyncingLibrary(
+          true,
+        );
+
+        setLibraryIssue(
+          null,
+        );
+
+        setLibraryWarning(
+          null,
+        );
+
+        try {
+          const updated =
+            await syncSpotifyLibrary();
+
+          setSnapshot(
+            updated,
+          );
+        } catch (error) {
+          setLibraryIssue(
+            classifyRecoveryIssue(
+              error,
+              {
+                service:
+                  "spotify",
+                connectivityStatus,
+              },
+            ),
+          );
+        } finally {
+          setSyncingLibrary(
+            false,
+          );
+        }
+      },
+      [
+        connectivityStatus,
+      ],
+    );
+
+  useReconnectReload(
+    retrySpotifyLibrary,
+  );
+
+  const recoverSpotifyLibrary =
+    async (): Promise<void> => {
+      if (
+        libraryIssue?.action ===
+        "reconnect-spotify"
+      ) {
+        router.push(
+          "/music-services",
+        );
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus !==
+        "offline"
+      ) {
+        await retrySpotifyLibrary();
+      }
+    };
 
   const totalImportedTracks =
     useMemo(() => {
@@ -567,9 +686,20 @@ export default function SceneStudioScreen() {
             null,
         );
 
+        setLibraryIssue(
+          latestLibrary.issue ??
+            null,
+        );
+
         if (!latestSnapshot) {
+          if (
+            latestLibrary.issue
+          ) {
+            return;
+          }
+
           throw new Error(
-            "Your Spotify Library is not ready. Open Settings, connect Spotify, and sync the library before creating a Scene.",
+            "Your Spotify Library is not ready. Open Music Services, connect Spotify, and sync the library before creating a Scene.",
           );
         }
 
@@ -595,8 +725,14 @@ export default function SceneStudioScreen() {
         if (
           latestTrackIds.size < 3
         ) {
+          if (
+            latestLibrary.issue
+          ) {
+            return;
+          }
+
           throw new Error(
-            "Canal needs at least three imported Spotify tracks. Open Settings and sync your Spotify Library again.",
+            "Canal did not find enough music yet. Listen to or save a few tracks in Spotify, then sync again.",
           );
         }
 
@@ -744,7 +880,9 @@ export default function SceneStudioScreen() {
         }
         keyboardShouldPersistTaps="handled"
       >
-        {snapshot ? (
+        {snapshot &&
+        totalImportedTracks >=
+          3 ? (
           <View style={styles.spotifyCard}>
             <View style={styles.spotifyMark}>
               <Text
@@ -785,29 +923,41 @@ export default function SceneStudioScreen() {
               </Text>
             </View>
           </View>
-        ) : (
+        ) : libraryIssue ? null : (
           <View style={styles.missingCard}>
             <Text
               style={styles.missingTitle}
             >
-              Spotify Library not ready
+              {snapshot
+                ? "We didn’t find enough music yet"
+                : "Spotify Library not ready"}
             </Text>
 
             <Text
               style={styles.missingText}
             >
-              Connect and sync Spotify in
-              Settings before creating a
-              Scene. Scene Studio does not
-              connect or sync music accounts.
+              {snapshot
+                ? "Listen to or save a few tracks in Spotify, then sync again so Canal has enough music to shape a Scene."
+                : "Connect and sync Spotify before creating a Scene. Canal needs a taste snapshot with at least three tracks."}
             </Text>
 
             <Pressable
               accessibilityRole="button"
+              accessibilityState={{
+                busy:
+                  syncingLibrary,
+                disabled:
+                  syncingLibrary,
+              }}
+              disabled={
+                syncingLibrary
+              }
               onPress={() =>
-                router.push(
-                  "/settings",
-                )
+                snapshot
+                  ? void retrySpotifyLibrary()
+                  : router.push(
+                      "/music-services",
+                    )
               }
               style={({ pressed }) => [
                 styles.primaryButton,
@@ -821,14 +971,32 @@ export default function SceneStudioScreen() {
                   styles.primaryButtonText
                 }
               >
-                Open Settings
+                {syncingLibrary
+                  ? "Syncing Spotify…"
+                  : snapshot
+                    ? "Sync Spotify again"
+                    : "Open Music Services"}
               </Text>
             </Pressable>
           </View>
         )}
 
-        {libraryWarning ? (
+        {libraryIssue ? (
+          <RecoveryNotice
+            busy={
+              syncingLibrary
+            }
+            issue={
+              libraryIssue
+            }
+            onAction={
+              recoverSpotifyLibrary
+            }
+          />
+        ) : libraryWarning ? (
           <View
+            accessibilityLiveRegion="polite"
+            accessibilityRole="alert"
             style={
               styles.warningCard
             }
@@ -1150,12 +1318,22 @@ export default function SceneStudioScreen() {
         </View>
 
         {errorMessage ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorTitle}>
+          <View
+            accessibilityLiveRegion="polite"
+            accessibilityRole="alert"
+            style={styles.errorBox}
+          >
+            <Text
+              selectable
+              style={styles.errorTitle}
+            >
               Scene generation error
             </Text>
 
-            <Text style={styles.errorText}>
+            <Text
+              selectable
+              style={styles.errorText}
+            >
               {errorMessage}
             </Text>
           </View>
@@ -1163,14 +1341,33 @@ export default function SceneStudioScreen() {
 
         <Pressable
           accessibilityRole="button"
-          disabled={generating}
+          accessibilityState={{
+            busy:
+              generating,
+            disabled:
+              generating ||
+              !snapshot ||
+              totalImportedTracks <
+                3,
+          }}
+          disabled={
+            generating ||
+            !snapshot ||
+            totalImportedTracks <
+              3
+          }
           onPress={() =>
             void generateScene()
           }
           style={({ pressed }) => [
             styles.generateButton,
 
-            generating &&
+            (
+              generating ||
+              !snapshot ||
+              totalImportedTracks <
+                3
+            ) &&
               styles.disabledButton,
 
             pressed &&

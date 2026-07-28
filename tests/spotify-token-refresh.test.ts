@@ -4,17 +4,65 @@ import {
 
 import {
   clearSpotifySession,
+  getSpotifyConnectionGeneration,
   getValidSpotifySession,
   readSpotifySession,
   saveSpotifySession,
   spotifyAuthenticatedFetch,
 } from "../lib/spotify-auth";
 import {
+  supabase,
+} from "../lib/supabase";
+import {
   mockStorage,
 } from "./helpers/async-storage-mock";
 import {
   mockSecureValues,
 } from "./helpers/secure-store-mock";
+
+let mockSupabaseConfigured =
+  true;
+
+let mockCanalOwnerId:
+  string | null =
+    "canal-user-a";
+
+jest.mock(
+  "../lib/supabase",
+  () => ({
+    get isSupabaseConfigured() {
+      return mockSupabaseConfigured;
+    },
+    supabase: {
+      auth: {
+        getSession:
+          jest.fn(),
+      },
+    },
+  }),
+);
+
+const mockGetSession =
+  jest.mocked(
+    supabase.auth.getSession,
+  );
+
+function canalAuthResult() {
+  return {
+    data: {
+      session:
+        mockCanalOwnerId
+          ? {
+              user: {
+                id:
+                  mockCanalOwnerId,
+              },
+            }
+          : null,
+    },
+    error: null,
+  } as never;
+}
 
 function mockResponse(
   status: number,
@@ -67,6 +115,17 @@ describe(
         .EXPO_PUBLIC_SPOTIFY_CLIENT_ID;
 
     beforeEach(async () => {
+      mockSupabaseConfigured =
+        true;
+
+      mockCanalOwnerId =
+        "canal-user-a";
+
+      mockGetSession.mockImplementation(
+        async () =>
+          canalAuthResult(),
+      );
+
       await clearSpotifySession();
 
       mockStorage.clear();
@@ -97,6 +156,9 @@ describe(
             syncLibrary: false,
           },
         );
+
+        const connectionGeneration =
+          getSpotifyConnectionGeneration();
 
         const fetchMock =
           jest
@@ -145,6 +207,12 @@ describe(
           fetchMock,
         ).toHaveBeenCalledTimes(
           1,
+        );
+
+        expect(
+          getSpotifyConnectionGeneration(),
+        ).toBe(
+          connectionGeneration,
         );
       },
     );
@@ -272,6 +340,196 @@ describe(
         ).toBe(
           "refresh-token",
         );
+      },
+    );
+
+    it(
+      "clears an expired connection after Spotify rejects its refresh grant",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            Date.now() -
+              1,
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        jest
+          .spyOn(
+            global,
+            "fetch",
+          )
+          .mockResolvedValue(
+            mockResponse(
+              400,
+              {
+                error:
+                  "invalid_grant",
+              },
+            ),
+          );
+
+        await expect(
+          getValidSpotifySession(),
+        ).resolves.toBeNull();
+
+        await expect(
+          readSpotifySession(),
+        ).resolves.toBeNull();
+      },
+    );
+
+    it(
+      "preserves an expired connection when Spotify reports a client configuration error",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            Date.now() -
+              1,
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        jest
+          .spyOn(
+            global,
+            "fetch",
+          )
+          .mockResolvedValue(
+            mockResponse(
+              400,
+              {
+                error:
+                  "invalid_client",
+              },
+            ),
+          );
+
+        await expect(
+          getValidSpotifySession(),
+        ).rejects.toThrow(
+          "invalid_client",
+        );
+
+        expect(
+          (
+            await readSpotifySession()
+          )?.refreshToken,
+        ).toBe(
+          "refresh-token",
+        );
+      },
+    );
+
+    it(
+      "does not let an obsolete refresh clear a newly connected account",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            Date.now() -
+              1,
+          ),
+          {
+            syncLibrary: false,
+          },
+        );
+
+        let signalRefreshStarted:
+          () => void =
+            () => {};
+
+        const refreshStarted =
+          new Promise<void>(
+            (resolve) => {
+              signalRefreshStarted =
+                resolve;
+            },
+          );
+
+        let releaseRefresh:
+          (response: Response) => void =
+            () => {};
+
+        const refreshResponse =
+          new Promise<Response>(
+            (resolve) => {
+              releaseRefresh =
+                resolve;
+            },
+          );
+
+        jest
+          .spyOn(
+            global,
+            "fetch",
+          )
+          .mockImplementation(
+            () => {
+              signalRefreshStarted();
+
+              return refreshResponse;
+            },
+          );
+
+        const obsoleteRefresh =
+          getValidSpotifySession();
+
+        await refreshStarted;
+
+        await saveSpotifySession(
+          {
+            ...createSession(
+              Date.now() +
+                60 *
+                  60 *
+                  1000,
+            ),
+            accessToken:
+              "other-access-token",
+            refreshToken:
+              "other-refresh-token",
+            profile: {
+              id:
+                "other-spotify-user",
+              display_name:
+                "Other Listener",
+            },
+          },
+          {
+            syncLibrary: false,
+          },
+        );
+
+        releaseRefresh(
+          mockResponse(
+            400,
+            {
+              error:
+                "invalid_grant",
+            },
+          ),
+        );
+
+        await expect(
+          obsoleteRefresh,
+        ).rejects.toThrow(
+          "connection changed",
+        );
+
+        await expect(
+          readSpotifySession(),
+        ).resolves.toMatchObject({
+          accessToken:
+            "other-access-token",
+          profile: {
+            id:
+              "other-spotify-user",
+          },
+        });
       },
     );
   },

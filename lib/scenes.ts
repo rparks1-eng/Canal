@@ -1,5 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import {
+  normalizeSpotifyTrackLinks,
+} from "./spotify-track-links";
+
 export type SceneVisibility =
   | "private"
   | "public";
@@ -180,20 +184,20 @@ function normalizeTrack(
       "Unknown artist",
     );
 
-  const spotifyUri =
-    readOptionalString(
-      track.spotifyUri,
-    ) ??
-    readOptionalString(
-      track.uri,
-    );
-
-  const spotifyUrl =
-    readOptionalString(
-      track.spotifyUrl,
-    ) ??
-    readOptionalString(
-      track.spotify_url,
+  const spotifyLinks =
+    normalizeSpotifyTrackLinks(
+      readOptionalString(
+        track.spotifyUri,
+      ) ??
+        readOptionalString(
+          track.uri,
+        ),
+      readOptionalString(
+        track.spotifyUrl,
+      ) ??
+        readOptionalString(
+          track.spotify_url,
+        ),
     );
 
   const durationMs =
@@ -229,8 +233,7 @@ function normalizeTrack(
         track.source,
       ),
 
-    spotifyUri,
-    spotifyUrl,
+    ...spotifyLinks,
     durationMs,
     imageUrl,
     intensity,
@@ -438,6 +441,14 @@ function normalizeScene(
         scene.feedback,
       ),
   };
+}
+
+export function normalizeStoredScene(
+  value: unknown,
+): StoredScene | null {
+  return normalizeScene(
+    value,
+  );
 }
 
 async function readArrayFromKey(

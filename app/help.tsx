@@ -109,7 +109,7 @@ export default function HelpScreen() {
               action="Create a Scene"
               onPress={() =>
                 router.push(
-                  "/scene/create",
+                  "/scene-studio",
                 )
               }
             />

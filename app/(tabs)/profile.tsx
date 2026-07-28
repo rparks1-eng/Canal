@@ -1,11 +1,14 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -29,6 +32,38 @@ import {
 } from "../../components/PublicSnapshotCard";
 
 import {
+  RecoveryNotice,
+} from "../../components/recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../../hooks/use-reconnect-reload";
+
+import {
+  classifyRecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import type {
+  RecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import {
+  readScenePlaylistExports,
+} from "../../lib/playlist-exports";
+
+import type {
+  ScenePlaylistExport,
+} from "../../lib/playlist-exports";
+
+import {
+  loadProfileConnectionSummary,
+} from "../../lib/profile-social";
+
+import type {
+  ProfileConnectionSummary,
+} from "../../lib/profile-social";
+
+import {
   readScenes,
 } from "../../lib/scenes";
 
@@ -44,12 +79,22 @@ import {
   supabase,
 } from "../../lib/supabase";
 
+import {
+  useAuth,
+} from "../../providers/auth-provider";
+
+import {
+  useConnectivity,
+} from "../../providers/connectivity-provider";
+
 type ProfileForm = {
   displayName: string;
   handle: string;
   bio: string;
   favoriteActivities: string;
   isPublic: boolean;
+  isVerified: boolean;
+  isCanal: boolean;
 };
 
 const EMPTY_PROFILE: ProfileForm = {
@@ -58,6 +103,8 @@ const EMPTY_PROFILE: ProfileForm = {
   bio: "",
   favoriteActivities: "",
   isPublic: true,
+  isVerified: false,
+  isCanal: false,
 };
 
 function normalizeHandle(
@@ -127,12 +174,47 @@ function initials(
 }
 
 export default function ProfileScreen() {
+  const {
+    user,
+  } =
+    useAuth();
+
+  return (
+    <ProfileScreenContent
+      key={
+        user?.id ??
+        "signed-out"
+      }
+    />
+  );
+}
+
+function ProfileScreenContent() {
+  const {
+    user,
+    profile:
+      cachedAuthProfile,
+  } =
+    useAuth();
+
+  const {
+    status:
+      connectivityStatus,
+    refresh:
+      refreshConnectivity,
+  } =
+    useConnectivity();
+
+  const identityKey =
+    user?.id ??
+    "signed-out";
+
   const [
     profile,
     setProfile,
   ] =
-    useState<ProfileForm>(
-      EMPTY_PROFILE,
+    useState<ProfileForm | null>(
+      null,
     );
 
   const [
@@ -159,6 +241,24 @@ export default function ProfileScreen() {
   ] = useState(0);
 
   const [
+    connectionSummary,
+    setConnectionSummary,
+  ] =
+    useState<
+      ProfileConnectionSummary | null
+    >(
+      null,
+    );
+
+  const [
+    playlistExports,
+    setPlaylistExports,
+  ] =
+    useState<
+      ScenePlaylistExport[]
+    >([]);
+
+  const [
     publicSnapshots,
     setPublicSnapshots,
   ] =
@@ -167,9 +267,19 @@ export default function ProfileScreen() {
     >([]);
 
   const [
-    snapshotWarning,
-    setSnapshotWarning,
-  ] = useState("");
+    sceneDataResolved,
+    setSceneDataResolved,
+  ] = useState(false);
+
+  const [
+    snapshotDataResolved,
+    setSnapshotDataResolved,
+  ] = useState(false);
+
+  const [
+    socialDataResolved,
+    setSocialDataResolved,
+  ] = useState(false);
 
   const [
     editing,
@@ -192,153 +302,383 @@ export default function ProfileScreen() {
   ] = useState("");
 
   const [
-    errorMessage,
-    setErrorMessage,
+    formErrorMessage,
+    setFormErrorMessage,
   ] = useState("");
+
+  const [
+    profileError,
+    setProfileError,
+  ] =
+    useState<unknown | null>(
+      null,
+    );
+
+  const [
+    sceneError,
+    setSceneError,
+  ] =
+    useState<unknown | null>(
+      null,
+    );
+
+  const [
+    snapshotError,
+    setSnapshotError,
+  ] =
+    useState<unknown | null>(
+      null,
+    );
+
+  const loadPromiseRef =
+    useRef<
+      {
+        key: string;
+        promise:
+          Promise<void>;
+      } | null
+    >(
+      null,
+    );
+
+  const mountedRef =
+    useRef(
+      true,
+    );
+
+  const identityKeyRef =
+    useRef(
+      identityKey,
+    );
+
+  identityKeyRef.current =
+    identityKey;
+
+  useEffect(
+    () => {
+      mountedRef.current =
+        true;
+
+      return () => {
+        mountedRef.current =
+          false;
+      };
+    },
+    [],
+  );
 
   const load =
     useCallback(
       async (): Promise<void> => {
-        setLoading(
-          true,
-        );
+        const requestKey =
+          identityKey;
 
-        setErrorMessage("");
+        if (
+          loadPromiseRef.current
+            ?.key ===
+          requestKey
+        ) {
+          return loadPromiseRef.current
+            .promise;
+        }
 
-        try {
-          const {
-            data: {
-              user,
-            },
-            error: userError,
-          } =
-            await supabase.auth.getUser();
+        const isCurrent =
+          (): boolean =>
+            mountedRef.current &&
+            requestKey ===
+              identityKeyRef.current;
 
-          if (userError) {
-            throw userError;
-          }
-
-          if (!user) {
-            throw new Error(
-              "Your Canal account session is missing.",
+        const nextLoad =
+          (async (): Promise<void> => {
+            setLoading(
+              true,
             );
-          }
+            setConnectionSummary(
+              null,
+            );
+            setPlaylistExports(
+              [],
+            );
+            setSocialDataResolved(
+              false,
+            );
 
-          const [
-            profileResult,
-            scenes,
-            snapshotResult,
-          ] =
+            const profileLoad =
+              (async (): Promise<void> => {
+                if (!user) {
+                  throw new Error(
+                    "Your Canal account session is missing. Sign in to refresh your profile.",
+                  );
+                }
+
+                const profileResult =
+                  await supabase
+                    .from(
+                      "profiles",
+                    )
+                    .select(
+                      "display_name, handle, bio, favorite_activities, is_public, is_verified, is_canal",
+                    )
+                    .eq(
+                      "id",
+                      user.id,
+                    )
+                    .maybeSingle();
+
+                if (
+                  profileResult.error
+                ) {
+                  throw profileResult.error;
+                }
+
+                if (!isCurrent()) {
+                  return;
+                }
+
+                const row =
+                  profileResult.data;
+
+                const next: ProfileForm = {
+                  displayName:
+                    row?.display_name ||
+                    user.user_metadata
+                      ?.display_name ||
+                    user.email?.split(
+                      "@",
+                    )[0] ||
+                    "Canal Listener",
+
+                  handle:
+                    `@${row?.handle || user.user_metadata?.handle || fallbackHandle(user.id)}`,
+
+                  bio:
+                    row?.bio ||
+                    "",
+
+                  favoriteActivities:
+                    row
+                      ?.favorite_activities ||
+                    "",
+
+                  isPublic:
+                    row?.is_public !==
+                    false,
+
+                  isVerified:
+                    row?.is_verified ===
+                    true,
+
+                  isCanal:
+                    row?.is_canal ===
+                    true,
+                };
+
+                setProfile(
+                  next,
+                );
+
+                setDraft(
+                  next,
+                );
+
+                setProfileError(
+                  null,
+                );
+              })().catch(
+                (error: unknown) => {
+                  if (!isCurrent()) {
+                    return;
+                  }
+
+                  setProfileError(
+                    error,
+                  );
+                },
+              );
+
+            const sceneLoad =
+              readScenes()
+                .then(
+                  (scenes) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setSceneCount(
+                      scenes.length,
+                    );
+
+                    setPublicCount(
+                      scenes.filter(
+                        (scene) =>
+                          scene.libraryType !==
+                            "saved" &&
+                          scene.visibility ===
+                            "public",
+                      ).length,
+                    );
+
+                    setSavedCount(
+                      scenes.filter(
+                        (scene) =>
+                          scene.libraryType ===
+                          "saved",
+                      ).length,
+                    );
+
+                    setSceneDataResolved(
+                      true,
+                    );
+
+                    setSceneError(
+                      null,
+                    );
+                  },
+                )
+                .catch(
+                  (error: unknown) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setSceneError(
+                      error,
+                    );
+                  },
+                );
+
+            const snapshotLoad =
+              readSnapshotsWithStatus()
+                .then(
+                  (
+                    snapshotResult,
+                  ) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setPublicSnapshots(
+                      snapshotResult.value.filter(
+                        (snapshot) =>
+                          snapshot.visibility ===
+                          "public",
+                      ),
+                    );
+
+                    setSnapshotDataResolved(
+                      true,
+                    );
+
+                    setSnapshotError(
+                      snapshotResult.warning ??
+                        null,
+                    );
+                  },
+                )
+                .catch(
+                  (error: unknown) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setSnapshotError(
+                      error,
+                    );
+                  },
+                );
+
+            const socialLoad =
+              (
+                user
+                  ? Promise.all([
+                      loadProfileConnectionSummary(
+                        user.id,
+                      ),
+                      readScenePlaylistExports({
+                        limit:
+                          5,
+                      }),
+                    ])
+                  : Promise.reject(
+                      new Error(
+                        "Sign in to refresh your profile connections.",
+                      ),
+                    )
+              )
+                .then(
+                  ([
+                    nextSummary,
+                    nextExports,
+                  ]) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setConnectionSummary(
+                      nextSummary,
+                    );
+                    setPlaylistExports(
+                      nextExports,
+                    );
+                    setSocialDataResolved(
+                      true,
+                    );
+                  },
+                )
+                .catch(
+                  () => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setSocialDataResolved(
+                      true,
+                    );
+                  },
+                );
+
             await Promise.all([
-              supabase
-                .from(
-                  "profiles",
-                )
-                .select(
-                  "display_name, handle, bio, favorite_activities, is_public",
-                )
-                .eq(
-                  "id",
-                  user.id,
-                )
-                .maybeSingle(),
-
-              readScenes(),
-
-              readSnapshotsWithStatus(),
+              profileLoad,
+              sceneLoad,
+              snapshotLoad,
+              socialLoad,
             ]);
 
-          if (
-            profileResult.error
-          ) {
-            throw profileResult.error;
-          }
+            if (isCurrent()) {
+              setLoading(
+                false,
+              );
+            }
+          })();
 
-          const row =
-            profileResult.data;
-
-          const next: ProfileForm = {
-            displayName:
-              row?.display_name ||
-              user.user_metadata
-                ?.display_name ||
-              user.email?.split(
-                "@",
-              )[0] ||
-              "Canal Listener",
-
-            handle:
-              `@${row?.handle || user.user_metadata?.handle || fallbackHandle(user.id)}`,
-
-            bio:
-              row?.bio ||
-              "",
-
-            favoriteActivities:
-              row
-                ?.favorite_activities ||
-              "",
-
-            isPublic:
-              row?.is_public !==
-              false,
+        loadPromiseRef.current =
+          {
+            key:
+              requestKey,
+            promise:
+              nextLoad,
           };
 
-          setProfile(
-            next,
-          );
-
-          setDraft(
-            next,
-          );
-
-          setSceneCount(
-            scenes.length,
-          );
-
-          setPublicCount(
-            scenes.filter(
-              (scene) =>
-                scene.libraryType !==
-                  "saved" &&
-                scene.visibility ===
-                  "public",
-            ).length,
-          );
-
-          setSavedCount(
-            scenes.filter(
-              (scene) =>
-                scene.libraryType ===
-                "saved",
-            ).length,
-          );
-
-          setPublicSnapshots(
-            snapshotResult.value.filter(
-              (snapshot) =>
-                snapshot.visibility ===
-                "public",
-            ),
-          );
-
-          setSnapshotWarning(
-            snapshotResult.warning ??
-            "",
-          );
-        } catch (error) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Canal could not load your profile.",
-          );
+        try {
+          await nextLoad;
         } finally {
-          setLoading(
-            false,
-          );
+          if (
+            loadPromiseRef.current
+              ?.key ===
+              requestKey &&
+            loadPromiseRef.current
+              .promise ===
+              nextLoad
+          ) {
+            loadPromiseRef.current =
+              null;
+          }
         }
       },
-      [],
+      [
+        identityKey,
+        user,
+      ],
     );
 
   useFocusEffect(
@@ -352,14 +692,140 @@ export default function ProfileScreen() {
     ),
   );
 
+  useReconnectReload(
+    load,
+  );
+
+  const displayProfile =
+    profile ??
+    (
+      cachedAuthProfile
+        ? {
+            displayName:
+              cachedAuthProfile.displayName,
+
+            handle:
+              cachedAuthProfile.handle,
+
+            bio:
+              cachedAuthProfile.bio,
+
+            favoriteActivities:
+              cachedAuthProfile.favoriteActivities,
+
+            /*
+             * Visibility is only rendered from
+             * the remote profile below.
+             */
+            isPublic:
+              true,
+
+            isVerified:
+              false,
+
+            isCanal:
+              false,
+          }
+        : null
+    );
+
+  const profileIssue =
+    useMemo(
+      () =>
+        profileError
+          ? classifyRecoveryIssue(
+              profileError,
+              {
+                service:
+                  "canal",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        connectivityStatus,
+        profileError,
+      ],
+    );
+
+  const sceneIssue =
+    useMemo(
+      () =>
+        sceneError
+          ? classifyRecoveryIssue(
+              sceneError,
+              {
+                service:
+                  "canal",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        connectivityStatus,
+        sceneError,
+      ],
+    );
+
+  const snapshotIssue =
+    useMemo(
+      () =>
+        snapshotError
+          ? classifyRecoveryIssue(
+              snapshotError,
+              {
+                service:
+                  "canal",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        connectivityStatus,
+        snapshotError,
+      ],
+    );
+
+  const recoverRead =
+    async (
+      issue: RecoveryIssue,
+    ): Promise<void> => {
+      if (
+        issue.action ===
+        "sign-in"
+      ) {
+        router.push(
+          "/login" as never,
+        );
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus !==
+        "offline"
+      ) {
+        await load();
+      }
+    };
+
   const beginEditing =
     (): void => {
+      if (!profile) {
+        return;
+      }
+
       setDraft({
         ...profile,
       });
 
       setMessage("");
-      setErrorMessage("");
+      setFormErrorMessage(
+        "",
+      );
       setEditing(
         true,
       );
@@ -367,11 +833,21 @@ export default function ProfileScreen() {
 
   const cancelEditing =
     (): void => {
+      if (!profile) {
+        setEditing(
+          false,
+        );
+
+        return;
+      }
+
       setDraft({
         ...profile,
       });
 
-      setErrorMessage("");
+      setFormErrorMessage(
+        "",
+      );
       setEditing(
         false,
       );
@@ -388,7 +864,9 @@ export default function ProfileScreen() {
       );
 
       setMessage("");
-      setErrorMessage("");
+      setFormErrorMessage(
+        "",
+      );
 
       try {
         const {
@@ -484,7 +962,7 @@ export default function ProfileScreen() {
               },
             )
             .select(
-              "display_name, handle, bio, favorite_activities, is_public",
+              "display_name, handle, bio, favorite_activities, is_public, is_verified, is_canal",
             )
             .single();
 
@@ -523,6 +1001,14 @@ export default function ProfileScreen() {
           isPublic:
             data.is_public !==
             false,
+
+          isVerified:
+            data.is_verified ===
+            true,
+
+          isCanal:
+            data.is_canal ===
+            true,
         };
 
         setProfile(
@@ -541,7 +1027,7 @@ export default function ProfileScreen() {
           "Profile updated.",
         );
       } catch (error) {
-        setErrorMessage(
+        setFormErrorMessage(
           error instanceof Error
             ? error.message
             : "Canal could not save your profile.",
@@ -557,14 +1043,22 @@ export default function ProfileScreen() {
     useMemo(
       () =>
         initials(
-          profile.displayName,
+          displayProfile
+            ?.displayName ??
+            "",
         ),
       [
-        profile.displayName,
+        displayProfile
+          ?.displayName,
       ],
     );
 
-  if (loading) {
+  if (
+    loading &&
+    !displayProfile &&
+    !sceneDataResolved &&
+    !snapshotDataResolved
+  ) {
     return (
       <SafeAreaView
         style={
@@ -646,84 +1140,493 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
-        <View
-          style={
-            styles.identityCard
-          }
-        >
+        {profileIssue ? (
+          <RecoveryNotice
+            busy={
+              loading
+            }
+            issue={
+              profileIssue
+            }
+            onAction={() =>
+              recoverRead(
+                profileIssue,
+              )
+            }
+          />
+        ) : null}
+
+        {sceneIssue ? (
+          <RecoveryNotice
+            busy={
+              loading
+            }
+            issue={
+              sceneIssue
+            }
+            onAction={() =>
+              recoverRead(
+                sceneIssue,
+              )
+            }
+          />
+        ) : null}
+
+        {displayProfile ? (
           <View
             style={
-              styles.avatar
+              styles.identityCard
+            }
+          >
+            <View
+              style={
+                styles.avatar
+              }
+            >
+              <Text
+                style={
+                  styles.avatarText
+                }
+              >
+                {avatarText}
+              </Text>
+            </View>
+
+            <Text
+              style={
+                styles.profileName
+              }
+            >
+              {
+                displayProfile.displayName
+              }
+            </Text>
+
+            <Text
+              style={
+                styles.handle
+              }
+            >
+              {
+                displayProfile.handle
+              }
+            </Text>
+
+            <View
+              style={
+                styles.visibilityBadge
+              }
+            >
+              <Text
+                style={
+                  styles.visibilityBadgeText
+                }
+              >
+                {displayProfile
+                  .isCanal
+                  ? "Canal profile"
+                  : displayProfile
+                      .isVerified
+                    ? "Verified profile"
+                    : profile
+                      ? profile.isPublic
+                        ? "Public profile"
+                        : "Private profile"
+                      : "Saved profile details"}
+              </Text>
+            </View>
+
+            {sceneDataResolved ? (
+              <View
+                style={
+                  styles.stats
+                }
+              >
+                <Stat
+                  value={
+                    sceneCount
+                  }
+                  label="Library"
+                />
+
+                <Stat
+                  value={
+                    publicCount
+                  }
+                  label="Public"
+                />
+
+                <Stat
+                  value={
+                    savedCount
+                  }
+                  label="Saved"
+                />
+              </View>
+            ) : null}
+          </View>
+        ) : sceneDataResolved ? (
+          <View
+            style={
+              styles.identityCard
             }
           >
             <Text
+              selectable
               style={
-                styles.avatarText
+                styles.localLibraryTitle
               }
             >
-              {avatarText}
+              Your local Library
             </Text>
-          </View>
 
-          <Text
-            style={
-              styles.profileName
-            }
-          >
-            {profile.displayName}
-          </Text>
-
-          <Text
-            style={
-              styles.handle
-            }
-          >
-            {profile.handle}
-          </Text>
-
-          <View
-            style={
-              styles.visibilityBadge
-            }
-          >
             <Text
+              selectable
               style={
-                styles.visibilityBadgeText
+                styles.localLibraryText
               }
             >
-              {profile.isPublic
-                ? "Public profile"
-                : "Private profile"}
+              Your saved Scenes remain available while Canal refreshes your profile.
             </Text>
-          </View>
 
+            <View
+              style={
+                styles.stats
+              }
+            >
+              <Stat
+                value={
+                  sceneCount
+                }
+                label="Library"
+              />
+
+              <Stat
+                value={
+                  publicCount
+                }
+                label="Public"
+              />
+
+              <Stat
+                value={
+                  savedCount
+                }
+                label="Saved"
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {user &&
+        socialDataResolved ? (
           <View
             style={
-              styles.stats
+              styles.connectionCard
             }
           >
-            <Stat
-              value={
-                sceneCount
+            <View
+              style={
+                styles.connectionHeader
               }
-              label="Library"
-            />
+            >
+              <View>
+                <Text
+                  selectable
+                  style={
+                    styles.connectionTitle
+                  }
+                >
+                  Your network
+                </Text>
 
-            <Stat
-              value={
-                publicCount
-              }
-              label="Public"
-            />
+                <Text
+                  selectable
+                  style={
+                    styles.connectionSubtitle
+                  }
+                >
+                  People and creators you connect with.
+                </Text>
+              </View>
 
-            <Stat
-              value={
-                savedCount
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push(
+                    "/(tabs)/explore",
+                  )
+                }
+              >
+                <Text
+                  style={
+                    styles.discoverText
+                  }
+                >
+                  Discover
+                </Text>
+              </Pressable>
+            </View>
+
+            <View
+              style={
+                styles.connectionStats
               }
-              label="Saved"
-            />
+            >
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({
+                    pathname:
+                      "/following",
+                    params: {
+                      profileId:
+                        user.id,
+                      mode:
+                        "following",
+                    },
+                  })
+                }
+                style={
+                  styles.connectionStat
+                }
+              >
+                <Text
+                  style={
+                    styles.connectionValue
+                  }
+                >
+                  {connectionSummary
+                    ?.followingCount ??
+                    0}
+                </Text>
+
+                <Text
+                  style={
+                    styles.connectionLabel
+                  }
+                >
+                  Following
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({
+                    pathname:
+                      "/following",
+                    params: {
+                      profileId:
+                        user.id,
+                      mode:
+                        "followers",
+                    },
+                  })
+                }
+                style={
+                  styles.connectionStat
+                }
+              >
+                <Text
+                  style={
+                    styles.connectionValue
+                  }
+                >
+                  {connectionSummary
+                    ?.followerCount ??
+                    0}
+                </Text>
+
+                <Text
+                  style={
+                    styles.connectionLabel
+                  }
+                >
+                  Followers
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push(
+                    "/activity",
+                  )
+                }
+                style={
+                  styles.connectionStat
+                }
+              >
+                <Text
+                  style={
+                    styles.connectionValue
+                  }
+                >
+                  ↗
+                </Text>
+
+                <Text
+                  style={
+                    styles.connectionLabel
+                  }
+                >
+                  Activity
+                </Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
+        ) : null}
+
+        {socialDataResolved ? (
+          <View
+            style={
+              styles.playlistCard
+            }
+          >
+            <View
+              style={
+                styles.playlistHeader
+              }
+            >
+              <View>
+                <Text
+                  selectable
+                  style={
+                    styles.playlistTitle
+                  }
+                >
+                  Spotify playlists
+                </Text>
+
+                <Text
+                  selectable
+                  style={
+                    styles.playlistSubtitle
+                  }
+                >
+                  Created from your Canal Scenes.
+                </Text>
+              </View>
+
+              <Text
+                style={
+                  styles.playlistCount
+                }
+              >
+                {
+                  playlistExports.length
+                }
+              </Text>
+            </View>
+
+            {playlistExports.length >
+            0 ? (
+              <View
+                style={
+                  styles.playlistList
+                }
+              >
+                {playlistExports.map(
+                  (
+                    playlist,
+                  ) => (
+                    <Pressable
+                      key={
+                        playlist.id
+                      }
+                      accessibilityRole={
+                        playlist
+                          .spotifyPlaylistUrl
+                          ? "link"
+                          : "button"
+                      }
+                      disabled={
+                        !playlist
+                          .spotifyPlaylistUrl
+                      }
+                      onPress={() => {
+                        if (
+                          playlist
+                            .spotifyPlaylistUrl
+                        ) {
+                          void Linking.openURL(
+                            playlist
+                              .spotifyPlaylistUrl,
+                          );
+                        }
+                      }}
+                      style={
+                        styles.playlistRow
+                      }
+                    >
+                      <View
+                        style={
+                          styles.playlistIcon
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.playlistIconText
+                          }
+                        >
+                          ♪
+                        </Text>
+                      </View>
+
+                      <View
+                        style={
+                          styles.playlistCopy
+                        }
+                      >
+                        <Text
+                          numberOfLines={
+                            1
+                          }
+                          style={
+                            styles.playlistName
+                          }
+                        >
+                          {
+                            playlist.sceneName
+                          }
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.playlistMeta
+                          }
+                        >
+                          {
+                            playlist.trackCount
+                          }{" "}
+                          tracks · Spotify
+                        </Text>
+                      </View>
+
+                      <Text
+                        style={
+                          styles.playlistArrow
+                        }
+                      >
+                        ›
+                      </Text>
+                    </Pressable>
+                  ),
+                )}
+              </View>
+            ) : (
+              <Text
+                selectable
+                style={
+                  styles.playlistEmpty
+                }
+              >
+                Create a Spotify playlist from any Scene and it will appear here.
+              </Text>
+            )}
+          </View>
+        ) : null}
 
         {message ? (
           <View
@@ -741,51 +1644,56 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
-        {errorMessage ? (
+        {formErrorMessage ? (
           <View
             style={
               styles.errorBox
             }
           >
             <Text
+              selectable
               style={
                 styles.errorText
               }
             >
-              {errorMessage}
+              {
+                formErrorMessage
+              }
             </Text>
           </View>
         ) : null}
 
         {!editing ? (
           <>
-            <View
-              style={
-                styles.infoCard
-              }
-            >
-              <ProfileSection
-                label="BIO"
-                value={
-                  profile.bio
-                }
-                empty="No bio added yet."
-              />
-
+            {displayProfile ? (
               <View
                 style={
-                  styles.divider
+                  styles.infoCard
                 }
-              />
+              >
+                <ProfileSection
+                  label="BIO"
+                  value={
+                    displayProfile.bio
+                  }
+                  empty="No bio added yet."
+                />
 
-              <ProfileSection
-                label="FAVORITE ACTIVITIES"
-                value={
-                  profile.favoriteActivities
-                }
-                empty="No favorite activities added yet."
-              />
-            </View>
+                <View
+                  style={
+                    styles.divider
+                  }
+                />
+
+                <ProfileSection
+                  label="FAVORITE ACTIVITIES"
+                  value={
+                    displayProfile.favoriteActivities
+                  }
+                  empty="No favorite activities added yet."
+                />
+              </View>
+            ) : null}
 
             <View
               style={
@@ -815,29 +1723,42 @@ export default function ProfileScreen() {
                   styles.snapshotCount
                 }
               >
-                {publicSnapshots.length}
+                {(
+                  !snapshotDataResolved ||
+                  snapshotIssue
+                ) &&
+                publicSnapshots.length ===
+                  0
+                  ? "—"
+                  : publicSnapshots.length}
               </Text>
             </View>
 
-            {snapshotWarning ? (
-              <View
-                accessibilityRole="alert"
-                style={
-                  styles.snapshotWarning
+            {snapshotIssue ? (
+              <RecoveryNotice
+                busy={
+                  loading
                 }
-              >
-                <Text
-                  style={
-                    styles.snapshotWarningText
-                  }
-                >
-                  {snapshotWarning}
-                </Text>
-              </View>
+                issue={
+                  snapshotIssue
+                }
+                onAction={() =>
+                  recoverRead(
+                    snapshotIssue,
+                  )
+                }
+              />
             ) : null}
 
-            {publicSnapshots.length ===
+            {publicSnapshots.length >
             0 ? (
+              <PublicSnapshotGrid
+                snapshots={
+                  publicSnapshots
+                }
+              />
+            ) : snapshotDataResolved &&
+              !snapshotIssue ? (
               <View
                 style={
                   styles.snapshotEmpty
@@ -879,31 +1800,27 @@ export default function ProfileScreen() {
                   </Text>
                 </Pressable>
               </View>
-            ) : (
-              <PublicSnapshotGrid
-                snapshots={
-                  publicSnapshots
-                }
-              />
-            )}
+            ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              onPress={
-                beginEditing
-              }
-              style={
-                styles.editButton
-              }
-            >
-              <Text
+            {profile ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={
+                  beginEditing
+                }
                 style={
-                  styles.editButtonText
+                  styles.editButton
                 }
               >
-                Edit Profile
-              </Text>
-            </Pressable>
+                <Text
+                  style={
+                    styles.editButtonText
+                  }
+                >
+                  Edit Profile
+                </Text>
+              </Pressable>
+            ) : null}
           </>
         ) : (
           <View
@@ -1293,6 +2210,21 @@ const styles =
       padding: 22,
     },
 
+    localLibraryTitle: {
+      color: "#1B1B1B",
+      fontSize: 19,
+      fontWeight: "900",
+    },
+
+    localLibraryText: {
+      maxWidth: 300,
+      color: "#746D67",
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign: "center",
+      marginTop: 6,
+    },
+
     avatar: {
       width: 78,
       height: 78,
@@ -1363,6 +2295,182 @@ const styles =
       marginTop: 3,
     },
 
+    connectionCard: {
+      borderWidth: 1,
+      borderColor:
+        "#ECDDD2",
+      borderRadius: 22,
+      backgroundColor:
+        "#FFFFFF",
+      padding: 17,
+      gap: 16,
+    },
+
+    connectionHeader: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      gap: 12,
+    },
+
+    connectionTitle: {
+      color: "#1B1B1B",
+      fontSize: 17,
+      fontWeight: "900",
+    },
+
+    connectionSubtitle: {
+      color: "#817972",
+      fontSize: 10,
+      marginTop: 3,
+    },
+
+    discoverText: {
+      color: "#F47A24",
+      fontSize: 11,
+      fontWeight: "900",
+    },
+
+    connectionStats: {
+      flexDirection:
+        "row",
+      gap: 8,
+    },
+
+    connectionStat: {
+      flex: 1,
+      minHeight: 66,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 15,
+      backgroundColor:
+        "#FFF7F1",
+    },
+
+    connectionValue: {
+      color: "#241B16",
+      fontSize: 17,
+      fontWeight: "900",
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+
+    connectionLabel: {
+      color: "#817972",
+      fontSize: 9,
+      fontWeight: "800",
+      marginTop: 4,
+    },
+
+    playlistCard: {
+      borderWidth: 1,
+      borderColor:
+        "#DCE9DE",
+      borderRadius: 22,
+      backgroundColor:
+        "#F7FCF7",
+      padding: 17,
+      gap: 14,
+    },
+
+    playlistHeader: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+    },
+
+    playlistTitle: {
+      color: "#17241A",
+      fontSize: 17,
+      fontWeight: "900",
+    },
+
+    playlistSubtitle: {
+      color: "#6E7B70",
+      fontSize: 10,
+      marginTop: 3,
+    },
+
+    playlistCount: {
+      color: "#1DB954",
+      fontSize: 14,
+      fontWeight: "900",
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+
+    playlistList: {
+      gap: 8,
+    },
+
+    playlistRow: {
+      minHeight: 58,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 11,
+      borderRadius: 15,
+      backgroundColor:
+        "#FFFFFF",
+      padding: 10,
+    },
+
+    playlistIcon: {
+      width: 38,
+      height: 38,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 10,
+      backgroundColor:
+        "#1DB954",
+    },
+
+    playlistIconText: {
+      color: "#07130B",
+      fontSize: 17,
+      fontWeight: "900",
+    },
+
+    playlistCopy: {
+      flex: 1,
+    },
+
+    playlistName: {
+      color: "#17241A",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    playlistMeta: {
+      color: "#6E7B70",
+      fontSize: 9,
+      marginTop: 3,
+    },
+
+    playlistArrow: {
+      color: "#1DB954",
+      fontSize: 24,
+    },
+
+    playlistEmpty: {
+      color: "#6E7B70",
+      fontSize: 11,
+      lineHeight: 17,
+    },
+
     infoCard: {
       backgroundColor:
         "#FFFFFF",
@@ -1421,20 +2529,6 @@ const styles =
       color: "#F47A24",
       fontSize: 13,
       fontWeight: "900",
-    },
-
-    snapshotWarning: {
-      borderRadius: 15,
-      backgroundColor:
-        "#FFF5E8",
-      padding: 13,
-      marginTop: 10,
-    },
-
-    snapshotWarningText: {
-      color: "#865216",
-      fontSize: 11,
-      lineHeight: 17,
     },
 
     snapshotEmpty: {

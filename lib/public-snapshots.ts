@@ -7,10 +7,16 @@ import {
   supabase,
 } from "./supabase";
 
+import {
+  canonicalSpotifyTrackUrl,
+} from "./spotify-track-links";
+
 export type PublicSnapshotCreator = {
   id: string;
   displayName: string;
   handle: string;
+  isVerified: boolean;
+  isCanal: boolean;
 };
 
 export type PublicCanalSnapshot =
@@ -44,6 +50,8 @@ type ProfileRow = {
   id: string;
   display_name: string | null;
   handle: string | null;
+  is_verified: boolean | null;
+  is_canal: boolean | null;
 };
 
 const SNAPSHOT_COLUMNS = [
@@ -64,7 +72,7 @@ const SNAPSHOT_COLUMNS = [
 ].join(", ");
 
 const PROFILE_COLUMNS =
-  "id, display_name, handle";
+  "id, display_name, handle, is_verified, is_canal";
 
 export async function loadPublicSnapshotFeed(
   limit = 100,
@@ -99,24 +107,8 @@ async function loadPublicSnapshots(
 ): Promise<PublicCanalSnapshot[]> {
   requireSupabaseConfiguration();
 
-  const {
-    data: {
-      user,
-    },
-    error:
-      userError,
-  } =
-    await supabase.auth.getUser();
-
-  if (userError) {
-    throw userError;
-  }
-
-  if (!user) {
-    throw new Error(
-      "Sign in to browse public Snapshots.",
-    );
-  }
+  const viewerId =
+    await currentPublicSnapshotViewerId();
 
   let query =
     supabase
@@ -162,6 +154,10 @@ async function loadPublicSnapshots(
       ),
     );
 
+  await assertPublicSnapshotViewer(
+    viewerId,
+  );
+
   if (error) {
     throw new Error(
       `Canal could not load public Snapshots: ${error.message}`,
@@ -180,17 +176,30 @@ async function loadPublicSnapshots(
         (row) =>
           row.user_id,
       ),
+      viewerId,
     );
 
+  await assertPublicSnapshotViewer(
+    viewerId,
+  );
+
   return normalizePublicSnapshotRows(
-    rows,
-    user.id,
+    rows.filter(
+      (row) =>
+        row.user_id ===
+          viewerId ||
+        creators.has(
+          row.user_id,
+        ),
+    ),
+    viewerId,
     creators,
   );
 }
 
 async function loadCreators(
   ownerIds: string[],
+  expectedViewerId: string,
 ): Promise<
   Map<
     string,
@@ -216,8 +225,16 @@ async function loadCreators(
     uniqueOwnerIds.length ===
     0
   ) {
+    await assertPublicSnapshotViewer(
+      expectedViewerId,
+    );
+
     return creators;
   }
+
+  await assertPublicSnapshotViewer(
+    expectedViewerId,
+  );
 
   const {
     data,
@@ -234,6 +251,10 @@ async function loadCreators(
         "id",
         uniqueOwnerIds,
       );
+
+  await assertPublicSnapshotViewer(
+    expectedViewerId,
+  );
 
   if (error) {
     throw new Error(
@@ -258,6 +279,44 @@ async function loadCreators(
   }
 
   return creators;
+}
+
+async function currentPublicSnapshotViewerId(): Promise<string> {
+  const {
+    data: {
+      user,
+    },
+    error,
+  } =
+    await supabase.auth.getUser();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!user) {
+    throw new Error(
+      "Sign in to browse public Snapshots.",
+    );
+  }
+
+  return user.id;
+}
+
+async function assertPublicSnapshotViewer(
+  expectedViewerId: string,
+): Promise<void> {
+  const actualViewerId =
+    await currentPublicSnapshotViewerId();
+
+  if (
+    actualViewerId !==
+    expectedViewerId
+  ) {
+    throw new Error(
+      "The signed-in Canal account changed while public Snapshots were loading. Please try again.",
+    );
+  }
 }
 
 export function normalizePublicSnapshotRows(
@@ -368,9 +427,10 @@ function normalizePublicSnapshot(
       ),
 
     spotifyUrl:
-      cleanOptionalString(
+      canonicalSpotifyTrackUrl(
         row.spotify_url,
-      ),
+      ) ??
+      undefined,
 
     positionMs:
       typeof row.position_ms ===
@@ -446,6 +506,14 @@ function normalizeCreator(
       handle
         ? `@${handle.replace(/^@+/, "")}`
         : "@canal_listener",
+
+    isVerified:
+      row?.is_verified ===
+        true,
+
+    isCanal:
+      row?.is_canal ===
+        true,
   };
 }
 

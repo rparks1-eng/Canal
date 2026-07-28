@@ -6,7 +6,7 @@ or release record.
 
 ## Prerequisites
 
-- The six Supabase migrations are applied in filename order.
+- Every committed Supabase migration is applied in filename order.
 - Supabase allows the Canal authentication and password-reset redirect URLs.
 - The build contains the public Supabase and Spotify configuration values.
 - The Spotify dashboard allows the exact production redirect URI.
@@ -56,6 +56,25 @@ or release record.
 - [ ] Delete the Snapshot and confirm it no longer opens.
 - [ ] Turn off network access, create or edit a Snapshot, restore the network,
       and confirm synchronization completes without duplication.
+
+## Live Stages
+
+- [ ] Apply the Live Stages migrations to a development Supabase project and confirm
+      the Live tables are absent from the `supabase_realtime` publication.
+- [ ] Confirm the database Broadcast triggers deliver `stage_changed` on private
+      `live-stage:<uuid>` channels, `realtime.messages` RLS authorizes access, the
+      client subscribes with `private: true`, and Realtime public-channel access is
+      disabled in the Supabase dashboard.
+- [ ] Start public and private Stages from a saved Scene, then join each from Account B
+      using discovery or its invite code as appropriate.
+- [ ] Confirm participants and chat update on both devices without a manual refresh,
+      and that a non-member cannot discover or read a private Stage.
+- [ ] Send chat messages from both accounts and confirm empty, oversized, and
+      unauthorized messages are rejected.
+- [ ] Advance the queue and end the Stage as the host; confirm a listener cannot use
+      host controls.
+- [ ] Background, reopen, disconnect, and reconnect both devices; confirm the Stage
+      recovers without duplicating participants, messages, or Snapshots.
 
 ## Account isolation
 

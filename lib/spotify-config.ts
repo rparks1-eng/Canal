@@ -20,6 +20,20 @@ export const SPOTIFY_SCOPES = [
   "playlist-modify-public",
 ] as const;
 
+export const CANAL_REQUIRED_SPOTIFY_SCOPES = [
+  "user-read-private",
+  "user-top-read",
+  "user-library-read",
+  "user-read-recently-played",
+  "playlist-read-private",
+  "playlist-read-collaborative",
+  "playlist-modify-private",
+] as const;
+
+export const CANAL_SPOTIFY_EXPORT_SCOPES = [
+  "playlist-modify-private",
+] as const;
+
 export const spotifyDiscovery:
   DiscoveryDocument = {
     authorizationEndpoint:

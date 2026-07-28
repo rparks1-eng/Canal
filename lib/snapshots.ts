@@ -16,6 +16,10 @@ import {
   isSupabaseConfigured,
 } from "./supabase";
 
+import {
+  canonicalSpotifyTrackUrl,
+} from "./spotify-track-links";
+
 export type SnapshotVisibility =
   | "public"
   | "private";
@@ -80,56 +84,98 @@ const SNAPSHOT_ACCOUNT_KEY_PREFIX =
 const SNAPSHOT_DELETION_KEY_PREFIX =
   "@canal/snapshot-deletions:user:";
 
+const SNAPSHOT_ACCOUNT_CHANGED_ERROR_NAME =
+  "SnapshotAccountChangedError";
+
+const SNAPSHOT_ACCOUNT_CHANGED_ERROR_MESSAGE =
+  "The active Snapshot account changed while Canal was working. Try again for the current account.";
+
+const SNAPSHOT_ACCOUNT_CHANGED_WARNING =
+  "Canal stopped loading Snapshots because the active account changed. Try again to load the current account.";
+
+class SnapshotAccountChangedError extends Error {
+  constructor() {
+    super(
+      SNAPSHOT_ACCOUNT_CHANGED_ERROR_MESSAGE,
+    );
+
+    this.name =
+      SNAPSHOT_ACCOUNT_CHANGED_ERROR_NAME;
+  }
+}
+
 export async function readSnapshotsWithStatus(): Promise<
   SnapshotResult<Snapshot[]>
 > {
-  const userId =
+  const expectedUserId =
     await getSnapshotSessionUserId();
 
+  return readSnapshotsForUser(
+    expectedUserId,
+  );
+}
+
+async function readSnapshotsForUser(
+  expectedUserId: string | null,
+): Promise<
+  SnapshotResult<Snapshot[]>
+> {
   const storageKey =
     getSnapshotStorageKey(
-      userId,
+      expectedUserId,
     );
 
-  const localSnapshots =
-    await readLocalSnapshots(
-      storageKey,
-      userId,
-    );
-
-  if (
-    !isSupabaseConfigured ||
-    !userId
-  ) {
-    return {
-      value:
-        localSnapshots,
-
-      cloudStatus:
-        "local-only",
-
-      warning:
-        !isSupabaseConfigured
-          ? "Snapshots are available on this device, but Supabase is not configured."
-          : "Snapshots are available on this device. Sign in to sync them with Canal.",
-    };
-  }
+  let localSnapshots:
+    Snapshot[] =
+    [];
 
   try {
+    localSnapshots =
+      await readLocalSnapshots(
+        storageKey,
+        expectedUserId,
+      );
+
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
+
+    if (
+      !isSupabaseConfigured ||
+      !expectedUserId
+    ) {
+      return {
+        value:
+          localSnapshots,
+
+        cloudStatus:
+          "local-only",
+
+        warning:
+          !isSupabaseConfigured
+            ? "Snapshots are available on this device, but Supabase is not configured."
+            : "Snapshots are available on this device. Sign in to sync them with Canal.",
+      };
+    }
+
     await syncPendingDeletions(
-      userId,
+      expectedUserId,
     );
 
     const initialCloudResult =
-      await listOwnCloudSnapshots();
+      await listOwnCloudSnapshots(
+        expectedUserId,
+      );
+
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
 
     if (
       initialCloudResult.userId !==
-      userId
+      expectedUserId
     ) {
-      throw new Error(
-        "The active Snapshot account changed during synchronization.",
-      );
+      throw new SnapshotAccountChangedError();
     }
 
     const cloudById =
@@ -151,19 +197,26 @@ export async function readSnapshotsWithStatus(): Promise<
         (
           !localSnapshot.ownerId ||
           localSnapshot.ownerId ===
-            userId
+            expectedUserId
         )
       ) {
         const syncedSnapshot =
-          await upsertCloudSnapshot({
-            ...localSnapshot,
+          await upsertCloudSnapshot(
+            {
+              ...localSnapshot,
 
-            ownerId:
-              userId,
+              ownerId:
+                expectedUserId,
 
-            isMine:
-              true,
-          });
+              isMine:
+                true,
+            },
+            expectedUserId,
+          );
+
+        await assertExpectedSnapshotUser(
+          expectedUserId,
+        );
 
         cloudById.set(
           syncedSnapshot.id,
@@ -179,9 +232,17 @@ export async function readSnapshotsWithStatus(): Promise<
         ),
       );
 
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
+
     await writeLocalSnapshots(
       storageKey,
       syncedSnapshots,
+    );
+
+    await assertExpectedSnapshotUser(
+      expectedUserId,
     );
 
     return {
@@ -192,6 +253,36 @@ export async function readSnapshotsWithStatus(): Promise<
         "synced",
     };
   } catch (error) {
+    if (
+      isSnapshotAccountChangedError(
+        error,
+      )
+    ) {
+      return snapshotAccountChangedResult(
+        [],
+      );
+    }
+
+    try {
+      await assertExpectedSnapshotUser(
+        expectedUserId,
+      );
+    } catch (
+      accountError
+    ) {
+      if (
+        isSnapshotAccountChangedError(
+          accountError,
+        )
+      ) {
+        return snapshotAccountChangedResult(
+          [],
+        );
+      }
+
+      throw accountError;
+    }
+
     return {
       value:
         localSnapshots,
@@ -233,8 +324,40 @@ export async function readSnapshotWithStatus(
     };
   }
 
+  const expectedUserId =
+    await getSnapshotSessionUserId();
+
   const ownResult =
-    await readSnapshotsWithStatus();
+    await readSnapshotsForUser(
+      expectedUserId,
+    );
+
+  if (
+    ownResult.warning ===
+    SNAPSHOT_ACCOUNT_CHANGED_WARNING
+  ) {
+    return snapshotAccountChangedResult(
+      null,
+    );
+  }
+
+  try {
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
+  } catch (error) {
+    if (
+      isSnapshotAccountChangedError(
+        error,
+      )
+    ) {
+      return snapshotAccountChangedResult(
+        null,
+      );
+    }
+
+    throw error;
+  }
 
   const ownSnapshot =
     ownResult.value.find(
@@ -244,6 +367,24 @@ export async function readSnapshotWithStatus(
     );
 
   if (ownSnapshot) {
+    try {
+      await assertExpectedSnapshotUser(
+        expectedUserId,
+      );
+    } catch (error) {
+      if (
+        isSnapshotAccountChangedError(
+          error,
+        )
+      ) {
+        return snapshotAccountChangedResult(
+          null,
+        );
+      }
+
+      throw error;
+    }
+
     return {
       ...ownResult,
       value:
@@ -253,7 +394,7 @@ export async function readSnapshotWithStatus(
 
   if (
     !isSupabaseConfigured ||
-    !await getSnapshotSessionUserId()
+    !expectedUserId
   ) {
     return {
       value: null,
@@ -268,7 +409,12 @@ export async function readSnapshotWithStatus(
     const publicSnapshot =
       await readCloudSnapshot(
         normalizedId,
+        expectedUserId,
       );
+
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
 
     return {
       value:
@@ -278,6 +424,36 @@ export async function readSnapshotWithStatus(
         "synced",
     };
   } catch (error) {
+    if (
+      isSnapshotAccountChangedError(
+        error,
+      )
+    ) {
+      return snapshotAccountChangedResult(
+        null,
+      );
+    }
+
+    try {
+      await assertExpectedSnapshotUser(
+        expectedUserId,
+      );
+    } catch (
+      accountError
+    ) {
+      if (
+        isSnapshotAccountChangedError(
+          accountError,
+        )
+      ) {
+        return snapshotAccountChangedResult(
+          null,
+        );
+      }
+
+      throw accountError;
+    }
+
     return {
       value: null,
       cloudStatus:
@@ -307,19 +483,23 @@ export async function createSnapshotWithStatus(
 ): Promise<
   SnapshotResult<Snapshot>
 > {
-  const userId =
+  const expectedUserId =
     await getSnapshotSessionUserId();
 
   const storageKey =
     getSnapshotStorageKey(
-      userId,
+      expectedUserId,
     );
 
   const snapshots =
     await readLocalSnapshots(
       storageKey,
-      userId,
+      expectedUserId,
     );
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const now =
     new Date().toISOString();
@@ -351,9 +531,10 @@ export async function createSnapshotWithStatus(
       ),
 
     spotifyUrl:
-      cleanOptionalString(
+      canonicalSpotifyTrackUrl(
         input.spotifyUrl,
-      ),
+      ) ??
+      undefined,
 
     positionMs:
       typeof input.positionMs ===
@@ -387,7 +568,7 @@ export async function createSnapshotWithStatus(
         : "private",
 
     ownerId:
-      userId ??
+      expectedUserId ??
       undefined,
 
     isMine:
@@ -397,6 +578,10 @@ export async function createSnapshotWithStatus(
       true,
   };
 
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
+
   await writeLocalSnapshots(
     storageKey,
     [
@@ -405,9 +590,14 @@ export async function createSnapshotWithStatus(
     ],
   );
 
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
+
   return syncCreatedOrUpdatedSnapshot(
     snapshot,
     storageKey,
+    expectedUserId,
   );
 }
 
@@ -428,19 +618,23 @@ export async function updateSnapshotWithStatus(
 ): Promise<
   SnapshotResult<Snapshot | null>
 > {
-  const userId =
+  const expectedUserId =
     await getSnapshotSessionUserId();
 
   const storageKey =
     getSnapshotStorageKey(
-      userId,
+      expectedUserId,
     );
 
   const snapshots =
     await readLocalSnapshots(
       storageKey,
-      userId,
+      expectedUserId,
     );
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const existingSnapshot =
     snapshots.find(
@@ -454,7 +648,7 @@ export async function updateSnapshotWithStatus(
       value: null,
       cloudStatus:
         isSupabaseConfigured &&
-        userId
+        expectedUserId
           ? "synced"
           : "local-only",
     };
@@ -465,9 +659,9 @@ export async function updateSnapshotWithStatus(
       false ||
     (
       existingSnapshot.ownerId &&
-      userId &&
+      expectedUserId &&
       existingSnapshot.ownerId !==
-        userId
+        expectedUserId
     )
   ) {
     throw new Error(
@@ -492,9 +686,10 @@ export async function updateSnapshotWithStatus(
 
     spotifyUrl:
       changes.spotifyUrl !== undefined
-        ? cleanOptionalString(
+        ? canonicalSpotifyTrackUrl(
             changes.spotifyUrl,
-          )
+          ) ??
+          undefined
         : existingSnapshot.spotifyUrl,
 
     visibility:
@@ -511,7 +706,7 @@ export async function updateSnapshotWithStatus(
 
     ownerId:
       existingSnapshot.ownerId ??
-      userId ??
+      expectedUserId ??
       undefined,
 
     isMine:
@@ -520,6 +715,10 @@ export async function updateSnapshotWithStatus(
     pendingCloudSync:
       true,
   };
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   await writeLocalSnapshots(
     storageKey,
@@ -531,9 +730,14 @@ export async function updateSnapshotWithStatus(
     ),
   );
 
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
+
   return syncCreatedOrUpdatedSnapshot(
     updatedSnapshot,
     storageKey,
+    expectedUserId,
   );
 }
 
@@ -555,19 +759,23 @@ export async function syncSnapshotWithStatus(
 ): Promise<
   SnapshotResult<Snapshot | null>
 > {
-  const userId =
+  const expectedUserId =
     await getSnapshotSessionUserId();
 
   const storageKey =
     getSnapshotStorageKey(
-      userId,
+      expectedUserId,
     );
 
   const snapshots =
     await readLocalSnapshots(
       storageKey,
-      userId,
+      expectedUserId,
     );
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const snapshot =
     snapshots.find(
@@ -593,25 +801,30 @@ export async function syncSnapshotWithStatus(
         true,
     },
     storageKey,
+    expectedUserId,
   );
 }
 
 export async function deleteSnapshotWithStatus(
   snapshotId: string,
 ): Promise<SnapshotResult<null>> {
-  const userId =
+  const expectedUserId =
     await getSnapshotSessionUserId();
 
   const storageKey =
     getSnapshotStorageKey(
-      userId,
+      expectedUserId,
     );
 
   const snapshots =
     await readLocalSnapshots(
       storageKey,
-      userId,
+      expectedUserId,
     );
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const existingSnapshot =
     snapshots.find(
@@ -640,8 +853,12 @@ export async function deleteSnapshotWithStatus(
 
   if (
     !isSupabaseConfigured ||
-    !userId
+    !expectedUserId
   ) {
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
+
     return {
       value: null,
       cloudStatus:
@@ -652,17 +869,26 @@ export async function deleteSnapshotWithStatus(
   }
 
   await addPendingDeletion(
-    userId,
+    expectedUserId,
     snapshotId,
   );
 
   try {
-    await deleteCloudSnapshot(
-      snapshotId,
+    await assertExpectedSnapshotUser(
+      expectedUserId,
     );
 
-    await removePendingDeletion(
-      userId,
+    await deleteCloudSnapshot(
+      snapshotId,
+      expectedUserId,
+    );
+
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
+
+    await removePendingDeletionForExpectedUser(
+      expectedUserId,
       snapshotId,
     );
 
@@ -697,22 +923,27 @@ export async function deleteSnapshot(
 export async function writeSnapshots(
   snapshots: Snapshot[],
 ): Promise<void> {
-  const userId =
+  const expectedUserId =
     await getSnapshotSessionUserId();
 
   await writeLocalSnapshots(
     getSnapshotStorageKey(
-      userId,
+      expectedUserId,
     ),
     sortSnapshots(
       snapshots,
     ),
+  );
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
   );
 }
 
 async function syncCreatedOrUpdatedSnapshot(
   snapshot: Snapshot,
   storageKey: string,
+  expectedUserId: string | null,
 ): Promise<
   SnapshotResult<Snapshot>
 > {
@@ -742,15 +973,28 @@ async function syncCreatedOrUpdatedSnapshot(
     };
   }
 
+  if (
+    snapshot.ownerId !==
+    expectedUserId
+  ) {
+    throw new SnapshotAccountChangedError();
+  }
+
   try {
     const syncedSnapshot =
       await upsertCloudSnapshot(
         snapshot,
+        snapshot.ownerId,
       );
+
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
 
     await replaceLocalSnapshot(
       storageKey,
       syncedSnapshot,
+      expectedUserId,
     );
 
     return {
@@ -761,6 +1005,18 @@ async function syncCreatedOrUpdatedSnapshot(
         "synced",
     };
   } catch (error) {
+    if (
+      isSnapshotAccountChangedError(
+        error,
+      )
+    ) {
+      throw error;
+    }
+
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
+
     return {
       value:
         snapshot,
@@ -781,13 +1037,17 @@ async function syncCreatedOrUpdatedSnapshot(
 async function replaceLocalSnapshot(
   storageKey: string,
   snapshot: Snapshot,
+  expectedUserId: string | null,
 ): Promise<void> {
   const snapshots =
     await readLocalSnapshots(
       storageKey,
-      snapshot.ownerId ??
-      null,
+      expectedUserId,
     );
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const existingIndex =
     snapshots.findIndex(
@@ -812,6 +1072,10 @@ async function replaceLocalSnapshot(
   await writeLocalSnapshots(
     storageKey,
     nextSnapshots,
+  );
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
   );
 }
 
@@ -871,12 +1135,16 @@ async function writeLocalSnapshots(
 }
 
 async function syncPendingDeletions(
-  userId: string,
+  expectedUserId: string,
 ): Promise<void> {
   const snapshotIds =
     await readPendingDeletions(
-      userId,
+      expectedUserId,
     );
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   for (
     const snapshotId of
@@ -884,16 +1152,16 @@ async function syncPendingDeletions(
   ) {
     await deleteCloudSnapshot(
       snapshotId,
+      expectedUserId,
     );
-  }
 
-  if (
-    snapshotIds.length >
-    0
-  ) {
-    await writePendingDeletions(
-      userId,
-      [],
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
+
+    await removePendingDeletionForExpectedUser(
+      expectedUserId,
+      snapshotId,
     );
   }
 }
@@ -935,6 +1203,33 @@ async function removePendingDeletion(
         snapshotId,
     ),
   );
+}
+
+async function removePendingDeletionForExpectedUser(
+  expectedUserId: string,
+  snapshotId: string,
+): Promise<void> {
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
+
+  await removePendingDeletion(
+    expectedUserId,
+    snapshotId,
+  );
+
+  try {
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
+  } catch (error) {
+    await addPendingDeletion(
+      expectedUserId,
+      snapshotId,
+    );
+
+    throw error;
+  }
 }
 
 async function readPendingDeletions(
@@ -1067,9 +1362,10 @@ function normalizeSnapshot(
       ),
 
     spotifyUrl:
-      readOptionalString(
+      canonicalSpotifyTrackUrl(
         record.spotifyUrl,
-      ),
+      ) ??
+      undefined,
 
     positionMs:
       typeof record.positionMs ===
@@ -1212,6 +1508,42 @@ function cleanOptionalString(
 
   return cleanedValue ||
     undefined;
+}
+
+async function assertExpectedSnapshotUser(
+  expectedUserId: string | null,
+): Promise<void> {
+  const actualUserId =
+    await getSnapshotSessionUserId();
+
+  if (
+    actualUserId !==
+    expectedUserId
+  ) {
+    throw new SnapshotAccountChangedError();
+  }
+}
+
+function isSnapshotAccountChangedError(
+  error: unknown,
+): boolean {
+  return (
+    error instanceof Error &&
+    error.name ===
+      SNAPSHOT_ACCOUNT_CHANGED_ERROR_NAME
+  );
+}
+
+function snapshotAccountChangedResult<T>(
+  value: T,
+): SnapshotResult<T> {
+  return {
+    value,
+    cloudStatus:
+      "local-only",
+    warning:
+      SNAPSHOT_ACCOUNT_CHANGED_WARNING,
+  };
 }
 
 function buildCloudWarning(

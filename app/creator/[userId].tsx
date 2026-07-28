@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -16,6 +17,7 @@ import {
 
 import {
   router,
+  useFocusEffect,
   useLocalSearchParams,
 } from "expo-router";
 
@@ -28,12 +30,41 @@ import {
 } from "../../components/PublicSnapshotCard";
 
 import {
+  RecoveryNotice,
+} from "../../components/recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../../hooks/use-reconnect-reload";
+
+import {
   loadPublicProfileSnapshots,
 } from "../../lib/public-snapshots";
 
 import type {
   PublicCanalSnapshot,
 } from "../../lib/public-snapshots";
+
+import {
+  classifyRecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import type {
+  RecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import {
+  loadProfileConnectionSummary,
+} from "../../lib/profile-social";
+
+import type {
+  ProfileConnectionSummary,
+} from "../../lib/profile-social";
+
+import {
+  followUser,
+  unfollowUser,
+} from "../../lib/relationships";
 
 import {
   loadPublicProfile,
@@ -44,6 +75,14 @@ import type {
   PublicCanalProfile,
   PublicCanalScene,
 } from "../../lib/social";
+
+import {
+  useAuth,
+} from "../../providers/auth-provider";
+
+import {
+  useConnectivity,
+} from "../../providers/connectivity-provider";
 
 function safeBack(): void {
   if (
@@ -86,6 +125,11 @@ function creatorInitials(
 }
 
 export default function CreatorProfileScreen() {
+  const {
+    user,
+  } =
+    useAuth();
+
   const params =
     useLocalSearchParams<{
       userId?: string;
@@ -96,6 +140,55 @@ export default function CreatorProfileScreen() {
       "string"
       ? params.userId
       : "";
+
+  const viewerId =
+    user?.id ??
+    null;
+
+  const identityKey =
+    `${viewerId ?? "signed-out"}:${userId}`;
+
+  return (
+    <CreatorProfileScreenContent
+      key={
+        identityKey
+      }
+      identityKey={
+        identityKey
+      }
+      userId={
+        userId
+      }
+      viewerId={
+        viewerId
+      }
+    />
+  );
+}
+
+function CreatorProfileScreenContent(
+  props: {
+    identityKey: string;
+    userId: string;
+    viewerId:
+      | string
+      | null;
+  },
+) {
+  const {
+    status:
+      connectivityStatus,
+    refresh:
+      refreshConnectivity,
+  } =
+    useConnectivity();
+
+  const {
+    identityKey,
+    userId,
+    viewerId,
+  } =
+    props;
 
   const [
     profile,
@@ -124,9 +217,29 @@ export default function CreatorProfileScreen() {
     >([]);
 
   const [
-    snapshotError,
-    setSnapshotError,
-  ] = useState("");
+    profileResolved,
+    setProfileResolved,
+  ] = useState(false);
+
+  const [
+    connectionSummary,
+    setConnectionSummary,
+  ] =
+    useState<
+      ProfileConnectionSummary | null
+    >(
+      null,
+    );
+
+  const [
+    followBusy,
+    setFollowBusy,
+  ] = useState(false);
+
+  const [
+    snapshotsResolved,
+    setSnapshotsResolved,
+  ] = useState(false);
 
   const [
     loading,
@@ -144,15 +257,76 @@ export default function CreatorProfileScreen() {
   ] = useState("");
 
   const [
-    errorMessage,
-    setErrorMessage,
+    routeErrorMessage,
+    setRouteErrorMessage,
   ] = useState("");
+
+  const [
+    saveErrorMessage,
+    setSaveErrorMessage,
+  ] = useState("");
+
+  const [
+    profileError,
+    setProfileError,
+  ] =
+    useState<unknown | null>(
+      null,
+    );
+
+  const [
+    snapshotError,
+    setSnapshotError,
+  ] =
+    useState<unknown | null>(
+      null,
+    );
+
+  const loadPromiseRef =
+    useRef<
+      {
+        key: string;
+        promise:
+          Promise<void>;
+      } | null
+    >(
+      null,
+    );
+
+  const mountedRef =
+    useRef(
+      true,
+    );
+
+  const identityKeyRef =
+    useRef(
+      identityKey,
+    );
+
+  identityKeyRef.current =
+    identityKey;
+
+  useEffect(
+    () => {
+      mountedRef.current =
+        true;
+
+      return () => {
+        mountedRef.current =
+          false;
+      };
+    },
+    [],
+  );
 
   const load =
     useCallback(
       async (): Promise<void> => {
+        const requestKey =
+          identityKey;
+
         if (!userId) {
-          setErrorMessage(
+          setRouteErrorMessage(
             "The creator ID is missing.",
           );
 
@@ -163,83 +337,285 @@ export default function CreatorProfileScreen() {
           return;
         }
 
-        setLoading(
-          true,
-        );
+        if (
+          loadPromiseRef.current
+            ?.key ===
+          requestKey
+        ) {
+          return loadPromiseRef.current
+            .promise;
+        }
 
-        setErrorMessage("");
-        setSnapshotError("");
+        const isCurrent =
+          (): boolean =>
+            mountedRef.current &&
+            requestKey ===
+              identityKeyRef.current;
 
-        try {
-          const [
-            profileResult,
-            snapshotResult,
-          ] =
-            await Promise.allSettled([
-              loadPublicProfile(
-                userId,
-              ),
+        const nextLoad =
+          (async (): Promise<void> => {
+            setLoading(
+              true,
+            );
+            setConnectionSummary(
+              null,
+            );
+            setFollowBusy(
+              false,
+            );
 
-              loadPublicProfileSnapshots(
-                userId,
-              ),
+            setRouteErrorMessage(
+              "",
+            );
+
+            const sessionError =
+              !viewerId
+                ? new Error(
+                    "Your Canal account session is missing. Sign in to browse creator profiles.",
+                  )
+                : null;
+
+            const profileLoad =
+              (
+                sessionError
+                  ? Promise.reject(
+                      sessionError,
+                    )
+                  : loadPublicProfile(
+                      userId,
+                    )
+                )
+                .then(
+                  (result) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setProfile(
+                      result.profile,
+                    );
+
+                    setScenes(
+                      result.scenes,
+                    );
+
+                    setProfileResolved(
+                      true,
+                    );
+
+                    setProfileError(
+                      null,
+                    );
+                  },
+                )
+                .catch(
+                  (error: unknown) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setProfileError(
+                      error,
+                    );
+                  },
+                );
+
+            const snapshotLoad =
+              (
+                sessionError
+                  ? Promise.reject(
+                      sessionError,
+                    )
+                  : loadPublicProfileSnapshots(
+                      userId,
+                    )
+                )
+                .then(
+                  (result) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setSnapshots(
+                      result,
+                    );
+
+                    setSnapshotsResolved(
+                      true,
+                    );
+
+                    setSnapshotError(
+                      null,
+                    );
+                  },
+                )
+                .catch(
+                  (error: unknown) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setSnapshotError(
+                      error,
+                    );
+                  },
+                );
+
+            const connectionLoad =
+              (
+                sessionError
+                  ? Promise.reject(
+                      sessionError,
+                    )
+                  : loadProfileConnectionSummary(
+                      userId,
+                    )
+              )
+                .then(
+                  (result) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setConnectionSummary(
+                      result,
+                    );
+                  },
+                )
+                .catch(
+                  () => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setConnectionSummary(
+                      null,
+                    );
+                  },
+                );
+
+            await Promise.all([
+              profileLoad,
+              snapshotLoad,
+              connectionLoad,
             ]);
 
-          if (
-            profileResult.status ===
-            "rejected"
-          ) {
-            throw profileResult.reason;
-          }
+            if (isCurrent()) {
+              setLoading(
+                false,
+              );
+            }
+          })();
 
-          setProfile(
-            profileResult.value
-              .profile,
-          );
+        loadPromiseRef.current =
+          {
+            key:
+              requestKey,
+            promise:
+              nextLoad,
+          };
 
-          setScenes(
-            profileResult.value
-              .scenes,
-          );
-
-          if (
-            snapshotResult.status ===
-            "fulfilled"
-          ) {
-            setSnapshots(
-              snapshotResult.value,
-            );
-          } else {
-            setSnapshotError(
-              snapshotResult.reason instanceof
-              Error
-                ? snapshotResult.reason
-                    .message
-                : "Canal could not load this creator's Snapshots.",
-            );
-          }
-        } catch (error) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Canal could not load this creator.",
-          );
+        try {
+          await nextLoad;
         } finally {
-          setLoading(
-            false,
-          );
+          if (
+            loadPromiseRef.current
+              ?.key ===
+              requestKey &&
+            loadPromiseRef.current
+              .promise ===
+              nextLoad
+          ) {
+            loadPromiseRef.current =
+              null;
+          }
         }
       },
       [
+        identityKey,
         userId,
+        viewerId,
       ],
     );
 
-  useEffect(() => {
-    void load();
-  }, [
+  useFocusEffect(
+    useCallback(
+      () => {
+        void load();
+      },
+      [
+        load,
+      ],
+    ),
+  );
+
+  useReconnectReload(
     load,
-  ]);
+  );
+
+  const profileIssue =
+    useMemo(
+      () =>
+        profileError
+          ? classifyRecoveryIssue(
+              profileError,
+              {
+                service:
+                  "canal",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        connectivityStatus,
+        profileError,
+      ],
+    );
+
+  const snapshotIssue =
+    useMemo(
+      () =>
+        snapshotError
+          ? classifyRecoveryIssue(
+              snapshotError,
+              {
+                service:
+                  "canal",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        connectivityStatus,
+        snapshotError,
+      ],
+    );
+
+  const recoverRead =
+    async (
+      issue: RecoveryIssue,
+    ): Promise<void> => {
+      if (
+        issue.action ===
+        "sign-in"
+      ) {
+        router.push(
+          "/login" as never,
+        );
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus !==
+        "offline"
+      ) {
+        await load();
+      }
+    };
 
   const initials =
     useMemo(
@@ -266,7 +642,9 @@ export default function CreatorProfileScreen() {
       );
 
       setMessage("");
-      setErrorMessage("");
+      setSaveErrorMessage(
+        "",
+      );
 
       try {
         await savePublicSceneToLibrary(
@@ -293,7 +671,7 @@ export default function CreatorProfileScreen() {
           `"${scene.scene.name}" was saved to your Library.`,
         );
       } catch (error) {
-        setErrorMessage(
+        setSaveErrorMessage(
           error instanceof Error
             ? error.message
             : "Canal could not save this Scene.",
@@ -301,6 +679,95 @@ export default function CreatorProfileScreen() {
       } finally {
         setSavingKey(
           "",
+        );
+      }
+    };
+
+  const toggleFollow =
+    async (): Promise<void> => {
+      if (
+        !profile ||
+        !connectionSummary ||
+        connectionSummary
+          .isOwnProfile ||
+        followBusy
+      ) {
+        return;
+      }
+
+      setFollowBusy(
+        true,
+      );
+      setSaveErrorMessage(
+        "",
+      );
+      setMessage(
+        "",
+      );
+
+      try {
+        const normalizedHandle =
+          profile.handle.replace(
+            /^@+/,
+            "",
+          );
+
+        if (
+          connectionSummary
+            .viewerIsFollowing
+        ) {
+          await unfollowUser(
+            normalizedHandle,
+            profile.displayName,
+            profile.id,
+          );
+        } else {
+          await followUser(
+            normalizedHandle,
+            profile.displayName,
+            profile.id,
+          );
+        }
+
+        setConnectionSummary(
+          (current) =>
+            current
+              ? {
+                  ...current,
+                  viewerIsFollowing:
+                    !current
+                      .viewerIsFollowing,
+                  followerCount:
+                    Math.max(
+                      0,
+                      current
+                        .followerCount +
+                        (
+                          current
+                            .viewerIsFollowing
+                            ? -1
+                            : 1
+                        ),
+                    ),
+                }
+              : current,
+        );
+
+        setMessage(
+          connectionSummary
+            .viewerIsFollowing
+            ? `Unfollowed ${profile.displayName}.`
+            : `Following ${profile.displayName}.`,
+        );
+      } catch (error) {
+        setSaveErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not update this follow.",
+        );
+      } finally {
+        setFollowBusy(
+          false,
         );
       }
     };
@@ -353,7 +820,14 @@ export default function CreatorProfileScreen() {
         />
       </View>
 
-      {loading ? (
+      {loading &&
+      !profile &&
+      !profileResolved &&
+      !snapshotsResolved &&
+      scenes.length ===
+        0 &&
+      snapshots.length ===
+        0 ? (
         <View
           style={
             styles.loading
@@ -372,6 +846,22 @@ export default function CreatorProfileScreen() {
             false
           }
         >
+          {profileIssue ? (
+            <RecoveryNotice
+              busy={
+                loading
+              }
+              issue={
+                profileIssue
+              }
+              onAction={() =>
+                recoverRead(
+                  profileIssue,
+                )
+              }
+            />
+          ) : null}
+
           {profile ? (
             <View
               style={
@@ -408,6 +898,25 @@ export default function CreatorProfileScreen() {
                 {profile.handle}
               </Text>
 
+              {profile.isCanal ||
+              profile.isVerified ? (
+                <View
+                  style={
+                    styles.verifiedBadge
+                  }
+                >
+                  <Text
+                    style={
+                      styles.verifiedBadgeText
+                    }
+                  >
+                    {profile.isCanal
+                      ? "CANAL CREATOR"
+                      : "VERIFIED CREATOR"}
+                  </Text>
+                </View>
+              ) : null}
+
               {profile.bio ? (
                 <Text
                   style={
@@ -441,6 +950,126 @@ export default function CreatorProfileScreen() {
                   </Text>
                 </View>
               ) : null}
+
+              {connectionSummary ? (
+                <>
+                  <View
+                    style={
+                      styles.connectionStats
+                    }
+                  >
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        router.push({
+                          pathname:
+                            "/following",
+                          params: {
+                            profileId:
+                              profile.id,
+                            mode:
+                              "following",
+                          },
+                        })
+                      }
+                      style={
+                        styles.connectionStat
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.connectionValue
+                        }
+                      >
+                        {
+                          connectionSummary.followingCount
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.connectionLabel
+                        }
+                      >
+                        Following
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        router.push({
+                          pathname:
+                            "/following",
+                          params: {
+                            profileId:
+                              profile.id,
+                            mode:
+                              "followers",
+                          },
+                        })
+                      }
+                      style={
+                        styles.connectionStat
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.connectionValue
+                        }
+                      >
+                        {
+                          connectionSummary.followerCount
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.connectionLabel
+                        }
+                      >
+                        Followers
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {!connectionSummary
+                    .isOwnProfile ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={
+                        followBusy
+                      }
+                      onPress={() =>
+                        void toggleFollow()
+                      }
+                      style={[
+                        styles.followButton,
+                        connectionSummary
+                          .viewerIsFollowing &&
+                          styles.followButtonActive,
+                      ]}
+                    >
+                      {followBusy ? (
+                        <ActivityIndicator
+                          color="#FFFFFF"
+                        />
+                      ) : (
+                        <Text
+                          style={
+                            styles.followButtonText
+                          }
+                        >
+                          {connectionSummary
+                            .viewerIsFollowing
+                            ? "Following"
+                            : "Follow Creator"}
+                        </Text>
+                      )}
+                    </Pressable>
+                  ) : null}
+                </>
+              ) : null}
             </View>
           ) : null}
 
@@ -460,18 +1089,40 @@ export default function CreatorProfileScreen() {
             </View>
           ) : null}
 
-          {errorMessage ? (
+          {routeErrorMessage ? (
             <View
               style={
                 styles.errorBox
               }
             >
               <Text
+                selectable
                 style={
                   styles.errorText
                 }
               >
-                {errorMessage}
+                {
+                  routeErrorMessage
+                }
+              </Text>
+            </View>
+          ) : null}
+
+          {saveErrorMessage ? (
+            <View
+              style={
+                styles.errorBox
+              }
+            >
+              <Text
+                selectable
+                style={
+                  styles.errorText
+                }
+              >
+                {
+                  saveErrorMessage
+                }
               </Text>
             </View>
           ) : null}
@@ -494,45 +1145,42 @@ export default function CreatorProfileScreen() {
                 styles.sceneCount
               }
             >
-              {snapshots.length}
+              {(
+                !snapshotsResolved ||
+                snapshotIssue
+              ) &&
+              snapshots.length ===
+                0
+                ? "—"
+                : snapshots.length}
             </Text>
           </View>
 
-          {snapshotError ? (
-            <View
-              accessibilityRole="alert"
-              style={
-                styles.errorBox
+          {snapshotIssue ? (
+            <RecoveryNotice
+              busy={
+                loading
               }
-            >
-              <Text
-                style={
-                  styles.errorText
-                }
-              >
-                {snapshotError}
-              </Text>
+              issue={
+                snapshotIssue
+              }
+              onAction={() =>
+                recoverRead(
+                  snapshotIssue,
+                )
+              }
+            />
+          ) : null}
 
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  void load()
-                }
-                style={
-                  styles.retryButton
-                }
-              >
-                <Text
-                  style={
-                    styles.retryButtonText
-                  }
-                >
-                  Try again
-                </Text>
-              </Pressable>
-            </View>
-          ) : snapshots.length ===
-            0 ? (
+          {snapshots.length >
+          0 ? (
+            <PublicSnapshotGrid
+              snapshots={
+                snapshots
+              }
+            />
+          ) : snapshotsResolved &&
+            !snapshotIssue ? (
             <View
               style={
                 styles.emptyCard
@@ -546,13 +1194,7 @@ export default function CreatorProfileScreen() {
                 This creator has no public Snapshots.
               </Text>
             </View>
-          ) : (
-            <PublicSnapshotGrid
-              snapshots={
-                snapshots
-              }
-            />
-          )}
+          ) : null}
 
           <View
             style={
@@ -572,26 +1214,19 @@ export default function CreatorProfileScreen() {
                 styles.sceneCount
               }
             >
-              {scenes.length}
+              {(
+                !profileResolved ||
+                profileIssue
+              ) &&
+              scenes.length ===
+                0
+                ? "—"
+                : scenes.length}
             </Text>
           </View>
 
-          {scenes.length ===
+          {scenes.length >
           0 ? (
-            <View
-              style={
-                styles.emptyCard
-              }
-            >
-              <Text
-                style={
-                  styles.emptyText
-                }
-              >
-                This creator has no public Scenes.
-              </Text>
-            </View>
-          ) : (
             <View
               style={
                 styles.list
@@ -729,7 +1364,22 @@ export default function CreatorProfileScreen() {
                 },
               )}
             </View>
-          )}
+          ) : profileResolved &&
+            !profileIssue ? (
+            <View
+              style={
+                styles.emptyCard
+              }
+            >
+              <Text
+                style={
+                  styles.emptyText
+                }
+              >
+                This creator has no public Scenes.
+              </Text>
+            </View>
+          ) : null}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -836,6 +1486,22 @@ const styles =
       marginTop: 3,
     },
 
+    verifiedBadge: {
+      borderRadius: 9,
+      backgroundColor:
+        "#FFF0E5",
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      marginTop: 8,
+    },
+
+    verifiedBadgeText: {
+      color: "#B9500B",
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.5,
+    },
+
     bio: {
       color: "#4F4944",
       fontSize: 13,
@@ -865,6 +1531,66 @@ const styles =
       fontSize: 12,
       lineHeight: 18,
       marginTop: 5,
+    },
+
+    connectionStats: {
+      width: "100%",
+      flexDirection:
+        "row",
+      gap: 9,
+      marginTop: 16,
+    },
+
+    connectionStat: {
+      flex: 1,
+      minHeight: 64,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 15,
+      backgroundColor:
+        "#FFF7F1",
+    },
+
+    connectionValue: {
+      color: "#241B16",
+      fontSize: 18,
+      fontWeight: "900",
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+
+    connectionLabel: {
+      color: "#817972",
+      fontSize: 9,
+      fontWeight: "800",
+      marginTop: 4,
+    },
+
+    followButton: {
+      width: "100%",
+      minHeight: 48,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 15,
+      backgroundColor:
+        "#F47A24",
+      marginTop: 12,
+    },
+
+    followButtonActive: {
+      backgroundColor:
+        "#51463E",
+    },
+
+    followButtonText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "900",
     },
 
     sectionHeader: {
@@ -1011,20 +1737,4 @@ const styles =
       lineHeight: 18,
     },
 
-    retryButton: {
-      alignSelf:
-        "flex-start",
-      borderRadius: 12,
-      backgroundColor:
-        "#A62E27",
-      paddingHorizontal: 12,
-      paddingVertical: 9,
-      marginTop: 10,
-    },
-
-    retryButtonText: {
-      color: "#FFFFFF",
-      fontSize: 11,
-      fontWeight: "900",
-    },
   });

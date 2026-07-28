@@ -1,6 +1,7 @@
 import {
   useCallback,
-  useEffect,
+  useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -18,6 +19,7 @@ import {
 
 import {
   router,
+  useFocusEffect,
 } from "expo-router";
 
 import {
@@ -27,6 +29,18 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
+
+import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../hooks/use-reconnect-reload";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
 
 import {
   exportSpotifyTastePlaylist,
@@ -44,6 +58,10 @@ import type {
   SpotifyTrack,
 } from "../lib/spotify-api";
 
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
+
 function formatArtistNames(
   track: SpotifyTrack,
 ): string {
@@ -54,6 +72,15 @@ function formatArtistNames(
     )
     .join(", ");
 }
+
+type SpotifyLibraryRecoveryFailure = {
+  operation:
+    | "load"
+    | "sync"
+    | "export";
+  cause: unknown;
+  message: string;
+};
 
 function formatSyncTime(
   syncedAt: string,
@@ -378,6 +405,14 @@ function PlaylistRow(props: {
 }
 
 export default function SpotifyLibraryScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const [
     snapshot,
     setSnapshot,
@@ -402,10 +437,10 @@ export default function SpotifyLibraryScreen() {
   ] = useState(false);
 
   const [
-    errorMessage,
-    setErrorMessage,
+    recoveryFailure,
+    setRecoveryFailure,
   ] =
-    useState<string | null>(
+    useState<SpotifyLibraryRecoveryFailure | null>(
       null,
     );
 
@@ -429,11 +464,31 @@ export default function SpotifyLibraryScreen() {
           setSnapshot(
             cached,
           );
+
+          setRecoveryFailure(
+            (current) =>
+              current?.operation ===
+              "load"
+                ? null
+                : current,
+          );
         } catch (error) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Canal could not load your Spotify library.",
+          setRecoveryFailure(
+            (current) =>
+              current?.operation ===
+              "export"
+                ? current
+                : {
+                    operation:
+                      "load",
+                    cause:
+                      error,
+                    message:
+                      error instanceof
+                      Error
+                        ? error.message
+                        : "Canal could not load your Spotify library.",
+                  },
           );
         } finally {
           setLoading(false);
@@ -442,14 +497,20 @@ export default function SpotifyLibraryScreen() {
       [],
     );
 
-  useEffect(() => {
-    void loadCachedSnapshot();
-  }, [loadCachedSnapshot]);
+  useFocusEffect(
+    useCallback(
+      () => {
+        void loadCachedSnapshot();
+      },
+      [
+        loadCachedSnapshot,
+      ],
+    ),
+  );
 
   const handleSync =
     async (): Promise<void> => {
       setSyncing(true);
-      setErrorMessage(null);
       setSuccessMessage(null);
 
       try {
@@ -461,28 +522,79 @@ export default function SpotifyLibraryScreen() {
         setSuccessMessage(
           "Your Spotify taste snapshot is up to date.",
         );
+
+        setRecoveryFailure(
+          (current) =>
+            current?.operation ===
+            "export"
+              ? current
+              : null,
+        );
       } catch (error) {
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Canal could not sync Spotify.",
+        setRecoveryFailure(
+          (current) =>
+            current?.operation ===
+            "export"
+              ? current
+              : {
+                  operation:
+                    "sync",
+                  cause:
+                    error,
+                  message:
+                    error instanceof
+                    Error
+                      ? error.message
+                      : "Canal could not sync Spotify.",
+                },
         );
       } finally {
         setSyncing(false);
       }
     };
 
+  useReconnectReload(
+    handleSync,
+  );
+
+  const exportInFlight =
+    useRef(false);
+
   const handleExport =
-    async (): Promise<void> => {
-      if (!snapshot) {
+    async (
+      refreshBeforeExport = false,
+    ): Promise<void> => {
+      if (
+        !snapshot ||
+        exportInFlight.current
+      ) {
         return;
       }
 
+      exportInFlight.current =
+        true;
       setExporting(true);
-      setErrorMessage(null);
-      setSuccessMessage(null);
 
       try {
+        if (
+          refreshBeforeExport
+        ) {
+          const nextStatus =
+            await refreshConnectivity();
+
+          if (
+            nextStatus ===
+            "offline"
+          ) {
+            return;
+          }
+        }
+
+        setRecoveryFailure(
+          null,
+        );
+        setSuccessMessage(null);
+
         const result =
           await exportSpotifyTastePlaylist(
             snapshot,
@@ -498,18 +610,55 @@ export default function SpotifyLibraryScreen() {
             ?.spotify;
 
         if (url) {
-          await openExternalUrl(
-            url,
-          );
+          try {
+            await openExternalUrl(
+              url,
+            );
+          } catch (error) {
+            console.warn(
+              "Spotify playlist created, but Canal could not open it:",
+              error,
+            );
+          }
         }
       } catch (error) {
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Canal could not create the Spotify playlist.",
-        );
+        setRecoveryFailure({
+          operation:
+            "export",
+          cause:
+            error,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Canal could not create the Spotify playlist.",
+        });
       } finally {
+        exportInFlight.current =
+          false;
+
         setExporting(false);
+      }
+    };
+
+  const retryReadOrSync =
+    async (): Promise<void> => {
+      if (
+        recoveryFailure?.operation ===
+        "load"
+      ) {
+        await loadCachedSnapshot();
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus !==
+        "offline"
+      ) {
+        await handleSync();
       }
     };
 
@@ -523,6 +672,65 @@ export default function SpotifyLibraryScreen() {
     snapshot?.profile
       .images?.[0]?.url ??
     null;
+
+  const recoveryIssue =
+    useMemo(
+      () => {
+        if (
+          !recoveryFailure &&
+          connectivityStatus !==
+            "offline"
+        ) {
+          return null;
+        }
+
+        return classifyRecoveryIssue(
+          recoveryFailure
+            ?.cause ??
+            new Error(
+              recoveryFailure
+                ?.message ||
+                "Canal is offline.",
+            ),
+          {
+            service:
+              "spotify",
+            connectivityStatus,
+          },
+        );
+      },
+      [
+        connectivityStatus,
+        recoveryFailure,
+      ],
+    );
+
+  const recover =
+    async (): Promise<void> => {
+      if (
+        recoveryIssue?.action ===
+        "reconnect-spotify"
+      ) {
+        router.push(
+          "/music-services",
+        );
+
+        return;
+      }
+
+      if (
+        recoveryFailure?.operation ===
+        "export"
+      ) {
+        await handleExport(
+          true,
+        );
+
+        return;
+      }
+
+      await retryReadOrSync();
+    };
 
   return (
     <SafeAreaView
@@ -593,16 +801,41 @@ export default function SpotifyLibraryScreen() {
           }
           refreshControl={
             <RefreshControl
+              enabled={
+                connectivityStatus !==
+                "offline"
+              }
               refreshing={
                 syncing
               }
-              onRefresh={() =>
-                void handleSync()
-              }
+              onRefresh={() => {
+                if (
+                  connectivityStatus !==
+                  "offline"
+                ) {
+                  void handleSync();
+                }
+              }}
             />
           }
         >
-          {!snapshot ? (
+          {recoveryIssue ? (
+            <RecoveryNotice
+              busy={
+                syncing ||
+                exporting
+              }
+              issue={
+                recoveryIssue
+              }
+              onAction={
+                recover
+              }
+            />
+          ) : null}
+
+          {!snapshot &&
+          !recoveryIssue ? (
             <View style={styles.emptyCard}>
               <Text
                 style={
@@ -625,7 +858,19 @@ export default function SpotifyLibraryScreen() {
 
               <Pressable
                 accessibilityRole="button"
-                disabled={syncing}
+                accessibilityState={{
+                  busy:
+                    syncing,
+                  disabled:
+                    syncing ||
+                    connectivityStatus ===
+                      "offline",
+                }}
+                disabled={
+                  syncing ||
+                  connectivityStatus ===
+                    "offline"
+                }
                 onPress={() =>
                   void handleSync()
                 }
@@ -677,7 +922,7 @@ export default function SpotifyLibraryScreen() {
                 </Text>
               </Pressable>
             </View>
-          ) : (
+          ) : snapshot ? (
             <>
               <View style={styles.profileCard}>
                 {profileImageUrl ? (
@@ -808,7 +1053,19 @@ export default function SpotifyLibraryScreen() {
               <View style={styles.actionRow}>
                 <Pressable
                   accessibilityRole="button"
-                  disabled={syncing}
+                  accessibilityState={{
+                    busy:
+                      syncing,
+                    disabled:
+                      syncing ||
+                      connectivityStatus ===
+                        "offline",
+                  }}
+                  disabled={
+                    syncing ||
+                    connectivityStatus ===
+                      "offline"
+                  }
                   onPress={() =>
                     void handleSync()
                   }
@@ -839,7 +1096,19 @@ export default function SpotifyLibraryScreen() {
 
                 <Pressable
                   accessibilityRole="button"
-                  disabled={exporting}
+                  accessibilityState={{
+                    busy:
+                      exporting,
+                    disabled:
+                      exporting ||
+                      connectivityStatus ===
+                        "offline",
+                  }}
+                  disabled={
+                    exporting ||
+                    connectivityStatus ===
+                      "offline"
+                  }
                   onPress={() =>
                     void handleExport()
                   }
@@ -877,26 +1146,6 @@ export default function SpotifyLibraryScreen() {
                     }
                   >
                     {successMessage}
-                  </Text>
-                </View>
-              ) : null}
-
-              {errorMessage ? (
-                <View style={styles.errorBox}>
-                  <Text
-                    style={
-                      styles.errorTitle
-                    }
-                  >
-                    Spotify error
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.errorText
-                    }
-                  >
-                    {errorMessage}
                   </Text>
                 </View>
               ) : null}
@@ -1149,20 +1398,8 @@ export default function SpotifyLibraryScreen() {
                 </View>
               ) : null}
             </>
-          )}
-
-          {!snapshot &&
-          errorMessage ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorTitle}>
-                Spotify error
-              </Text>
-
-              <Text style={styles.errorText}>
-                {errorMessage}
-              </Text>
-            </View>
           ) : null}
+
         </ScrollView>
       )}
     </SafeAreaView>

@@ -1,5 +1,7 @@
 import {
+  useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -24,8 +26,16 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
   publishSnapshot as publishToLocalActivity,
 } from "../lib/canal-session";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
 
 import {
   createSnapshotWithStatus,
@@ -42,7 +52,31 @@ import type {
   StoredScene,
 } from "../lib/scenes";
 
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
+
+function closeSceneSnapshot(): void {
+  if (router.canGoBack()) {
+    router.back();
+
+    return;
+  }
+
+  router.replace(
+    "/(tabs)/library",
+  );
+}
+
 export default function SceneSnapshotScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const params =
     useLocalSearchParams<{
       sceneId?: string;
@@ -61,6 +95,18 @@ export default function SceneSnapshotScreen() {
     useState<StoredScene | null>(
       null,
     );
+
+  const [
+    isLoadingScene,
+    setIsLoadingScene,
+  ] = useState(true);
+
+  const [
+    sceneLoadError,
+    setSceneLoadError,
+  ] = useState<unknown>(
+    null,
+  );
 
   const [
     caption,
@@ -83,24 +129,80 @@ export default function SceneSnapshotScreen() {
   ] = useState("");
 
   const [
-    publishError,
-    setPublishError,
-  ] = useState("");
+    publishErrorCause,
+    setPublishErrorCause,
+  ] = useState<unknown>(
+    null,
+  );
 
-  useEffect(() => {
-    const load =
+  const publishInFlight =
+    useRef(false);
+
+  const loadScene =
+    useCallback(
       async (): Promise<void> => {
-        if (sceneId) {
+        setIsLoadingScene(
+          true,
+        );
+
+        setSceneLoadError(
+          null,
+        );
+
+        if (!sceneId) {
+          setScene(
+            null,
+          );
+
+          setIsLoadingScene(
+            false,
+          );
+
+          return;
+        }
+
+        try {
           setScene(
             await getSceneById(
               sceneId,
             ),
           );
-        }
-      };
+        } catch (error) {
+          console.error(
+            "Unable to load Scene for Snapshot:",
+            error,
+          );
 
-    void load();
-  }, [sceneId]);
+          const loadFailure =
+            error ??
+            new Error(
+              "Canal could not load this Scene.",
+            );
+
+          setScene(
+            null,
+          );
+
+          setSceneLoadError(
+            () =>
+              loadFailure,
+          );
+        } finally {
+          setIsLoadingScene(
+            false,
+          );
+        }
+      },
+      [
+        sceneId,
+      ],
+    );
+
+  useEffect(() => {
+    void loadScene();
+  }, [
+    loadScene,
+  ]);
 
   const share =
     async (): Promise<void> => {
@@ -122,18 +224,40 @@ export default function SceneSnapshotScreen() {
     };
 
   const publish =
-    async (): Promise<void> => {
+    async (
+      refreshBeforePublish = false,
+    ): Promise<void> => {
       if (
         !scene ||
-        isPublishing
+        published ||
+        publishInFlight.current
       ) {
         return;
       }
 
+      publishInFlight.current =
+        true;
       setIsPublishing(true);
-      setPublishError("");
 
       try {
+        if (
+          refreshBeforePublish
+        ) {
+          const nextStatus =
+            await refreshConnectivity();
+
+          if (
+            nextStatus ===
+            "offline"
+          ) {
+            return;
+          }
+        }
+
+        setPublishErrorCause(
+          null,
+        );
+
         const result =
           pendingSnapshotId
             ? await syncSnapshotWithStatus(
@@ -158,9 +282,11 @@ export default function SceneSnapshotScreen() {
               });
 
         if (!result.value) {
-          setPublishError(
-            result.warning ||
-            "The pending Snapshot could not be found. Try posting again.",
+          setPublishErrorCause(
+            new Error(
+              result.warning ||
+              "The pending Snapshot could not be found. Try posting again.",
+            ),
           );
 
           setPendingSnapshotId("");
@@ -176,9 +302,11 @@ export default function SceneSnapshotScreen() {
             result.value.id,
           );
 
-          setPublishError(
-            result.warning ||
-            "The Snapshot is saved on this device, but it has not been published to Canal.",
+          setPublishErrorCause(
+            new Error(
+              result.warning ||
+              "The Snapshot is saved on this device, but it has not been published to Canal.",
+            ),
           );
 
           return;
@@ -186,6 +314,9 @@ export default function SceneSnapshotScreen() {
 
         setPendingSnapshotId("");
         setPublished(true);
+        setPublishErrorCause(
+          null,
+        );
 
         /*
          * Keep the existing local Activity card as an
@@ -230,17 +361,66 @@ export default function SceneSnapshotScreen() {
           );
         }
       } catch (error) {
-        setPublishError(
-          error instanceof Error
-            ? error.message
-            : "Canal could not publish this Snapshot.",
+        const publishFailure =
+          error ??
+          new Error(
+            "Canal could not publish this Snapshot.",
+          );
+
+        setPublishErrorCause(
+          () =>
+            publishFailure,
         );
       } finally {
+        publishInFlight.current =
+          false;
+
         setIsPublishing(false);
       }
     };
 
-  if (!scene) {
+  const sceneLoadIssue =
+    sceneLoadError
+      ? classifyRecoveryIssue(
+          sceneLoadError,
+          {
+            service:
+              "canal",
+          },
+        )
+      : null;
+
+  const publishIssue =
+    publishErrorCause
+      ? classifyRecoveryIssue(
+          publishErrorCause,
+          {
+            service:
+              "canal",
+            connectivityStatus,
+          },
+        )
+      : null;
+
+  const recoverPublish =
+    async (): Promise<void> => {
+      if (
+        publishIssue?.action ===
+        "sign-in"
+      ) {
+        router.push(
+          "/login" as never,
+        );
+
+        return;
+      }
+
+      await publish(
+        true,
+      );
+    };
+
+  if (isLoadingScene) {
     return (
       <SafeAreaView
         style={styles.safeArea}
@@ -250,7 +430,107 @@ export default function SceneSnapshotScreen() {
             styles.center
           }
         >
-          <ActivityIndicator />
+          <ActivityIndicator
+            size="large"
+            color="#F47A24"
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (sceneLoadIssue) {
+    return (
+      <SafeAreaView
+        style={styles.safeArea}
+      >
+        <View
+          style={styles.center}
+        >
+          <View
+            style={
+              styles.recovery
+            }
+          >
+            <RecoveryNotice
+              issue={
+                sceneLoadIssue
+              }
+              onAction={
+                loadScene
+              }
+            />
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={
+              closeSceneSnapshot
+            }
+            style={({ pressed }) => [
+              styles.stateButton,
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.stateButtonText
+              }
+            >
+              Return to Library
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!scene) {
+    return (
+      <SafeAreaView
+        style={styles.safeArea}
+      >
+        <View
+          style={styles.center}
+        >
+          <Text
+            style={
+              styles.stateTitle
+            }
+          >
+            Scene not found
+          </Text>
+
+          <Text
+            selectable
+            style={
+              styles.stateText
+            }
+          >
+            It may have been removed from
+            your library.
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={
+              closeSceneSnapshot
+            }
+            style={({ pressed }) => [
+              styles.stateButton,
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.stateButtonText
+              }
+            >
+              Return to Library
+            </Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -267,13 +547,9 @@ export default function SceneSnapshotScreen() {
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace("/(tabs)");
-            }
-          }}
+          onPress={
+            closeSceneSnapshot
+          }
           style={({ pressed }) => [
             styles.backButton,
 
@@ -459,22 +735,23 @@ export default function SceneSnapshotScreen() {
           </Pressable>
         </View>
 
-        {publishError ? (
+        {publishIssue ? (
           <View
-            accessibilityRole="alert"
-            style={styles.error}
+            style={
+              styles.publishRecovery
+            }
           >
-            <Text
-              style={styles.errorTitle}
-            >
-              Not published yet
-            </Text>
-
-            <Text
-              style={styles.errorText}
-            >
-              {publishError}
-            </Text>
+            <RecoveryNotice
+              busy={
+                isPublishing
+              }
+              issue={
+                publishIssue
+              }
+              onAction={
+                recoverPublish
+              }
+            />
           </View>
         ) : null}
 
@@ -535,6 +812,47 @@ const styles =
         "center",
       justifyContent:
         "center",
+      gap: 14,
+      paddingHorizontal: 20,
+    },
+
+    recovery: {
+      width: "100%",
+      maxWidth: 520,
+    },
+
+    stateTitle: {
+      color: "#1B1B1B",
+      fontSize: 24,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+
+    stateText: {
+      color: "#6E6660",
+      fontSize: 14,
+      lineHeight: 20,
+      textAlign: "center",
+    },
+
+    stateButton: {
+      minHeight: 48,
+      minWidth: 190,
+      alignItems: "center",
+      justifyContent:
+        "center",
+      paddingHorizontal: 20,
+      borderRadius: 16,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#F47A24",
+    },
+
+    stateButtonText: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "900",
     },
 
     header: {
@@ -747,28 +1065,8 @@ const styles =
       marginTop: 14,
     },
 
-    error: {
-      backgroundColor:
-        "#FFF0EA",
-      borderColor:
-        "#E9B29D",
-      borderWidth: 1,
-      borderRadius: 17,
-      padding: 14,
+    publishRecovery: {
       marginTop: 14,
-    },
-
-    errorTitle: {
-      color: "#9A3A1E",
-      fontSize: 12,
-      fontWeight: "900",
-    },
-
-    errorText: {
-      color: "#7D4938",
-      fontSize: 12,
-      lineHeight: 18,
-      marginTop: 5,
     },
 
     successText: {

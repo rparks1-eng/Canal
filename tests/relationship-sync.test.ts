@@ -5,6 +5,9 @@ import {
   it,
 } from "@jest/globals";
 
+import fs from "node:fs";
+import path from "node:path";
+
 import {
   blockUser,
   compactRelationshipMutations,
@@ -98,6 +101,133 @@ describe(
             action: "upsert",
           },
         ]);
+      },
+    );
+
+    it(
+      "keeps the stable profile ID while compacting a follow or block",
+      () => {
+        expect(
+          compactRelationshipMutations([
+            {
+              username:
+                "canalfriend",
+              targetUserId:
+                "00000000-0000-4000-8000-000000000010",
+              relationshipType:
+                "following",
+              action:
+                "upsert",
+            },
+          ]),
+        ).toEqual([
+          {
+            username:
+              "canalfriend",
+            targetUserId:
+              "00000000-0000-4000-8000-000000000010",
+            relationshipType:
+              "following",
+            action:
+              "upsert",
+          },
+          {
+            username:
+              "canalfriend",
+            targetUserId:
+              "00000000-0000-4000-8000-000000000010",
+            relationshipType:
+              "blocked",
+            action:
+              "delete",
+          },
+        ]);
+      },
+    );
+
+    it(
+      "keeps only the latest intent when a target profile is renamed",
+      () => {
+        const targetUserId =
+          "00000000-0000-4000-8000-000000000010";
+
+        expect(
+          compactRelationshipMutations([
+            {
+              username:
+                "old_handle",
+              targetUserId,
+              relationshipType:
+                "blocked",
+              action:
+                "upsert",
+            },
+            {
+              username:
+                "new_handle",
+              targetUserId,
+              relationshipType:
+                "following",
+              action:
+                "upsert",
+            },
+          ]),
+        ).toEqual([
+          {
+            username:
+              "new_handle",
+            targetUserId,
+            relationshipType:
+              "following",
+            action:
+              "upsert",
+          },
+          {
+            username:
+              "new_handle",
+            targetUserId,
+            relationshipType:
+              "blocked",
+            action:
+              "delete",
+          },
+        ]);
+      },
+    );
+
+    it(
+      "removes an existing stable-ID row before inserting a renamed target",
+      () => {
+        const source =
+          fs.readFileSync(
+            path.join(
+              process.cwd(),
+              "lib",
+              "relationships.ts",
+            ),
+            "utf8",
+          );
+
+        const stableDeleteIndex =
+          source.indexOf(
+            '"target_user_id",\n          stableUpsertTargetUserIds',
+          );
+
+        const upsertIndex =
+          source.indexOf(
+            ".upsert(\n          upserts.map",
+          );
+
+        expect(
+          stableDeleteIndex,
+        ).toBeGreaterThan(
+          -1,
+        );
+        expect(
+          upsertIndex,
+        ).toBeGreaterThan(
+          stableDeleteIndex,
+        );
       },
     );
   },

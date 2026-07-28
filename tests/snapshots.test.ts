@@ -111,6 +111,29 @@ describe(
     );
 
     it(
+      "does not persist an untrusted Snapshot Spotify link",
+      async () => {
+        mockActiveUserId =
+          "user-a";
+
+        const result =
+          await createSnapshotWithStatus({
+            sceneId:
+              "scene-1",
+            sceneName:
+              "Unsafe link",
+            spotifyUrl:
+              "https://example.com/phishing",
+          });
+
+        expect(
+          result.value
+            .spotifyUrl,
+        ).toBeUndefined();
+      },
+    );
+
+    it(
       "keeps cached Snapshots isolated between Canal accounts",
       async () => {
         mockActiveUserId =

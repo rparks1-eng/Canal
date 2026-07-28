@@ -21,11 +21,40 @@ import type {
 } from "./spotify-api";
 
 import type {
+  SpotifyConnectionGuard,
   SpotifyProfile,
 } from "./spotify-auth";
 
+import {
+  assertSpotifyConnectionGuardCurrent,
+  getSpotifyConnectionGeneration,
+  isSpotifyConnectionGuardCurrent,
+  readGuardedSpotifySession,
+  requireGuardedSpotifyLibrarySession,
+  requireGuardedSpotifyPlaylistExportSession,
+} from "./spotify-auth";
+
+import type {
+  RecoveryIssue,
+} from "./recovery-issue";
+
+import {
+  classifyRecoveryIssue,
+} from "./recovery-issue";
+
 export const SPOTIFY_LIBRARY_STORAGE_KEY =
   "@canal/spotify-library-snapshot";
+
+const SPOTIFY_LIBRARY_ENVELOPE_VERSION =
+  2;
+
+type PersistedSpotifyLibraryEnvelope = {
+  version: number;
+  ownerId: string;
+  accountGeneration: number;
+  snapshot:
+    SpotifyLibrarySnapshot;
+};
 
 export type SpotifyGenreSignal = {
   name: string;
@@ -59,6 +88,7 @@ export type LatestSpotifyLibraryResult = {
   snapshot: SpotifyLibrarySnapshot | null;
   refreshed: boolean;
   warning?: string;
+  issue?: RecoveryIssue;
 };
 
 const DEFAULT_LIBRARY_MAX_AGE_MS =
@@ -68,8 +98,50 @@ let libraryRefreshPromise:
   Promise<SpotifyLibrarySnapshot> | null =
     null;
 
+let libraryRefreshGeneration:
+  number | null =
+    null;
+
 let lastLibraryRefreshFailureAt =
   0;
+
+let lastLibraryRefreshIssue:
+  RecoveryIssue | null =
+    null;
+
+let libraryCacheOperationTail:
+  Promise<void> =
+    Promise.resolve();
+
+async function runLibraryCacheOperation<
+  Result,
+>(
+  operation:
+    () => Promise<Result>,
+): Promise<Result> {
+  const previousOperation =
+    libraryCacheOperationTail;
+
+  let releaseOperation:
+    () => void =
+      () => {};
+
+  libraryCacheOperationTail =
+    new Promise<void>(
+      (resolve) => {
+        releaseOperation =
+          resolve;
+      },
+    );
+
+  await previousOperation;
+
+  try {
+    return await operation();
+  } finally {
+    releaseOperation();
+  }
+}
 
 function readErrorMessage(
   error: unknown,
@@ -81,6 +153,45 @@ function readErrorMessage(
   }
 
   return "Unknown Spotify error.";
+}
+
+function isSpotifyAccessFailure(
+  error: unknown,
+): boolean {
+  if (
+    !error ||
+    typeof error !==
+      "object"
+  ) {
+    return false;
+  }
+
+  const candidate =
+    error as {
+      status?: unknown;
+      authorizationInvalid?: unknown;
+    };
+
+  return (
+    candidate.status ===
+      401 ||
+    candidate.status ===
+      403 ||
+    candidate.authorizationInvalid ===
+      true
+  );
+}
+
+function rethrowSpotifyAccessFailure(
+  error: unknown,
+): void {
+  if (
+    isSpotifyAccessFailure(
+      error,
+    )
+  ) {
+    throw error;
+  }
 }
 
 function buildTopGenres(
@@ -163,18 +274,271 @@ function deduplicateTracks(
   );
 }
 
-export async function saveSpotifyLibrarySnapshot(
+async function writeSpotifyLibrarySnapshot(
   snapshot: SpotifyLibrarySnapshot,
+  options: {
+    expectedConnectionGeneration?: number;
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<void> {
+  const guardedSession =
+    await readGuardedSpotifySession();
+
+  const connectionGuard =
+    options.connectionGuard ??
+    guardedSession?.connectionGuard;
+
+  const ownershipChanged =
+    !guardedSession ||
+    !connectionGuard ||
+    guardedSession.session.profile.id !==
+      snapshot.profile.id ||
+    (
+      options.expectedConnectionGeneration !==
+        undefined &&
+      options.expectedConnectionGeneration !==
+        connectionGuard.connectionGeneration
+    );
+
+  if (ownershipChanged) {
+    throw new Error(
+      "Spotify account changed while Canal was syncing. Sync the current account again.",
+    );
+  }
+
+  await assertSpotifyConnectionGuardCurrent(
+    connectionGuard,
+  );
+
+  const storedValue =
+    connectionGuard.canalOwnerId
+      ? {
+          version:
+            SPOTIFY_LIBRARY_ENVELOPE_VERSION,
+          ownerId:
+            connectionGuard.canalOwnerId,
+          accountGeneration:
+            connectionGuard.canalAccountGeneration,
+          snapshot,
+        } satisfies PersistedSpotifyLibraryEnvelope
+      : snapshot;
+
+  const serialized =
+    JSON.stringify(
+      storedValue,
+    );
+
   await AsyncStorage.setItem(
     SPOTIFY_LIBRARY_STORAGE_KEY,
-    JSON.stringify(snapshot),
+    serialized,
+  );
+
+  try {
+    await assertSpotifyConnectionGuardCurrent(
+      connectionGuard,
+    );
+  } catch (error) {
+    await AsyncStorage.removeItem(
+      SPOTIFY_LIBRARY_STORAGE_KEY,
+    );
+
+    throw error;
+  }
+}
+
+export async function saveSpotifyLibrarySnapshot(
+  snapshot: SpotifyLibrarySnapshot,
+  options: {
+    expectedConnectionGeneration?: number;
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
+): Promise<void> {
+  return runLibraryCacheOperation(
+    () =>
+      writeSpotifyLibrarySnapshot(
+        snapshot,
+        options,
+      ),
   );
 }
 
-export async function readSpotifyLibrarySnapshot(): Promise<
+function normalizeSpotifyLibrarySnapshot(
+  value: unknown,
+): SpotifyLibrarySnapshot | null {
+  if (
+    !value ||
+    typeof value !==
+      "object"
+  ) {
+    return null;
+  }
+
+  const parsed =
+    value as
+      Partial<SpotifyLibrarySnapshot>;
+
+  if (
+    !parsed.profile ||
+    typeof parsed.profile.id !==
+      "string" ||
+    typeof parsed.syncedAt !==
+      "string"
+  ) {
+    return null;
+  }
+
+  return {
+    syncedAt:
+      parsed.syncedAt,
+
+    profile:
+      parsed.profile,
+
+    topArtists:
+      Array.isArray(
+        parsed.topArtists,
+      )
+        ? parsed.topArtists
+        : [],
+
+    topTracks:
+      Array.isArray(
+        parsed.topTracks,
+      )
+        ? parsed.topTracks
+        : [],
+
+    recentTracks:
+      Array.isArray(
+        parsed.recentTracks,
+      )
+        ? parsed.recentTracks
+        : [],
+
+    savedTracks:
+      Array.isArray(
+        parsed.savedTracks,
+      )
+        ? parsed.savedTracks
+        : [],
+
+    playlistTracks:
+      Array.isArray(
+        parsed.playlistTracks,
+      )
+        ? parsed.playlistTracks
+        : [],
+
+    discoveryTracks:
+      Array.isArray(
+        parsed.discoveryTracks,
+      )
+        ? parsed.discoveryTracks
+        : [],
+
+    playlists:
+      Array.isArray(
+        parsed.playlists,
+      )
+        ? parsed.playlists
+        : [],
+
+    topGenres:
+      Array.isArray(
+        parsed.topGenres,
+      )
+        ? parsed.topGenres
+        : [],
+
+    trackGenres:
+      parsed.trackGenres &&
+      typeof parsed.trackGenres ===
+        "object"
+        ? parsed.trackGenres
+        : {},
+
+    warnings:
+      Array.isArray(
+        parsed.warnings,
+      )
+        ? parsed.warnings
+        : [],
+  };
+}
+
+function normalizeSpotifyLibraryEnvelope(
+  value: unknown,
+): PersistedSpotifyLibraryEnvelope | null {
+  if (
+    !value ||
+    typeof value !==
+      "object"
+  ) {
+    return null;
+  }
+
+  const candidate =
+    value as
+      Partial<PersistedSpotifyLibraryEnvelope>;
+
+  if (
+    candidate.version !==
+      SPOTIFY_LIBRARY_ENVELOPE_VERSION ||
+    typeof candidate.ownerId !==
+      "string" ||
+    !candidate.ownerId ||
+    typeof candidate.accountGeneration !==
+      "number" ||
+    !Number.isSafeInteger(
+      candidate.accountGeneration,
+    ) ||
+    candidate.accountGeneration < 1
+  ) {
+    return null;
+  }
+
+  const snapshot =
+    normalizeSpotifyLibrarySnapshot(
+      candidate.snapshot,
+    );
+
+  if (!snapshot) {
+    return null;
+  }
+
+  return {
+    version:
+      SPOTIFY_LIBRARY_ENVELOPE_VERSION,
+    ownerId:
+      candidate.ownerId,
+    accountGeneration:
+      candidate.accountGeneration,
+    snapshot,
+  };
+}
+
+async function loadSpotifyLibrarySnapshot(): Promise<
   SpotifyLibrarySnapshot | null
 > {
+  const guardedSession =
+    await readGuardedSpotifySession();
+
+  if (!guardedSession) {
+    await AsyncStorage.removeItem(
+      SPOTIFY_LIBRARY_STORAGE_KEY,
+    );
+
+    return null;
+  }
+
+  const {
+    connectionGuard,
+    session,
+  } =
+    guardedSession;
+
   const serialized =
     await AsyncStorage.getItem(
       SPOTIFY_LIBRARY_STORAGE_KEY,
@@ -185,112 +549,162 @@ export async function readSpotifyLibrarySnapshot(): Promise<
   }
 
   try {
-    const parsed =
-      JSON.parse(serialized) as
-        Partial<SpotifyLibrarySnapshot>;
+    const parsed: unknown =
+      JSON.parse(
+        serialized,
+      );
+
+    const envelope =
+      normalizeSpotifyLibraryEnvelope(
+        parsed,
+      );
+
+    const snapshot =
+      connectionGuard.canalOwnerId
+        ? (
+            envelope?.ownerId ===
+              connectionGuard.canalOwnerId &&
+            envelope.accountGeneration ===
+              connectionGuard.canalAccountGeneration
+              ? envelope.snapshot
+              : null
+          )
+        : (
+            envelope?.snapshot ??
+            normalizeSpotifyLibrarySnapshot(
+              parsed,
+            )
+          );
 
     if (
-      !parsed.profile ||
-      typeof parsed.syncedAt !==
-        "string"
+      !snapshot ||
+      session.profile.id !==
+        snapshot.profile.id
     ) {
+      await AsyncStorage.removeItem(
+        SPOTIFY_LIBRARY_STORAGE_KEY,
+      );
+
       return null;
     }
 
-    return {
-      syncedAt:
-        parsed.syncedAt,
+    await assertSpotifyConnectionGuardCurrent(
+      connectionGuard,
+    );
 
-      profile:
-        parsed.profile,
-
-      topArtists:
-        Array.isArray(
-          parsed.topArtists,
-        )
-          ? parsed.topArtists
-          : [],
-
-      topTracks:
-        Array.isArray(
-          parsed.topTracks,
-        )
-          ? parsed.topTracks
-          : [],
-
-      recentTracks:
-        Array.isArray(
-          parsed.recentTracks,
-        )
-          ? parsed.recentTracks
-          : [],
-
-      savedTracks:
-        Array.isArray(
-          parsed.savedTracks,
-        )
-          ? parsed.savedTracks
-          : [],
-
-      playlistTracks:
-        Array.isArray(
-          parsed.playlistTracks,
-        )
-          ? parsed.playlistTracks
-          : [],
-
-      discoveryTracks:
-        Array.isArray(
-          parsed.discoveryTracks,
-        )
-          ? parsed.discoveryTracks
-          : [],
-
-      playlists:
-        Array.isArray(
-          parsed.playlists,
-        )
-          ? parsed.playlists
-          : [],
-
-      topGenres:
-        Array.isArray(
-          parsed.topGenres,
-        )
-          ? parsed.topGenres
-          : [],
-
-      trackGenres:
-        parsed.trackGenres &&
-        typeof parsed.trackGenres ===
-          "object"
-          ? parsed.trackGenres
-          : {},
-
-      warnings:
-        Array.isArray(
-          parsed.warnings,
-        )
-          ? parsed.warnings
-          : [],
-    };
+    return snapshot;
   } catch {
+    await AsyncStorage.removeItem(
+      SPOTIFY_LIBRARY_STORAGE_KEY,
+    );
+
     return null;
   }
 }
 
-export async function clearSpotifyLibrarySnapshot(): Promise<void> {
-  await AsyncStorage.removeItem(
-    SPOTIFY_LIBRARY_STORAGE_KEY,
+export async function readSpotifyLibrarySnapshot(): Promise<
+  SpotifyLibrarySnapshot | null
+> {
+  return runLibraryCacheOperation(
+    loadSpotifyLibrarySnapshot,
   );
+}
+
+export async function clearSpotifyLibrarySnapshot(): Promise<void> {
+  return runLibraryCacheOperation(
+    () =>
+      AsyncStorage.removeItem(
+        SPOTIFY_LIBRARY_STORAGE_KEY,
+      ),
+  );
+}
+
+async function isSpotifyConnectionStillCurrent(
+  connectionGuard:
+    SpotifyConnectionGuard,
+): Promise<boolean> {
+  if (
+    !isSpotifyConnectionGuardCurrent(
+      connectionGuard,
+    )
+  ) {
+    return false;
+  }
+
+  try {
+    await assertSpotifyConnectionGuardCurrent(
+      connectionGuard,
+    );
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function getLatestSpotifyLibrarySnapshot(
   maxAgeMs =
     DEFAULT_LIBRARY_MAX_AGE_MS,
 ): Promise<LatestSpotifyLibraryResult> {
-  const cached =
+  const cachedCandidate =
     await readSpotifyLibrarySnapshot();
+
+  let connectionGuard:
+    Awaited<
+      ReturnType<
+        typeof requireGuardedSpotifyLibrarySession
+      >
+    >["connectionGuard"];
+
+  try {
+    ({
+      connectionGuard,
+    } =
+      await requireGuardedSpotifyLibrarySession());
+  } catch (error) {
+    const issue =
+      classifyRecoveryIssue(
+        error,
+        {
+          service:
+            "spotify",
+        },
+      );
+
+    lastLibraryRefreshFailureAt =
+      Date.now();
+
+    lastLibraryRefreshIssue =
+      issue;
+
+    const availableCached =
+      await readSpotifyLibrarySnapshot();
+
+    return {
+      snapshot:
+        availableCached,
+      refreshed:
+        false,
+      warning:
+        availableCached
+          ? `Using the last Spotify sync. ${issue.message}`
+          : issue.message,
+      issue,
+    };
+  }
+
+  const connectionIsCurrent =
+    await isSpotifyConnectionStillCurrent(
+      connectionGuard,
+    );
+
+  let cached =
+    cachedCandidate &&
+    cachedCandidate.profile.id ===
+      connectionGuard.profileId &&
+    connectionIsCurrent
+      ? cachedCandidate
+      : null;
 
   const syncedAt =
     cached
@@ -304,7 +718,13 @@ export async function getLatestSpotifyLibrarySnapshot(
     Date.now() - syncedAt <
       maxAgeMs;
 
-  if (cached && isFresh) {
+  if (
+    cached &&
+    isFresh &&
+    await isSpotifyConnectionStillCurrent(
+      connectionGuard,
+    )
+  ) {
     return {
       snapshot: cached,
       refreshed: false,
@@ -313,6 +733,9 @@ export async function getLatestSpotifyLibrarySnapshot(
 
   if (
     cached &&
+    await isSpotifyConnectionStillCurrent(
+      connectionGuard,
+    ) &&
     Date.now() -
       lastLibraryRefreshFailureAt <
       15 * 60 * 1000
@@ -322,25 +745,21 @@ export async function getLatestSpotifyLibrarySnapshot(
       refreshed: false,
       warning:
         "Using the last Spotify sync while Canal waits to retry the connection.",
+      issue:
+        lastLibraryRefreshIssue ??
+        undefined,
     };
   }
 
   try {
-    if (!libraryRefreshPromise) {
-      libraryRefreshPromise =
-        syncSpotifyLibrary().finally(
-          () => {
-            libraryRefreshPromise =
-              null;
-          },
-        );
-    }
-
     const refreshedSnapshot =
-      await libraryRefreshPromise;
+      await syncSpotifyLibrary();
 
     lastLibraryRefreshFailureAt =
       0;
+
+    lastLibraryRefreshIssue =
+      null;
 
     return {
       snapshot:
@@ -351,14 +770,36 @@ export async function getLatestSpotifyLibrarySnapshot(
     lastLibraryRefreshFailureAt =
       Date.now();
 
+    const issue =
+      classifyRecoveryIssue(
+        error,
+        {
+          service:
+            "spotify",
+        },
+      );
+
+    lastLibraryRefreshIssue =
+      issue;
+
+    if (
+      !(
+        await isSpotifyConnectionStillCurrent(
+          connectionGuard,
+        )
+      )
+    ) {
+      cached =
+        null;
+    }
+
     if (cached) {
       return {
         snapshot: cached,
         refreshed: false,
         warning:
-          error instanceof Error
-            ? `Using the last Spotify sync because the latest listening data could not refresh: ${error.message}`
-            : "Using the last Spotify sync because the latest listening data could not refresh.",
+          `Using the last Spotify sync because the latest listening data could not refresh. ${issue.message}`,
+        issue,
       };
     }
 
@@ -366,9 +807,8 @@ export async function getLatestSpotifyLibrarySnapshot(
       snapshot: null,
       refreshed: false,
       warning:
-        error instanceof Error
-          ? error.message
-          : "Canal could not load Spotify listening data.",
+        issue.message,
+      issue,
     };
   }
 }
@@ -376,6 +816,69 @@ export async function getLatestSpotifyLibrarySnapshot(
 export async function syncSpotifyLibrary(): Promise<
   SpotifyLibrarySnapshot
 > {
+  const connectionGeneration =
+    getSpotifyConnectionGeneration();
+
+  if (
+    libraryRefreshPromise &&
+    libraryRefreshGeneration ===
+      connectionGeneration
+  ) {
+    return libraryRefreshPromise;
+  }
+
+  const nextPromise =
+    performSpotifyLibrarySync(
+      connectionGeneration,
+    ).finally(
+      () => {
+        if (
+          libraryRefreshPromise ===
+          nextPromise
+        ) {
+          libraryRefreshPromise =
+            null;
+
+          libraryRefreshGeneration =
+            null;
+        }
+      },
+    );
+
+  libraryRefreshPromise =
+    nextPromise;
+
+  libraryRefreshGeneration =
+    connectionGeneration;
+
+  return nextPromise;
+}
+
+async function performSpotifyLibrarySync(
+  expectedConnectionGeneration: number,
+): Promise<
+  SpotifyLibrarySnapshot
+> {
+  const {
+    session:
+      syncSession,
+    connectionGuard,
+  } =
+    await requireGuardedSpotifyLibrarySession();
+
+  if (
+    expectedConnectionGeneration !==
+    connectionGuard.connectionGeneration
+  ) {
+    throw new Error(
+      "Spotify account changed while Canal was syncing. Sync the current account again.",
+    );
+  }
+
+  await assertSpotifyConnectionGuardCurrent(
+    connectionGuard,
+  );
+
   const [
     profileResult,
     topArtistsResult,
@@ -396,11 +899,70 @@ export async function syncSpotifyLibrary(): Promise<
     profileResult.status ===
     "rejected"
   ) {
+    throw profileResult.reason;
+  }
+
+  if (
+    profileResult.value.id !==
+    syncSession.profile.id
+  ) {
     throw new Error(
-      readErrorMessage(
-        profileResult.reason,
-      ),
+      "Spotify account changed while Canal was syncing. Sync the current account again.",
     );
+  }
+
+  await assertSpotifyConnectionGuardCurrent(
+    connectionGuard,
+  );
+
+  for (
+    const result of [
+      topArtistsResult,
+      topTracksResult,
+      recentResult,
+      savedResult,
+      playlistsResult,
+    ]
+  ) {
+    if (
+      result.status ===
+      "rejected"
+    ) {
+      rethrowSpotifyAccessFailure(
+        result.reason,
+      );
+    }
+  }
+
+  const libraryResults =
+    [
+      topArtistsResult,
+      topTracksResult,
+      recentResult,
+      savedResult,
+      playlistsResult,
+    ];
+
+  if (
+    libraryResults.every(
+      (result) =>
+        result.status ===
+        "rejected",
+    )
+  ) {
+    const firstFailure =
+      libraryResults.find(
+        (result) =>
+          result.status ===
+          "rejected",
+      );
+
+    if (
+      firstFailure?.status ===
+      "rejected"
+    ) {
+      throw firstFailure.reason;
+    }
   }
 
   const warnings: string[] =
@@ -511,6 +1073,10 @@ export async function syncSpotifyLibrary(): Promise<
         )),
       );
     } catch (error) {
+      rethrowSpotifyAccessFailure(
+        error,
+      );
+
       warnings.push(
         `Playlist ${playlist.name}: ${readErrorMessage(
           error,
@@ -545,6 +1111,10 @@ export async function syncSpotifyLibrary(): Promise<
         artistIds,
       );
   } catch (error) {
+    rethrowSpotifyAccessFailure(
+      error,
+    );
+
     warnings.push(
       `Track genres: ${readErrorMessage(
         error,
@@ -643,6 +1213,10 @@ export async function syncSpotifyLibrary(): Promise<
           );
       }
     } catch (error) {
+      rethrowSpotifyAccessFailure(
+        error,
+      );
+
       warnings.push(
         `Discovery for ${genre.name}: ${readErrorMessage(
           error,
@@ -696,7 +1270,18 @@ export async function syncSpotifyLibrary(): Promise<
 
   await saveSpotifyLibrarySnapshot(
     snapshot,
+    {
+      expectedConnectionGeneration:
+        expectedConnectionGeneration,
+      connectionGuard,
+    },
   );
+
+  lastLibraryRefreshFailureAt =
+    0;
+
+  lastLibraryRefreshIssue =
+    null;
 
   return snapshot;
 }
@@ -704,6 +1289,21 @@ export async function syncSpotifyLibrary(): Promise<
 export async function exportSpotifyTastePlaylist(
   snapshot: SpotifyLibrarySnapshot,
 ): Promise<SpotifyPlaylistExportResult> {
+  const {
+    session,
+    connectionGuard,
+  } =
+    await requireGuardedSpotifyPlaylistExportSession();
+
+  if (
+    session.profile.id !==
+    snapshot.profile.id
+  ) {
+    throw new Error(
+      "This Spotify snapshot belongs to a different account. Sync the current account before exporting.",
+    );
+  }
+
   const candidateTracks =
     deduplicateTracks([
       ...snapshot.topTracks,
@@ -748,11 +1348,18 @@ export async function exportSpotifyTastePlaylist(
         "A private playlist created by Canal from your Spotify top tracks, saved music, and recent listening.",
 
       isPublic: false,
-    });
+    },
+    {
+      connectionGuard,
+    },
+    );
 
   await addSpotifyItemsToPlaylist(
     playlist.id,
     trackUris,
+    {
+      connectionGuard,
+    },
   );
 
   return {

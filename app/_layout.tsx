@@ -21,6 +21,10 @@ import {
 } from "../providers/auth-provider";
 
 import {
+  ConnectivityProvider,
+} from "../providers/connectivity-provider";
+
+import {
   isOnboardingRequired,
   ONBOARDING_METADATA_KEY,
   subscribeToOnboarding,
@@ -262,6 +266,10 @@ function CanalNavigator() {
 
   return (
     <Stack
+      key={
+        userId ??
+        "signed-out"
+      }
       screenOptions={{
         headerShown:
           false,
@@ -348,9 +356,11 @@ function CanalNavigator() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <CanalNavigator />
-    </AuthProvider>
+    <ConnectivityProvider>
+      <AuthProvider>
+        <CanalNavigator />
+      </AuthProvider>
+    </ConnectivityProvider>
   );
 }
 

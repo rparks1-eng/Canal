@@ -218,20 +218,42 @@ export function PublicSnapshotCard(
               styles.creatorCopy
             }
           >
-            <Text
-              numberOfLines={
-                1
-              }
+            <View
               style={
-                styles.creatorName
+                styles.creatorNameRow
               }
             >
+              <Text
+                numberOfLines={
+                  1
+                }
+                style={
+                  styles.creatorName
+                }
+              >
+                {snapshot.creator
+                  .displayName}
+                {snapshot.isMine
+                  ? " · You"
+                  : ""}
+              </Text>
+
               {snapshot.creator
-                .displayName}
-              {snapshot.isMine
-                ? " · You"
-                : ""}
-            </Text>
+                .isCanal ||
+              snapshot.creator
+                .isVerified ? (
+                <Text
+                  style={
+                    styles.creatorBadge
+                  }
+                >
+                  {snapshot.creator
+                    .isCanal
+                    ? "CANAL"
+                    : "VERIFIED"}
+                </Text>
+              ) : null}
+            </View>
 
             <Text
               numberOfLines={
@@ -418,10 +440,30 @@ const styles =
       flex: 1,
     },
 
+    creatorNameRow: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 6,
+    },
+
     creatorName: {
+      flexShrink: 1,
       color: "#2A2724",
       fontSize: 11,
       fontWeight: "800",
+    },
+
+    creatorBadge: {
+      borderRadius: 6,
+      backgroundColor:
+        "#FFF0E5",
+      color: "#B9500B",
+      fontSize: 7,
+      fontWeight: "900",
+      paddingHorizontal: 5,
+      paddingVertical: 3,
     },
 
     creatorHandle: {

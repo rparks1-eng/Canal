@@ -4,7 +4,8 @@ import {
 } from "react-native";
 
 import {
-    LiveStage,
+  LiveStage,
+  readLiveStage,
 } from "./live-stages";
 
 export type InviteShareResult = {
@@ -27,6 +28,15 @@ type WebNavigator = {
     ) => Promise<void>;
   };
 };
+
+const CANONICAL_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+const STAGE_CODE_PATTERN =
+  /^\d{6}$/;
+
+const SHARE_CONFIGURATION_ERROR =
+  "Canal sharing is temporarily unavailable. Please try again later.";
 
 export async function shareCanalInvite(): Promise<InviteShareResult> {
   const baseUrl =
@@ -52,20 +62,29 @@ export async function shareCanalInvite(): Promise<InviteShareResult> {
 export async function shareStageInvite(
   stage: LiveStage,
 ): Promise<InviteShareResult> {
+  const shareableStage =
+    await validateShareableStage(
+      stage,
+    );
+
   const stageUrl =
-    buildStageUrl(stage.id);
+    buildStageUrl(
+      shareableStage.id,
+      shareableStage.code,
+    );
 
   const currentTrack =
-    stage.tracks[
-      stage.currentTrackIndex
+    shareableStage.tracks[
+      shareableStage
+        .currentTrackIndex
     ];
 
   const message = [
-    `Join my Canal Stage: ${stage.name}`,
+    `Join my Canal Stage: ${shareableStage.name}`,
     "",
-    `Stage code: ${stage.code}`,
-    `Hosted by ${stage.hostName}`,
-    stage.activity,
+    `Stage code: ${shareableStage.code}`,
+    `Hosted by ${shareableStage.hostName}`,
+    shareableStage.activity,
     currentTrack
       ? `Now playing: ${currentTrack.title} by ${currentTrack.artist}`
       : "",
@@ -76,7 +95,8 @@ export async function shareStageInvite(
     .join("\n");
 
   return shareInviteContent({
-    title: stage.name,
+    title:
+      shareableStage.name,
     message,
     url: stageUrl,
   });
@@ -161,15 +181,70 @@ async function shareInviteContent({
 }
 
 function getShareBaseUrl(): string {
-  return (
+  const configuredBaseUrl = (
     process.env
       .EXPO_PUBLIC_CANAL_SHARE_BASE_URL ??
     ""
-  ).replace(/\/+$/, "");
+  ).trim();
+
+  if (!configuredBaseUrl) {
+    return "";
+  }
+
+  try {
+    const parsedUrl =
+      new URL(
+        configuredBaseUrl,
+      );
+
+    if (
+      parsedUrl.protocol !==
+        "https:" ||
+      parsedUrl.username ||
+      parsedUrl.password ||
+      parsedUrl.search ||
+      parsedUrl.hash ||
+      configuredBaseUrl.includes(
+        "?",
+      ) ||
+      configuredBaseUrl.includes(
+        "#",
+      )
+    ) {
+      throw new Error(
+        SHARE_CONFIGURATION_ERROR,
+      );
+    }
+
+    const normalizedPath =
+      parsedUrl.pathname.replace(
+        /\/+$/,
+        "",
+      );
+
+    const normalizedOrigin =
+      `${parsedUrl.protocol}//` +
+      parsedUrl.host.toLowerCase();
+
+    return (
+      normalizedOrigin +
+      (
+        normalizedPath ===
+        "/"
+          ? ""
+          : normalizedPath
+      )
+    );
+  } catch {
+    throw new Error(
+      SHARE_CONFIGURATION_ERROR,
+    );
+  }
 }
 
 function buildStageUrl(
   stageId: string,
+  stageCode: string,
 ): string | undefined {
   const baseUrl =
     getShareBaseUrl();
@@ -178,5 +253,71 @@ function buildStageUrl(
     return undefined;
   }
 
-  return `${baseUrl}/live-stage/${stageId}`;
+  return (
+    `${baseUrl}/live-stage/` +
+    `${encodeURIComponent(stageId)}` +
+    `?code=${encodeURIComponent(stageCode)}`
+  );
+}
+
+async function validateShareableStage(
+  stage: LiveStage,
+): Promise<LiveStage> {
+  if (!stage.membershipRole) {
+    throw new Error(
+      "Join this Stage before sharing its invite.",
+    );
+  }
+
+  if (
+    stage.status !==
+    "live"
+  ) {
+    throw new Error(
+      "Only live Stages can be shared.",
+    );
+  }
+
+  if (
+    !CANONICAL_UUID_PATTERN.test(
+      stage.id,
+    ) ||
+    !STAGE_CODE_PATTERN.test(
+      stage.code,
+    ) ||
+    !STAGE_CODE_PATTERN.test(
+      stage.stageCode,
+    ) ||
+    stage.code !==
+      stage.stageCode
+  ) {
+    throw new Error(
+      "This Stage invite is unavailable. Refresh the Stage and try again.",
+    );
+  }
+
+  const currentStage =
+    await readLiveStage(
+      stage.id,
+    );
+
+  if (
+    !currentStage ||
+    currentStage.id !==
+      stage.id ||
+    currentStage.status !==
+      "live" ||
+    !currentStage
+      .membershipRole ||
+    currentStage.code !==
+      stage.code ||
+    currentStage.stageCode !==
+      stage.stageCode
+  ) {
+    throw new Error(
+      "Join this Stage before sharing its invite.",
+    );
+  }
+
+  return currentStage;
 }

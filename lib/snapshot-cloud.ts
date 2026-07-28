@@ -8,6 +8,10 @@ import {
   supabase,
 } from "./supabase";
 
+import {
+  canonicalSpotifyTrackUrl,
+} from "./spotify-track-links";
+
 type SnapshotRow = {
   id: string;
   user_id: string;
@@ -44,6 +48,20 @@ const SNAPSHOT_COLUMNS = [
   "updated_at",
 ].join(", ");
 
+const SNAPSHOT_ACCOUNT_CHANGED_ERROR_NAME =
+  "SnapshotAccountChangedError";
+
+class SnapshotAccountChangedError extends Error {
+  constructor() {
+    super(
+      "The active Snapshot account changed while Canal was working. Try again for the current account.",
+    );
+
+    this.name =
+      SNAPSHOT_ACCOUNT_CHANGED_ERROR_NAME;
+  }
+}
+
 export async function getSnapshotSessionUserId(): Promise<
   string | null
 > {
@@ -61,12 +79,15 @@ export async function getSnapshotSessionUserId(): Promise<
   return session?.user.id ?? null;
 }
 
-export async function listOwnCloudSnapshots(): Promise<{
+export async function listOwnCloudSnapshots(
+  expectedUserId: string,
+): Promise<{
   userId: string;
   snapshots: Snapshot[];
 }> {
-  const userId =
-    await requireSnapshotUserId();
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const {
     data,
@@ -81,7 +102,7 @@ export async function listOwnCloudSnapshots(): Promise<{
       )
       .eq(
         "user_id",
-        userId,
+        expectedUserId,
       )
       .order(
         "updated_at",
@@ -91,6 +112,10 @@ export async function listOwnCloudSnapshots(): Promise<{
         },
       );
 
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
+
   if (error) {
     throw new Error(
       `Canal could not load cloud Snapshots: ${error.message}`,
@@ -98,7 +123,8 @@ export async function listOwnCloudSnapshots(): Promise<{
   }
 
   return {
-    userId,
+    userId:
+      expectedUserId,
 
     snapshots:
       (
@@ -107,7 +133,7 @@ export async function listOwnCloudSnapshots(): Promise<{
         .map((row) =>
           snapshotFromRow(
             row,
-            userId,
+            expectedUserId,
           ),
         )
         .filter(
@@ -121,9 +147,11 @@ export async function listOwnCloudSnapshots(): Promise<{
 
 export async function readCloudSnapshot(
   snapshotId: string,
+  expectedUserId: string,
 ): Promise<Snapshot | null> {
-  const userId =
-    await requireSnapshotUserId();
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const {
     data,
@@ -142,6 +170,10 @@ export async function readCloudSnapshot(
       )
       .maybeSingle();
 
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
+
   if (error) {
     throw new Error(
       `Canal could not load this cloud Snapshot: ${error.message}`,
@@ -151,21 +183,23 @@ export async function readCloudSnapshot(
   return data
     ? snapshotFromRow(
         data as unknown as SnapshotRow,
-        userId,
+        expectedUserId,
       )
     : null;
 }
 
 export async function upsertCloudSnapshot(
   snapshot: Snapshot,
+  expectedUserId: string,
 ): Promise<Snapshot> {
-  const userId =
-    await requireSnapshotUserId();
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   if (
     snapshot.ownerId &&
     snapshot.ownerId !==
-      userId
+      expectedUserId
   ) {
     throw new Error(
       "Canal will not save another listener's Snapshot.",
@@ -186,7 +220,7 @@ export async function upsertCloudSnapshot(
             snapshot.id,
 
           user_id:
-            userId,
+            expectedUserId,
 
           scene_id:
             snapshot.sceneId,
@@ -239,6 +273,10 @@ export async function upsertCloudSnapshot(
       )
       .single();
 
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
+
   if (error) {
     throw new Error(
       `Canal could not sync this Snapshot: ${error.message}`,
@@ -248,7 +286,7 @@ export async function upsertCloudSnapshot(
   const syncedSnapshot =
     snapshotFromRow(
       data as unknown as SnapshotRow,
-      userId,
+      expectedUserId,
     );
 
   if (!syncedSnapshot) {
@@ -262,9 +300,11 @@ export async function upsertCloudSnapshot(
 
 export async function deleteCloudSnapshot(
   snapshotId: string,
+  expectedUserId: string,
 ): Promise<void> {
-  const userId =
-    await requireSnapshotUserId();
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const {
     error,
@@ -280,13 +320,31 @@ export async function deleteCloudSnapshot(
       )
       .eq(
         "user_id",
-        userId,
+        expectedUserId,
       );
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   if (error) {
     throw new Error(
       `Canal could not delete this cloud Snapshot: ${error.message}`,
     );
+  }
+}
+
+async function assertExpectedSnapshotUser(
+  expectedUserId: string,
+): Promise<void> {
+  const actualUserId =
+    await requireSnapshotUserId();
+
+  if (
+    actualUserId !==
+    expectedUserId
+  ) {
+    throw new SnapshotAccountChangedError();
   }
 }
 
@@ -362,9 +420,10 @@ function snapshotFromRow(
       ),
 
     spotifyUrl:
-      cleanOptionalString(
+      canonicalSpotifyTrackUrl(
         row.spotify_url,
-      ),
+      ) ??
+      undefined,
 
     positionMs:
       typeof row.position_ms ===

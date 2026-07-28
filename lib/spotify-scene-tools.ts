@@ -1,5 +1,11 @@
 import {
+  requireGuardedSpotifyPlaylistExportSession,
+  SpotifySessionChangedError,
   spotifyAuthenticatedFetch,
+} from "./spotify-auth";
+
+import type {
+  SpotifyConnectionGuard,
 } from "./spotify-auth";
 
 import type {
@@ -63,6 +69,8 @@ type SpotifyErrorPayload = {
 async function spotifyRequest<T>(
   path: string,
   init?: RequestInit,
+  connectionGuard?:
+    SpotifyConnectionGuard,
 ): Promise<T> {
   const response =
     await spotifyAuthenticatedFetch(
@@ -83,6 +91,7 @@ async function spotifyRequest<T>(
 
         },
       },
+      connectionGuard,
     );
 
   const raw =
@@ -172,6 +181,8 @@ async function spotifyRequest<T>(
 
 export async function searchSpotifySceneTracks(
   query: string,
+  connectionGuard?:
+    SpotifyConnectionGuard,
 ): Promise<
   SpotifySceneSearchTrack[]
 > {
@@ -196,6 +207,8 @@ export async function searchSpotifySceneTracks(
       };
     }>(
       `/search?type=track&limit=10&q=${encodeURIComponent(normalized)}`,
+      undefined,
+      connectionGuard,
     );
 
   return (
@@ -456,6 +469,8 @@ function buildTrackSearchQuery(
 
 async function resolveSceneTrackUri(
   track: SceneTrack,
+  connectionGuard:
+    SpotifyConnectionGuard,
 ): Promise<string | null> {
   if (
     track.spotifyUri
@@ -479,6 +494,7 @@ async function resolveSceneTrackUri(
     const matches =
       await searchSpotifySceneTracks(
         query,
+        connectionGuard,
       );
 
     return (
@@ -486,7 +502,14 @@ async function resolveSceneTrackUri(
         ?.uri ??
       null
     );
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof
+      SpotifySessionChangedError
+    ) {
+      throw error;
+    }
+
     return null;
   }
 }
@@ -504,10 +527,19 @@ export async function exportSceneToSpotify(
     );
   }
 
+  const {
+    connectionGuard,
+  } =
+    await requireGuardedSpotifyPlaylistExportSession();
+
   const uriResults =
     await Promise.all(
       scene.tracks.map(
-        resolveSceneTrackUri,
+        (track) =>
+          resolveSceneTrackUri(
+            track,
+            connectionGuard,
+          ),
       ),
     );
 
@@ -570,6 +602,7 @@ export async function exportSceneToSpotify(
               false,
           }),
       },
+      connectionGuard,
     );
 
   if (!playlist.id) {
@@ -602,6 +635,7 @@ export async function exportSceneToSpotify(
               chunk,
           }),
       },
+      connectionGuard,
     );
   }
 
