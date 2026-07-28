@@ -24,6 +24,18 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  PublicSnapshotCard,
+} from "../../components/PublicSnapshotCard";
+
+import {
+  loadPublicSnapshotFeed,
+} from "../../lib/public-snapshots";
+
+import type {
+  PublicCanalSnapshot,
+} from "../../lib/public-snapshots";
+
+import {
   loadExploreScenes,
   savePublicSceneToLibrary,
 } from "../../lib/social";
@@ -31,6 +43,10 @@ import {
 import type {
   PublicCanalScene,
 } from "../../lib/social";
+
+type ExploreContent =
+  | "snapshots"
+  | "scenes";
 
 function PublicSceneCard(
   props: {
@@ -290,6 +306,22 @@ export default function ExploreScreen() {
     >([]);
 
   const [
+    snapshots,
+    setSnapshots,
+  ] =
+    useState<
+      PublicCanalSnapshot[]
+    >([]);
+
+  const [
+    activeContent,
+    setActiveContent,
+  ] =
+    useState<ExploreContent>(
+      "snapshots",
+    );
+
+  const [
     query,
     setQuery,
   ] = useState("");
@@ -314,6 +346,17 @@ export default function ExploreScreen() {
     setErrorMessage,
   ] = useState("");
 
+  const [
+    loadErrors,
+    setLoadErrors,
+  ] = useState<{
+    snapshots: string;
+    scenes: string;
+  }>({
+    snapshots: "",
+    scenes: "",
+  });
+
   const load =
     useCallback(
       async (): Promise<void> => {
@@ -321,26 +364,67 @@ export default function ExploreScreen() {
           true,
         );
 
-        setErrorMessage("");
+        setLoadErrors({
+          snapshots: "",
+          scenes: "",
+        });
 
-        try {
-          const result =
-            await loadExploreScenes();
+        const [
+          snapshotResult,
+          sceneResult,
+        ] =
+          await Promise.allSettled([
+            loadPublicSnapshotFeed(),
+            loadExploreScenes(),
+          ]);
 
-          setScenes(
-            result,
+        if (
+          snapshotResult.status ===
+          "fulfilled"
+        ) {
+          setSnapshots(
+            snapshotResult.value,
           );
-        } catch (error) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Canal could not load Explore.",
-          );
-        } finally {
-          setLoading(
-            false,
+        } else {
+          setLoadErrors(
+            (current) => ({
+              ...current,
+
+              snapshots:
+                snapshotResult.reason instanceof
+                Error
+                  ? snapshotResult.reason
+                      .message
+                  : "Canal could not load public Snapshots.",
+            }),
           );
         }
+
+        if (
+          sceneResult.status ===
+          "fulfilled"
+        ) {
+          setScenes(
+            sceneResult.value,
+          );
+        } else {
+          setLoadErrors(
+            (current) => ({
+              ...current,
+
+              scenes:
+                sceneResult.reason instanceof
+                Error
+                  ? sceneResult.reason
+                      .message
+                  : "Canal could not load public Scenes.",
+            }),
+          );
+        }
+
+        setLoading(
+          false,
+        );
       },
       [],
     );
@@ -356,7 +440,7 @@ export default function ExploreScreen() {
     ),
   );
 
-  const filtered =
+  const filteredScenes =
     useMemo(
       () => {
         const needle =
@@ -396,6 +480,54 @@ export default function ExploreScreen() {
         scenes,
       ],
     );
+
+  const filteredSnapshots =
+    useMemo(
+      () => {
+        const needle =
+          query
+            .trim()
+            .toLowerCase();
+
+        if (!needle) {
+          return snapshots;
+        }
+
+        return snapshots.filter(
+          (snapshot) =>
+            [
+              snapshot.sceneName,
+              snapshot.trackTitle,
+              snapshot.trackArtist,
+              snapshot.note,
+              snapshot.mood,
+              snapshot.creator
+                .displayName,
+              snapshot.creator
+                .handle,
+            ]
+              .filter(
+                Boolean,
+              )
+              .join(
+                " ",
+              )
+              .toLowerCase()
+              .includes(
+                needle,
+              ),
+        );
+      },
+      [
+        query,
+        snapshots,
+      ],
+    );
+
+  const activeError =
+    loadErrors[
+      activeContent
+    ];
 
   const save =
     async (
@@ -487,7 +619,7 @@ export default function ExploreScreen() {
                 styles.subtitle
               }
             >
-              Public Scenes from Canal creators.
+              Public moments and Scenes from Canal creators.
             </Text>
           </View>
 
@@ -517,7 +649,7 @@ export default function ExploreScreen() {
           onChangeText={
             setQuery
           }
-          placeholder="Search Scenes, creators, moods, or artists"
+          placeholder="Search moments, Scenes, creators, moods, or artists"
           placeholderTextColor="#9A938C"
           autoCapitalize="none"
           autoCorrect={
@@ -527,6 +659,45 @@ export default function ExploreScreen() {
             styles.searchInput
           }
         />
+
+        <View
+          accessibilityRole="tablist"
+          style={
+            styles.segmentedControl
+          }
+        >
+          <ExploreTab
+            active={
+              activeContent ===
+              "snapshots"
+            }
+            count={
+              snapshots.length
+            }
+            label="Snapshots"
+            onPress={() =>
+              setActiveContent(
+                "snapshots",
+              )
+            }
+          />
+
+          <ExploreTab
+            active={
+              activeContent ===
+              "scenes"
+            }
+            count={
+              scenes.length
+            }
+            label="Scenes"
+            onPress={() =>
+              setActiveContent(
+                "scenes",
+              )
+            }
+          />
+        </View>
 
         {message ? (
           <View
@@ -546,6 +717,7 @@ export default function ExploreScreen() {
 
         {errorMessage ? (
           <View
+            accessibilityRole="alert"
             style={
               styles.errorBox
             }
@@ -557,6 +729,69 @@ export default function ExploreScreen() {
             >
               {errorMessage}
             </Text>
+          </View>
+        ) : null}
+
+        {activeError ? (
+          <View
+            accessibilityRole="alert"
+            style={
+              styles.errorBox
+            }
+          >
+            <Text
+              style={
+                styles.errorTitle
+              }
+            >
+              {activeError
+                .toLowerCase()
+                .includes(
+                  "sign in",
+                )
+                ? "Sign in required"
+                : "Connection interrupted"}
+            </Text>
+
+            <Text
+              style={
+                styles.errorText
+              }
+            >
+              {activeError}
+            </Text>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                activeError
+                  .toLowerCase()
+                  .includes(
+                    "sign in",
+                  )
+                  ? router.replace(
+                      "/login" as never,
+                    )
+                  : void load()
+              }
+              style={
+                styles.recoveryButton
+              }
+            >
+              <Text
+                style={
+                  styles.recoveryButtonText
+                }
+              >
+                {activeError
+                  .toLowerCase()
+                  .includes(
+                    "sign in",
+                  )
+                  ? "Go to sign in"
+                  : "Try again"}
+              </Text>
+            </Pressable>
           </View>
         ) : null}
 
@@ -575,10 +810,20 @@ export default function ExploreScreen() {
                 styles.loadingText
               }
             >
-              Loading public Scenes...
+              Loading public {activeContent}...
             </Text>
           </View>
-        ) : filtered.length ===
+        ) : activeError &&
+          (
+            activeContent ===
+              "snapshots"
+              ? filteredSnapshots.length ===
+                0
+              : filteredScenes.length ===
+                0
+          ) ? null : activeContent ===
+          "snapshots" &&
+          filteredSnapshots.length ===
           0 ? (
           <View
             style={
@@ -590,7 +835,9 @@ export default function ExploreScreen() {
                 styles.emptyTitle
               }
             >
-              No public Scenes yet
+              {query.trim()
+                ? "No matching Snapshots"
+                : "No public Snapshots yet"}
             </Text>
 
             <Text
@@ -598,7 +845,57 @@ export default function ExploreScreen() {
                 styles.emptyText
               }
             >
-              Change one of your created Scenes to Public in Library. Your own public Scene will appear here so the social flow can be tested before other creators join.
+              {query.trim()
+                ? "Try a different Scene, creator, mood, track, or note."
+                : "Publish a Snapshot from one of your Scenes. Your public moment will appear here for other listeners to discover."}
+            </Text>
+          </View>
+        ) : activeContent ===
+          "snapshots" ? (
+          <View
+            style={
+              styles.list
+            }
+          >
+            {filteredSnapshots.map(
+              (snapshot) => (
+                <PublicSnapshotCard
+                  key={
+                    snapshot.id
+                  }
+                  showCreator
+                  snapshot={
+                    snapshot
+                  }
+                />
+              ),
+            )}
+          </View>
+        ) : filteredScenes.length ===
+          0 ? (
+          <View
+            style={
+              styles.emptyCard
+            }
+          >
+            <Text
+              style={
+                styles.emptyTitle
+              }
+            >
+              {query.trim()
+                ? "No matching Scenes"
+                : "No public Scenes yet"}
+            </Text>
+
+            <Text
+              style={
+                styles.emptyText
+              }
+            >
+              {query.trim()
+                ? "Try a different Scene, creator, mood, or artist."
+                : "Change one of your created Scenes to Public in Library. Your own public Scene will appear here so the social flow can be tested before other creators join."}
             </Text>
           </View>
         ) : (
@@ -607,7 +904,7 @@ export default function ExploreScreen() {
               styles.list
             }
           >
-            {filtered.map(
+            {filteredScenes.map(
               (item) => {
                 const key =
                   `${item.ownerId}:${item.sceneId}`;
@@ -704,6 +1001,63 @@ const styles =
       fontSize: 13,
       paddingHorizontal: 14,
       marginBottom: 14,
+    },
+
+    segmentedControl: {
+      flexDirection: "row",
+      borderRadius: 16,
+      backgroundColor:
+        "#EEE7E1",
+      padding: 4,
+      marginBottom: 14,
+      gap: 4,
+    },
+
+    segmentButton: {
+      minHeight: 42,
+      flex: 1,
+      flexDirection: "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 13,
+      gap: 7,
+    },
+
+    segmentButtonActive: {
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    segmentText: {
+      color: "#817972",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    segmentTextActive: {
+      color: "#1B1B1B",
+    },
+
+    segmentCount: {
+      minWidth: 22,
+      borderRadius: 99,
+      backgroundColor:
+        "#DCD3CC",
+      color: "#625B55",
+      fontSize: 9,
+      fontWeight: "900",
+      textAlign: "center",
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      overflow: "hidden",
+    },
+
+    segmentCountActive: {
+      backgroundColor:
+        "#FFF0E5",
+      color: "#B65413",
     },
 
     list: {
@@ -911,7 +1265,81 @@ const styles =
       lineHeight: 18,
     },
 
+    errorTitle: {
+      color: "#8D211C",
+      fontSize: 13,
+      fontWeight: "900",
+      marginBottom: 4,
+    },
+
+    recoveryButton: {
+      alignSelf:
+        "flex-start",
+      borderRadius: 12,
+      backgroundColor:
+        "#A62E27",
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      marginTop: 10,
+    },
+
+    recoveryButtonText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "900",
+    },
+
     pressed: {
       opacity: 0.7,
     },
   });
+
+function ExploreTab(
+  props: {
+    active: boolean;
+    count: number;
+    label: string;
+    onPress: () => void;
+  },
+) {
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{
+        selected:
+          props.active,
+      }}
+      onPress={
+        props.onPress
+      }
+      style={[
+        styles.segmentButton,
+
+        props.active &&
+          styles.segmentButtonActive,
+      ]}
+    >
+      <Text
+        style={[
+          styles.segmentText,
+
+          props.active &&
+            styles.segmentTextActive,
+        ]}
+      >
+        {props.label}
+      </Text>
+
+      <Text
+        style={[
+          styles.segmentCount,
+
+          props.active &&
+            styles.segmentCountActive,
+        ]}
+      >
+        {props.count}
+      </Text>
+    </Pressable>
+  );
+}

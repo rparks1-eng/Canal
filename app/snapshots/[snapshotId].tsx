@@ -37,6 +37,20 @@ import {
     SoundscapeProfile,
 } from "../../lib/soundscape";
 
+function closeSnapshot(): void {
+  if (
+    router.canGoBack()
+  ) {
+    router.back();
+
+    return;
+  }
+
+  router.replace(
+    "/snapshots",
+  );
+}
+
 export default function SnapshotDetailScreen() {
   const params =
     useLocalSearchParams();
@@ -498,10 +512,8 @@ export default function SnapshotDetailScreen() {
 
           <Pressable
             accessibilityRole="button"
-            onPress={() =>
-              router.replace(
-                "/snapshots",
-              )
+            onPress={
+              closeSnapshot
             }
             style={({ pressed }) => [
               styles.primaryButton,

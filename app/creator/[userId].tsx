@@ -24,6 +24,18 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  PublicSnapshotGrid,
+} from "../../components/PublicSnapshotCard";
+
+import {
+  loadPublicProfileSnapshots,
+} from "../../lib/public-snapshots";
+
+import type {
+  PublicCanalSnapshot,
+} from "../../lib/public-snapshots";
+
+import {
   loadPublicProfile,
   savePublicSceneToLibrary,
 } from "../../lib/social";
@@ -104,6 +116,19 @@ export default function CreatorProfileScreen() {
     >([]);
 
   const [
+    snapshots,
+    setSnapshots,
+  ] =
+    useState<
+      PublicCanalSnapshot[]
+    >([]);
+
+  const [
+    snapshotError,
+    setSnapshotError,
+  ] = useState("");
+
+  const [
     loading,
     setLoading,
   ] = useState(true);
@@ -143,20 +168,56 @@ export default function CreatorProfileScreen() {
         );
 
         setErrorMessage("");
+        setSnapshotError("");
 
         try {
-          const result =
-            await loadPublicProfile(
-              userId,
-            );
+          const [
+            profileResult,
+            snapshotResult,
+          ] =
+            await Promise.allSettled([
+              loadPublicProfile(
+                userId,
+              ),
+
+              loadPublicProfileSnapshots(
+                userId,
+              ),
+            ]);
+
+          if (
+            profileResult.status ===
+            "rejected"
+          ) {
+            throw profileResult.reason;
+          }
 
           setProfile(
-            result.profile,
+            profileResult.value
+              .profile,
           );
 
           setScenes(
-            result.scenes,
+            profileResult.value
+              .scenes,
           );
+
+          if (
+            snapshotResult.status ===
+            "fulfilled"
+          ) {
+            setSnapshots(
+              snapshotResult.value,
+            );
+          } else {
+            setSnapshotError(
+              snapshotResult.reason instanceof
+              Error
+                ? snapshotResult.reason
+                    .message
+                : "Canal could not load this creator's Snapshots.",
+            );
+          }
         } catch (error) {
           setErrorMessage(
             error instanceof Error
@@ -414,6 +475,84 @@ export default function CreatorProfileScreen() {
               </Text>
             </View>
           ) : null}
+
+          <View
+            style={
+              styles.sectionHeader
+            }
+          >
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
+              Public Snapshots
+            </Text>
+
+            <Text
+              style={
+                styles.sceneCount
+              }
+            >
+              {snapshots.length}
+            </Text>
+          </View>
+
+          {snapshotError ? (
+            <View
+              accessibilityRole="alert"
+              style={
+                styles.errorBox
+              }
+            >
+              <Text
+                style={
+                  styles.errorText
+                }
+              >
+                {snapshotError}
+              </Text>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  void load()
+                }
+                style={
+                  styles.retryButton
+                }
+              >
+                <Text
+                  style={
+                    styles.retryButtonText
+                  }
+                >
+                  Try again
+                </Text>
+              </Pressable>
+            </View>
+          ) : snapshots.length ===
+            0 ? (
+            <View
+              style={
+                styles.emptyCard
+              }
+            >
+              <Text
+                style={
+                  styles.emptyText
+                }
+              >
+                This creator has no public Snapshots.
+              </Text>
+            </View>
+          ) : (
+            <PublicSnapshotGrid
+              snapshots={
+                snapshots
+              }
+            />
+          )}
 
           <View
             style={
@@ -870,5 +1009,22 @@ const styles =
       color: "#A62E27",
       fontSize: 12,
       lineHeight: 18,
+    },
+
+    retryButton: {
+      alignSelf:
+        "flex-start",
+      borderRadius: 12,
+      backgroundColor:
+        "#A62E27",
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      marginTop: 10,
+    },
+
+    retryButtonText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "900",
     },
   });

@@ -25,8 +25,20 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  PublicSnapshotGrid,
+} from "../../components/PublicSnapshotCard";
+
+import {
   readScenes,
 } from "../../lib/scenes";
+
+import {
+  readSnapshotsWithStatus,
+} from "../../lib/snapshots";
+
+import type {
+  Snapshot,
+} from "../../lib/snapshots";
 
 import {
   supabase,
@@ -147,6 +159,19 @@ export default function ProfileScreen() {
   ] = useState(0);
 
   const [
+    publicSnapshots,
+    setPublicSnapshots,
+  ] =
+    useState<
+      Snapshot[]
+    >([]);
+
+  const [
+    snapshotWarning,
+    setSnapshotWarning,
+  ] = useState("");
+
+  const [
     editing,
     setEditing,
   ] = useState(false);
@@ -202,6 +227,7 @@ export default function ProfileScreen() {
           const [
             profileResult,
             scenes,
+            snapshotResult,
           ] =
             await Promise.all([
               supabase
@@ -218,6 +244,8 @@ export default function ProfileScreen() {
                 .maybeSingle(),
 
               readScenes(),
+
+              readSnapshotsWithStatus(),
             ]);
 
           if (
@@ -284,6 +312,19 @@ export default function ProfileScreen() {
                 scene.libraryType ===
                 "saved",
             ).length,
+          );
+
+          setPublicSnapshots(
+            snapshotResult.value.filter(
+              (snapshot) =>
+                snapshot.visibility ===
+                "public",
+            ),
+          );
+
+          setSnapshotWarning(
+            snapshotResult.warning ??
+            "",
           );
         } catch (error) {
           setErrorMessage(
@@ -746,6 +787,106 @@ export default function ProfileScreen() {
               />
             </View>
 
+            <View
+              style={
+                styles.snapshotSectionHeader
+              }
+            >
+              <View>
+                <Text
+                  style={
+                    styles.snapshotSectionTitle
+                  }
+                >
+                  Public Snapshots
+                </Text>
+
+                <Text
+                  style={
+                    styles.snapshotSectionSubtitle
+                  }
+                >
+                  Moments visible on your profile.
+                </Text>
+              </View>
+
+              <Text
+                style={
+                  styles.snapshotCount
+                }
+              >
+                {publicSnapshots.length}
+              </Text>
+            </View>
+
+            {snapshotWarning ? (
+              <View
+                accessibilityRole="alert"
+                style={
+                  styles.snapshotWarning
+                }
+              >
+                <Text
+                  style={
+                    styles.snapshotWarningText
+                  }
+                >
+                  {snapshotWarning}
+                </Text>
+              </View>
+            ) : null}
+
+            {publicSnapshots.length ===
+            0 ? (
+              <View
+                style={
+                  styles.snapshotEmpty
+                }
+              >
+                <Text
+                  style={
+                    styles.snapshotEmptyTitle
+                  }
+                >
+                  No public Snapshots
+                </Text>
+
+                <Text
+                  style={
+                    styles.snapshotEmptyText
+                  }
+                >
+                  Publish a Snapshot from a Scene to add it to your profile.
+                </Text>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push(
+                      "/snapshots" as never,
+                    )
+                  }
+                  style={
+                    styles.snapshotAction
+                  }
+                >
+                  <Text
+                    style={
+                      styles.snapshotActionText
+                    }
+                  >
+                    Open Snapshots
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <PublicSnapshotGrid
+                snapshots={
+                  publicSnapshots
+                }
+              />
+            )}
+
             <Pressable
               accessibilityRole="button"
               onPress={
@@ -921,7 +1062,7 @@ export default function ProfileScreen() {
                     styles.publicDescription
                   }
                 >
-                  Other signed-in users can see your profile and public Scenes.
+                  Other signed-in users can see your profile, public Scenes, and public Snapshots.
                 </Text>
               </View>
 
@@ -1253,6 +1394,87 @@ const styles =
       backgroundColor:
         "#F0ECE8",
       marginVertical: 17,
+    },
+
+    snapshotSectionHeader: {
+      flexDirection: "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      marginTop: 4,
+    },
+
+    snapshotSectionTitle: {
+      color: "#1B1B1B",
+      fontSize: 19,
+      fontWeight: "900",
+    },
+
+    snapshotSectionSubtitle: {
+      color: "#817972",
+      fontSize: 11,
+      marginTop: 3,
+    },
+
+    snapshotCount: {
+      color: "#F47A24",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    snapshotWarning: {
+      borderRadius: 15,
+      backgroundColor:
+        "#FFF5E8",
+      padding: 13,
+      marginTop: 10,
+    },
+
+    snapshotWarningText: {
+      color: "#865216",
+      fontSize: 11,
+      lineHeight: 17,
+    },
+
+    snapshotEmpty: {
+      borderWidth: 1,
+      borderColor:
+        "#EEE5DE",
+      borderRadius: 20,
+      backgroundColor:
+        "#FFFFFF",
+      padding: 18,
+    },
+
+    snapshotEmptyTitle: {
+      color: "#1B1B1B",
+      fontSize: 15,
+      fontWeight: "900",
+    },
+
+    snapshotEmptyText: {
+      color: "#746D67",
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 5,
+    },
+
+    snapshotAction: {
+      alignSelf:
+        "flex-start",
+      borderRadius: 12,
+      backgroundColor:
+        "#F47A24",
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      marginTop: 12,
+    },
+
+    snapshotActionText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "900",
     },
 
     editButton: {
