@@ -374,7 +374,8 @@ export default function LoginScreen() {
               >
                 Your Supabase URL or
                 publishable key is missing
-                from the Canal .env file.
+                from Canal&apos;s
+                .env.local file.
               </Text>
             </View>
           ) : null}

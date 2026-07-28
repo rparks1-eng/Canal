@@ -2,8 +2,8 @@ import {
     getSpotifyCachedJson,
 } from "./spotify-cache";
 import {
-    getValidSpotifyAccessToken,
-} from "./spotify-session";
+    spotifyAuthenticatedFetch,
+} from "./spotify-auth";
 
 const SPOTIFY_API_BASE =
   "https://api.spotify.com/v1";
@@ -96,17 +96,12 @@ export async function exportSceneToSpotify({
     );
   }
 
-  const accessToken =
-    await getValidSpotifyAccessToken();
-
   const playlistResponse =
-    await fetch(
+    await spotifyAuthenticatedFetch(
       `${SPOTIFY_API_BASE}/me/playlists`,
       {
         method: "POST",
         headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
           "Content-Type":
             "application/json",
         },
@@ -132,13 +127,11 @@ export async function exportSceneToSpotify({
       SpotifyPlaylistResponse;
 
   const addItemsResponse =
-    await fetch(
+    await spotifyAuthenticatedFetch(
       `${SPOTIFY_API_BASE}/playlists/${playlist.id}/items`,
       {
         method: "POST",
         headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
           "Content-Type":
             "application/json",
         },

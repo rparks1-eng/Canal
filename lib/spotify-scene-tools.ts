@@ -1,5 +1,5 @@
 import {
-  getSpotifyAccessToken,
+  spotifyAuthenticatedFetch,
 } from "./spotify-auth";
 
 import type {
@@ -64,19 +64,13 @@ async function spotifyRequest<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const accessToken =
-    await getSpotifyAccessToken();
-
   const response =
-    await fetch(
+    await spotifyAuthenticatedFetch(
       `${SPOTIFY_API_BASE}${path}`,
       {
         ...init,
 
         headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
-
           Accept:
             "application/json",
 

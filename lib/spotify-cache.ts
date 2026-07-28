@@ -1,8 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
-    getValidSpotifyAccessToken,
-} from "./spotify-session";
+    spotifyAuthenticatedFetch,
+} from "./spotify-auth";
 
 const SPOTIFY_API_BASE_URL =
   "https://api.spotify.com/v1";
@@ -54,15 +54,10 @@ export async function getSpotifyCachedJson<T>(
     return existingEntry.data;
   }
 
-  const accessToken =
-    await getValidSpotifyAccessToken();
-
   const headers: Record<
     string,
     string
   > = {
-    Authorization:
-      `Bearer ${accessToken}`,
     Accept: "application/json",
   };
 
@@ -74,12 +69,13 @@ export async function getSpotifyCachedJson<T>(
       existingEntry.etag;
   }
 
-  const response = await fetch(
-    requestUrl,
-    {
+  const response =
+    await spotifyAuthenticatedFetch(
+      requestUrl,
+      {
       headers,
-    },
-  );
+      },
+    );
 
   if (
     response.status === 304 &&

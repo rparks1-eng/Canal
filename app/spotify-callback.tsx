@@ -14,17 +14,32 @@ import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
+import {
+  readSpotifyReturnRoute,
+} from "../lib/spotify-auth-return";
+
 WebBrowser.maybeCompleteAuthSession();
 
 export default function SpotifyCallbackScreen() {
   useEffect(() => {
+    let active =
+      true;
+
     const timer = setTimeout(() => {
-      router.replace(
-        "/music-services",
-      );
+      void readSpotifyReturnRoute()
+        .then((route) => {
+          if (active) {
+            router.replace(
+              route as never,
+            );
+          }
+        });
     }, 300);
 
     return () => {
+      active =
+        false;
+
       clearTimeout(timer);
     };
   }, []);

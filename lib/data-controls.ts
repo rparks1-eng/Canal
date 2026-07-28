@@ -9,7 +9,8 @@ import {
 } from "./spotify-cache";
 import {
     clearSpotifySession,
-} from "./spotify-session";
+    SPOTIFY_ASYNC_STORAGE_KEY,
+} from "./spotify-auth";
 import {
     CANAL_STORAGE_PREFIX,
 } from "./storage-keys";
@@ -32,7 +33,9 @@ export async function exportCanalData(): Promise<string> {
     allKeys.filter((key) =>
       key.startsWith(
         CANAL_STORAGE_PREFIX,
-      ),
+      ) &&
+      key !==
+        SPOTIFY_ASYNC_STORAGE_KEY,
     );
 
   const storedEntries =
@@ -93,7 +96,9 @@ export async function getCanalStorageSummary(): Promise<{
     allKeys.filter((key) =>
       key.startsWith(
         CANAL_STORAGE_PREFIX,
-      ),
+      ) &&
+      key !==
+        SPOTIFY_ASYNC_STORAGE_KEY,
     );
 
   const storedEntries =

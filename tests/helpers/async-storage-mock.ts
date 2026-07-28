@@ -50,6 +50,44 @@ export const mockAsyncStorage = {
       }
     },
   ),
+
+  getAllKeys: jest.fn(
+    async () =>
+      Array.from(
+        mockStorage.keys(),
+      ),
+  ),
+
+  multiGet: jest.fn(
+    async (
+      keys: string[],
+    ) =>
+      keys.map(
+        (key) =>
+          [
+            key,
+            mockStorage.get(
+              key,
+            ) ??
+              null,
+          ] as [
+            string,
+            string | null,
+          ],
+      ),
+  ),
+
+  multiRemove: jest.fn(
+    async (
+      keys: string[],
+    ) => {
+      for (const key of keys) {
+        mockStorage.delete(
+          key,
+        );
+      }
+    },
+  ),
 };
 
 export default

@@ -33,8 +33,11 @@ import {
 } from "../lib/app-session";
 
 import {
+  getSpotifyClientId,
   getSpotifyRedirectUri,
-} from "../lib/spotify-redirect";
+  SPOTIFY_SCOPES,
+  spotifyDiscovery,
+} from "../lib/spotify-config";
 
 import {
   getValidSpotifySession,
@@ -52,26 +55,6 @@ import {
 } from "../lib/spotify-library";
 
 WebBrowser.maybeCompleteAuthSession();
-
-const discovery: AuthSession.DiscoveryDocument = {
-  authorizationEndpoint:
-    "https://accounts.spotify.com/authorize",
-
-  tokenEndpoint:
-    "https://accounts.spotify.com/api/token",
-};
-
-const SPOTIFY_SCOPES = [
-  "user-read-private",
-  "user-read-email",
-  "user-top-read",
-  "user-library-read",
-  "user-read-recently-played",
-  "playlist-read-private",
-  "playlist-read-collaborative",
-  "playlist-modify-private",
-  "playlist-modify-public",
-];
 
 type ConnectionState =
   | "loading"
@@ -106,9 +89,7 @@ export default function MusicServicesScreen() {
     params.mode === "login";
 
   const clientId =
-    process.env
-      .EXPO_PUBLIC_SPOTIFY_CLIENT_ID ??
-    "";
+    getSpotifyClientId();
 
   const redirectUri =
     getSpotifyRedirectUri();
@@ -159,7 +140,9 @@ export default function MusicServicesScreen() {
         clientId,
 
         scopes:
-          SPOTIFY_SCOPES,
+          [
+            ...SPOTIFY_SCOPES,
+          ],
 
         redirectUri,
 
@@ -175,7 +158,7 @@ export default function MusicServicesScreen() {
         },
       },
 
-      discovery,
+      spotifyDiscovery,
     );
 
   useEffect(() => {
@@ -241,7 +224,19 @@ export default function MusicServicesScreen() {
         );
       };
 
-    void loadExistingConnection();
+    void loadExistingConnection().catch(
+      (error: unknown) => {
+        setConnectionState(
+          "disconnected",
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not verify the Spotify connection.",
+        );
+      },
+    );
   }, []);
 
   useEffect(() => {
@@ -315,7 +310,7 @@ export default function MusicServicesScreen() {
               },
             },
 
-            discovery,
+            spotifyDiscovery,
           );
 
         const profileResponse =
@@ -404,19 +399,35 @@ export default function MusicServicesScreen() {
           "Spotify connected. Canal is automatically importing your library.",
         );
 
-        const snapshot =
-          await syncSpotifyLibrary();
+        try {
+          const snapshot =
+            await syncSpotifyLibrary();
 
-        setLibraryReady(
-          Boolean(snapshot),
-        );
+          setLibraryReady(
+            Boolean(snapshot),
+          );
+
+          setStatusMessage(
+            "Spotify is connected and your library is ready.",
+          );
+        } catch (error) {
+          setLibraryReady(
+            false,
+          );
+
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Spotify connected, but the library could not be synced.",
+          );
+
+          setStatusMessage(
+            "Spotify is connected. Retry the library import when your connection is available.",
+          );
+        }
 
         setConnectionState(
           "connected",
-        );
-
-        setStatusMessage(
-          "Spotify is connected and your library is ready.",
         );
 
         try {
@@ -485,20 +496,32 @@ export default function MusicServicesScreen() {
         "Opening Spotify authorization.",
       );
 
-      const result =
-        await promptAsync();
+      try {
+        const result =
+          await promptAsync();
 
-      if (
-        result.type ===
-        "cancel" ||
-        result.type ===
-        "dismiss"
-      ) {
+        if (
+          result.type ===
+          "cancel" ||
+          result.type ===
+          "dismiss"
+        ) {
+          setConnectionState(
+            "disconnected",
+          );
+
+          setStatusMessage("");
+        }
+      } catch (error) {
         setConnectionState(
           "disconnected",
         );
 
-        setStatusMessage("");
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not open Spotify authorization.",
+        );
       }
     };
 

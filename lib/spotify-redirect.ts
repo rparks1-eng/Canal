@@ -1,6 +1,10 @@
-export const SPOTIFY_REDIRECT_URI =
-  "com.raishawnparks.canal.spotify://callback";
+import {
+  getSpotifyRedirectUri as getCanonicalSpotifyRedirectUri,
+  SPOTIFY_NATIVE_REDIRECT_URI,
+} from "./spotify-config";
 
-export function getSpotifyRedirectUri(): string {
-  return SPOTIFY_REDIRECT_URI;
-}
+export const SPOTIFY_REDIRECT_URI =
+  SPOTIFY_NATIVE_REDIRECT_URI;
+
+export const getSpotifyRedirectUri =
+  getCanonicalSpotifyRedirectUri;

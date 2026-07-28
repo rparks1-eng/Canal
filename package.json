@@ -11,10 +11,11 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
+    "launcher:test": "bash -n script/build_and_run.sh && node script/validate_public_env.test.cjs",
     "dependencies:check": "expo install --check",
     "config:check": "expo config --type public --json",
     "web:export": "expo export --platform web --clear",
-    "validate": "npm run dependencies:check && npm run lint && npm run typecheck && npm run test -- --ci && npm run config:check && npm run web:export"
+    "validate": "npm run dependencies:check && npm run lint && npm run typecheck && npm run test -- --ci && npm run launcher:test && npm run config:check && npm run web:export"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -51,6 +52,7 @@
     "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
+    "@expo/env": "~2.0.12",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",

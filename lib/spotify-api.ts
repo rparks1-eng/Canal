@@ -1,6 +1,5 @@
 import {
-  clearSpotifySession,
-  getValidSpotifySession,
+  spotifyAuthenticatedFetch,
 } from "./spotify-auth";
 
 import type {
@@ -228,17 +227,8 @@ async function spotifyRequest<T>(
   path: string,
   options: SpotifyRequestOptions = {},
 ): Promise<T> {
-  const session =
-    await getValidSpotifySession();
-
-  if (!session) {
-    throw new SpotifyApiError(
-      "Spotify is not connected. Connect Spotify again.",
-      401,
-    );
-  }
-
-  const response = await fetch(
+  const response =
+    await spotifyAuthenticatedFetch(
     buildSpotifyUrl(path),
     {
       method:
@@ -246,9 +236,6 @@ async function spotifyRequest<T>(
         "GET",
 
       headers: {
-        Authorization:
-          `Bearer ${session.accessToken}`,
-
         Accept:
           "application/json",
 
@@ -267,7 +254,7 @@ async function spotifyRequest<T>(
             )
           : undefined,
     },
-  );
+    );
 
   if (
     response.status === 204
@@ -290,12 +277,6 @@ async function spotifyRequest<T>(
   }
 
   if (!response.ok) {
-    if (
-      response.status === 401
-    ) {
-      await clearSpotifySession();
-    }
-
     const retryAfterHeader =
       response.headers.get(
         "Retry-After",

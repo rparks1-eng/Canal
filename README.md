@@ -55,6 +55,20 @@ gate as unavailable instead of claiming that dependency review passed.
 - `EXPO_PUBLIC_CANAL_SHARE_BASE_URL`
 - `EXPO_PUBLIC_CANAL_WEB_URL` (optional HTTPS fallback for password reset)
 
+`EXPO_PUBLIC_SPOTIFY_CLIENT_ID` is required for Spotify sign-in. It is public
+application configuration, but `.env.local` is intentionally ignored by Git
+and is not copied into a fresh clone. Run
+`./script/build_and_run.sh --check-config` before launching Canal.
+After moving to a fresh clone,
+`./script/build_and_run.sh --recover-spotify-config` can safely copy the public
+client ID from a known older local Canal folder without printing it.
+
+Canal uses one native Spotify callback:
+`com.raishawnparks.canal.spotify://callback`. Add that exact redirect URI to
+the Canal application in the Spotify Developer Dashboard. The optional
+`EXPO_PUBLIC_SPOTIFY_REDIRECT_URI` is reserved for a deployed HTTPS web
+callback.
+
 Only public client configuration belongs in Expo client variables. Apple
 private keys, MusicKit signing material, Supabase service-role keys, and other
 server credentials do not belong in this repository or client bundle.
