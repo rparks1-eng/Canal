@@ -441,7 +441,7 @@ export default function SoundscapeScreen() {
                 isEditing
                   ? cancelEditing()
                   : router.replace(
-                      "/(tabs)/you",
+                      "/(tabs)/profile",
                     )
               }
               style={({ pressed }) => [

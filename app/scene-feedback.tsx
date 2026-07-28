@@ -39,11 +39,11 @@ import type {
   StoredScene,
 } from "../lib/scenes";
 
-const OPTIONS: Array<{
+const OPTIONS: {
   value: SceneFeedbackRating;
   label: string;
   description: string;
-}> = [
+}[] = [
   {
     value: "perfect",
     label: "Perfect",

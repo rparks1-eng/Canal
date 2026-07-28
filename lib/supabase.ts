@@ -51,7 +51,9 @@ export const supabase =
     {
       auth: {
         storage:
-          AsyncStorage,
+          Platform.OS === "web"
+            ? undefined
+            : AsyncStorage,
 
         autoRefreshToken:
           true,

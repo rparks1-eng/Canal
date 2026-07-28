@@ -77,7 +77,7 @@ export default function ForgotPasswordScreen() {
         );
 
         setMessage(
-          "Reset email sent. Use the newest email. On a real iPhone, tap its button. In the iOS Simulator, copy the complete link from the email and paste it below.",
+          "Reset email sent. Open the newest email and tap its button. If Canal does not open, copy the button's complete link and paste it below.",
         );
       } catch (error) {
         setErrorMessage(
@@ -271,7 +271,7 @@ export default function ForgotPasswordScreen() {
                 styles.simulatorTitle
               }
             >
-              Testing in iOS Simulator
+              Reset link did not open?
             </Text>
 
             <Text
@@ -279,7 +279,7 @@ export default function ForgotPasswordScreen() {
                 styles.simulatorText
               }
             >
-              A link clicked on your Mac cannot automatically open the fake iPhone. Copy the complete password-reset link from the newest email, then paste it here.
+              Press and hold the reset button in the newest email, copy its complete link, then paste it here. This also works in the iOS Simulator.
             </Text>
 
             <TextInput
