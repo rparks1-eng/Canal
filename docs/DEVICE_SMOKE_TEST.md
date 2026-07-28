@@ -6,7 +6,7 @@ or release record.
 
 ## Prerequisites
 
-- The four Supabase migrations are applied in filename order.
+- The six Supabase migrations are applied in filename order.
 - Supabase allows the Canal authentication and password-reset redirect URLs.
 - The build contains the public Supabase and Spotify configuration values.
 - The Spotify dashboard allows the exact production redirect URI.
@@ -20,6 +20,8 @@ or release record.
 - [ ] Log out and log back into Account A.
 - [ ] Request a password reset, open the newest email, set a new password, and
       log in with it.
+- [ ] Repeat password reset with Canal closed, backgrounded, and already open.
+- [ ] Confirm the HTTPS reset page works when the native app cannot open.
 - [ ] Confirm expired or already-used reset links show a recoverable error.
 
 ## Spotify and Scene loop
@@ -27,7 +29,18 @@ or release record.
 - [ ] Connect Spotify after Canal sign-in.
 - [ ] Deny or cancel once and confirm Canal offers a clear retry.
 - [ ] Import library data and create a Scene with mood, activity, energy,
-      familiarity, duration, and artist choices.
+      familiarity, duration, genre, and artist choices.
+- [ ] Confirm the sync includes liked songs and tracks across the account's
+      playlists, and that a stale library refreshes without blocking cached use.
+- [ ] Type one letter into track search and confirm likely songs and artists appear
+      immediately before live catalog results.
+- [ ] Generate short and long Scenes. Confirm track count and summed track length
+      align with the selected duration.
+- [ ] Confirm a new Scene opens directly in playback, every visible track has artwork
+      or an intentional fallback, and the player retains Home, Library, Create,
+      Activity, and Profile navigation.
+- [ ] Confirm Familiar favors liked and playlist music, Discovery adds genre-linked
+      tracks outside the library, and selected genres change the generated mix.
 - [ ] Edit the proposed track list, save the Scene, close the app, reopen it,
       and confirm the Scene remains.
 - [ ] Export the Scene to Spotify and open the resulting playlist.

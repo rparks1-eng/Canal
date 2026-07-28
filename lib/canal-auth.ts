@@ -9,13 +9,18 @@ import {
   supabase,
 } from "./supabase";
 
+import {
+  AUTH_CALLBACK_URL,
+  getPasswordResetRedirectUrl,
+  PASSWORD_RESET_URL,
+} from "./auth-redirect";
+
 WebBrowser.maybeCompleteAuthSession();
 
-export const AUTH_CALLBACK_URL =
-  "canal://auth/callback";
-
-export const PASSWORD_RESET_URL =
-  "canal://auth/reset-password";
+export {
+  AUTH_CALLBACK_URL,
+  PASSWORD_RESET_URL,
+};
 
 function safeDecode(
   value: string,
@@ -587,7 +592,7 @@ export async function requestPasswordReset(
       normalizedEmail,
       {
         redirectTo:
-          PASSWORD_RESET_URL,
+          getPasswordResetRedirectUrl(),
       },
     );
 

@@ -2,12 +2,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
   ActivityIndicator,
-  Image,
   Linking,
   Pressable,
   ScrollView,
@@ -16,6 +16,10 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import {
+  Image,
+} from "expo-image";
 
 import {
   router,
@@ -42,12 +46,25 @@ import {
 
 import {
   exportSceneToSpotify,
+  getSpotifyLibraryTrackSuggestions,
   searchSpotifySceneTracks,
 } from "../lib/spotify-scene-tools";
+
+import {
+  createPlayerSession,
+} from "../lib/canal-player";
 
 import type {
   SpotifySceneSearchTrack,
 } from "../lib/spotify-scene-tools";
+
+import {
+  readSpotifyLibrarySnapshot,
+} from "../lib/spotify-library";
+
+import type {
+  SpotifyLibrarySnapshot,
+} from "../lib/spotify-library";
 
 function safeBack(): void {
   if (
@@ -139,6 +156,14 @@ export default function ScenePreviewScreen() {
     >([]);
 
   const [
+    librarySnapshot,
+    setLibrarySnapshot,
+  ] =
+    useState<SpotifyLibrarySnapshot | null>(
+      null,
+    );
+
+  const [
     searching,
     setSearching,
   ] = useState(false);
@@ -173,6 +198,9 @@ export default function ScenePreviewScreen() {
     setErrorMessage,
   ] = useState("");
 
+  const searchRequestId =
+    useRef(0);
+
   const load =
     useCallback(
       async (): Promise<void> => {
@@ -181,8 +209,14 @@ export default function ScenePreviewScreen() {
         );
 
         try {
-          const stored =
-            await readGeneratedScenePreview();
+          const [
+            stored,
+            storedLibrary,
+          ] =
+            await Promise.all([
+              readGeneratedScenePreview(),
+              readSpotifyLibrarySnapshot(),
+            ]);
 
           if (!stored) {
             throw new Error(
@@ -192,6 +226,10 @@ export default function ScenePreviewScreen() {
 
           setResult(
             stored,
+          );
+
+          setLibrarySnapshot(
+            storedLibrary,
           );
         } catch (error) {
           setErrorMessage(
@@ -229,6 +267,136 @@ export default function ScenePreviewScreen() {
       ],
     );
 
+  const localSuggestions =
+    useMemo(
+      () =>
+        getSpotifyLibraryTrackSuggestions(
+          librarySnapshot,
+          query,
+        ),
+      [
+        librarySnapshot,
+        query,
+      ],
+    );
+
+  useEffect(() => {
+    const cleanedQuery =
+      query.trim();
+
+    const requestId =
+      searchRequestId.current +
+      1;
+
+    searchRequestId.current =
+      requestId;
+
+    if (!cleanedQuery) {
+      setSearchResults([]);
+      setSearching(false);
+
+      return;
+    }
+
+    setSearchResults(
+      localSuggestions,
+    );
+
+    if (
+      cleanedQuery.length <
+      2
+    ) {
+      setSearching(false);
+
+      return;
+    }
+
+    setSearching(true);
+
+    const timer =
+      setTimeout(() => {
+        const search =
+          async (): Promise<void> => {
+            try {
+              const liveResults =
+                await searchSpotifySceneTracks(
+                  cleanedQuery,
+                );
+
+              if (
+                searchRequestId.current !==
+                requestId
+              ) {
+                return;
+              }
+
+              const merged =
+                new Map<
+                  string,
+                  SpotifySceneSearchTrack
+                >();
+
+              for (
+                const track of [
+                  ...localSuggestions,
+                  ...liveResults,
+                ]
+              ) {
+                if (
+                  !merged.has(
+                    track.id,
+                  )
+                ) {
+                  merged.set(
+                    track.id,
+                    track,
+                  );
+                }
+              }
+
+              setSearchResults(
+                Array.from(
+                  merged.values(),
+                ).slice(0, 10),
+              );
+
+              setErrorMessage("");
+            } catch (error) {
+              if (
+                searchRequestId.current !==
+                  requestId ||
+                localSuggestions.length >
+                  0
+              ) {
+                return;
+              }
+
+              setErrorMessage(
+                error instanceof Error
+                  ? error.message
+                  : "Canal could not search Spotify.",
+              );
+            } finally {
+              if (
+                searchRequestId.current ===
+                requestId
+              ) {
+                setSearching(false);
+              }
+            }
+          };
+
+        void search();
+      }, 280);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [
+    localSuggestions,
+    query,
+  ]);
+
   const persistResult =
     async (
       next: GeneratedSceneResult,
@@ -240,38 +408,6 @@ export default function ScenePreviewScreen() {
       setResult(
         next,
       );
-    };
-
-  const runSearch =
-    async (): Promise<void> => {
-      if (searching) {
-        return;
-      }
-
-      setSearching(
-        true,
-      );
-
-      setMessage("");
-      setErrorMessage("");
-
-      try {
-        setSearchResults(
-          await searchSpotifySceneTracks(
-            query,
-          ),
-        );
-      } catch (error) {
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Canal could not search Spotify.",
-        );
-      } finally {
-        setSearching(
-          false,
-        );
-      }
     };
 
   const addTrack =
@@ -361,13 +497,24 @@ export default function ScenePreviewScreen() {
           result,
         );
 
-        await saveGeneratedSceneToLibrary(
-          result,
+        const savedScene =
+          await saveGeneratedSceneToLibrary(
+            result,
+          );
+
+        await createPlayerSession(
+          savedScene,
         );
 
-        setMessage(
-          `"${result.scene.name}" was saved to your Library.`,
-        );
+        router.replace({
+          pathname:
+            "/now-playing",
+
+          params: {
+            sceneId:
+              savedScene.id,
+          },
+        });
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -644,7 +791,7 @@ export default function ScenePreviewScreen() {
                   styles.sectionSubtitle
                 }
               >
-                Search the connected Spotify account, then add tracks directly to this Scene.
+                Suggestions update as you type. Recent and liked music appears first, then Canal adds live Spotify matches.
               </Text>
 
               <View
@@ -659,10 +806,7 @@ export default function ScenePreviewScreen() {
                   onChangeText={
                     setQuery
                   }
-                  onSubmitEditing={() =>
-                    void runSearch()
-                  }
-                  placeholder="Song, artist, or album"
+                  placeholder="Type a song or artist"
                   placeholderTextColor="#9A938C"
                   returnKeyType="search"
                   style={
@@ -670,33 +814,13 @@ export default function ScenePreviewScreen() {
                   }
                 />
 
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={
-                    searching
-                  }
-                  onPress={() =>
-                    void runSearch()
-                  }
-                  style={
-                    styles.searchButton
-                  }
-                >
-                  {searching ? (
-                    <ActivityIndicator
-                      size="small"
-                      color="#FFFFFF"
-                    />
-                  ) : (
-                    <Text
-                      style={
-                        styles.searchButtonText
-                      }
-                    >
-                      Search
-                    </Text>
-                  )}
-                </Pressable>
+                {searching ? (
+                  <ActivityIndicator
+                    accessibilityLabel="Searching Spotify"
+                    size="small"
+                    color="#F47A24"
+                  />
+                ) : null}
               </View>
 
               {searchResults.length >
@@ -823,6 +947,15 @@ export default function ScenePreviewScreen() {
                     },
                   )}
                 </View>
+              ) : query.trim() &&
+                !searching ? (
+                <Text
+                  style={
+                    styles.noSearchResults
+                  }
+                >
+                  No matching songs or artists yet.
+                </Text>
               ) : null}
             </View>
 
@@ -1032,7 +1165,7 @@ export default function ScenePreviewScreen() {
                       styles.primaryText
                     }
                   >
-                    Save Scene
+                    Save & Play Scene
                   </Text>
                 )}
               </Pressable>
@@ -1310,6 +1443,13 @@ const styles =
 
     searchResults: {
       marginTop: 10,
+    },
+
+    noSearchResults: {
+      color: "#817972",
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 12,
     },
 
     searchResult: {

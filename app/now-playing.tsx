@@ -20,6 +20,10 @@ import {
 } from "expo-router";
 
 import {
+  Image,
+} from "expo-image";
+
+import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
@@ -46,6 +50,8 @@ import type {
 import {
   recordListeningHistory,
 } from "../lib/canal-session";
+
+import CanalBottomNav from "../components/CanalBottomNav";
 
 function formatTime(
   totalSeconds: number,
@@ -539,8 +545,11 @@ export default function NowPlayingScreen() {
 
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Edit Scene"
           onPress={() =>
-            void finish()
+            router.push(
+              "/scene-preview",
+            )
           }
           style={({ pressed }) => [
             styles.doneButton,
@@ -554,7 +563,7 @@ export default function NowPlayingScreen() {
               styles.doneText
             }
           >
-            Done
+            Edit
           </Text>
         </Pressable>
       </View>
@@ -567,19 +576,34 @@ export default function NowPlayingScreen() {
           false
         }
       >
-        <View style={styles.artwork}>
-          <View style={styles.orbOne} />
-          <View style={styles.orbTwo} />
-          <View style={styles.orbThree} />
-
-          <Text
+        {currentTrack.imageUrl ? (
+          <Image
+            accessibilityLabel={`${currentTrack.title} artwork`}
+            source={{
+              uri:
+                currentTrack.imageUrl,
+            }}
+            contentFit="cover"
+            transition={180}
             style={
-              styles.artworkText
+              styles.artwork
             }
-          >
-            ◉
-          </Text>
-        </View>
+          />
+        ) : (
+          <View style={styles.artwork}>
+            <View style={styles.orbOne} />
+            <View style={styles.orbTwo} />
+            <View style={styles.orbThree} />
+
+            <Text
+              style={
+                styles.artworkText
+              }
+            >
+              ◉
+            </Text>
+          </View>
+        )}
 
         <Text
           numberOfLines={2}
@@ -782,6 +806,35 @@ export default function NowPlayingScreen() {
                     styles.queueRow
                   }
                 >
+                  {track.imageUrl ? (
+                    <Image
+                      accessibilityLabel=""
+                      source={{
+                        uri:
+                          track.imageUrl,
+                      }}
+                      contentFit="cover"
+                      style={
+                        styles.queueImage
+                      }
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.queueImage,
+                        styles.queueImagePlaceholder,
+                      ]}
+                    >
+                      <Text
+                        style={
+                          styles.queueImageText
+                        }
+                      >
+                        ♪
+                      </Text>
+                    </View>
+                  )}
+
                   <Text
                     style={
                       styles.queueNumber
@@ -842,6 +895,8 @@ export default function NowPlayingScreen() {
           </Text>
         </Pressable>
       </ScrollView>
+
+      <CanalBottomNav />
     </SafeAreaView>
   );
 }
@@ -1179,6 +1234,29 @@ const styles =
       borderTopColor:
         "#F0ECE8",
       paddingVertical: 11,
+    },
+
+    queueImage: {
+      width: 42,
+      height: 42,
+      borderRadius: 8,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#F1E7DF",
+      marginRight: 8,
+    },
+
+    queueImagePlaceholder: {
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+    },
+
+    queueImageText: {
+      color: "#8A827B",
+      fontSize: 18,
     },
 
     queueNumber: {

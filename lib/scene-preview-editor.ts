@@ -68,6 +68,22 @@ function calculateSourceBreakdown(
             "recent",
           ),
       ).length,
+
+    playlist:
+      signals.filter(
+        (signal) =>
+          signal.sources.includes(
+            "playlist",
+          ),
+      ).length,
+
+    discovery:
+      signals.filter(
+        (signal) =>
+          signal.sources.includes(
+            "discovery",
+          ),
+      ).length,
   };
 }
 

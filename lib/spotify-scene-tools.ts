@@ -7,6 +7,14 @@ import type {
   StoredScene,
 } from "./scenes";
 
+import type {
+  SpotifyTrack,
+} from "./spotify-api";
+
+import type {
+  SpotifyLibrarySnapshot,
+} from "./spotify-library";
+
 const SPOTIFY_API_BASE =
   "https://api.spotify.com/v1";
 
@@ -210,6 +218,188 @@ export async function searchSpotifySceneTracks(
           track.uri,
       ),
   );
+}
+
+export function getSpotifyLibraryTrackSuggestions(
+  snapshot:
+    | SpotifyLibrarySnapshot
+    | null,
+  query: string,
+  limit = 10,
+): SpotifySceneSearchTrack[] {
+  const normalized =
+    query.trim().toLowerCase();
+
+  if (
+    !snapshot ||
+    !normalized
+  ) {
+    return [];
+  }
+
+  const candidates =
+    new Map<
+      string,
+      {
+        track: SpotifyTrack;
+        score: number;
+      }
+    >();
+
+  const addTracks = (
+    tracks: SpotifyTrack[],
+    sourceScore: number,
+  ): void => {
+    tracks.forEach(
+      (track, index) => {
+        const title =
+          track.name.toLowerCase();
+
+        const artists =
+          track.artists
+            .map(
+              (artist) =>
+                artist.name.toLowerCase(),
+            )
+            .join(" ");
+
+        const titleStarts =
+          title.startsWith(
+            normalized,
+          );
+
+        const artistStarts =
+          track.artists.some(
+            (artist) =>
+              artist.name
+                .toLowerCase()
+                .startsWith(
+                  normalized,
+                ),
+          );
+
+        if (
+          !title.includes(
+            normalized,
+          ) &&
+          !artists.includes(
+            normalized,
+          )
+        ) {
+          return;
+        }
+
+        const score =
+          sourceScore -
+          index +
+          (titleStarts
+            ? 50
+            : 0) +
+          (artistStarts
+            ? 40
+            : 0);
+
+        const existing =
+          candidates.get(
+            track.id,
+          );
+
+        if (
+          !existing ||
+          score >
+            existing.score
+        ) {
+          candidates.set(
+            track.id,
+            {
+              track,
+              score,
+            },
+          );
+        }
+      },
+    );
+  };
+
+  addTracks(
+    snapshot.recentTracks,
+    300,
+  );
+
+  addTracks(
+    snapshot.topTracks,
+    240,
+  );
+
+  addTracks(
+    snapshot.savedTracks,
+    180,
+  );
+
+  addTracks(
+    snapshot.playlistTracks,
+    210,
+  );
+
+  addTracks(
+    snapshot.discoveryTracks,
+    100,
+  );
+
+  return Array.from(
+    candidates.values(),
+  )
+    .sort(
+      (first, second) =>
+        second.score -
+        first.score,
+    )
+    .slice(0, limit)
+    .map(
+      ({ track }) => ({
+        id: track.id,
+        name: track.name,
+        uri: track.uri,
+        duration_ms:
+          track.duration_ms ??
+          210_000,
+        explicit:
+          track.explicit ??
+          false,
+        artists:
+          track.artists.map(
+            (artist) => ({
+              id: artist.id,
+              name:
+                artist.name,
+            }),
+          ),
+        album:
+          track.album
+            ? {
+                id:
+                  track.album.id,
+                name:
+                  track.album.name,
+                images:
+                  track.album.images?.map(
+                    (image) => ({
+                      url:
+                        image.url,
+                      height:
+                        image.height ??
+                        null,
+                      width:
+                        image.width ??
+                        null,
+                    }),
+                  ),
+              }
+            : undefined,
+        external_urls:
+          track.external_urls,
+      }),
+    );
 }
 
 export function spotifySearchTrackToSceneTrack(

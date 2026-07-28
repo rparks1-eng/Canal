@@ -3,12 +3,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   addSpotifyItemsToPlaylist,
   createSpotifyPlaylist,
-  getSpotifyPlaylists,
+  getAllSpotifyPlaylists,
+  getAllSpotifyPlaylistTracks,
+  getAllSpotifySavedTracks,
+  getSpotifyArtistsByIds,
   getSpotifyProfile,
   getSpotifyRecentlyPlayed,
-  getSpotifySavedTracks,
   getSpotifyTopArtists,
   getSpotifyTopTracks,
+  searchSpotifyCatalogTracks,
 } from "./spotify-api";
 
 import type {
@@ -36,8 +39,14 @@ export type SpotifyLibrarySnapshot = {
   topTracks: SpotifyTrack[];
   recentTracks: SpotifyTrack[];
   savedTracks: SpotifyTrack[];
+  playlistTracks: SpotifyTrack[];
+  discoveryTracks: SpotifyTrack[];
   playlists: SpotifyPlaylist[];
   topGenres: SpotifyGenreSignal[];
+  trackGenres: Record<
+    string,
+    string[]
+  >;
   warnings: string[];
 };
 
@@ -45,6 +54,22 @@ export type SpotifyPlaylistExportResult = {
   playlist: SpotifyPlaylist;
   trackCount: number;
 };
+
+export type LatestSpotifyLibraryResult = {
+  snapshot: SpotifyLibrarySnapshot | null;
+  refreshed: boolean;
+  warning?: string;
+};
+
+const DEFAULT_LIBRARY_MAX_AGE_MS =
+  6 * 60 * 60 * 1000;
+
+let libraryRefreshPromise:
+  Promise<SpotifyLibrarySnapshot> | null =
+    null;
+
+let lastLibraryRefreshFailureAt =
+  0;
 
 function readErrorMessage(
   error: unknown,
@@ -207,6 +232,20 @@ export async function readSpotifyLibrarySnapshot(): Promise<
           ? parsed.savedTracks
           : [],
 
+      playlistTracks:
+        Array.isArray(
+          parsed.playlistTracks,
+        )
+          ? parsed.playlistTracks
+          : [],
+
+      discoveryTracks:
+        Array.isArray(
+          parsed.discoveryTracks,
+        )
+          ? parsed.discoveryTracks
+          : [],
+
       playlists:
         Array.isArray(
           parsed.playlists,
@@ -220,6 +259,13 @@ export async function readSpotifyLibrarySnapshot(): Promise<
         )
           ? parsed.topGenres
           : [],
+
+      trackGenres:
+        parsed.trackGenres &&
+        typeof parsed.trackGenres ===
+          "object"
+          ? parsed.trackGenres
+          : {},
 
       warnings:
         Array.isArray(
@@ -239,6 +285,94 @@ export async function clearSpotifyLibrarySnapshot(): Promise<void> {
   );
 }
 
+export async function getLatestSpotifyLibrarySnapshot(
+  maxAgeMs =
+    DEFAULT_LIBRARY_MAX_AGE_MS,
+): Promise<LatestSpotifyLibraryResult> {
+  const cached =
+    await readSpotifyLibrarySnapshot();
+
+  const syncedAt =
+    cached
+      ? Date.parse(
+          cached.syncedAt,
+        )
+      : Number.NaN;
+
+  const isFresh =
+    Number.isFinite(syncedAt) &&
+    Date.now() - syncedAt <
+      maxAgeMs;
+
+  if (cached && isFresh) {
+    return {
+      snapshot: cached,
+      refreshed: false,
+    };
+  }
+
+  if (
+    cached &&
+    Date.now() -
+      lastLibraryRefreshFailureAt <
+      15 * 60 * 1000
+  ) {
+    return {
+      snapshot: cached,
+      refreshed: false,
+      warning:
+        "Using the last Spotify sync while Canal waits to retry the connection.",
+    };
+  }
+
+  try {
+    if (!libraryRefreshPromise) {
+      libraryRefreshPromise =
+        syncSpotifyLibrary().finally(
+          () => {
+            libraryRefreshPromise =
+              null;
+          },
+        );
+    }
+
+    const refreshedSnapshot =
+      await libraryRefreshPromise;
+
+    lastLibraryRefreshFailureAt =
+      0;
+
+    return {
+      snapshot:
+        refreshedSnapshot,
+      refreshed: true,
+    };
+  } catch (error) {
+    lastLibraryRefreshFailureAt =
+      Date.now();
+
+    if (cached) {
+      return {
+        snapshot: cached,
+        refreshed: false,
+        warning:
+          error instanceof Error
+            ? `Using the last Spotify sync because the latest listening data could not refresh: ${error.message}`
+            : "Using the last Spotify sync because the latest listening data could not refresh.",
+      };
+    }
+
+    return {
+      snapshot: null,
+      refreshed: false,
+      warning:
+        error instanceof Error
+          ? error.message
+          : "Canal could not load Spotify listening data.",
+    };
+  }
+}
+
 export async function syncSpotifyLibrary(): Promise<
   SpotifyLibrarySnapshot
 > {
@@ -254,8 +388,8 @@ export async function syncSpotifyLibrary(): Promise<
     getSpotifyTopArtists(20),
     getSpotifyTopTracks(20),
     getSpotifyRecentlyPlayed(20),
-    getSpotifySavedTracks(20),
-    getSpotifyPlaylists(20),
+    getAllSpotifySavedTracks(),
+    getAllSpotifyPlaylists(),
   ]);
 
   if (
@@ -330,7 +464,7 @@ export async function syncSpotifyLibrary(): Promise<
   const savedTracks =
     savedResult.status ===
     "fulfilled"
-      ? savedResult.value.items.map(
+      ? savedResult.value.map(
           (item) => item.track,
         )
       : [];
@@ -350,7 +484,6 @@ export async function syncSpotifyLibrary(): Promise<
     playlistsResult.status ===
     "fulfilled"
       ? playlistsResult.value
-          .items
       : [];
 
   if (
@@ -362,6 +495,160 @@ export async function syncSpotifyLibrary(): Promise<
         playlistsResult.reason,
       )}`,
     );
+  }
+
+  const playlistTracks:
+    SpotifyTrack[] = [];
+
+  for (
+    const playlist of
+      playlists
+  ) {
+    try {
+      playlistTracks.push(
+        ...(await getAllSpotifyPlaylistTracks(
+          playlist.id,
+        )),
+      );
+    } catch (error) {
+      warnings.push(
+        `Playlist ${playlist.name}: ${readErrorMessage(
+          error,
+        )}`,
+      );
+    }
+  }
+
+  const userLibraryTracks =
+    deduplicateTracks([
+      ...topTracks,
+      ...savedTracks,
+      ...recentTracks,
+      ...playlistTracks,
+    ]);
+
+  const artistIds =
+    userLibraryTracks.flatMap(
+      (track) =>
+        track.artists.map(
+          (artist) =>
+            artist.id,
+        ),
+    );
+
+  let libraryArtists:
+    SpotifyArtist[] = [];
+
+  try {
+    libraryArtists =
+      await getSpotifyArtistsByIds(
+        artistIds,
+      );
+  } catch (error) {
+    warnings.push(
+      `Track genres: ${readErrorMessage(
+        error,
+      )}`,
+    );
+  }
+
+  const artistsById =
+    new Map(
+      [
+        ...topArtists,
+        ...libraryArtists,
+      ].map(
+        (artist) => [
+          artist.id,
+          artist,
+        ] as const,
+      ),
+    );
+
+  const trackGenres:
+    Record<
+      string,
+      string[]
+    > = {};
+
+  for (
+    const track of
+      userLibraryTracks
+  ) {
+    trackGenres[track.id] =
+      Array.from(
+        new Set(
+          track.artists.flatMap(
+            (artist) =>
+              artistsById.get(
+                artist.id,
+              )?.genres ??
+              [],
+          ),
+        ),
+      );
+  }
+
+  const topGenres =
+    buildTopGenres([
+      ...topArtists,
+      ...libraryArtists,
+    ]);
+
+  const userTrackIds =
+    new Set(
+      userLibraryTracks.map(
+        (track) =>
+          track.id,
+      ),
+    );
+
+  const discoveryTracks:
+    SpotifyTrack[] = [];
+
+  for (
+    const genre of
+      topGenres.slice(0, 4)
+  ) {
+    try {
+      const matches =
+        (
+          await searchSpotifyCatalogTracks(
+            `genre:"${genre.name}"`,
+            10,
+          )
+        ).filter(
+          (track) =>
+            !userTrackIds.has(
+              track.id,
+            ),
+        );
+
+      for (
+        const track of
+          matches
+      ) {
+        discoveryTracks.push(
+          track,
+        );
+
+        trackGenres[track.id] =
+          Array.from(
+            new Set([
+              ...(trackGenres[
+                track.id
+              ] ?? []),
+              genre.name,
+            ]),
+          );
+      }
+    } catch (error) {
+      warnings.push(
+        `Discovery for ${genre.name}: ${readErrorMessage(
+          error,
+        )}`,
+      );
+    }
   }
 
   const snapshot: SpotifyLibrarySnapshot = {
@@ -388,12 +675,21 @@ export async function syncSpotifyLibrary(): Promise<
         savedTracks,
       ),
 
+    playlistTracks:
+      deduplicateTracks(
+        playlistTracks,
+      ),
+
+    discoveryTracks:
+      deduplicateTracks(
+        discoveryTracks,
+      ),
+
     playlists,
 
-    topGenres:
-      buildTopGenres(
-        topArtists,
-      ),
+    topGenres,
+
+    trackGenres,
 
     warnings,
   };

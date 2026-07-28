@@ -53,6 +53,7 @@ gate as unavailable instead of claiming that dependency review passed.
 - `EXPO_PUBLIC_SPOTIFY_CLIENT_ID`
 - `EXPO_PUBLIC_SPOTIFY_REDIRECT_URI`
 - `EXPO_PUBLIC_CANAL_SHARE_BASE_URL`
+- `EXPO_PUBLIC_CANAL_WEB_URL` (optional HTTPS fallback for password reset)
 
 Only public client configuration belongs in Expo client variables. Apple
 private keys, MusicKit signing material, Supabase service-role keys, and other

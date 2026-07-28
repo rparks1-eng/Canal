@@ -21,6 +21,18 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  getLatestSpotifyLibrarySnapshot,
+} from "../../lib/spotify-library";
+
+import type {
+  SpotifyLibrarySnapshot,
+} from "../../lib/spotify-library";
+
+import {
+  rankSceneRecommendations,
+} from "../../lib/scene-recommendations";
+
+import {
   getRecentScenes,
   readScenes,
   sceneDurationMinutes,
@@ -182,7 +194,23 @@ export default function HomeScreen() {
     setHistory,
   ] = useState<
     ListeningHistoryEntry[]
-  >([]);
+    >([]);
+
+  const [
+    spotifySnapshot,
+    setSpotifySnapshot,
+  ] =
+    useState<SpotifyLibrarySnapshot | null>(
+      null,
+    );
+
+  const [
+    recommendationWarning,
+    setRecommendationWarning,
+  ] =
+    useState<string | null>(
+      null,
+    );
 
   const load =
     useCallback(() => {
@@ -192,11 +220,13 @@ export default function HomeScreen() {
             storedScenes,
             storedRecent,
             storedHistory,
+            latestSpotify,
           ] =
             await Promise.all([
               readScenes(),
               getRecentScenes(5),
               readListeningHistory(),
+              getLatestSpotifyLibrarySnapshot(),
             ]);
 
           setScenes(
@@ -210,6 +240,15 @@ export default function HomeScreen() {
           setHistory(
             storedHistory,
           );
+
+          setSpotifySnapshot(
+            latestSpotify.snapshot,
+          );
+
+          setRecommendationWarning(
+            latestSpotify.warning ??
+              null,
+          );
         };
 
       void run();
@@ -218,41 +257,10 @@ export default function HomeScreen() {
   useFocusEffect(load);
 
   const recommended =
-    [...scenes]
-      .sort(
-        (first, second) => {
-          const firstScore =
-            (first.favorite
-              ? 100
-              : 0) +
-            (first.playCount ??
-              0) *
-              5 +
-            (first.feedback
-              ?.latestRating ===
-            "perfect"
-              ? 35
-              : 0);
-
-          const secondScore =
-            (second.favorite
-              ? 100
-              : 0) +
-            (second.playCount ??
-              0) *
-              5 +
-            (second.feedback
-              ?.latestRating ===
-            "perfect"
-              ? 35
-              : 0);
-
-          return (
-            secondScore -
-            firstScore
-          );
-        },
-      )
+    rankSceneRecommendations(
+      scenes,
+      spotifySnapshot,
+    )
       .slice(0, 3);
 
   return (
@@ -396,8 +404,9 @@ export default function HomeScreen() {
                     styles.sectionSubtitle
                   }
                 >
-                  Based on favorites, plays,
-                  and feedback.
+                  Based on your latest Spotify
+                  taste, favorites, plays, and
+                  feedback.
                 </Text>
               </View>
 
@@ -438,6 +447,19 @@ export default function HomeScreen() {
                 ),
               )}
             </ScrollView>
+
+            {recommendationWarning ? (
+              <Text
+                selectable
+                style={
+                  styles.recommendationWarning
+                }
+              >
+                Recommendations are using your
+                last Spotify sync while Canal
+                reconnects.
+              </Text>
+            ) : null}
 
             <View
               style={
@@ -736,6 +758,13 @@ const styles =
       paddingRight: 10,
       paddingBottom: 23,
       gap: 12,
+    },
+
+    recommendationWarning: {
+      color: "#7A5B12",
+      fontSize: 12,
+      lineHeight: 17,
+      paddingHorizontal: 2,
     },
 
     compactSceneCard: {

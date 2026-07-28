@@ -68,7 +68,7 @@ export default function SpotifyArtistPicker({
     const cleanedQuery =
       query.trim();
 
-    if (cleanedQuery.length < 2) {
+    if (cleanedQuery.length < 1) {
       setSearchResults([]);
       setIsSearching(false);
       setAuthorizationError(false);

@@ -29,6 +29,14 @@ Each run follows this order:
 8. Do not merge automatically. Begin the next item only after the active change
    is resolved.
 
+User-reported completion criteria remain part of this loop until both source
+validation and the applicable external smoke tests pass. Current criteria include
+password-reset return and fallback behavior, direct post-creation playback, persistent
+player navigation, track artwork, duration-aligned generation, first-character song
+and artist typeahead, current streaming-data recommendations, genre selection, full
+liked-song and playlist indexing, per-track genre inference, and discovery outside
+the existing listening pattern.
+
 This ordering replaces separate roadmap, UI, QA, and integration loops. It
 prevents duplicate branches, conflicting redesigns, repeated dependency
 installs, and multiple test runs for the same change.

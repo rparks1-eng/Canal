@@ -107,6 +107,11 @@ export type SpotifyRecentItem = {
   track: SpotifyTrack;
 };
 
+export type SpotifyPlaylistTrackItem = {
+  track?: SpotifyTrack | null;
+  item?: SpotifyTrack | null;
+};
+
 export type SpotifySavedTrackItem = {
   added_at: string;
   track: SpotifyTrack;
@@ -409,6 +414,167 @@ export async function getSpotifyPlaylists(
   >(
     `/me/playlists?limit=${safeLimit}&offset=0`,
   );
+}
+
+async function collectSpotifyPages<T>(
+  firstPath: string,
+): Promise<T[]> {
+  const items: T[] = [];
+  const visited =
+    new Set<string>();
+  let next:
+    | string
+    | null =
+      firstPath;
+
+  while (
+    next &&
+    !visited.has(
+      next,
+    )
+  ) {
+    visited.add(next);
+
+    const page:
+      SpotifyPage<T> =
+      await spotifyRequest<
+        SpotifyPage<T>
+      >(next);
+
+    items.push(
+      ...(page.items ?? []),
+    );
+
+    next =
+      page.next ??
+      null;
+  }
+
+  return items;
+}
+
+export async function getAllSpotifySavedTracks(): Promise<
+  SpotifySavedTrackItem[]
+> {
+  return collectSpotifyPages<SpotifySavedTrackItem>(
+    "/me/tracks?limit=50&offset=0",
+  );
+}
+
+export async function getAllSpotifyPlaylists(): Promise<
+  SpotifyPlaylist[]
+> {
+  return collectSpotifyPages<SpotifyPlaylist>(
+    "/me/playlists?limit=50&offset=0",
+  );
+}
+
+export async function getAllSpotifyPlaylistTracks(
+  playlistId: string,
+): Promise<SpotifyTrack[]> {
+  const items =
+    await collectSpotifyPages<SpotifyPlaylistTrackItem>(
+      `/playlists/${encodeURIComponent(
+        playlistId,
+      )}/items?limit=50&offset=0`,
+    );
+
+  return items
+    .map(
+      (entry) =>
+        entry.track ??
+        entry.item ??
+        null,
+    )
+    .filter(
+      (
+        track,
+      ): track is SpotifyTrack =>
+        Boolean(
+          track?.id &&
+            track.uri &&
+            !track.is_local,
+        ),
+    );
+}
+
+export async function getSpotifyArtistsByIds(
+  artistIds: string[],
+): Promise<SpotifyArtist[]> {
+  const uniqueIds =
+    Array.from(
+      new Set(
+        artistIds.filter(
+          Boolean,
+        ),
+      ),
+    );
+
+  const artists:
+    SpotifyArtist[] = [];
+
+  for (
+    let index = 0;
+    index <
+    uniqueIds.length;
+    index += 50
+  ) {
+    const batch =
+      uniqueIds.slice(
+        index,
+        index + 50,
+      );
+
+    const response =
+      await spotifyRequest<{
+        artists?: Array<
+          SpotifyArtist | null
+        >;
+      }>(
+        `/artists?ids=${encodeURIComponent(
+          batch.join(","),
+        )}`,
+      );
+
+    artists.push(
+      ...(response.artists ?? [])
+        .filter(
+          (
+            artist,
+          ): artist is SpotifyArtist =>
+            artist !== null,
+        ),
+    );
+  }
+
+  return artists;
+}
+
+export async function searchSpotifyCatalogTracks(
+  query: string,
+  limit = 10,
+): Promise<SpotifyTrack[]> {
+  const safeLimit =
+    Math.min(
+      Math.max(
+        limit,
+        1,
+      ),
+      10,
+    );
+
+  const response =
+    await spotifyRequest<{
+      tracks?: SpotifyPage<SpotifyTrack>;
+    }>(
+      `/search?type=track&limit=${safeLimit}&q=${encodeURIComponent(
+        query,
+      )}`,
+    );
+
+  return response.tracks
+    ?.items ??
+    [];
 }
 
 export async function createSpotifyPlaylist(

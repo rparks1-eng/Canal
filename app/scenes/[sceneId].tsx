@@ -22,6 +22,10 @@ import {
 } from "expo-router";
 
 import {
+  Image,
+} from "expo-image";
+
+import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
@@ -783,13 +787,34 @@ export default function SceneDetailScreen() {
                       styles.pressed,
                   ]}
                 >
-                  <Text
-                    style={
-                      styles.trackNumber
-                    }
-                  >
-                    {index + 1}
-                  </Text>
+                  {track.imageUrl ? (
+                    <Image
+                      accessibilityLabel=""
+                      source={{
+                        uri:
+                          track.imageUrl,
+                      }}
+                      contentFit="cover"
+                      style={
+                        styles.trackImage
+                      }
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.trackImage,
+                        styles.trackImagePlaceholder,
+                      ]}
+                    >
+                      <Text
+                        style={
+                          styles.trackNumber
+                        }
+                      >
+                        {index + 1}
+                      </Text>
+                    </View>
+                  )}
 
                   <View
                     style={
@@ -1104,12 +1129,28 @@ const styles =
     },
 
     trackNumber: {
-      width: 27,
       color: "#918981",
       fontSize: 11,
       fontWeight: "800",
       textAlign: "center",
-      marginRight: 8,
+    },
+
+    trackImage: {
+      width: 48,
+      height: 48,
+      borderRadius: 10,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#F1E7DF",
+      marginRight: 10,
+    },
+
+    trackImagePlaceholder: {
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
     },
 
     trackText: {

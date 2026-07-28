@@ -179,6 +179,21 @@ export const SCENE_ARC_OPTIONS = [
   },
 ] as const;
 
+export const SCENE_GENRE_OPTIONS = [
+  "Pop",
+  "Hip hop",
+  "R&B",
+  "Rock",
+  "Indie",
+  "Electronic",
+  "Dance",
+  "Afrobeats",
+  "Latin",
+  "Jazz",
+  "Classical",
+  "Ambient",
+] as const;
+
 export type SceneActivity =
   (typeof SCENE_ACTIVITY_OPTIONS)[number]["value"];
 
@@ -198,6 +213,7 @@ export type SceneStudioDraft = {
   name: string;
   activity: SceneActivity;
   moods: SceneMood[];
+  preferredGenres: string[];
   durationMinutes: number;
   energy: SceneEnergy;
   familiarity: SceneFamiliarity;
@@ -210,7 +226,9 @@ export type SceneStudioDraft = {
 export type SceneTrackSource =
   | "top"
   | "saved"
-  | "recent";
+  | "recent"
+  | "playlist"
+  | "discovery";
 
 export type GeneratedTrackSignal = {
   track: SpotifyTrack;
@@ -224,6 +242,8 @@ export type GeneratedSceneSourceBreakdown = {
   top: number;
   saved: number;
   recent: number;
+  playlist: number;
+  discovery: number;
 };
 
 export type GeneratedSceneResult = {
@@ -257,6 +277,7 @@ export const DEFAULT_SCENE_STUDIO_DRAFT: SceneStudioDraft = {
   name: "",
   activity: "focus",
   moods: ["calm"],
+  preferredGenres: [],
   durationMinutes: 35,
   energy: "medium",
   familiarity: "balanced",
@@ -717,6 +738,20 @@ function getSourceBaseScore(
     );
   }
 
+  if (source === "playlist") {
+    return Math.max(
+      6,
+      28 - rank * 0.45,
+    );
+  }
+
+  if (source === "discovery") {
+    return Math.max(
+      4,
+      18 - rank * 0.35,
+    );
+  }
+
   return Math.max(
     4,
     23 - rank * 0.7,
@@ -738,6 +773,14 @@ function getSourceMultiplier(
       return 1.2;
     }
 
+    if (source === "playlist") {
+      return 1.15;
+    }
+
+    if (source === "discovery") {
+      return 0.35;
+    }
+
     return 0.9;
   }
 
@@ -752,6 +795,14 @@ function getSourceMultiplier(
       return 1.05;
     }
 
+    if (source === "playlist") {
+      return 0.95;
+    }
+
+    if (source === "discovery") {
+      return 1.55;
+    }
+
     return 1.1;
   }
 
@@ -761,6 +812,14 @@ function getSourceMultiplier(
 
   if (source === "saved") {
     return 1.05;
+  }
+
+  if (source === "playlist") {
+    return 1.05;
+  }
+
+  if (source === "discovery") {
+    return 0.8;
   }
 
   return 1;
@@ -792,6 +851,7 @@ function getGenreMatchScore(
 
   let activityMatches = 0;
   let moodMatches = 0;
+  let preferredMatches = 0;
 
   for (const genre of genres) {
     if (
@@ -811,6 +871,22 @@ function getGenreMatchScore(
     ) {
       moodMatches += 1;
     }
+
+    if (
+      draft.preferredGenres.some(
+        (preferredGenre) =>
+          includesKeyword(
+            genre,
+            [preferredGenre],
+          ) ||
+          includesKeyword(
+            preferredGenre,
+            [genre],
+          ),
+      )
+    ) {
+      preferredMatches += 1;
+    }
   }
 
   return (
@@ -821,6 +897,10 @@ function getGenreMatchScore(
     Math.min(
       moodMatches * 3,
       15,
+    ) +
+    Math.min(
+      preferredMatches * 9,
+      36,
     )
   );
 }
@@ -943,6 +1023,10 @@ function addCandidate(
     string,
     string[]
   >,
+  trackGenreMap: Record<
+    string,
+    string[]
+  >,
 ): void {
   if (
     !track ||
@@ -969,6 +1053,9 @@ function addCandidate(
   }
 
   const genres =
+    trackGenreMap[
+      track.id
+    ] ??
     getTrackGenres(
       track,
       artistGenreMap,
@@ -1019,6 +1106,7 @@ function buildCandidatePool(
         "top",
         index + 1,
         artistGenreMap,
+        snapshot.trackGenres,
       );
     },
   );
@@ -1031,6 +1119,7 @@ function buildCandidatePool(
         "saved",
         index + 1,
         artistGenreMap,
+        snapshot.trackGenres,
       );
     },
   );
@@ -1044,10 +1133,37 @@ function buildCandidatePool(
           "recent",
           index + 1,
           artistGenreMap,
+          snapshot.trackGenres,
         );
       },
     );
   }
+
+  snapshot.playlistTracks.forEach(
+    (track, index) => {
+      addCandidate(
+        candidateMap,
+        track,
+        "playlist",
+        index + 1,
+        artistGenreMap,
+        snapshot.trackGenres,
+      );
+    },
+  );
+
+  snapshot.discoveryTracks.forEach(
+    (track, index) => {
+      addCandidate(
+        candidateMap,
+        track,
+        "discovery",
+        index + 1,
+        artistGenreMap,
+        snapshot.trackGenres,
+      );
+    },
+  );
 
   const candidates =
     Array.from(
@@ -1085,12 +1201,6 @@ function selectTracksForDuration(
   const targetDurationMs =
     draft.durationMinutes *
     60_000;
-
-  const minimumTargetMs =
-    targetDurationMs * 0.9;
-
-  const maximumTargetMs =
-    targetDurationMs * 1.12;
 
   const selected:
     InternalCandidate[] = [];
@@ -1144,11 +1254,22 @@ function selectTracksForDuration(
         candidate.track,
       );
 
-    if (
-      selected.length >= 5 &&
+    const nextDurationMs =
       currentDurationMs +
-        trackDurationMs >
-        maximumTargetMs
+      trackDurationMs;
+
+    if (
+      selected.length >= 3 &&
+      nextDurationMs >
+        targetDurationMs &&
+      Math.abs(
+        targetDurationMs -
+          currentDurationMs,
+      ) <=
+        Math.abs(
+          targetDurationMs -
+            nextDurationMs,
+        )
     ) {
       return false;
     }
@@ -1164,8 +1285,8 @@ function selectTracksForDuration(
       currentArtistCount + 1,
     );
 
-    currentDurationMs +=
-      trackDurationMs;
+    currentDurationMs =
+      nextDurationMs;
 
     return true;
   };
@@ -1181,8 +1302,8 @@ function selectTracksForDuration(
 
     if (
       currentDurationMs >=
-        minimumTargetMs &&
-      selected.length >= 5
+        targetDurationMs &&
+      selected.length >= 3
     ) {
       break;
     }
@@ -1190,7 +1311,7 @@ function selectTracksForDuration(
 
   if (
     currentDurationMs <
-    minimumTargetMs
+    targetDurationMs
   ) {
     for (
       const candidate of
@@ -1203,8 +1324,8 @@ function selectTracksForDuration(
 
       if (
         currentDurationMs >=
-          minimumTargetMs &&
-        selected.length >= 5
+          targetDurationMs &&
+        selected.length >= 3
       ) {
         break;
       }
@@ -1352,6 +1473,8 @@ function getSourceBreakdown(
     top: 0,
     saved: 0,
     recent: 0,
+    playlist: 0,
+    discovery: 0,
   };
 
   for (
@@ -1486,6 +1609,19 @@ function buildSceneTrack(
       signal.track
         .external_urls
         ?.spotify,
+
+    durationMs:
+      getTrackDurationMs(
+        signal.track,
+      ),
+
+    imageUrl:
+      signal.track.album
+        ?.images?.[0]
+        ?.url,
+
+    intensity:
+      signal.intensity,
   };
 }
 
@@ -1648,6 +1784,9 @@ export async function readSceneStudioDraft(): Promise<
       moods: [
         ...DEFAULT_SCENE_STUDIO_DRAFT.moods,
       ],
+      preferredGenres: [
+        ...DEFAULT_SCENE_STUDIO_DRAFT.preferredGenres,
+      ],
     };
   }
 
@@ -1669,12 +1808,37 @@ export async function readSceneStudioDraft(): Promise<
           : [
               ...DEFAULT_SCENE_STUDIO_DRAFT.moods,
             ],
+
+      preferredGenres:
+        Array.isArray(
+          parsed.preferredGenres,
+        )
+          ? parsed.preferredGenres
+              .filter(
+                (
+                  genre,
+                ): genre is string =>
+                  typeof genre ===
+                    "string" &&
+                  Boolean(
+                    genre.trim(),
+                  ),
+              )
+              .map(
+                (genre) =>
+                  genre.trim(),
+              )
+              .slice(0, 5)
+          : [],
     };
   } catch {
     return {
       ...DEFAULT_SCENE_STUDIO_DRAFT,
       moods: [
         ...DEFAULT_SCENE_STUDIO_DRAFT.moods,
+      ],
+      preferredGenres: [
+        ...DEFAULT_SCENE_STUDIO_DRAFT.preferredGenres,
       ],
     };
   }
@@ -1716,7 +1880,52 @@ export async function readGeneratedScenePreview(): Promise<
       return null;
     }
 
-    return parsed;
+    return {
+      ...parsed,
+
+      draft: {
+        ...DEFAULT_SCENE_STUDIO_DRAFT,
+        ...parsed.draft,
+        moods:
+          Array.isArray(
+            parsed.draft?.moods,
+          )
+            ? parsed.draft.moods
+            : [
+                ...DEFAULT_SCENE_STUDIO_DRAFT.moods,
+              ],
+        preferredGenres:
+          Array.isArray(
+            parsed.draft
+              ?.preferredGenres,
+          )
+            ? parsed.draft.preferredGenres
+            : [],
+      },
+
+      sourceBreakdown: {
+        top:
+          parsed.sourceBreakdown
+            ?.top ??
+          0,
+        saved:
+          parsed.sourceBreakdown
+            ?.saved ??
+          0,
+        recent:
+          parsed.sourceBreakdown
+            ?.recent ??
+          0,
+        playlist:
+          parsed.sourceBreakdown
+            ?.playlist ??
+          0,
+        discovery:
+          parsed.sourceBreakdown
+            ?.discovery ??
+          0,
+      },
+    };
   } catch {
     return null;
   }
@@ -1795,13 +2004,18 @@ export function generateSceneFromSpotify(
     );
 
   const selectedGenres =
-    getSelectedGenres(
-      signals,
-      snapshot.topGenres.map(
-        (genre) =>
-          genre.name,
-      ),
-    );
+    Array.from(
+      new Set([
+        ...draft.preferredGenres,
+        ...getSelectedGenres(
+          signals,
+          snapshot.topGenres.map(
+            (genre) =>
+              genre.name,
+          ),
+        ),
+      ]),
+    ).slice(0, 8);
 
   const selectedArtists =
     getSelectedArtists(
@@ -1894,6 +2108,9 @@ export function generateSceneFromSpotify(
       ...draft,
       moods: [
         ...draft.moods,
+      ],
+      preferredGenres: [
+        ...draft.preferredGenres,
       ],
     },
     scene,
