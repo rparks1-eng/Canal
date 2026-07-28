@@ -62,10 +62,7 @@ read_public_env() {
           value = substr($0, length(key) + 2)
           sub(/\r$/, "", value)
           gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-          if (
-            (substr(value, 1, 1) == "\"" && substr(value, length(value), 1) == "\"") ||
-            (substr(value, 1, 1) == "\047" && substr(value, length(value), 1) == "\047")
-          ) {
+          if ((substr(value, 1, 1) == "\"" && substr(value, length(value), 1) == "\"") || (substr(value, 1, 1) == "\047" && substr(value, length(value), 1) == "\047")) {
             value = substr(value, 2, length(value) - 2)
           }
           print value
