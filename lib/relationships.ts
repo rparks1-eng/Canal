@@ -456,13 +456,18 @@ export async function readActivity(): Promise<
 async function readLocalActivity(): Promise<
   CanalActivityItem[]
 > {
+  const storageKey =
+    await activityStorageKey();
+
   const currentValue =
     await AsyncStorage.getItem(
-      STORAGE_KEYS.activity,
+      storageKey,
     );
 
   const legacyValue =
-    currentValue
+    currentValue ||
+    storageKey !==
+      STORAGE_KEYS.activity
       ? null
       : await AsyncStorage.getItem(
           STORAGE_KEYS.legacyReadActivity,
@@ -599,8 +604,11 @@ export async function writeActivity(
   activities:
     CanalActivityItem[],
 ): Promise<void> {
+  const storageKey =
+    await activityStorageKey();
+
   await AsyncStorage.setItem(
-    STORAGE_KEYS.activity,
+    storageKey,
     JSON.stringify(
       activities,
     ),
@@ -623,6 +631,41 @@ export async function markActivityRead(
         : activity,
     ),
   );
+
+  if (isSupabaseConfigured) {
+    try {
+      const userId =
+        await currentUserId();
+
+      if (userId) {
+        const { error } =
+          await supabase
+            .from(
+              "activity_events",
+            )
+            .update({
+              is_read: true,
+            })
+            .eq(
+              "user_id",
+              userId,
+            )
+            .eq(
+              "id",
+              activityId,
+            );
+
+        if (error) {
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.warn(
+        "Canal could not mark cloud activity as read:",
+        error,
+      );
+    }
+  }
 }
 
 export async function markAllActivityRead(): Promise<void> {
@@ -671,9 +714,17 @@ export async function markAllActivityRead(): Promise<void> {
 }
 
 export async function clearActivity(): Promise<void> {
+  const storageKey =
+    await activityStorageKey();
+
   await AsyncStorage.multiRemove([
-    STORAGE_KEYS.activity,
-    STORAGE_KEYS.legacyReadActivity,
+    storageKey,
+    ...(storageKey ===
+    STORAGE_KEYS.activity
+      ? [
+          STORAGE_KEYS.legacyReadActivity,
+        ]
+      : []),
   ]);
 
   if (isSupabaseConfigured) {
@@ -801,6 +852,30 @@ function sortActivity(
         first.createdAt,
       ),
   );
+}
+
+async function activityStorageKey(): Promise<string> {
+  if (!isSupabaseConfigured) {
+    return STORAGE_KEYS.activity;
+  }
+
+  try {
+    const {
+      data: {
+        session,
+      },
+    } =
+      await supabase.auth.getSession();
+
+    const userId =
+      session?.user.id;
+
+    return userId
+      ? `${STORAGE_KEYS.activity}:${userId}`
+      : STORAGE_KEYS.activity;
+  } catch {
+    return STORAGE_KEYS.activity;
+  }
 }
 
 async function currentUserId(): Promise<
