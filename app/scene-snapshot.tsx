@@ -24,8 +24,13 @@ import {
 } from "react-native-safe-area-context";
 
 import {
-  publishSnapshot,
+  publishSnapshot as publishToLocalActivity,
 } from "../lib/canal-session";
+
+import {
+  createSnapshotWithStatus,
+  syncSnapshotWithStatus,
+} from "../lib/snapshots";
 
 import {
   getSceneById,
@@ -67,6 +72,21 @@ export default function SceneSnapshotScreen() {
     setPublished,
   ] = useState(false);
 
+  const [
+    isPublishing,
+    setIsPublishing,
+  ] = useState(false);
+
+  const [
+    pendingSnapshotId,
+    setPendingSnapshotId,
+  ] = useState("");
+
+  const [
+    publishError,
+    setPublishError,
+  ] = useState("");
+
   useEffect(() => {
     const load =
       async (): Promise<void> => {
@@ -103,42 +123,121 @@ export default function SceneSnapshotScreen() {
 
   const publish =
     async (): Promise<void> => {
-      if (!scene) {
+      if (
+        !scene ||
+        isPublishing
+      ) {
         return;
       }
 
-      await publishSnapshot({
-        sceneId:
-          scene.id,
+      setIsPublishing(true);
+      setPublishError("");
 
-        sceneName:
-          scene.name,
+      try {
+        const result =
+          pendingSnapshotId
+            ? await syncSnapshotWithStatus(
+                pendingSnapshotId,
+              )
+            : await createSnapshotWithStatus({
+                sceneId:
+                  scene.id,
 
-        activity:
-          scene.activity,
+                sceneName:
+                  scene.name,
 
-        mood:
-          scene.emotions ||
-          `${scene.energy} energy`,
+                note:
+                  caption.trim(),
 
-        caption:
-          caption.trim(),
+                mood:
+                  scene.emotions ||
+                  `${scene.energy} energy`,
 
-        trackCount:
-          scene.tracks.length,
+                visibility:
+                  "public",
+              });
 
-        artists:
-          scene.artists ||
-          scene.tracks
-            .slice(0, 4)
-            .map(
-              (track) =>
-                track.artist,
-            )
-            .join(", "),
-      });
+        if (!result.value) {
+          setPublishError(
+            result.warning ||
+            "The pending Snapshot could not be found. Try posting again.",
+          );
 
-      setPublished(true);
+          setPendingSnapshotId("");
+
+          return;
+        }
+
+        if (
+          result.cloudStatus !==
+          "synced"
+        ) {
+          setPendingSnapshotId(
+            result.value.id,
+          );
+
+          setPublishError(
+            result.warning ||
+            "The Snapshot is saved on this device, but it has not been published to Canal.",
+          );
+
+          return;
+        }
+
+        setPendingSnapshotId("");
+        setPublished(true);
+
+        /*
+         * Keep the existing local Activity card as an
+         * offline convenience. Cloud publication above
+         * is the source of truth for success.
+         */
+        try {
+          await publishToLocalActivity({
+            sceneId:
+              scene.id,
+
+            sceneName:
+              scene.name,
+
+            activity:
+              scene.activity,
+
+            mood:
+              scene.emotions ||
+              `${scene.energy} energy`,
+
+            caption:
+              caption.trim(),
+
+            trackCount:
+              scene.tracks.length,
+
+            artists:
+              scene.artists ||
+              scene.tracks
+                .slice(0, 4)
+                .map(
+                  (track) =>
+                    track.artist,
+                )
+                .join(", "),
+          });
+        } catch (error) {
+          console.warn(
+            "Snapshot published, but the local Activity card could not be updated:",
+            error,
+          );
+        }
+      } catch (error) {
+        setPublishError(
+          error instanceof Error
+            ? error.message
+            : "Canal could not publish this Snapshot.",
+        );
+      } finally {
+        setIsPublishing(false);
+      }
     };
 
   if (!scene) {
@@ -319,7 +418,10 @@ export default function SceneSnapshotScreen() {
 
           <Pressable
             accessibilityRole="button"
-            disabled={published}
+            disabled={
+              published ||
+              isPublishing
+            }
             onPress={() =>
               void publish()
             }
@@ -329,21 +431,52 @@ export default function SceneSnapshotScreen() {
               published &&
                 styles.disabled,
 
+              isPublishing &&
+                styles.disabled,
+
               pressed &&
                 styles.pressed,
             ]}
           >
-            <Text
-              style={
-                styles.secondaryButtonText
-              }
-            >
-              {published
-                ? "Published"
-                : "Post to Canal"}
-            </Text>
+            {isPublishing ? (
+              <ActivityIndicator
+                size="small"
+                color="#F47A24"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.secondaryButtonText
+                }
+              >
+                {published
+                  ? "Published"
+                  : pendingSnapshotId
+                    ? "Retry Post"
+                    : "Post to Canal"}
+              </Text>
+            )}
           </Pressable>
         </View>
+
+        {publishError ? (
+          <View
+            accessibilityRole="alert"
+            style={styles.error}
+          >
+            <Text
+              style={styles.errorTitle}
+            >
+              Not published yet
+            </Text>
+
+            <Text
+              style={styles.errorText}
+            >
+              {publishError}
+            </Text>
+          </View>
+        ) : null}
 
         {published ? (
           <View style={styles.success}>
@@ -352,8 +485,7 @@ export default function SceneSnapshotScreen() {
                 styles.successText
               }
             >
-              Snapshot added to your local
-              Activity feed.
+              Snapshot published to Canal.
             </Text>
 
             <Pressable
@@ -613,6 +745,30 @@ const styles =
       borderRadius: 17,
       padding: 14,
       marginTop: 14,
+    },
+
+    error: {
+      backgroundColor:
+        "#FFF0EA",
+      borderColor:
+        "#E9B29D",
+      borderWidth: 1,
+      borderRadius: 17,
+      padding: 14,
+      marginTop: 14,
+    },
+
+    errorTitle: {
+      color: "#9A3A1E",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    errorText: {
+      color: "#7D4938",
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 5,
     },
 
     successText: {

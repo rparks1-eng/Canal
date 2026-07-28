@@ -1,0 +1,64 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    groups:
+      expo-runtime:
+        patterns:
+          - "@expo/*"
+          - "expo"
+          - "expo-*"
+          - "react"
+          - "react-dom"
+          - "react-native"
+          - "react-native-*"
+        update-types:
+          - minor
+          - patch
+      production-packages:
+        dependency-type: production
+        exclude-patterns:
+          - "@expo/*"
+          - "expo"
+          - "expo-*"
+          - "react"
+          - "react-dom"
+          - "react-native"
+          - "react-native-*"
+        update-types:
+          - minor
+          - patch
+      development-packages:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: expo
+        update-types:
+          - version-update:semver-major
+      - dependency-name: react
+        update-types:
+          - version-update:semver-major
+      - dependency-name: react-dom
+        update-types:
+          - version-update:semver-major
+      - dependency-name: react-native
+        update-types:
+          - version-update:semver-major
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:15"
+      timezone: America/New_York
+    open-pull-requests-limit: 3

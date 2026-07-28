@@ -26,10 +26,10 @@ import {
     shareSnapshot,
 } from "../../lib/canal-share";
 import {
-    deleteSnapshot,
-    readSnapshot,
+    deleteSnapshotWithStatus,
+    readSnapshotWithStatus,
     Snapshot,
-    updateSnapshot,
+    updateSnapshotWithStatus,
 } from "../../lib/snapshots";
 import {
     readSoundscape,
@@ -81,16 +81,21 @@ export default function SnapshotDetailScreen() {
     | ""
   >("");
 
+  const [
+    cloudWarning,
+    setCloudWarning,
+  ] = useState("");
+
   const loadSnapshot =
     useCallback(async () => {
       try {
         setIsLoading(true);
 
         const [
-          storedSnapshot,
+          snapshotResult,
           storedSoundscape,
         ] = await Promise.all([
-          readSnapshot(
+          readSnapshotWithStatus(
             snapshotId,
           ),
 
@@ -98,7 +103,12 @@ export default function SnapshotDetailScreen() {
         ]);
 
         setSnapshot(
-          storedSnapshot,
+          snapshotResult.value,
+        );
+
+        setCloudWarning(
+          snapshotResult.warning ??
+          "",
         );
 
         setSoundscape(
@@ -106,12 +116,12 @@ export default function SnapshotDetailScreen() {
         );
 
         setNote(
-          storedSnapshot?.note ??
+          snapshotResult.value?.note ??
             "",
         );
 
         setMood(
-          storedSnapshot?.mood ??
+          snapshotResult.value?.mood ??
             "",
         );
       } catch (error) {
@@ -143,8 +153,8 @@ export default function SnapshotDetailScreen() {
     try {
       setActiveAction("save");
 
-      const updatedSnapshot =
-        await updateSnapshot(
+      const result =
+        await updateSnapshotWithStatus(
           snapshot.id,
           {
             note,
@@ -153,13 +163,24 @@ export default function SnapshotDetailScreen() {
         );
 
       setSnapshot(
-        updatedSnapshot,
+        result.value,
       );
 
-      Alert.alert(
-        "Snapshot updated",
-        "Your note and mood were saved.",
+      setCloudWarning(
+        result.warning ?? "",
       );
+
+      if (result.warning) {
+        Alert.alert(
+          "Saved on this device",
+          result.warning,
+        );
+      } else {
+        Alert.alert(
+          "Snapshot updated",
+          "Your note and mood were saved to Canal.",
+        );
+      }
     } catch (error) {
       console.error(
         "Unable to save Snapshot:",
@@ -168,7 +189,9 @@ export default function SnapshotDetailScreen() {
 
       Alert.alert(
         "Unable to save",
-        "Canal could not update this Snapshot.",
+        error instanceof Error
+          ? error.message
+          : "Canal could not update this Snapshot.",
       );
     } finally {
       setActiveAction("");
@@ -187,8 +210,8 @@ export default function SnapshotDetailScreen() {
         "visibility",
       );
 
-      const updatedSnapshot =
-        await updateSnapshot(
+      const result =
+        await updateSnapshotWithStatus(
           snapshot.id,
           {
             visibility:
@@ -199,8 +222,19 @@ export default function SnapshotDetailScreen() {
         );
 
       setSnapshot(
-        updatedSnapshot,
+        result.value,
       );
+
+      setCloudWarning(
+        result.warning ?? "",
+      );
+
+      if (result.warning) {
+        Alert.alert(
+          "Visibility pending",
+          result.warning,
+        );
+      }
     } catch (error) {
       console.error(
         "Unable to update visibility:",
@@ -209,7 +243,9 @@ export default function SnapshotDetailScreen() {
 
       Alert.alert(
         "Unable to update",
-        "Canal could not change the Snapshot visibility.",
+        error instanceof Error
+          ? error.message
+          : "Canal could not change the Snapshot visibility.",
       );
     } finally {
       setActiveAction("");
@@ -367,7 +403,8 @@ export default function SnapshotDetailScreen() {
         "delete",
       );
 
-      await deleteSnapshot(
+      const result =
+        await deleteSnapshotWithStatus(
         snapshot.id,
       );
 
@@ -384,6 +421,13 @@ export default function SnapshotDetailScreen() {
         });
       }
 
+      if (result.warning) {
+        Alert.alert(
+          "Deleted on this device",
+          result.warning,
+        );
+      }
+
       router.replace(
         "/snapshots",
       );
@@ -395,7 +439,9 @@ export default function SnapshotDetailScreen() {
 
       Alert.alert(
         "Unable to delete",
-        "Canal could not delete this Snapshot.",
+        error instanceof Error
+          ? error.message
+          : "Canal could not delete this Snapshot.",
       );
     } finally {
       setActiveAction("");
@@ -480,6 +526,10 @@ export default function SnapshotDetailScreen() {
     soundscape?.snapshotIds.includes(
       snapshot.id,
     ) ?? false;
+
+  const canEdit =
+    snapshot.isMine !==
+    false;
 
   const hasUnsavedChanges =
     note.trim() !==
@@ -590,7 +640,9 @@ export default function SnapshotDetailScreen() {
                 styles.visibilityBadgeText
               }
             >
-              {snapshot.visibility}
+              {snapshot.pendingCloudSync
+                ? "pending sync"
+                : snapshot.visibility}
             </Text>
           </View>
 
@@ -608,6 +660,55 @@ export default function SnapshotDetailScreen() {
             )}
           </Text>
         </View>
+
+        {cloudWarning ? (
+          <View
+            accessibilityRole="alert"
+            style={styles.syncWarning}
+          >
+            <Ionicons
+              name="cloud-offline-outline"
+              size={20}
+              color="#ffb27a"
+            />
+
+            <View
+              style={styles.syncWarningCopy}
+            >
+              <Text
+                style={styles.syncWarningTitle}
+              >
+                Cloud sync needs attention
+              </Text>
+
+              <Text
+                style={styles.syncWarningText}
+              >
+                {cloudWarning}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        {!canEdit ? (
+          <View
+            style={styles.readOnlyCard}
+          >
+            <Ionicons
+              name="eye-outline"
+              size={20}
+              color="#9ff3b5"
+            />
+
+            <Text
+              style={styles.readOnlyText}
+            >
+              This is a public Snapshot.
+              Only its creator can edit or
+              delete it.
+            </Text>
+          </View>
+        ) : null}
 
         <View
           style={styles.trackCard}
@@ -710,6 +811,7 @@ export default function SnapshotDetailScreen() {
             />
           ) : (
             <Switch
+              disabled={!canEdit}
               value={
                 snapshot.visibility ===
                 "public"
@@ -737,6 +839,7 @@ export default function SnapshotDetailScreen() {
             </Text>
 
             <TextInput
+              editable={canEdit}
               value={mood}
               onChangeText={setMood}
               placeholder="Calm · reflective"
@@ -754,6 +857,7 @@ export default function SnapshotDetailScreen() {
             </Text>
 
             <TextInput
+              editable={canEdit}
               value={note}
               onChangeText={setNote}
               placeholder="Why did this moment matter?"
@@ -778,6 +882,7 @@ export default function SnapshotDetailScreen() {
             accessibilityRole="button"
             disabled={
               !hasUnsavedChanges ||
+              !canEdit ||
               activeAction ===
                 "save"
             }
@@ -787,6 +892,7 @@ export default function SnapshotDetailScreen() {
             style={({ pressed }) => [
               styles.primaryButton,
               (!hasUnsavedChanges ||
+                !canEdit ||
                 activeAction ===
                   "save") &&
                 styles.disabled,
@@ -893,39 +999,41 @@ export default function SnapshotDetailScreen() {
           </Text>
         </Pressable>
 
-        <Pressable
-          accessibilityRole="button"
-          disabled={
-            activeAction ===
-            "delete"
-          }
-          onPress={
-            confirmDelete
-          }
-          style={({ pressed }) => [
-            styles.deleteButton,
-            activeAction ===
-              "delete" &&
-              styles.disabled,
-            pressed &&
-              styles.pressed,
-          ]}
-        >
-          {activeAction ===
-          "delete" ? (
-            <ActivityIndicator
-              color="#ff9187"
-            />
-          ) : (
-            <Text
-              style={
-                styles.deleteButtonText
-              }
-            >
-              Delete Snapshot
-            </Text>
-          )}
-        </Pressable>
+        {canEdit ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={
+              activeAction ===
+              "delete"
+            }
+            onPress={
+              confirmDelete
+            }
+            style={({ pressed }) => [
+              styles.deleteButton,
+              activeAction ===
+                "delete" &&
+                styles.disabled,
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            {activeAction ===
+            "delete" ? (
+              <ActivityIndicator
+                color="#ff9187"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.deleteButtonText
+                }
+              >
+                Delete Snapshot
+              </Text>
+            )}
+          </Pressable>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1082,6 +1190,52 @@ const styles = StyleSheet.create({
     marginTop: 7,
     color: "#8f9891",
     fontSize: 11,
+  },
+
+  syncWarning: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 11,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#6d472c",
+    borderRadius: 18,
+    backgroundColor: "#241a13",
+  },
+
+  syncWarningCopy: {
+    flex: 1,
+  },
+
+  syncWarningTitle: {
+    color: "#ffb27a",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  syncWarningText: {
+    marginTop: 4,
+    color: "#d5c1b2",
+    fontSize: 11,
+    lineHeight: 17,
+  },
+
+  readOnlyCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#2d6540",
+    borderRadius: 18,
+    backgroundColor: "#14251a",
+  },
+
+  readOnlyText: {
+    flex: 1,
+    color: "#b8d8c1",
+    fontSize: 12,
+    lineHeight: 18,
   },
 
   trackCard: {

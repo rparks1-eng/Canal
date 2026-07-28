@@ -18,6 +18,10 @@ import {
   router,
 } from "expo-router";
 
+import type {
+  Session,
+} from "@supabase/supabase-js";
+
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
@@ -29,8 +33,11 @@ import {
 } from "../lib/canal-auth";
 
 import {
-  getValidSpotifySession,
-} from "../lib/spotify-auth";
+  isOnboardingRequired,
+  markOnboardingRequired,
+  ONBOARDING_METADATA_KEY,
+  rememberPendingSignup,
+} from "../lib/onboarding";
 
 import {
   useAuth,
@@ -40,27 +47,55 @@ type LoginMode =
   | "sign-in"
   | "create-account";
 
-async function continueAfterAccountLogin(): Promise<void> {
-  const spotifySession =
-    await getValidSpotifySession();
-
-  if (spotifySession) {
-    router.replace(
-      "/(tabs)" as never,
+async function continueAfterAccountLogin(
+  session: Session,
+): Promise<void> {
+  const onboardingRequired =
+    await isOnboardingRequired(
+      session.user.id,
+      session.user.email,
+      session.user.created_at,
+      session.user.user_metadata?.[
+        ONBOARDING_METADATA_KEY
+      ],
     );
 
-    return;
-  }
+  router.replace(
+    (
+      onboardingRequired
+        ? "/onboarding"
+        : "/(tabs)"
+    ) as never,
+  );
+}
 
-  router.replace({
-    pathname:
-      "/music-services",
+function isFirstSocialSignIn(
+  session: Session,
+): boolean {
+  const createdAt =
+    Date.parse(
+      session.user.created_at,
+    );
 
-    params: {
-      mode:
-        "onboarding",
-    },
-  } as never);
+  const lastSignInAt =
+    Date.parse(
+      session.user.last_sign_in_at ??
+        "",
+    );
+
+  return (
+    Number.isFinite(
+      createdAt,
+    ) &&
+    Number.isFinite(
+      lastSignInAt,
+    ) &&
+    Math.abs(
+      lastSignInAt -
+        createdAt,
+    ) <
+      120_000
+  );
 }
 
 export default function LoginScreen() {
@@ -138,12 +173,15 @@ export default function LoginScreen() {
           mode ===
           "sign-in"
         ) {
-          await signInWithEmail(
-            email,
-            password,
-          );
+          const session =
+            await signInWithEmail(
+              email,
+              password,
+            );
 
-          await continueAfterAccountLogin();
+          await continueAfterAccountLogin(
+            session,
+          );
 
           return;
         }
@@ -159,6 +197,10 @@ export default function LoginScreen() {
         if (
           result.needsEmailConfirmation
         ) {
+          await rememberPendingSignup(
+            email,
+          );
+
           setMessage(
             "Your Canal account was created. Open the confirmation email, confirm the account, then return here and sign in.",
           );
@@ -170,7 +212,19 @@ export default function LoginScreen() {
           return;
         }
 
-        await continueAfterAccountLogin();
+        if (!result.session) {
+          throw new Error(
+            "Canal created the account but did not return a usable session.",
+          );
+        }
+
+        await markOnboardingRequired(
+          result.session.user.id,
+        );
+
+        await continueAfterAccountLogin(
+          result.session,
+        );
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -197,11 +251,24 @@ export default function LoginScreen() {
       setErrorMessage("");
 
       try {
-        await signInWithSocial(
-          provider,
-        );
+        const session =
+          await signInWithSocial(
+            provider,
+          );
 
-        await continueAfterAccountLogin();
+        if (
+          isFirstSocialSignIn(
+            session,
+          )
+        ) {
+          await markOnboardingRequired(
+            session.user.id,
+          );
+        }
+
+        await continueAfterAccountLogin(
+          session,
+        );
       } catch (error) {
         setErrorMessage(
           error instanceof Error

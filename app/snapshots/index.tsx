@@ -24,8 +24,8 @@ import {
   shareSnapshot,
 } from "../../lib/canal-share";
 import {
-  deleteSnapshot,
-  readSnapshots,
+  deleteSnapshotWithStatus,
+  readSnapshotsWithStatus,
   Snapshot,
   SnapshotVisibility,
 } from "../../lib/snapshots";
@@ -77,16 +77,25 @@ export default function SnapshotsScreen() {
     setDeletingSnapshotId,
   ] = useState("");
 
+  const [
+    cloudWarning,
+    setCloudWarning,
+  ] = useState("");
+
   const loadSnapshots =
     useCallback(async () => {
       try {
         setIsLoading(true);
 
-        const storedSnapshots =
-          await readSnapshots();
+        const result =
+          await readSnapshotsWithStatus();
 
         setSnapshots(
-          storedSnapshots,
+          result.value,
+        );
+
+        setCloudWarning(
+          result.warning ?? "",
         );
       } catch (error) {
         console.error(
@@ -206,17 +215,32 @@ export default function SnapshotsScreen() {
         snapshotId,
       );
 
-      await deleteSnapshot(
+      const result =
+        await deleteSnapshotWithStatus(
         snapshotId,
       );
 
       setSnapshots(
-        snapshots.filter(
+        (currentSnapshots) =>
+          currentSnapshots.filter(
           (snapshot) =>
             snapshot.id !==
             snapshotId,
-        ),
+          ),
       );
+
+      if (result.warning) {
+        setCloudWarning(
+          result.warning,
+        );
+
+        Alert.alert(
+          "Deleted on this device",
+          result.warning,
+        );
+      } else {
+        setCloudWarning("");
+      }
     } catch (error) {
       console.error(
         "Unable to delete Snapshot:",
@@ -315,6 +339,35 @@ export default function SnapshotsScreen() {
             and Scene moments.
           </Text>
         </View>
+
+        {cloudWarning ? (
+          <View
+            accessibilityRole="alert"
+            style={styles.syncWarning}
+          >
+            <Ionicons
+              name="cloud-offline-outline"
+              size={19}
+              color="#ffb27a"
+            />
+
+            <View
+              style={styles.syncWarningCopy}
+            >
+              <Text
+                style={styles.syncWarningTitle}
+              >
+                Cloud sync needs attention
+              </Text>
+
+              <Text
+                style={styles.syncWarningText}
+              >
+                {cloudWarning}
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         <View
           style={styles.searchBox}
@@ -511,14 +564,18 @@ export default function SnapshotsScreen() {
 
                         <Ionicons
                           name={
-                            snapshot.visibility ===
+                            snapshot.pendingCloudSync
+                              ? "cloud-offline-outline"
+                              : snapshot.visibility ===
                             "public"
                               ? "globe-outline"
                               : "lock-closed-outline"
                           }
                           size={13}
                           color={
-                            snapshot.visibility ===
+                            snapshot.pendingCloudSync
+                              ? "#ffb27a"
+                              : snapshot.visibility ===
                             "public"
                               ? "#9ff3b5"
                               : "#8f9891"
@@ -755,6 +812,34 @@ const styles = StyleSheet.create({
     borderColor: "#303833",
     borderRadius: 17,
     backgroundColor: "#171c19",
+  },
+
+  syncWarning: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 11,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#6d472c",
+    borderRadius: 17,
+    backgroundColor: "#241a13",
+  },
+
+  syncWarningCopy: {
+    flex: 1,
+  },
+
+  syncWarningTitle: {
+    color: "#ffb27a",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  syncWarningText: {
+    marginTop: 4,
+    color: "#d5c1b2",
+    fontSize: 11,
+    lineHeight: 17,
   },
 
   searchInput: {

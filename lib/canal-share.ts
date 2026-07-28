@@ -75,7 +75,9 @@ export async function shareScene(
 ): Promise<CanalShareResult> {
   const url =
     buildCanalUrl(
-      `/scene/${scene.id}`,
+      `/scenes/${encodeURIComponent(
+        scene.id,
+      )}`,
     );
 
   const trackLines =
@@ -140,7 +142,12 @@ export async function shareSoundscape(
 ): Promise<CanalShareResult> {
   const url =
     buildCanalUrl(
-      `/soundscape/${profile.username}`,
+      `/friend/${encodeURIComponent(
+        profile.username.replace(
+          /^@/,
+          "",
+        ),
+      )}`,
     );
 
   const message = [
@@ -179,7 +186,9 @@ export async function shareSnapshot(
 ): Promise<CanalShareResult> {
   const url =
     buildCanalUrl(
-      `/snapshot/${snapshot.id}`,
+      `/snapshots/${encodeURIComponent(
+        snapshot.id,
+      )}`,
     );
 
   const message = [

@@ -1,0 +1,65 @@
+# Canal closed-beta device smoke test
+
+Run this checklist on a rebuilt app. Record the build identifier, device model,
+operating-system version, tester, date, and any failed step in the pull request
+or release record.
+
+## Prerequisites
+
+- The four Supabase migrations are applied in filename order.
+- Supabase allows the Canal authentication and password-reset redirect URLs.
+- The build contains the public Supabase and Spotify configuration values.
+- The Spotify dashboard allows the exact production redirect URI.
+- Two test email accounts are available. Call them Account A and Account B.
+- At least one account has a Spotify library with several saved tracks.
+
+## Account and recovery
+
+- [ ] Create Account A and confirm its email.
+- [ ] Complete the Connect, Shape, Export onboarding.
+- [ ] Log out and log back into Account A.
+- [ ] Request a password reset, open the newest email, set a new password, and
+      log in with it.
+- [ ] Confirm expired or already-used reset links show a recoverable error.
+
+## Spotify and Scene loop
+
+- [ ] Connect Spotify after Canal sign-in.
+- [ ] Deny or cancel once and confirm Canal offers a clear retry.
+- [ ] Import library data and create a Scene with mood, activity, energy,
+      familiarity, duration, and artist choices.
+- [ ] Edit the proposed track list, save the Scene, close the app, reopen it,
+      and confirm the Scene remains.
+- [ ] Export the Scene to Spotify and open the resulting playlist.
+- [ ] Disconnect and reconnect Spotify without losing the Canal account or
+      saved Scene.
+
+## Snapshot and sharing
+
+- [ ] Create a private Snapshot and confirm it appears only for Account A.
+- [ ] Change it to public, share its link, and open the link from a fresh app
+      launch.
+- [ ] Edit the Snapshot and confirm the shared view updates.
+- [ ] Delete the Snapshot and confirm it no longer opens.
+- [ ] Turn off network access, create or edit a Snapshot, restore the network,
+      and confirm synchronization completes without duplication.
+
+## Account isolation
+
+- [ ] Log out of Account A and sign in as Account B on the same device.
+- [ ] Confirm Account B cannot see Account A's private Scenes or Snapshots.
+- [ ] Confirm Account B can view but cannot edit Account A's public content.
+- [ ] Create Account B content, switch back to Account A, and repeat the
+      isolation check in the other direction.
+
+## Platform and recovery states
+
+- [ ] Verify all primary tabs, back navigation, deep links, keyboard behavior,
+      loading states, empty states, and error-retry actions.
+- [ ] Verify interactive controls have readable labels and usable touch targets
+      with the platform screen reader enabled.
+- [ ] Repeat the complete checklist on iOS and the Android checklist before an
+      Android release.
+
+Phase 1 passes only when every applicable box is checked and failures have a
+linked issue or pull request.
