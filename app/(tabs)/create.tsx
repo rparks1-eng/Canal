@@ -146,9 +146,9 @@ export default function CreateTabScreen() {
           style={styles.intro}
         >
           Build a Scene, start a
-          synchronized Stage from
-          one you already love, or
-          join friends with a code.
+          synchronized Stage, or
+          turn a public collection
+          into a listener ballot.
         </Text>
       </View>
 
@@ -189,8 +189,53 @@ export default function CreateTabScreen() {
         }}
       />
 
+      <CreateAction
+        eyebrow="RELEASE"
+        title="Start a Release Ballot"
+        description="Choose one of your public Scene collections, invite contributor credit, and let listeners pick a favorite."
+        symbol="★"
+        onPress={() => {
+          router.push(
+            "/releases/new",
+          );
+        }}
+      />
+
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel="Browse creator releases"
+        onPress={() => {
+          router.push(
+            "/releases",
+          );
+        }}
+        style={({ pressed }) => [
+          styles.liveLink,
+          pressed &&
+            styles.pressed,
+        ]}
+      >
+        <Text
+          style={
+            styles.liveLinkText
+          }
+        >
+          Browse creator releases
+        </Text>
+
+        <Text
+          accessibilityElementsHidden
+          style={
+            styles.liveLinkArrow
+          }
+        >
+          →
+        </Text>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Browse Live Stages"
         onPress={() => {
           router.push(
             "/(tabs)/live",

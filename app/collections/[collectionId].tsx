@@ -346,6 +346,53 @@ export default function SceneCollectionScreen() {
 
               {isOwner ? (
                 <>
+                  {collection.isPublic ? (
+                    <Pressable
+                      accessibilityLabel={`Start a Release Ballot from ${collection.title}`}
+                      accessibilityRole="button"
+                      onPress={() =>
+                        router.push({
+                          pathname:
+                            "/releases/new",
+                          params: {
+                            collectionId:
+                              collection.id,
+                          },
+                        } as never)
+                      }
+                      style={
+                        styles.releaseButton
+                      }
+                    >
+                      <View>
+                        <Text
+                          style={
+                            styles.releaseEyebrow
+                          }
+                        >
+                          PUBLIC LISTENER VOTE
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.releaseText
+                          }
+                        >
+                          Start a Release Ballot
+                        </Text>
+                      </View>
+
+                      <Text
+                        accessibilityElementsHidden
+                        style={
+                          styles.releaseArrow
+                        }
+                      >
+                        ›
+                      </Text>
+                    </Pressable>
+                  ) : null}
+
                   <Pressable
                     accessibilityLabel={`Plan an event with ${collection.title}`}
                     accessibilityRole="button"
@@ -695,6 +742,38 @@ const styles =
     ownerActions: {
       flexDirection: "row",
       gap: 9,
+    },
+    releaseButton: {
+      minHeight: 66,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      borderRadius: 18,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#F47A24",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    releaseEyebrow: {
+      color: "#FFE0C8",
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    releaseText: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    releaseArrow: {
+      color: "#FFFFFF",
+      fontSize: 28,
     },
     planEventButton: {
       minHeight: 66,
