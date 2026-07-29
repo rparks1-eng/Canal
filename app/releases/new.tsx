@@ -39,6 +39,11 @@ import {
 } from "../../lib/creator-releases";
 
 import {
+  createCreatorReleaseMutationLeaseGate,
+  shouldDiscardCreatorReleaseSnapshot,
+} from "../../lib/creator-release-interface";
+
+import {
   listOwnSceneCollections,
 } from "../../lib/scene-collections";
 
@@ -357,6 +362,11 @@ function NewCreatorReleaseContent(
     setFormMessage,
   ] = useState("");
 
+  const [
+    restoredDraftId,
+    setRestoredDraftId,
+  ] = useState("");
+
   const requestEpoch =
     useRef(0);
 
@@ -370,11 +380,10 @@ function NewCreatorReleaseContent(
   const freshSnapshotRef =
     useRef(false);
 
-  const mutationEpoch =
-    useRef(0);
-
-  const mutationInFlight =
-    useRef(false);
+  const mutationLeaseGateRef =
+    useRef(
+      createCreatorReleaseMutationLeaseGate(),
+    );
 
   const activeUserIdRef =
     useRef<
@@ -464,7 +473,9 @@ function NewCreatorReleaseContent(
           }
 
           const nextCollections =
-            await listOwnSceneCollections();
+            await listOwnSceneCollections({
+              account,
+            });
 
           if (
             !isCurrent(
@@ -567,6 +578,19 @@ function NewCreatorReleaseContent(
             return false;
           }
 
+          if (
+            shouldDiscardCreatorReleaseSnapshot(
+              error,
+            )
+          ) {
+            setCollections(
+              [],
+            );
+            setSelectedCollectionId(
+              "",
+            );
+          }
+
           setLoadError(
             error,
           );
@@ -616,8 +640,8 @@ function NewCreatorReleaseContent(
         return () => {
           requestEpoch.current +=
             1;
-          mutationEpoch.current +=
-            1;
+          mutationLeaseGateRef.current
+            .invalidateCommits();
           freshSnapshotRef.current =
             false;
           loadInFlightRef.current =
@@ -703,13 +727,15 @@ function NewCreatorReleaseContent(
   const createRelease =
     async (): Promise<void> => {
       if (
-        mutationInFlight.current ||
+        mutationLeaseGateRef.current
+          .isBusy() ||
         isCreating
       ) {
         return;
       }
 
       if (
+        restoredDraftId ||
         snapshotMutationIsBlocked()
       ) {
         return;
@@ -817,14 +843,13 @@ function NewCreatorReleaseContent(
         return;
       }
 
-      const epoch =
-        mutationEpoch.current +
-        1;
+      const lease =
+        mutationLeaseGateRef.current
+          .acquire();
 
-      mutationEpoch.current =
-        epoch;
-      mutationInFlight.current =
-        true;
+      if (!lease) {
+        return;
+      }
 
       setIsCreating(
         true,
@@ -841,8 +866,10 @@ function NewCreatorReleaseContent(
           accountUserId:
             string,
         ): boolean =>
-          mutationEpoch.current ===
-            epoch &&
+          mutationLeaseGateRef.current
+            .canCommit(
+              lease,
+            ) &&
           activeUserIdRef.current ===
             accountUserId &&
           accountUserId ===
@@ -882,6 +909,16 @@ function NewCreatorReleaseContent(
             account.userId,
           )
         ) {
+          if (
+            activeUserIdRef.current ===
+              props.expectedUserId &&
+            props.expectedUserId
+          ) {
+            setRestoredDraftId(
+              release.id,
+            );
+          }
+
           return;
         }
 
@@ -895,8 +932,10 @@ function NewCreatorReleaseContent(
         } as never);
       } catch (error) {
         if (
-          mutationEpoch.current ===
-            epoch &&
+          mutationLeaseGateRef.current
+            .canCommit(
+              lease,
+            ) &&
           activeUserIdRef.current ===
             props.expectedUserId
         ) {
@@ -905,14 +944,13 @@ function NewCreatorReleaseContent(
           );
         }
       } finally {
-        if (
-          mutationEpoch.current ===
-            epoch &&
-          activeUserIdRef.current ===
-            props.expectedUserId
-        ) {
-          mutationInFlight.current =
-            false;
+        const released =
+          mutationLeaseGateRef.current
+            .release(
+              lease,
+            );
+
+        if (released) {
           setIsCreating(
             false,
           );
@@ -931,6 +969,9 @@ function NewCreatorReleaseContent(
   const createIsDisabled =
     snapshotMutationIsBlocked() ||
     isCreating ||
+    Boolean(
+      restoredDraftId,
+    ) ||
     Boolean(
       loadError,
     ) ||
@@ -958,8 +999,10 @@ function NewCreatorReleaseContent(
         }
       >
         <Pressable
+          accessibilityHint="Returns to the previous Canal screen"
           accessibilityLabel="Go back"
           accessibilityRole="button"
+          hitSlop={8}
           onPress={
             goBack
           }
@@ -1075,6 +1118,55 @@ function NewCreatorReleaseContent(
                 }
               >
                 Loading your collections…
+              </Text>
+            </View>
+          ) : null}
+
+          {isLoading &&
+          collections.length >
+            0 &&
+          !issue ? (
+            <View
+              accessibilityLiveRegion="polite"
+              style={
+                styles.refreshNotice
+              }
+            >
+              <ActivityIndicator
+                color="#A84B0E"
+                size="small"
+              />
+
+              <Text
+                selectable
+                style={
+                  styles.refreshText
+                }
+              >
+                Refreshing collection eligibility…
+              </Text>
+            </View>
+          ) : null}
+
+          {connectivityStatus ===
+            "offline" &&
+          collections.length >
+            0 &&
+          !issue ? (
+            <View
+              accessibilityLiveRegion="assertive"
+              accessibilityRole="alert"
+              style={
+                styles.offlineNotice
+              }
+            >
+              <Text
+                selectable
+                style={
+                  styles.offlineText
+                }
+              >
+                Offline. Your form stays on this device, but Canal will not queue or create a release draft.
               </Text>
             </View>
           ) : null}
@@ -1223,11 +1315,17 @@ function NewCreatorReleaseContent(
                             selected,
                           disabled:
                             !eligible ||
-                            isCreating,
+                            isCreating ||
+                            Boolean(
+                              restoredDraftId,
+                            ),
                         }}
                         disabled={
                           !eligible ||
-                          isCreating
+                          isCreating ||
+                          Boolean(
+                            restoredDraftId,
+                          )
                         }
                         key={
                           collection.id
@@ -1366,7 +1464,8 @@ function NewCreatorReleaseContent(
             <TextInput
               accessibilityLabel="Release title"
               editable={
-                !isCreating
+                !isCreating &&
+                !restoredDraftId
               }
               maxLength={
                 MAX_TITLE_LENGTH
@@ -1417,7 +1516,8 @@ function NewCreatorReleaseContent(
             <TextInput
               accessibilityLabel="Release description"
               editable={
-                !isCreating
+                !isCreating &&
+                !restoredDraftId
               }
               maxLength={
                 MAX_DESCRIPTION_LENGTH
@@ -1438,6 +1538,60 @@ function NewCreatorReleaseContent(
               }
             />
           </View>
+
+          {restoredDraftId ? (
+            <View
+              accessibilityLiveRegion="polite"
+              accessibilityRole="alert"
+              style={
+                styles.restoredDraftCard
+              }
+            >
+              <Text
+                selectable
+                style={
+                  styles.restoredDraftTitle
+                }
+              >
+                Draft created while you were away
+              </Text>
+
+              <Text
+                selectable
+                style={
+                  styles.restoredDraftText
+                }
+              >
+                Canal stopped the late navigation. Open the completed draft before starting another release.
+              </Text>
+
+              <Pressable
+                accessibilityLabel="Open the completed release draft"
+                accessibilityRole="button"
+                onPress={() => {
+                  router.replace({
+                    pathname:
+                      "/releases/[releaseId]",
+                    params: {
+                      releaseId:
+                        restoredDraftId,
+                    },
+                  } as never);
+                }}
+                style={
+                  styles.restoredDraftButton
+                }
+              >
+                <Text
+                  style={
+                    styles.restoredDraftButtonText
+                  }
+                >
+                  Open completed draft
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {formMessage ? (
             <View
@@ -1612,6 +1766,46 @@ const styles =
     loadingText: {
       color: "#716861",
       fontSize: 13,
+    },
+
+    refreshNotice: {
+      minHeight: 44,
+      flexDirection: "row",
+      alignItems:
+        "center",
+      gap: 9,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 15,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFF3E9",
+    },
+
+    refreshText: {
+      flex: 1,
+      color: "#7C451F",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    offlineNotice: {
+      padding: 14,
+      borderWidth: 1,
+      borderColor:
+        "#D8C7A6",
+      borderRadius: 16,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFF7DF",
+    },
+
+    offlineText: {
+      color: "#6E5525",
+      fontSize: 12,
+      lineHeight: 18,
     },
 
     emptyCard: {
@@ -1833,6 +2027,53 @@ const styles =
 
     descriptionInput: {
       minHeight: 126,
+    },
+
+    restoredDraftCard: {
+      alignItems:
+        "flex-start",
+      gap: 9,
+      padding: 16,
+      borderWidth: 1,
+      borderColor:
+        "#B8DEC5",
+      borderRadius: 18,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#EAF7EE",
+    },
+
+    restoredDraftTitle: {
+      color: "#2F6543",
+      fontSize: 15,
+      fontWeight: "900",
+    },
+
+    restoredDraftText: {
+      color: "#496C56",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    restoredDraftButton: {
+      minHeight: 44,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      paddingHorizontal: 16,
+      borderRadius: 14,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#347047",
+    },
+
+    restoredDraftButtonText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "900",
     },
 
     formMessage: {

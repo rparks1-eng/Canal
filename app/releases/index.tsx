@@ -45,6 +45,16 @@ import type {
 } from "../../lib/creator-releases";
 
 import {
+  CREATOR_RELEASE_BROWSE_FILTERS,
+  filterCreatorReleases,
+  shouldDiscardCreatorReleaseSnapshot,
+} from "../../lib/creator-release-interface";
+
+import type {
+  CreatorReleaseBrowseFilter,
+} from "../../lib/creator-release-interface";
+
+import {
   classifyRecoveryIssue,
 } from "../../lib/recovery-issue";
 
@@ -258,6 +268,14 @@ function CreatorReleasesContent(
       null,
     );
 
+  const [
+    browseFilter,
+    setBrowseFilter,
+  ] =
+    useState<CreatorReleaseBrowseFilter>(
+      "all",
+    );
+
   const requestEpoch =
     useRef(0);
 
@@ -367,6 +385,16 @@ function CreatorReleasesContent(
             return false;
           }
 
+          if (
+            shouldDiscardCreatorReleaseSnapshot(
+              error,
+            )
+          ) {
+            setReleases(
+              [],
+            );
+          }
+
           setLoadError(
             error,
           );
@@ -434,7 +462,7 @@ function CreatorReleasesContent(
       ],
     );
 
-  const ownReleases =
+  const allOwnReleases =
     useMemo(
       () =>
         releases.filter(
@@ -448,7 +476,7 @@ function CreatorReleasesContent(
       ],
     );
 
-  const accessibleBallots =
+  const allAccessibleBallots =
     useMemo(
       () =>
         releases.filter(
@@ -461,6 +489,62 @@ function CreatorReleasesContent(
         releases,
       ],
     );
+
+  const ownReleases =
+    useMemo(
+      () =>
+        filterCreatorReleases(
+          allOwnReleases,
+          browseFilter,
+        ),
+      [
+        allOwnReleases,
+        browseFilter,
+      ],
+    );
+
+  const accessibleBallots =
+    useMemo(
+      () =>
+        filterCreatorReleases(
+          allAccessibleBallots,
+          browseFilter,
+        ),
+      [
+        allAccessibleBallots,
+        browseFilter,
+      ],
+    );
+
+  const openBallotCount =
+    useMemo(
+      () =>
+        releases.filter(
+          (release) =>
+            release.status ===
+            "open",
+        ).length,
+      [
+        releases,
+      ],
+    );
+
+  const closedBallotCount =
+    useMemo(
+      () =>
+        releases.filter(
+          (release) =>
+            release.status ===
+            "closed",
+        ).length,
+      [
+        releases,
+      ],
+    );
+
+  const filteredReleaseCount =
+    ownReleases.length +
+    accessibleBallots.length;
 
   const issue =
     loadError
@@ -487,8 +571,10 @@ function CreatorReleasesContent(
         }
       >
         <Pressable
+          accessibilityHint="Returns to the previous Canal screen"
           accessibilityLabel="Go back"
           accessibilityRole="button"
+          hitSlop={8}
           onPress={
             goBack
           }
@@ -518,8 +604,19 @@ function CreatorReleasesContent(
         </Text>
 
         <Pressable
+          accessibilityHint="Starts a draft from one of your public Scene collections"
           accessibilityLabel="Create a new release"
           accessibilityRole="button"
+          accessibilityState={{
+            disabled:
+              connectivityStatus ===
+              "offline",
+          }}
+          disabled={
+            connectivityStatus ===
+            "offline"
+          }
+          hitSlop={8}
           onPress={() =>
             router.push(
               "/releases/new" as never,
@@ -529,6 +626,9 @@ function CreatorReleasesContent(
             pressed,
           }) => [
             styles.headerButton,
+            connectivityStatus ===
+              "offline" &&
+              styles.disabledButton,
             pressed &&
               styles.pressed,
           ]}
@@ -586,6 +686,153 @@ function CreatorReleasesContent(
             </Text>
           </View>
 
+          {releases.length >
+          0 ? (
+            <>
+              <View
+                accessibilityLabel={`${allOwnReleases.length} releases created by you, ${openBallotCount} open ballots, ${closedBallotCount} closed results`}
+                style={
+                  styles.summaryRow
+                }
+              >
+                <View
+                  style={
+                    styles.summaryMetric
+                  }
+                >
+                  <Text
+                    style={
+                      styles.summaryValue
+                    }
+                  >
+                    {
+                      allOwnReleases.length
+                    }
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.summaryLabel
+                    }
+                  >
+                    YOURS
+                  </Text>
+                </View>
+
+                <View
+                  style={
+                    styles.summaryMetric
+                  }
+                >
+                  <Text
+                    style={
+                      styles.summaryValue
+                    }
+                  >
+                    {
+                      openBallotCount
+                    }
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.summaryLabel
+                    }
+                  >
+                    OPEN
+                  </Text>
+                </View>
+
+                <View
+                  style={
+                    styles.summaryMetric
+                  }
+                >
+                  <Text
+                    style={
+                      styles.summaryValue
+                    }
+                  >
+                    {
+                      closedBallotCount
+                    }
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.summaryLabel
+                    }
+                  >
+                    RESULTS
+                  </Text>
+                </View>
+              </View>
+
+              <View
+                accessibilityLabel="Filter release ballots"
+                accessibilityRole="radiogroup"
+                style={
+                  styles.filterRow
+                }
+              >
+                {CREATOR_RELEASE_BROWSE_FILTERS.map(
+                  (filter) => {
+                    const selected =
+                      browseFilter ===
+                      filter;
+
+                    const label =
+                      filter ===
+                        "all"
+                        ? "All"
+                        : filter ===
+                            "open"
+                          ? "Voting open"
+                          : "Results";
+
+                    return (
+                      <Pressable
+                        accessibilityLabel={`Show ${label.toLowerCase()} releases`}
+                        accessibilityRole="radio"
+                        accessibilityState={{
+                          checked:
+                            selected,
+                        }}
+                        key={
+                          filter
+                        }
+                        onPress={() => {
+                          setBrowseFilter(
+                            filter,
+                          );
+                        }}
+                        style={({
+                          pressed,
+                        }) => [
+                          styles.filterButton,
+                          selected &&
+                            styles.filterButtonSelected,
+                          pressed &&
+                            styles.pressed,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.filterButtonText,
+                            selected &&
+                              styles.filterButtonTextSelected,
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  },
+                )}
+              </View>
+            </>
+          ) : null}
+
           {issue ? (
             <>
               {releases.length >
@@ -623,6 +870,55 @@ function CreatorReleasesContent(
           ) : null}
 
           {isLoading &&
+          releases.length >
+            0 &&
+          !issue ? (
+            <View
+              accessibilityLiveRegion="polite"
+              style={
+                styles.refreshNotice
+              }
+            >
+              <ActivityIndicator
+                color="#A84B0E"
+                size="small"
+              />
+
+              <Text
+                selectable
+                style={
+                  styles.refreshText
+                }
+              >
+                Refreshing release access and status…
+              </Text>
+            </View>
+          ) : null}
+
+          {connectivityStatus ===
+            "offline" &&
+          releases.length >
+            0 &&
+          !issue ? (
+            <View
+              accessibilityLiveRegion="assertive"
+              accessibilityRole="alert"
+              style={
+                styles.offlineNotice
+              }
+            >
+              <Text
+                selectable
+                style={
+                  styles.offlineText
+                }
+              >
+                Offline. Showing the last loaded list; open a ballot again after reconnecting to confirm current access.
+              </Text>
+            </View>
+          ) : null}
+
+          {isLoading &&
           releases.length ===
             0 ? (
             <View
@@ -644,6 +940,61 @@ function CreatorReleasesContent(
               >
                 Loading release ballots…
               </Text>
+            </View>
+          ) : null}
+
+          {!isLoading &&
+          releases.length >
+            0 &&
+          filteredReleaseCount ===
+            0 &&
+          !issue ? (
+            <View
+              style={
+                styles.filteredEmptyCard
+              }
+            >
+              <Text
+                selectable
+                style={
+                  styles.filteredEmptyTitle
+                }
+              >
+                Nothing in this view
+              </Text>
+
+              <Text
+                selectable
+                style={
+                  styles.filteredEmptyText
+                }
+              >
+                {browseFilter ===
+                  "open"
+                  ? "No accessible ballot is currently open for voting."
+                  : "No closed release results are available yet."}
+              </Text>
+
+              <Pressable
+                accessibilityLabel="Show all release ballots"
+                accessibilityRole="button"
+                onPress={() => {
+                  setBrowseFilter(
+                    "all",
+                  );
+                }}
+                style={
+                  styles.showAllButton
+                }
+              >
+                <Text
+                  style={
+                    styles.showAllButtonText
+                  }
+                >
+                  Show all
+                </Text>
+              </Pressable>
             </View>
           ) : null}
 
@@ -677,6 +1028,15 @@ function CreatorReleasesContent(
               <Pressable
                 accessibilityLabel="Create your first release"
                 accessibilityRole="button"
+                accessibilityState={{
+                  disabled:
+                    connectivityStatus ===
+                    "offline",
+                }}
+                disabled={
+                  connectivityStatus ===
+                  "offline"
+                }
                 onPress={() =>
                   router.push(
                     "/releases/new" as never,
@@ -686,6 +1046,9 @@ function CreatorReleasesContent(
                   pressed,
                 }) => [
                   styles.primaryButton,
+                  connectivityStatus ===
+                    "offline" &&
+                    styles.disabledButton,
                   pressed &&
                     styles.pressed,
                 ]}
@@ -916,6 +1279,87 @@ const styles =
       lineHeight: 20,
     },
 
+    summaryRow: {
+      flexDirection: "row",
+      gap: 10,
+    },
+
+    summaryMetric: {
+      minHeight: 74,
+      flex: 1,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      gap: 3,
+      padding: 10,
+      borderWidth: 1,
+      borderColor:
+        "#E8DED5",
+      borderRadius: 18,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    summaryValue: {
+      color: "#2B211B",
+      fontSize: 22,
+      fontWeight: "900",
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+
+    summaryLabel: {
+      color: "#8B8179",
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.6,
+    },
+
+    filterRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      padding: 4,
+      borderRadius: 17,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#EFE8E1",
+    },
+
+    filterButton: {
+      minHeight: 48,
+      flexGrow: 1,
+      flexBasis: 96,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      paddingHorizontal: 13,
+      borderRadius: 13,
+      borderCurve:
+        "continuous",
+    },
+
+    filterButtonSelected: {
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    filterButtonText: {
+      color: "#776E67",
+      fontSize: 11,
+      fontWeight: "800",
+    },
+
+    filterButtonTextSelected: {
+      color: "#B9500B",
+    },
+
     staleNotice: {
       padding: 14,
       borderWidth: 1,
@@ -930,6 +1374,46 @@ const styles =
 
     staleText: {
       color: "#735320",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    refreshNotice: {
+      minHeight: 44,
+      flexDirection: "row",
+      alignItems:
+        "center",
+      gap: 9,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 15,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFF3E9",
+    },
+
+    refreshText: {
+      flex: 1,
+      color: "#7C451F",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    offlineNotice: {
+      padding: 14,
+      borderWidth: 1,
+      borderColor:
+        "#D8C7A6",
+      borderRadius: 16,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFF7DF",
+    },
+
+    offlineText: {
+      color: "#6E5525",
       fontSize: 12,
       lineHeight: 18,
     },
@@ -973,6 +1457,53 @@ const styles =
       color: "#6B625B",
       fontSize: 13,
       lineHeight: 20,
+    },
+
+    filteredEmptyCard: {
+      alignItems:
+        "flex-start",
+      gap: 9,
+      padding: 18,
+      borderWidth: 1,
+      borderColor:
+        "#E8DED5",
+      borderRadius: 20,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    filteredEmptyTitle: {
+      color: "#2B211B",
+      fontSize: 17,
+      fontWeight: "900",
+    },
+
+    filteredEmptyText: {
+      color: "#71675F",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    showAllButton: {
+      minHeight: 44,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      paddingHorizontal: 16,
+      borderRadius: 14,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFF0E5",
+    },
+
+    showAllButtonText: {
+      color: "#A84B0E",
+      fontSize: 12,
+      fontWeight: "900",
     },
 
     primaryButton: {
@@ -1033,6 +1564,10 @@ const styles =
 
     releaseList: {
       gap: 12,
+    },
+
+    disabledButton: {
+      opacity: 0.42,
     },
 
     pressed: {
