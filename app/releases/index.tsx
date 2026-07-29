@@ -1332,7 +1332,7 @@ const styles =
     },
 
     filterButton: {
-      minHeight: 42,
+      minHeight: 48,
       flexGrow: 1,
       flexBasis: 96,
       alignItems:

@@ -186,6 +186,12 @@ describe(
 
         expect(
           newRoute,
+        ).toMatch(
+          /listOwnSceneCollections[(]\{[\s\S]*account,[\s\S]*\}[)]/,
+        );
+
+        expect(
+          newRoute,
         ).toContain(
           "requestedCollectionId",
         );
@@ -864,6 +870,24 @@ describe(
           card,
         ).toContain(
           "accessibilityHint",
+        );
+
+        expect(
+          card,
+        ).toContain(
+          "AVAILABLE TO YOU",
+        );
+
+        expect(
+          card,
+        ).not.toContain(
+          '"LISTENER"',
+        );
+
+        expect(
+          listRoute,
+        ).toMatch(
+          /filterButton:\s*\{[\s\S]*?minHeight:\s*48,/,
         );
 
         expect(

@@ -186,7 +186,9 @@ function sceneRow(
 }
 
 function createQuery(
-  result: QueryResult,
+  result:
+    | QueryResult
+    | Promise<QueryResult>,
 ): MockQuery {
   let query =
     {} as MockQuery;
@@ -233,6 +235,37 @@ function createQuery(
   };
 
   return query;
+}
+
+function createDeferred<
+  Value,
+>(): {
+  promise:
+    Promise<Value>;
+  resolve: (
+    value: Value,
+  ) => void;
+} {
+  let resolve:
+    (
+      value: Value,
+    ) => void =
+      () => {};
+
+  const promise =
+    new Promise<Value>(
+      (
+        resolver,
+      ) => {
+        resolve =
+          resolver;
+      },
+    );
+
+  return {
+    promise,
+    resolve,
+  };
 }
 
 function authenticateAs(
@@ -773,6 +806,93 @@ describe(
           kind:
             "account-changed",
         });
+      },
+    );
+
+    it(
+      "never returns account B summaries to a screen bound to captured account A",
+      async () => {
+        const deferredResult =
+          createDeferred<QueryResult>();
+
+        const queryStarted =
+          createDeferred<void>();
+
+        const query =
+          createQuery(
+            deferredResult.promise,
+          );
+
+        query.order.mockImplementation(
+          () => {
+            queryStarted.resolve(
+              undefined,
+            );
+
+            return query;
+          },
+        );
+
+        mockFrom.mockReturnValueOnce(
+          query as never,
+        );
+
+        let committed:
+          unknown[] = [];
+
+        const result =
+          listOwnSceneCollections({
+            account: {
+              userId:
+                OWNER_ID,
+            },
+          }).then(
+            (
+              collections,
+            ) => {
+              committed =
+                collections;
+
+              return collections;
+            },
+          );
+
+        await queryStarted.promise;
+
+        authenticateAs(
+          NEXT_USER_ID,
+        );
+
+        deferredResult.resolve({
+          data: [
+            collectionRow({
+              owner_id:
+                NEXT_USER_ID,
+              title:
+                "Account B collection",
+            }),
+          ],
+          error:
+            null,
+        });
+
+        await expect(
+          result,
+        ).rejects.toMatchObject({
+          kind:
+            "account-changed",
+        });
+
+        expect(
+          committed,
+        ).toEqual([]);
+
+        expect(
+          query.eq,
+        ).toHaveBeenCalledWith(
+          "owner_id",
+          OWNER_ID,
+        );
       },
     );
 

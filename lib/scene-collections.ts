@@ -98,9 +98,15 @@ export function isSceneCollectionError(
   );
 }
 
-type SceneCollectionAccount =
+export type SceneCollectionAccount =
   Readonly<{
     userId: string;
+  }>;
+
+export type ListOwnSceneCollectionsOptions =
+  Readonly<{
+    account?:
+      SceneCollectionAccount;
   }>;
 
 type SceneCollectionVisibility =
@@ -208,11 +214,15 @@ const MAX_SCENE_ID_LENGTH =
 const MAX_COLLECTION_RESULTS =
   100;
 
-export async function listOwnSceneCollections(): Promise<
-  SceneCollectionSummary[]
-> {
+export async function listOwnSceneCollections(
+  options:
+    ListOwnSceneCollectionsOptions =
+      {},
+): Promise<SceneCollectionSummary[]> {
   const account =
-    await captureAccount();
+    await resolveAccount(
+      options.account,
+    );
 
   return listCollectionSummaries(
     account,
@@ -413,6 +423,18 @@ async function listCollectionSummaries(
     normalizeCollectionRows(
       result.data,
     );
+
+  if (
+    collections.some(
+      (collection) =>
+        collection.ownerId !==
+        ownerId,
+    )
+  ) {
+    throw invalidResponse(
+      "Canal returned a Scene collection for the wrong owner.",
+    );
+  }
 
   if (
     collections.length ===
@@ -675,6 +697,32 @@ async function captureAccount(): Promise<
     userId:
       await currentUserId(),
   };
+}
+
+async function resolveAccount(
+  account:
+    | SceneCollectionAccount
+    | undefined,
+): Promise<SceneCollectionAccount> {
+  if (
+    account === undefined
+  ) {
+    return captureAccount();
+  }
+
+  const resolved = {
+    userId:
+      requireUuid(
+        account.userId,
+        "Scene collection account",
+      ),
+  };
+
+  await assertAccount(
+    resolved,
+  );
+
+  return resolved;
 }
 
 async function currentUserId(): Promise<string> {

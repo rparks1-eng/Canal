@@ -18,7 +18,7 @@ const STATUS_COPY: Record<
   {
     label: string;
     ownerDetail: string;
-    listenerDetail: string;
+    availableDetail: string;
     privacy: string;
   }
 > = {
@@ -26,7 +26,7 @@ const STATUS_COPY: Record<
     label: "DRAFT",
     ownerDetail:
       "Review the collection before opening the ballot.",
-    listenerDetail:
+    availableDetail:
       "Voting has not opened yet.",
     privacy:
       "Scenes freeze when opened",
@@ -35,7 +35,7 @@ const STATUS_COPY: Record<
     label: "VOTING OPEN",
     ownerDetail:
       "Results stay sealed until you close voting.",
-    listenerDetail:
+    availableDetail:
       "Choose or change one private favorite Scene.",
     privacy:
       "Individual votes stay private",
@@ -44,7 +44,7 @@ const STATUS_COPY: Record<
     label: "CLOSED",
     ownerDetail:
       "Final totals and the winning Scene are available.",
-    listenerDetail:
+    availableDetail:
       "View final totals and the winning Scene.",
     privacy:
       "Aggregate results only",
@@ -94,7 +94,12 @@ export function CreatorReleaseCard(
   const roleLabel =
     props.isOwner
       ? "OWNER"
-      : "LISTENER";
+      : "AVAILABLE TO YOU";
+
+  const accessibleRole =
+    props.isOwner
+      ? "owner"
+      : "available to you";
 
   return (
     <Pressable
@@ -105,7 +110,7 @@ export function CreatorReleaseCard(
           ? "Opens the ballot where you can choose or change your favorite"
           : "Opens the release ballot details"
       }
-      accessibilityLabel={`Open ${release.title}, ${roleLabel.toLowerCase()}, ${status.label.toLowerCase()}. ${status.privacy}`}
+      accessibilityLabel={`Open ${release.title}, ${accessibleRole}, ${status.label.toLowerCase()}. ${status.privacy}`}
       accessibilityRole="button"
       onPress={() => {
         router.push({
@@ -201,7 +206,7 @@ export function CreatorReleaseCard(
         >
           {props.isOwner
             ? status.ownerDetail
-            : status.listenerDetail}
+            : status.availableDetail}
         </Text>
 
         <Text

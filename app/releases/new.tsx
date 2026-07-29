@@ -473,7 +473,9 @@ function NewCreatorReleaseContent(
           }
 
           const nextCollections =
-            await listOwnSceneCollections();
+            await listOwnSceneCollections({
+              account,
+            });
 
           if (
             !isCurrent(
