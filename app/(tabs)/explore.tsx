@@ -28,6 +28,22 @@ import {
 } from "../../components/PublicSnapshotCard";
 
 import {
+  RecoveryNotice,
+} from "../../components/recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../../hooks/use-reconnect-reload";
+
+import {
+  classifyRecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import type {
+  RecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import {
   loadPublicSnapshotFeed,
 } from "../../lib/public-snapshots";
 
@@ -43,6 +59,10 @@ import {
 import type {
   PublicCanalScene,
 } from "../../lib/social";
+
+import {
+  useConnectivity,
+} from "../../providers/connectivity-provider";
 
 type ExploreContent =
   | "snapshots"
@@ -297,6 +317,14 @@ function PublicSceneCard(
 }
 
 export default function ExploreScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const [
     scenes,
     setScenes,
@@ -350,11 +378,13 @@ export default function ExploreScreen() {
     loadErrors,
     setLoadErrors,
   ] = useState<{
-    snapshots: string;
-    scenes: string;
+    snapshots:
+      RecoveryIssue | null;
+    scenes:
+      RecoveryIssue | null;
   }>({
-    snapshots: "",
-    scenes: "",
+    snapshots: null,
+    scenes: null,
   });
 
   const load =
@@ -365,8 +395,8 @@ export default function ExploreScreen() {
         );
 
         setLoadErrors({
-          snapshots: "",
-          scenes: "",
+          snapshots: null,
+          scenes: null,
         });
 
         const [
@@ -391,11 +421,14 @@ export default function ExploreScreen() {
               ...current,
 
               snapshots:
-                snapshotResult.reason instanceof
-                Error
-                  ? snapshotResult.reason
-                      .message
-                  : "Canal could not load public Snapshots.",
+                classifyRecoveryIssue(
+                  snapshotResult.reason,
+                  {
+                    service:
+                      "canal",
+                    connectivityStatus,
+                  },
+                ),
             }),
           );
         }
@@ -413,11 +446,14 @@ export default function ExploreScreen() {
               ...current,
 
               scenes:
-                sceneResult.reason instanceof
-                Error
-                  ? sceneResult.reason
-                      .message
-                  : "Canal could not load public Scenes.",
+                classifyRecoveryIssue(
+                  sceneResult.reason,
+                  {
+                    service:
+                      "canal",
+                    connectivityStatus,
+                  },
+                ),
             }),
           );
         }
@@ -426,7 +462,9 @@ export default function ExploreScreen() {
           false,
         );
       },
-      [],
+      [
+        connectivityStatus,
+      ],
     );
 
   useFocusEffect(
@@ -438,6 +476,10 @@ export default function ExploreScreen() {
         load,
       ],
     ),
+  );
+
+  useReconnectReload(
+    load,
   );
 
   const filteredScenes =
@@ -528,6 +570,30 @@ export default function ExploreScreen() {
     loadErrors[
       activeContent
     ];
+
+  const recoverLoad =
+    async (): Promise<void> => {
+      if (
+        activeError?.action ===
+        "sign-in"
+      ) {
+        router.replace(
+          "/login" as never,
+        );
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus !==
+        "offline"
+      ) {
+        await load();
+      }
+    };
 
   const save =
     async (
@@ -733,66 +799,17 @@ export default function ExploreScreen() {
         ) : null}
 
         {activeError ? (
-          <View
-            accessibilityRole="alert"
-            style={
-              styles.errorBox
+          <RecoveryNotice
+            busy={
+              loading
             }
-          >
-            <Text
-              style={
-                styles.errorTitle
-              }
-            >
-              {activeError
-                .toLowerCase()
-                .includes(
-                  "sign in",
-                )
-                ? "Sign in required"
-                : "Connection interrupted"}
-            </Text>
-
-            <Text
-              style={
-                styles.errorText
-              }
-            >
-              {activeError}
-            </Text>
-
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                activeError
-                  .toLowerCase()
-                  .includes(
-                    "sign in",
-                  )
-                  ? router.replace(
-                      "/login" as never,
-                    )
-                  : void load()
-              }
-              style={
-                styles.recoveryButton
-              }
-            >
-              <Text
-                style={
-                  styles.recoveryButtonText
-                }
-              >
-                {activeError
-                  .toLowerCase()
-                  .includes(
-                    "sign in",
-                  )
-                  ? "Go to sign in"
-                  : "Try again"}
-              </Text>
-            </Pressable>
-          </View>
+            issue={
+              activeError
+            }
+            onAction={
+              recoverLoad
+            }
+          />
         ) : null}
 
         {loading ? (

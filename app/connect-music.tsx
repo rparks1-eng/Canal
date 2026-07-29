@@ -132,6 +132,10 @@ export default function ConnectMusicScreen() {
         params: {
           step:
             "shape",
+          spotify:
+            profile
+              ? "connected"
+              : "skipped",
         },
       } as never);
 

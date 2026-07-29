@@ -25,6 +25,22 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "../../components/recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../../hooks/use-reconnect-reload";
+
+import {
+  classifyRecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import type {
+  RecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import {
   deleteScene,
   readScenes,
   sceneDurationMinutes,
@@ -43,6 +59,10 @@ import {
   setOwnSceneVisibility,
 } from "../../lib/social";
 
+import {
+  useConnectivity,
+} from "../../providers/connectivity-provider";
+
 type LibraryFilter =
   | "all"
   | "created"
@@ -50,6 +70,14 @@ type LibraryFilter =
   | "favorites";
 
 export default function LibraryScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const [
     scenes,
     setScenes,
@@ -91,6 +119,14 @@ export default function LibraryScreen() {
     setErrorMessage,
   ] = useState("");
 
+  const [
+    loadIssue,
+    setLoadIssue,
+  ] =
+    useState<RecoveryIssue | null>(
+      null,
+    );
+
   const load =
     useCallback(
       async (): Promise<void> => {
@@ -98,17 +134,24 @@ export default function LibraryScreen() {
           true,
         );
 
-        setErrorMessage("");
+        setLoadIssue(
+          null,
+        );
 
         try {
           setScenes(
             await readScenes(),
           );
         } catch (error) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Canal could not load your Library.",
+          setLoadIssue(
+            classifyRecoveryIssue(
+              error,
+              {
+                service:
+                  "canal",
+                connectivityStatus,
+              },
+            ),
           );
         } finally {
           setLoading(
@@ -116,7 +159,9 @@ export default function LibraryScreen() {
           );
         }
       },
-      [],
+      [
+        connectivityStatus,
+      ],
     );
 
   useFocusEffect(
@@ -129,6 +174,34 @@ export default function LibraryScreen() {
       ],
     ),
   );
+
+  useReconnectReload(
+    load,
+  );
+
+  const recoverLoad =
+    async (): Promise<void> => {
+      if (
+        loadIssue?.action ===
+        "sign-in"
+      ) {
+        router.replace(
+          "/login" as never,
+        );
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus !==
+        "offline"
+      ) {
+        await load();
+      }
+    };
 
   const filteredScenes =
     useMemo(
@@ -546,6 +619,20 @@ export default function LibraryScreen() {
           />
         ) : null}
 
+        {loadIssue ? (
+          <RecoveryNotice
+            busy={
+              loading
+            }
+            issue={
+              loadIssue
+            }
+            onAction={
+              recoverLoad
+            }
+          />
+        ) : null}
+
         {loading ? (
           <View
             style={
@@ -556,7 +643,9 @@ export default function LibraryScreen() {
               size="large"
             />
           </View>
-        ) : filteredScenes.length ===
+        ) : loadIssue &&
+          scenes.length ===
+            0 ? null : filteredScenes.length ===
           0 ? (
           <View
             style={
@@ -568,7 +657,11 @@ export default function LibraryScreen() {
                 styles.emptyTitle
               }
             >
-              No matching Scenes
+              {query.trim() ||
+              filter !==
+                "all"
+                ? "No matching Scenes"
+                : "Your Library is empty"}
             </Text>
 
             <Text
@@ -576,7 +669,11 @@ export default function LibraryScreen() {
                 styles.emptyText
               }
             >
-              Create a Scene or save one from Explore.
+              {query.trim() ||
+              filter !==
+                "all"
+                ? "Try another search or filter."
+                : "Create a Scene or save one from Explore. Saved work remains available when you’re offline."}
             </Text>
           </View>
         ) : (

@@ -56,7 +56,7 @@ without seeing the first account's private data.
 - [x] Replace remaining local-only relationship and activity data with Supabase tables
   and row-level security.
 - [x] Add a public Snapshot feed and profile Snapshot grid.
-- Add explicit empty, offline, reconnect, and permission-recovery states.
+- [x] Add explicit empty, offline, reconnect, and permission-recovery states.
 - [x] Add analytics for onboarding completion, first Scene creation, export, Snapshot
   publication, seven-day return, and failure points. Analytics must not include
   Spotify access tokens, passwords, email reset links, or private Scene payloads.

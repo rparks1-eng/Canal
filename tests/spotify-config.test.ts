@@ -118,8 +118,19 @@ describe(
             "playlist-read-private",
             "playlist-read-collaborative",
             "playlist-modify-private",
-            "playlist-modify-public",
           ]),
+        );
+
+        expect(
+          SPOTIFY_SCOPES,
+        ).not.toContain(
+          "playlist-modify-public",
+        );
+
+        expect(
+          SPOTIFY_SCOPES,
+        ).not.toContain(
+          "user-read-email",
         );
       },
     );

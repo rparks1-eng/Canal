@@ -11,6 +11,7 @@ import {
   Linking,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -43,6 +44,11 @@ import {
   captureScenePlaylistExportAccount,
   recordScenePlaylistExport,
 } from "../lib/playlist-exports";
+
+import {
+  publicSceneShareUrl,
+  sceneShareText,
+} from "../lib/scenes";
 
 import {
   loadPublicScene,
@@ -124,6 +130,11 @@ export default function PublicSceneScreen() {
   const [
     saving,
     setSaving,
+  ] = useState(false);
+
+  const [
+    sharing,
+    setSharing,
   ] = useState(false);
 
   const [
@@ -269,6 +280,51 @@ export default function PublicSceneScreen() {
         );
       } finally {
         setSaving(
+          false,
+        );
+      }
+    };
+
+  const share =
+    async (): Promise<void> => {
+      if (
+        !item ||
+        sharing
+      ) {
+        return;
+      }
+
+      setSharing(
+        true,
+      );
+      setErrorMessage("");
+
+      try {
+        const returnUrl =
+          publicSceneShareUrl(
+            item.ownerId,
+            item.sceneId,
+          );
+
+        await Share.share({
+          title:
+            item.scene.name,
+          message:
+            sceneShareText(
+              item.scene,
+              returnUrl,
+            ),
+          url:
+            returnUrl,
+        });
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not share this public Scene.",
+        );
+      } finally {
+        setSharing(
           false,
         );
       }
@@ -719,6 +775,58 @@ export default function PublicSceneScreen() {
                     </Text>
                   )}
                 </Pressable>
+
+                <Pressable
+                  accessibilityHint="Opens your device sharing options."
+                  accessibilityLabel={`Share ${item.scene.name}`}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    busy:
+                      sharing,
+                    disabled:
+                      sharing,
+                  }}
+                  disabled={
+                    sharing
+                  }
+                  onPress={() =>
+                    void share()
+                  }
+                  style={[
+                    styles.shareButton,
+
+                    sharing &&
+                      styles.disabledButton,
+                  ]}
+                >
+                  {sharing ? (
+                    <View
+                      style={
+                        styles.shareBusy
+                      }
+                    >
+                      <ActivityIndicator
+                        color="#1B1B1B"
+                      />
+
+                      <Text
+                        style={
+                          styles.shareButtonText
+                        }
+                      >
+                        Sharing…
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text
+                      style={
+                        styles.shareButtonText
+                      }
+                    >
+                      Share Public Scene
+                    </Text>
+                  )}
+                </Pressable>
               </View>
 
               {message ? (
@@ -776,6 +884,8 @@ export default function PublicSceneScreen() {
 
               {errorMessage ? (
                 <View
+                  accessibilityLiveRegion="polite"
+                  accessibilityRole="alert"
                   style={
                     styles.errorBox
                   }
@@ -1093,6 +1203,32 @@ const styles =
 
     saveButtonText: {
       color: "#F47A24",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    shareButton: {
+      width: "100%",
+      minHeight: 50,
+      borderRadius: 17,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#F4EEE9",
+      marginTop: 10,
+    },
+
+    shareBusy: {
+      flexDirection: "row",
+      alignItems:
+        "center",
+      gap: 8,
+    },
+
+    shareButtonText: {
+      color: "#1B1B1B",
       fontSize: 13,
       fontWeight: "900",
     },

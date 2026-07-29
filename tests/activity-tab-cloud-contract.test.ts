@@ -1,4 +1,5 @@
 import {
+  existsSync,
   readFileSync,
 } from "node:fs";
 
@@ -34,22 +35,33 @@ describe(
 
     const activitySource =
       readSource(
-        "app/activity.tsx",
+        "components/activity-screen.tsx",
       );
 
     it(
-      "reuses the account-scoped cloud Activity screen",
+      "uses one canonical tab route backed by a shared component",
       () => {
         expect(
           tabSource,
         ).toMatch(
-          /import ActivityScreen from ["'][.][.]\/activity["']/,
+          /import ActivityScreen from ["'][.][.]\/[.][.]\/components\/activity-screen["']/,
         );
 
         expect(
           tabSource,
         ).toMatch(
-          /<ActivityScreen\s+embeddedInTabs/,
+          /<ActivityScreen\s*\/>/,
+        );
+
+        expect(
+          existsSync(
+            resolve(
+              PROJECT_ROOT,
+              "app/activity.tsx",
+            ),
+          ),
+        ).toBe(
+          false,
         );
 
         expect(
@@ -90,18 +102,12 @@ describe(
     );
 
     it(
-      "uses tab-native navigation and accessible root recovery",
+      "uses tab-native navigation and accessible controls",
       () => {
         expect(
           activitySource,
         ).toMatch(
-          /embeddedInTabs\s*\?\s*\([\s\S]*styles[.]headerSpacer/,
-        );
-
-        expect(
-          activitySource,
-        ).toContain(
-          'accessibilityLabel="Go back from Activity"',
+          /<View[\s\S]*styles[.]headerSpacer[\s\S]*\/>/,
         );
 
         expect(
@@ -116,11 +122,6 @@ describe(
           /accessibilityLabel=\{`\$\{item[.]title\}[.] \$\{item[.]description\}`\}/,
         );
 
-        expect(
-          activitySource,
-        ).toContain(
-          'router.replace(\n                    "/(tabs)/index",',
-        );
       },
     );
   },

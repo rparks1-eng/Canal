@@ -50,22 +50,13 @@ type LoginMode =
 async function continueAfterAccountLogin(
   session: Session,
 ): Promise<void> {
-  const onboardingRequired =
-    await isOnboardingRequired(
-      session.user.id,
-      session.user.email,
-      session.user.created_at,
-      session.user.user_metadata?.[
-        ONBOARDING_METADATA_KEY
-      ],
-    );
-
-  router.replace(
-    (
-      onboardingRequired
-        ? "/onboarding"
-        : "/(tabs)"
-    ) as never,
+  await isOnboardingRequired(
+    session.user.id,
+    session.user.email,
+    session.user.created_at,
+    session.user.user_metadata?.[
+      ONBOARDING_METADATA_KEY
+    ],
   );
 }
 

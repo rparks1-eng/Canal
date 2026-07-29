@@ -1162,6 +1162,33 @@ export async function clearActivity(): Promise<void> {
       expectedUserId,
     );
 
+  if (
+    isSupabaseConfigured &&
+    expectedUserId
+  ) {
+    const { error } =
+      await supabase
+        .from("activity_events")
+        .delete()
+        .eq(
+          "user_id",
+          expectedUserId,
+        );
+
+    if (error) {
+      throw error;
+    }
+
+    /*
+     * Cloud deletion can finish after an account switch.
+     * Keep the original account's local cache until the
+     * active session is revalidated.
+     */
+    await assertExpectedUser(
+      expectedUserId,
+    );
+  }
+
   await AsyncStorage.multiRemove([
     storageKey,
     ...(storageKey ===
@@ -1171,27 +1198,6 @@ export async function clearActivity(): Promise<void> {
         ]
       : []),
   ]);
-
-  if (isSupabaseConfigured) {
-    await assertExpectedUser(
-      expectedUserId,
-    );
-
-    if (expectedUserId) {
-      const { error } =
-        await supabase
-          .from("activity_events")
-          .delete()
-          .eq(
-            "user_id",
-            expectedUserId,
-          );
-
-      if (error) {
-        throw error;
-      }
-    }
-  }
 }
 
 function normalizeActivity(

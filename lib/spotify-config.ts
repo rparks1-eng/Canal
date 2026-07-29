@@ -10,14 +10,12 @@ export const SPOTIFY_NATIVE_REDIRECT_URI =
 
 export const SPOTIFY_SCOPES = [
   "user-read-private",
-  "user-read-email",
   "user-top-read",
   "user-library-read",
   "user-read-recently-played",
   "playlist-read-private",
   "playlist-read-collaborative",
   "playlist-modify-private",
-  "playlist-modify-public",
 ] as const;
 
 export const CANAL_REQUIRED_SPOTIFY_SCOPES = [

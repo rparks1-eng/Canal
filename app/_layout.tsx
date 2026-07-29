@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -12,6 +13,7 @@ import {
 import {
   Stack,
   router,
+  useGlobalSearchParams,
   useSegments,
 } from "expo-router";
 
@@ -29,10 +31,24 @@ import {
 } from "../providers/analytics-provider";
 
 import {
+  ConnectivityBanner,
+} from "../components/connectivity-banner";
+
+import {
   isOnboardingRequired,
   ONBOARDING_METADATA_KEY,
+  readPendingOnboardingDestination,
   subscribeToOnboarding,
 } from "../lib/onboarding";
+
+import type {
+  OnboardingDestination,
+} from "../lib/onboarding";
+
+import {
+  consumePublicSceneReturn,
+  rememberPublicSceneReturn,
+} from "../lib/auth-return";
 
 type OnboardingState =
   | "checking"
@@ -42,6 +58,12 @@ type OnboardingState =
 function CanalNavigator() {
   const segments =
     useSegments();
+
+  const routeParams =
+    useGlobalSearchParams<{
+      ownerId?: string;
+      sceneId?: string;
+    }>();
 
   const {
     session,
@@ -77,6 +99,43 @@ function CanalNavigator() {
       "checking",
     );
 
+  const [
+    onboardingDestination,
+    setOnboardingDestination,
+  ] =
+    useState<
+      OnboardingDestination | null
+    >(
+      null,
+    );
+
+  const [
+    onboardingCheckedUserId,
+    setOnboardingCheckedUserId,
+  ] =
+    useState<
+      string | null
+    >(
+      null,
+    );
+
+  const activeUserIdRef =
+    useRef<
+      string | null
+    >(
+      userId,
+    );
+
+  activeUserIdRef.current =
+    userId;
+
+  const authNavigationUserId =
+    useRef<
+      string | null
+    >(
+      null,
+    );
+
   useEffect(() => {
     if (loading) {
       return;
@@ -88,26 +147,51 @@ function CanalNavigator() {
       setOnboardingState(
         "complete",
       );
+      setOnboardingCheckedUserId(
+        null,
+      );
 
       return;
     }
 
     let active =
       true;
+    let completionPublished =
+      false;
 
     setOnboardingState(
       "checking",
+    );
+    setOnboardingDestination(
+      null,
+    );
+    setOnboardingCheckedUserId(
+      null,
     );
 
     const unsubscribe =
       subscribeToOnboarding(
         userId,
-        (required) => {
+        (update) => {
           if (active) {
+            if (
+              !update.required
+            ) {
+              completionPublished =
+                true;
+            }
+
             setOnboardingState(
-              required
+              update.required
                 ? "required"
                 : "complete",
+            );
+
+            setOnboardingDestination(
+              update.destination,
+            );
+            setOnboardingCheckedUserId(
+              userId,
             );
           }
         },
@@ -121,11 +205,26 @@ function CanalNavigator() {
     )
       .then(
         (required) => {
-          if (active) {
+          if (
+            active &&
+            !completionPublished &&
+            readPendingOnboardingDestination(
+              userId,
+            ) === null
+          ) {
             setOnboardingState(
               required
                 ? "required"
                 : "complete",
+            );
+            setOnboardingDestination(
+              (current) =>
+                required
+                  ? null
+                  : current,
+            );
+            setOnboardingCheckedUserId(
+              userId,
             );
           }
         },
@@ -144,6 +243,9 @@ function CanalNavigator() {
           if (active) {
             setOnboardingState(
               "complete",
+            );
+            setOnboardingCheckedUserId(
+              userId,
             );
           }
         },
@@ -168,8 +270,12 @@ function CanalNavigator() {
       loading ||
       (
         session &&
-        onboardingState ===
-          "checking"
+        (
+          onboardingState ===
+            "checking" ||
+          onboardingCheckedUserId !==
+            userId
+        )
       )
     ) {
       return;
@@ -188,6 +294,33 @@ function CanalNavigator() {
       !session &&
       !isAccountRoute
     ) {
+      if (
+        rootSegment ===
+          "public-scene" &&
+        typeof routeParams.ownerId ===
+          "string" &&
+        typeof routeParams.sceneId ===
+          "string"
+      ) {
+        void rememberPublicSceneReturn(
+          routeParams.ownerId,
+          routeParams.sceneId,
+        ).finally(
+          () => {
+            if (
+              activeUserIdRef.current ===
+                null
+            ) {
+              router.replace(
+                "/login" as never,
+              );
+            }
+          },
+        );
+
+        return;
+      }
+
       router.replace(
         "/login" as never,
       );
@@ -235,24 +368,101 @@ function CanalNavigator() {
           "onboarding"
       )
     ) {
-      router.replace(
-        "/(tabs)" as never,
-      );
+      if (
+        authNavigationUserId.current ===
+          userId
+      ) {
+        return;
+      }
+
+      const expectedUserId =
+        userId;
+
+      authNavigationUserId.current =
+        expectedUserId;
+
+      const fallbackDestination =
+        rootSegment ===
+          "onboarding"
+          ? onboardingDestination ??
+            "/(tabs)"
+          : "/(tabs)";
+
+      void consumePublicSceneReturn()
+        .then(
+          (returnDestination) => {
+            if (
+              activeUserIdRef.current !==
+                expectedUserId
+            ) {
+              return;
+            }
+
+            setOnboardingDestination(
+              null,
+            );
+
+            router.replace(
+              (
+                returnDestination ??
+                fallbackDestination
+              ) as never,
+            );
+          },
+        )
+        .catch(
+          () => {
+            if (
+              activeUserIdRef.current !==
+                expectedUserId
+            ) {
+              return;
+            }
+
+            setOnboardingDestination(
+              null,
+            );
+
+            router.replace(
+              fallbackDestination as never,
+            );
+          },
+        )
+        .finally(
+          () => {
+            if (
+              authNavigationUserId.current ===
+                expectedUserId
+            ) {
+              authNavigationUserId.current =
+                null;
+            }
+          },
+        );
     }
   }, [
     loading,
+    onboardingCheckedUserId,
+    onboardingDestination,
     onboardingState,
+    routeParams.ownerId,
+    routeParams.sceneId,
     routeKey,
     segments,
     session,
+    userId,
   ]);
 
   if (
     loading ||
     (
       session &&
-      onboardingState ===
-        "checking"
+      (
+        onboardingState ===
+          "checking" ||
+        onboardingCheckedUserId !==
+          userId
+      )
     )
   ) {
     return (
@@ -381,17 +591,31 @@ function CanalNavigator() {
 export default function RootLayout() {
   return (
     <ConnectivityProvider>
-      <AuthProvider>
-        <AnalyticsProvider>
-          <CanalNavigator />
-        </AnalyticsProvider>
-      </AuthProvider>
+      <View
+        style={
+          styles.root
+        }
+      >
+        <ConnectivityBanner />
+
+        <AuthProvider>
+          <AnalyticsProvider>
+            <CanalNavigator />
+          </AnalyticsProvider>
+        </AuthProvider>
+      </View>
     </ConnectivityProvider>
   );
 }
 
 const styles =
   StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor:
+        "#FFF9F4",
+    },
+
     loading: {
       flex: 1,
       alignItems:

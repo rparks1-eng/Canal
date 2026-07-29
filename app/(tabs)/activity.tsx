@@ -1,9 +1,7 @@
-import ActivityScreen from "../activity";
+import ActivityScreen from "../../components/activity-screen";
 
 export default function ActivityTabScreen() {
   return (
-    <ActivityScreen
-      embeddedInTabs
-    />
+    <ActivityScreen />
   );
 }

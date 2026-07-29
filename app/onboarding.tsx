@@ -29,6 +29,10 @@ import {
   completeOnboarding,
 } from "../lib/onboarding";
 
+import type {
+  OnboardingDestination,
+} from "../lib/onboarding";
+
 import {
   classifyAnalyticsFailure,
   recordAnalyticsFailure,
@@ -69,6 +73,7 @@ export default function OnboardingScreen() {
   const params =
     useLocalSearchParams<{
       step?: string;
+      spotify?: string;
     }>();
 
   const {
@@ -92,9 +97,32 @@ export default function OnboardingScreen() {
   ] = useState(false);
 
   const [
+    spotifyConnectSkipped,
+    setSpotifyConnectSkipped,
+  ] = useState(false);
+
+  const [
     errorMessage,
     setErrorMessage,
   ] = useState("");
+
+  useEffect(() => {
+    setSpotifyConnectSkipped(
+      params.spotify ===
+        "skipped",
+    );
+
+    setFinishing(
+      false,
+    );
+
+    setErrorMessage(
+      "",
+    );
+  }, [
+    params.spotify,
+    user?.id,
+  ]);
 
   useEffect(() => {
     setStep(
@@ -118,8 +146,7 @@ export default function OnboardingScreen() {
   const finishOnboarding =
     async (
       destination:
-        | "/scene-studio"
-        | "/(tabs)",
+        OnboardingDestination,
     ): Promise<void> => {
       if (
         finishing
@@ -142,12 +169,12 @@ export default function OnboardingScreen() {
       setErrorMessage("");
 
       try {
-        await completeOnboarding(
-          user.id,
-        );
+        const expectedUserId =
+          user.id;
 
-        router.replace(
-          destination as never,
+        await completeOnboarding(
+          expectedUserId,
+          destination,
         );
       } catch (error) {
         void recordAnalyticsFailure(
@@ -217,7 +244,9 @@ export default function OnboardingScreen() {
           {[
             "Connect",
             "Shape",
-            "Export",
+            spotifyConnectSkipped
+              ? "Explore"
+              : "Export",
           ].map(
             (
               label,
@@ -272,12 +301,20 @@ export default function OnboardingScreen() {
 
           {step ===
           1 ? (
-            <ShapeStep />
+            <ShapeStep
+              spotifyConnectSkipped={
+                spotifyConnectSkipped
+              }
+            />
           ) : null}
 
           {step ===
           2 ? (
-            <ExportStep />
+            <ExportStep
+              spotifyConnectSkipped={
+                spotifyConnectSkipped
+              }
+            />
           ) : null}
         </ScrollView>
 
@@ -322,11 +359,15 @@ export default function OnboardingScreen() {
 
               <SecondaryButton
                 label="Not now"
-                onPress={() =>
+                onPress={() => {
+                  setSpotifyConnectSkipped(
+                    true,
+                  );
+
                   goToStep(
                     1,
-                  )
-                }
+                  );
+                }}
               />
             </>
           ) : null}
@@ -335,7 +376,11 @@ export default function OnboardingScreen() {
           1 ? (
             <>
               <PrimaryButton
-                label="Next: Export"
+                label={
+                  spotifyConnectSkipped
+                    ? "Next: Explore"
+                    : "Next: Export"
+                }
                 onPress={() =>
                   goToStep(
                     2,
@@ -361,14 +406,26 @@ export default function OnboardingScreen() {
                 disabled={
                   finishing
                 }
-                label="Shape my first Scene"
+                label={
+                  spotifyConnectSkipped
+                    ? "Continue to Home"
+                    : "Shape my first Scene"
+                }
                 loading={
                   finishing
                 }
                 onPress={() => {
-                  void finishOnboarding(
-                    "/scene-studio",
-                  );
+                  if (
+                    spotifyConnectSkipped
+                  ) {
+                    void finishOnboarding(
+                      "/(tabs)",
+                    );
+                  } else {
+                    void finishOnboarding(
+                      "/scene-studio",
+                    );
+                  }
                 }}
               />
 
@@ -376,15 +433,34 @@ export default function OnboardingScreen() {
                 disabled={
                   finishing
                 }
-                label="Go to Home"
+                label={
+                  spotifyConnectSkipped
+                    ? "Connect Spotify"
+                    : "Go to Home"
+                }
                 onPress={() => {
-                  void finishOnboarding(
-                    "/(tabs)",
-                  );
+                  if (
+                    spotifyConnectSkipped
+                  ) {
+                    router.push({
+                      pathname:
+                        "/connect-music",
+
+                      params: {
+                        mode:
+                          "onboarding",
+                      },
+                    } as never);
+                  } else {
+                    void finishOnboarding(
+                      "/(tabs)",
+                    );
+                  }
                 }}
               />
 
               <Pressable
+                accessibilityLabel="Back to Shape"
                 accessibilityRole="button"
                 disabled={
                   finishing
@@ -538,7 +614,11 @@ function ConnectStep() {
   );
 }
 
-function ShapeStep() {
+function ShapeStep({
+  spotifyConnectSkipped,
+}: {
+  spotifyConnectSkipped: boolean;
+}) {
   return (
     <View
       style={
@@ -560,7 +640,9 @@ function ShapeStep() {
               styles.scenePreviewLabel
             }
           >
-            YOUR SCENE
+            {spotifyConnectSkipped
+              ? "PUBLIC SCENE"
+              : "YOUR SCENE"}
           </Text>
 
           <Text
@@ -670,10 +752,9 @@ function ShapeStep() {
           styles.description
         }
       >
-        Set the activity, mood, energy,
-        duration, and artist mix. Canal turns
-        those choices into one cohesive
-        Scene.
+        {spotifyConnectSkipped
+          ? "Explore how creators shape activity, mood, energy, duration, and artist mix. Connect Spotify when you want to create your own."
+          : "Set the activity, mood, energy, duration, and artist mix. Canal turns those choices into one cohesive Scene."}
       </Text>
 
       <View
@@ -700,7 +781,83 @@ function ShapeStep() {
   );
 }
 
-function ExportStep() {
+function ExportStep({
+  spotifyConnectSkipped,
+}: {
+  spotifyConnectSkipped: boolean;
+}) {
+  if (
+    spotifyConnectSkipped
+  ) {
+    return (
+      <View
+        style={
+          styles.step
+        }
+      >
+        <View
+          style={
+            styles.exploreVisual
+          }
+        >
+          <Text
+            style={
+              styles.exploreVisualMark
+            }
+          >
+            c
+          </Text>
+        </View>
+
+        <Text
+          style={
+            styles.eyebrow
+          }
+        >
+          EXPLORE
+        </Text>
+
+        <Text
+          style={
+            styles.title
+          }
+        >
+          Start with Canal. Connect when you’re ready.
+        </Text>
+
+        <Text
+          style={
+            styles.description
+          }
+        >
+          Explore public Scenes and creator profiles now. Connect Spotify later from Music Services when you want to shape and export your own Scene.
+        </Text>
+
+        <View
+          style={
+            styles.noteCard
+          }
+        >
+          <Text
+            style={
+              styles.noteTitle
+            }
+          >
+            Explore now
+          </Text>
+
+          <Text
+            style={
+              styles.noteText
+            }
+          >
+            Your Home and Explore feeds are ready. Spotify stays optional until you choose to create.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={
@@ -878,6 +1035,9 @@ function PrimaryButton(
 ) {
   return (
     <Pressable
+      accessibilityLabel={
+        props.label
+      }
       accessibilityRole="button"
       disabled={
         props.disabled
@@ -923,6 +1083,9 @@ function SecondaryButton(
 ) {
   return (
     <Pressable
+      accessibilityLabel={
+        props.label
+      }
       accessibilityRole="button"
       disabled={
         props.disabled
@@ -1304,6 +1467,24 @@ const styles =
       backgroundColor:
         "#E96722",
       padding: 20,
+    },
+
+    exploreVisual: {
+      minHeight: 210,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 28,
+      backgroundColor:
+        "#191714",
+    },
+
+    exploreVisualMark: {
+      color: "#F47A24",
+      fontSize: 82,
+      fontWeight: "900",
+      lineHeight: 90,
     },
 
     cover: {

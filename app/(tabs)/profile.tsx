@@ -1649,7 +1649,7 @@ function ProfileScreenContent() {
                 accessibilityRole="button"
                 onPress={() =>
                   router.push(
-                    "/activity",
+                    "/(tabs)/activity",
                   )
                 }
                 style={

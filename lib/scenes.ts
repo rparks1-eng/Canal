@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import * as Linking from "expo-linking";
+
 import {
   classifyAnalyticsFailure,
   recordAnalyticsEvent,
@@ -1132,6 +1134,7 @@ export function sceneDurationMinutes(
 
 export function sceneShareText(
   scene: StoredScene,
+  returnUrl = "",
 ): string {
   const artists =
     scene.artists ||
@@ -1158,8 +1161,115 @@ export function sceneShareText(
       ? `Artists: ${artists}`
       : "",
 
+    returnUrl.trim(),
+
     "Created with Canal.",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function publicSceneShareIdentifier(
+  value: string,
+  label: string,
+): string {
+  const normalized =
+    value.trim();
+
+  if (
+    !normalized ||
+    normalized.length > 200 ||
+    /[\u0000-\u001F\u007F]/u.test(
+      normalized,
+    )
+  ) {
+    throw new Error(
+      `This public Scene's ${label} is unavailable.`,
+    );
+  }
+
+  return normalized;
+}
+
+function configuredCanalWebUrl():
+  | URL
+  | null {
+  const configuredUrl =
+    process.env
+      .EXPO_PUBLIC_CANAL_WEB_URL
+      ?.trim();
+
+  if (!configuredUrl) {
+    return null;
+  }
+
+  try {
+    const parsedUrl =
+      new URL(
+        configuredUrl,
+      );
+
+    if (
+      parsedUrl.protocol !==
+        "https:" ||
+      parsedUrl.username ||
+      parsedUrl.password ||
+      parsedUrl.search ||
+      parsedUrl.hash
+    ) {
+      return null;
+    }
+
+    return parsedUrl;
+  } catch {
+    return null;
+  }
+}
+
+export function publicSceneShareUrl(
+  ownerId: string,
+  sceneId: string,
+): string {
+  const queryParams = {
+    ownerId:
+      publicSceneShareIdentifier(
+        ownerId,
+        "creator address",
+      ),
+
+    sceneId:
+      publicSceneShareIdentifier(
+        sceneId,
+        "address",
+      ),
+  };
+
+  const webBaseUrl =
+    configuredCanalWebUrl();
+
+  if (webBaseUrl) {
+    const webUrl =
+      new URL(
+        "/public-scene",
+        webBaseUrl.origin,
+      );
+
+    webUrl.searchParams.set(
+      "ownerId",
+      queryParams.ownerId,
+    );
+    webUrl.searchParams.set(
+      "sceneId",
+      queryParams.sceneId,
+    );
+
+    return webUrl.toString();
+  }
+
+  return Linking.createURL(
+    "public-scene",
+    {
+      queryParams,
+    },
+  );
 }
