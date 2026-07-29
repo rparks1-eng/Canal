@@ -8,10 +8,12 @@ import {
 
 import {
   advanceEventRunSheet,
+  completeEventRunSheet,
   deleteEventRunSheet,
   listOwnEventRunSheets,
   loadEventRunSheet,
   saveEventRunSheet,
+  startEventRunSheet,
 } from "../lib/event-run-sheets";
 
 import {
@@ -106,11 +108,46 @@ function runSheetRow(
       0,
     status:
       "planned",
+    version:
+      1,
+    started_at:
+      null,
+    completed_at:
+      null,
+    source_collection_title:
+      null,
     created_at:
       CREATED_AT,
     updated_at:
       UPDATED_AT,
     ...overrides,
+  };
+}
+
+function runSheetItemRow(
+  position: number,
+): Record<string, unknown> {
+  return {
+    run_sheet_id:
+      RUN_SHEET_ID,
+    owner_id:
+      OWNER_ID,
+    scene_id:
+      `scene-${position}`,
+    scene_revision:
+      position +
+      3,
+    position,
+    scene_title:
+      `Scene ${position + 1}`,
+    activity_label:
+      "Dinner",
+    duration_label:
+      "30 minutes",
+    track_count:
+      8,
+    created_at:
+      CREATED_AT,
   };
 }
 
@@ -176,7 +213,7 @@ function authenticateAs(
 }
 
 describe(
-  "private Event Run Sheets client",
+  "private frozen Event Run Sheets client",
   () => {
     beforeEach(() => {
       jest.clearAllMocks();
@@ -187,12 +224,28 @@ describe(
     });
 
     it(
-      "lists strictly normalized sheets for the signed-in owner",
+      "lists strictly normalized lifecycle summaries for one owner",
       async () => {
         const query =
           createQuery({
             data: [
               runSheetRow(),
+              runSheetRow({
+                id:
+                  "00000000-0000-4000-8000-000000000005",
+                status:
+                  "completed",
+                version:
+                  8,
+                active_position:
+                  1,
+                started_at:
+                  "2026-08-01T23:05:00.000Z",
+                completed_at:
+                  "2026-08-02T00:00:00.000Z",
+                source_collection_title:
+                  "Dinner flow",
+              }),
             ],
             error:
               null,
@@ -205,30 +258,26 @@ describe(
         await expect(
           listOwnEventRunSheets(),
         ).resolves.toEqual([
-          {
+          expect.objectContaining({
             id:
               RUN_SHEET_ID,
             ownerId:
               OWNER_ID,
-            collectionId:
-              COLLECTION_ID,
-            title:
-              "Friday Main Room",
-            venueLabel:
-              "Canal Hall",
-            startsAt:
-              STARTS_AT,
-            timeZone:
-              "America/New_York",
-            activePosition:
-              0,
             status:
               "planned",
-            createdAt:
-              CREATED_AT,
-            updatedAt:
-              UPDATED_AT,
-          },
+            version:
+              1,
+            sourceCollectionTitle:
+              null,
+          }),
+          expect.objectContaining({
+            status:
+              "completed",
+            version:
+              8,
+            sourceCollectionTitle:
+              "Dinner flow",
+          }),
         ]);
 
         expect(
@@ -241,19 +290,48 @@ describe(
     );
 
     it(
-      "loads only by exact owner and run sheet IDs",
+      "loads one running sheet with a contiguous immutable item snapshot",
       async () => {
-        const query =
+        const runSheetQuery =
           createQuery({
             data:
-              runSheetRow(),
+              runSheetRow({
+                status:
+                  "running",
+                version:
+                  4,
+                active_position:
+                  1,
+                started_at:
+                  "2026-08-01T23:05:00.000Z",
+                source_collection_title:
+                  "Dinner flow",
+              }),
             error:
               null,
           });
 
-        mockFrom.mockReturnValueOnce(
-          query as never,
-        );
+        const itemQuery =
+          createQuery({
+            data: [
+              runSheetItemRow(
+                0,
+              ),
+              runSheetItemRow(
+                1,
+              ),
+            ],
+            error:
+              null,
+          });
+
+        mockFrom
+          .mockReturnValueOnce(
+            runSheetQuery as never,
+          )
+          .mockReturnValueOnce(
+            itemQuery as never,
+          );
 
         await expect(
           loadEventRunSheet(
@@ -262,29 +340,86 @@ describe(
         ).resolves.toMatchObject({
           id:
             RUN_SHEET_ID,
-          ownerId:
-            OWNER_ID,
+          status:
+            "running",
+          activePosition:
+            1,
+          items: [
+            {
+              sceneId:
+                "scene-0",
+              sceneRevision:
+                3,
+              position:
+                0,
+            },
+            {
+              sceneId:
+                "scene-1",
+              sceneRevision:
+                4,
+              position:
+                1,
+            },
+          ],
         });
-
-        expect(
-          query.eq.mock.calls,
-        ).toEqual([
-          [
-            "id",
-            RUN_SHEET_ID,
-          ],
-          [
-            "owner_id",
-            OWNER_ID,
-          ],
-        ]);
       },
     );
 
     it(
-      "rejects cross-account rows returned by the server",
+      "rejects missing, duplicate, or cross-account frozen rows",
       async () => {
-        const query =
+        const runSheetQuery =
+          createQuery({
+            data:
+              runSheetRow({
+                status:
+                  "running",
+                started_at:
+                  "2026-08-01T23:05:00.000Z",
+                source_collection_title:
+                  "Dinner flow",
+              }),
+            error:
+              null,
+          });
+
+        const itemQuery =
+          createQuery({
+            data: [
+              runSheetItemRow(
+                0,
+              ),
+              {
+                ...runSheetItemRow(
+                  1,
+                ),
+                scene_id:
+                  "scene-0",
+              },
+            ],
+            error:
+              null,
+          });
+
+        mockFrom
+          .mockReturnValueOnce(
+            runSheetQuery as never,
+          )
+          .mockReturnValueOnce(
+            itemQuery as never,
+          );
+
+        await expect(
+          loadEventRunSheet(
+            RUN_SHEET_ID,
+          ),
+        ).rejects.toMatchObject({
+          kind:
+            "invalid-response",
+        });
+
+        const listQuery =
           createQuery({
             data: [
               runSheetRow({
@@ -297,7 +432,7 @@ describe(
           });
 
         mockFrom.mockReturnValueOnce(
-          query as never,
+          listQuery as never,
         );
 
         await expect(
@@ -310,12 +445,15 @@ describe(
     );
 
     it(
-      "saves normalized metadata through the exact RPC",
+      "saves planned metadata with an expected actor and exact version",
       async () => {
         mockRpc.mockResolvedValueOnce(
           {
             data:
-              runSheetRow(),
+              runSheetRow({
+                version:
+                  4,
+              }),
             error:
               null,
           } as never,
@@ -323,6 +461,8 @@ describe(
 
         await expect(
           saveEventRunSheet({
+            id:
+              RUN_SHEET_ID,
             collectionId:
               COLLECTION_ID,
             title:
@@ -333,10 +473,12 @@ describe(
               STARTS_AT,
             timeZone:
               "  America/New_York  ",
+            expectedVersion:
+              3,
           }),
         ).resolves.toMatchObject({
-          id:
-            RUN_SHEET_ID,
+          version:
+            4,
           title:
             "Friday Main Room",
         });
@@ -347,7 +489,7 @@ describe(
           "save_creator_event_run_sheet",
           {
             run_sheet_id_value:
-              null,
+              RUN_SHEET_ID,
             collection_id_value:
               COLLECTION_ID,
             title_value:
@@ -358,85 +500,201 @@ describe(
               STARTS_AT,
             time_zone_value:
               "America/New_York",
+            expected_version_value:
+              3,
+            expected_actor_id_value:
+              OWNER_ID,
           },
         );
       },
     );
 
     it(
-      "advances with an exact expected-position compare-and-swap",
+      "starts, advances, and completes through versioned actor-bound RPCs",
+      async () => {
+        mockRpc
+          .mockResolvedValueOnce(
+            {
+              data:
+                runSheetRow({
+                  status:
+                    "running",
+                  version:
+                    5,
+                  started_at:
+                    "2026-08-01T23:05:00.000Z",
+                  source_collection_title:
+                    "Dinner flow",
+                }),
+              error:
+                null,
+            } as never,
+          )
+          .mockResolvedValueOnce(
+            {
+              data:
+                runSheetRow({
+                  status:
+                    "running",
+                  version:
+                    6,
+                  active_position:
+                    1,
+                  started_at:
+                    "2026-08-01T23:05:00.000Z",
+                  source_collection_title:
+                    "Dinner flow",
+                }),
+              error:
+                null,
+            } as never,
+          )
+          .mockResolvedValueOnce(
+            {
+              data:
+                runSheetRow({
+                  status:
+                    "completed",
+                  version:
+                    7,
+                  active_position:
+                    1,
+                  started_at:
+                    "2026-08-01T23:05:00.000Z",
+                  completed_at:
+                    "2026-08-02T00:00:00.000Z",
+                  source_collection_title:
+                    "Dinner flow",
+                }),
+              error:
+                null,
+            } as never,
+          );
+
+        await expect(
+          startEventRunSheet(
+            RUN_SHEET_ID,
+            4,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            "running",
+          version:
+            5,
+        });
+
+        await expect(
+          advanceEventRunSheet(
+            RUN_SHEET_ID,
+            0,
+            5,
+          ),
+        ).resolves.toMatchObject({
+          activePosition:
+            1,
+          version:
+            6,
+        });
+
+        await expect(
+          completeEventRunSheet(
+            RUN_SHEET_ID,
+            1,
+            6,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            "completed",
+          version:
+            7,
+        });
+
+        expect(
+          mockRpc.mock.calls,
+        ).toEqual([
+          [
+            "start_creator_event_run_sheet",
+            {
+              run_sheet_id_value:
+                RUN_SHEET_ID,
+              expected_version_value:
+                4,
+              expected_actor_id_value:
+                OWNER_ID,
+            },
+          ],
+          [
+            "advance_creator_event_run_sheet",
+            {
+              run_sheet_id_value:
+                RUN_SHEET_ID,
+              expected_version_value:
+                5,
+              expected_actor_id_value:
+                OWNER_ID,
+              expected_position_value:
+                0,
+            },
+          ],
+          [
+            "complete_creator_event_run_sheet",
+            {
+              run_sheet_id_value:
+                RUN_SHEET_ID,
+              expected_version_value:
+                6,
+              expected_actor_id_value:
+                OWNER_ID,
+              expected_position_value:
+                1,
+            },
+          ],
+        ]);
+      },
+    );
+
+    it(
+      "deletes only a versioned planned sheet through the authenticated RPC",
       async () => {
         mockRpc.mockResolvedValueOnce(
           {
             data:
-              runSheetRow({
-                active_position:
-                  1,
-              }),
+              true,
             error:
               null,
           } as never,
         );
 
         await expect(
-          advanceEventRunSheet(
+          deleteEventRunSheet(
             RUN_SHEET_ID,
-            0,
+            3,
           ),
-        ).resolves.toMatchObject({
-          activePosition:
-            1,
-        });
+        ).resolves.toBeUndefined();
 
         expect(
           mockRpc,
         ).toHaveBeenCalledWith(
-          "advance_creator_event_run_sheet",
+          "delete_creator_event_run_sheet",
           {
             run_sheet_id_value:
               RUN_SHEET_ID,
-            expected_position_value:
-              0,
+            expected_version_value:
+              3,
+            expected_actor_id_value:
+              OWNER_ID,
           },
         );
       },
     );
 
     it(
-      "maps stale compare-and-swap results to a typed conflict",
-      async () => {
-        mockRpc.mockResolvedValueOnce(
-          {
-            data:
-              null,
-            error: {
-              code:
-                "40001",
-              message:
-                "Reload before trying again.",
-            },
-          } as never,
-        );
-
-        await expect(
-          advanceEventRunSheet(
-            RUN_SHEET_ID,
-            0,
-          ),
-        ).rejects.toMatchObject({
-          kind:
-            "conflict",
-          databaseCode:
-            "40001",
-        });
-      },
-    );
-
-    it(
-      "rejects invalid metadata before cloud writes",
+      "rejects invalid metadata and incomplete compare-and-swap values before cloud writes",
       async () => {
         await expect(
           saveEventRunSheet({
+            id:
+              RUN_SHEET_ID,
             collectionId:
               COLLECTION_ID,
             title:
@@ -454,18 +712,11 @@ describe(
         });
 
         await expect(
-          saveEventRunSheet({
-            collectionId:
-              COLLECTION_ID,
-            title:
-              "Main Room",
-            venueLabel:
-              "Canal Hall",
-            startsAt:
-              "not-a-date",
-            timeZone:
-              "GMT+500",
-          }),
+          advanceEventRunSheet(
+            RUN_SHEET_ID,
+            50,
+            2,
+          ),
         ).rejects.toMatchObject({
           kind:
             "invalid-input",
@@ -478,37 +729,79 @@ describe(
     );
 
     it(
-      "deletes only through the authenticated RPC",
+      "maps compare-and-swap, deadlock, and connectivity failures to actionable typed errors",
       async () => {
-        mockRpc.mockResolvedValueOnce(
-          {
-            data:
-              true,
-            error:
-              null,
-          } as never,
-        );
+        mockRpc
+          .mockResolvedValueOnce(
+            {
+              data:
+                null,
+              error: {
+                code:
+                  "40001",
+                message:
+                  "Reload before trying again.",
+              },
+            } as never,
+          )
+          .mockResolvedValueOnce(
+            {
+              data:
+                null,
+              error: {
+                code:
+                  "40P01",
+                message:
+                  "Concurrent lifecycle update.",
+              },
+            } as never,
+          )
+          .mockRejectedValueOnce(
+            new TypeError(
+              "Network request failed",
+            ),
+          );
 
         await expect(
-          deleteEventRunSheet(
+          startEventRunSheet(
             RUN_SHEET_ID,
+            2,
           ),
-        ).resolves.toBeUndefined();
+        ).rejects.toMatchObject({
+          kind:
+            "conflict",
+          retryable:
+            true,
+        });
 
-        expect(
-          mockRpc,
-        ).toHaveBeenCalledWith(
-          "delete_creator_event_run_sheet",
-          {
-            run_sheet_id_value:
-              RUN_SHEET_ID,
-          },
-        );
+        await expect(
+          startEventRunSheet(
+            RUN_SHEET_ID,
+            2,
+          ),
+        ).rejects.toMatchObject({
+          kind:
+            "conflict",
+          retryable:
+            true,
+        });
+
+        await expect(
+          startEventRunSheet(
+            RUN_SHEET_ID,
+            2,
+          ),
+        ).rejects.toMatchObject({
+          kind:
+            "offline",
+          retryable:
+            true,
+        });
       },
     );
 
     it(
-      "rejects a read completed after the active account changes",
+      "rejects a mutation response after an A-to-B account switch",
       async () => {
         mockGetUser
           .mockResolvedValueOnce(
@@ -548,21 +841,29 @@ describe(
             } as never,
           );
 
-        const query =
-          createQuery({
-            data: [
-              runSheetRow(),
-            ],
+        mockRpc.mockResolvedValueOnce(
+          {
+            data:
+              runSheetRow({
+                status:
+                  "running",
+                version:
+                  3,
+                started_at:
+                  "2026-08-01T23:05:00.000Z",
+                source_collection_title:
+                  "Dinner flow",
+              }),
             error:
               null,
-          });
-
-        mockFrom.mockReturnValueOnce(
-          query as never,
+          } as never,
         );
 
         await expect(
-          listOwnEventRunSheets(),
+          startEventRunSheet(
+            RUN_SHEET_ID,
+            2,
+          ),
         ).rejects.toMatchObject({
           kind:
             "account-changed",

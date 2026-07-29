@@ -99,7 +99,14 @@ channel access.
   account-switch-safe lifecycle restoration
 - [ ] Release Ballot physical-device acceptance; Android validation is explicitly
   deferred from the interface-polish sprint
-- Event, venue, and DJ controls
+- [x] Private Frozen Event Run Sheets with multiple planned/completed sheets per
+  collection, one active run per owner and collection, atomic 1–50 Scene revision
+  snapshots, version-and-position conflict protection, stored-zone scheduling,
+  owner-only recovery states, and immutable completed summaries
+- [ ] Apply and verify the Event Run Sheet lifecycle migration after the legacy-row
+  preflight, then capture two-device owner/account-switch, DST, offline/reconnect,
+  collection-deletion, and native accessibility acceptance evidence
+- Event, venue, and DJ controls beyond the private owner-only Run Sheet lifecycle
 - Licensing, moderation, reporting, and administrative tools required for broader
   distribution
 
