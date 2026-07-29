@@ -17,6 +17,9 @@ import {
   writeScenes,
 } from "../lib/scenes";
 
+const VALID_SPOTIFY_TRACK_ID =
+  "4uLU6hMCjMI75M1A2tKUQC";
+
 const CURRENT_STORAGE_KEY =
   "@canal/scenes-v2";
 
@@ -64,9 +67,9 @@ describe(
               artist:
                 "Legacy artist",
               uri:
-                "spotify:track:1",
+                `spotify:track:${VALID_SPOTIFY_TRACK_ID}`,
               spotify_url:
-                "https://open.spotify.com/track/1",
+                `https://open.spotify.com/track/${VALID_SPOTIFY_TRACK_ID}`,
               duration_ms:
                 180_000,
               image_url:
@@ -119,15 +122,57 @@ describe(
             artist:
               "Legacy artist",
             spotifyUri:
-              "spotify:track:1",
+              `spotify:track:${VALID_SPOTIFY_TRACK_ID}`,
             spotifyUrl:
-              "https://open.spotify.com/track/1",
+              `https://open.spotify.com/track/${VALID_SPOTIFY_TRACK_ID}`,
             durationMs:
               180_000,
             imageUrl:
               "https://example.com/cover.jpg",
           },
         ]);
+      },
+    );
+
+    it(
+      "drops malicious or malformed public track links during normalization",
+      async () => {
+        await writeScenes([
+          {
+            id:
+              "unsafe-scene",
+            name:
+              "Unsafe",
+            tracks: [
+              {
+                id:
+                  "phishing",
+                title:
+                  "Phishing",
+                artist:
+                  "Attacker",
+                spotifyUrl:
+                  `https://open.spotify.com.evil.example/track/${VALID_SPOTIFY_TRACK_ID}`,
+                spotifyUri:
+                  "tel:+15551234567",
+              },
+            ],
+          } as StoredScene,
+        ]);
+
+        const [scene] =
+          await readScenes();
+
+        expect(
+          scene.tracks[0],
+        ).not.toHaveProperty(
+          "spotifyUrl",
+        );
+        expect(
+          scene.tracks[0],
+        ).not.toHaveProperty(
+          "spotifyUri",
+        );
       },
     );
 

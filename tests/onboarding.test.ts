@@ -7,6 +7,7 @@ import {
 } from "@jest/globals";
 
 import {
+  mockAsyncStorage,
   mockStorage,
 } from "./helpers/async-storage-mock";
 
@@ -15,9 +16,15 @@ jest.mock(
   () => ({
     supabase: {
       auth: {
-        updateUser:
+        getUser:
           jest.fn(
             async () => ({
+              data: {
+                user: {
+                  id:
+                    "user-listener",
+                },
+              },
               error: null,
             }),
           ),
@@ -33,15 +40,15 @@ import {
 import {
   completeOnboarding,
   isOnboardingRequired,
-  ONBOARDING_METADATA_KEY,
+  readPendingOnboardingDestination,
   rememberPendingSignup,
   subscribeToOnboarding,
 } from "../lib/onboarding";
 
-const mockUpdateUser =
+const mockGetUser =
   supabase.auth
-    .updateUser as jest.MockedFunction<
-      typeof supabase.auth.updateUser
+    .getUser as jest.MockedFunction<
+      typeof supabase.auth.getUser
     >;
 
 describe(
@@ -49,14 +56,31 @@ describe(
   () => {
     beforeEach(() => {
       mockStorage.clear();
-      mockUpdateUser.mockReset();
-      mockUpdateUser.mockResolvedValue(
+      mockAsyncStorage.setItem.mockReset();
+      mockAsyncStorage.setItem.mockImplementation(
+        async (
+          key: string,
+          value: string,
+        ) => {
+          mockStorage.set(
+            key,
+            value,
+          );
+        },
+      );
+      mockGetUser.mockReset();
+      mockGetUser.mockResolvedValue(
         {
+          data: {
+            user: {
+              id:
+                "user-listener",
+            },
+          },
           error: null,
-          data: {},
         } as Awaited<
           ReturnType<
-            typeof supabase.auth.updateUser
+            typeof supabase.auth.getUser
           >
         >,
       );
@@ -113,7 +137,7 @@ describe(
     );
 
     it(
-      "notifies the navigator and synchronizes completion to the account",
+      "notifies the navigator after storing account-scoped completion",
       async () => {
         const listener =
           jest.fn();
@@ -126,22 +150,272 @@ describe(
 
         await completeOnboarding(
           "user-listener",
+          "/(tabs)",
         );
 
         expect(
           listener,
         ).toHaveBeenCalledWith(
-          false,
+          {
+            required: false,
+            destination:
+              "/(tabs)",
+          },
         );
 
         expect(
-          mockUpdateUser,
-        ).toHaveBeenCalledWith({
-          data: {
-            [ONBOARDING_METADATA_KEY]:
-              "connect-shape-export-v1",
+          mockStorage.get(
+            "@canal/onboarding/connect-shape-export-v1/user/user-listener",
+          ),
+        ).toBe(
+          "complete",
+        );
+
+        unsubscribe();
+      },
+    );
+
+    it(
+      "does not publish completion while account-scoped storage is pending",
+      async () => {
+        mockGetUser.mockResolvedValue(
+          {
+            data: {
+              user: {
+                id:
+                  "user-deferred",
+              },
+            },
+            error: null,
+          } as Awaited<
+            ReturnType<
+              typeof supabase.auth.getUser
+            >
+          >,
+        );
+
+        let resolveStorage:
+          () => void =
+            () => {};
+
+        let markStorageStarted:
+          () => void =
+            () => {};
+
+        const storageStarted =
+          new Promise<void>(
+            (resolveStarted) => {
+              markStorageStarted =
+                resolveStarted;
+            },
+          );
+
+        mockAsyncStorage.setItem.mockImplementation(
+          async (
+            key: string,
+            value: string,
+          ) => {
+            markStorageStarted();
+
+            await new Promise<void>(
+              (resolve) => {
+                resolveStorage =
+                  resolve;
+              },
+            );
+
+            mockStorage.set(
+              key,
+              value,
+            );
           },
+        );
+
+        const listener =
+          jest.fn();
+
+        const unsubscribe =
+          subscribeToOnboarding(
+            "user-deferred",
+            listener,
+          );
+
+        const completion =
+          completeOnboarding(
+            "user-deferred",
+            "/scene-studio",
+          );
+
+        await storageStarted;
+
+        expect(
+          listener,
+        ).not.toHaveBeenCalled();
+
+        expect(
+          readPendingOnboardingDestination(
+            "user-deferred",
+          ),
+        ).toBe(
+          "/scene-studio",
+        );
+
+        resolveStorage();
+
+        await completion;
+
+        expect(
+          listener,
+        ).toHaveBeenCalledWith(
+          {
+            required: false,
+            destination:
+              "/scene-studio",
+          },
+        );
+
+        expect(
+          listener,
+        ).toHaveBeenCalledTimes(
+          1,
+        );
+
+        expect(
+          readPendingOnboardingDestination(
+            "user-deferred",
+          ),
+        ).toBeNull();
+
+        unsubscribe();
+      },
+    );
+
+    it(
+      "does not publish a destination after the Canal account changes",
+      async () => {
+        const listener =
+          jest.fn();
+
+        mockGetUser
+          .mockResolvedValueOnce(
+            {
+              data: {
+                user: {
+                  id:
+                    "user-a",
+                },
+              },
+              error: null,
+            } as Awaited<
+              ReturnType<
+                typeof supabase.auth.getUser
+              >
+            >,
+          )
+          .mockResolvedValueOnce(
+            {
+              data: {
+                user: {
+                  id:
+                    "user-b",
+                },
+              },
+              error: null,
+            } as Awaited<
+              ReturnType<
+                typeof supabase.auth.getUser
+              >
+            >,
+          );
+
+        let resolveStorage:
+          () => void =
+            () => {};
+
+        let markStorageStarted:
+          () => void =
+            () => {};
+
+        const storageStarted =
+          new Promise<void>(
+            (resolveStarted) => {
+              markStorageStarted =
+                resolveStarted;
+            },
+          );
+
+        mockAsyncStorage.setItem.mockImplementation(
+          async (
+            key: string,
+            value: string,
+          ) => {
+            markStorageStarted();
+
+            await new Promise<void>(
+              (resolve) => {
+                resolveStorage =
+                  resolve;
+              },
+            );
+
+            mockStorage.set(
+              key,
+              value,
+            );
+          },
+        );
+
+        const unsubscribe =
+          subscribeToOnboarding(
+            "user-a",
+            listener,
+          );
+
+        const completion =
+          completeOnboarding(
+            "user-a",
+            "/scene-studio",
+          );
+
+        await storageStarted;
+        resolveStorage();
+
+        await expect(
+          completion,
+        ).rejects.toMatchObject({
+          code:
+            "CANAL_ONBOARDING_ACCOUNT_CHANGED",
         });
+
+        expect(
+          listener,
+        ).not.toHaveBeenCalled();
+
+        expect(
+          mockStorage.get(
+            "@canal/onboarding/connect-shape-export-v1/user/user-b",
+          ),
+        ).toBeUndefined();
+
+        expect(
+          readPendingOnboardingDestination(
+            "user-a",
+          ),
+        ).toBeNull();
+
+        expect(
+          mockGetUser,
+        ).toHaveBeenCalledTimes(
+          2,
+        );
+
+        expect(
+          mockStorage.get(
+            "@canal/onboarding/connect-shape-export-v1/user/user-a",
+          ),
+        ).toBe(
+          "complete",
+        );
 
         unsubscribe();
       },

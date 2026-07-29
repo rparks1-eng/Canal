@@ -40,9 +40,103 @@ export type SceneSyncResult = {
   syncedAt: string;
 };
 
-let activeSync:
-  Promise<SceneSyncResult> | null =
-  null;
+export type SceneCacheOwner = {
+  userId: string;
+  generation: number;
+};
+
+type ActiveSceneSync = {
+  owner: SceneCacheOwner;
+  promise: Promise<SceneSyncResult>;
+};
+
+const activeSyncs =
+  new Map<
+    string,
+    ActiveSceneSync
+  >();
+
+let observedUserId:
+  string | null = null;
+
+let sceneCacheGeneration =
+  0;
+
+let sceneCacheMutationTail:
+  Promise<void> =
+  Promise.resolve();
+
+function observeSceneUser(
+  userId: string | null,
+): SceneCacheOwner | null {
+  if (
+    observedUserId !==
+    userId
+  ) {
+    observedUserId =
+      userId;
+
+    sceneCacheGeneration +=
+      1;
+  }
+
+  return userId
+    ? {
+        userId,
+        generation:
+          sceneCacheGeneration,
+      }
+    : null;
+}
+
+function sameSceneCacheOwner(
+  first: SceneCacheOwner,
+  second: SceneCacheOwner,
+): boolean {
+  return (
+    first.userId ===
+      second.userId &&
+    first.generation ===
+      second.generation
+  );
+}
+
+function sceneCacheOwnerChangedError(): Error {
+  return new Error(
+    "The signed-in Canal account changed while Scenes were loading. Please try again.",
+  );
+}
+
+async function withSceneCacheMutationLock<
+  Result,
+>(
+  operation: () => Promise<Result>,
+): Promise<Result> {
+  const previous =
+    sceneCacheMutationTail;
+
+  let release:
+    () => void =
+    () => undefined;
+
+  sceneCacheMutationTail =
+    new Promise<void>(
+      (resolve) => {
+        release =
+          resolve;
+      },
+    );
+
+  await previous.catch(
+    () => undefined,
+  );
+
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}
 
 function timestamp(
   value?: string | null,
@@ -147,6 +241,170 @@ async function getCurrentUserId(): Promise<string> {
   return user.id;
 }
 
+async function captureSceneCacheOwner(): Promise<
+  SceneCacheOwner
+> {
+  const userId =
+    await getCurrentUserId();
+
+  return (
+    observeSceneUser(
+      userId,
+    ) as SceneCacheOwner
+  );
+}
+
+export async function assertSceneCacheOwner(
+  expectedOwner: SceneCacheOwner,
+): Promise<void> {
+  const currentOwner =
+    await captureSceneCacheOwner();
+
+  if (
+    !sameSceneCacheOwner(
+      expectedOwner,
+      currentOwner,
+    )
+  ) {
+    throw sceneCacheOwnerChangedError();
+  }
+}
+
+async function prepareCapturedSceneCacheOwner(
+  expectedOwner: SceneCacheOwner,
+): Promise<void> {
+  await withSceneCacheMutationLock(
+    async () => {
+      await assertSceneCacheOwner(
+        expectedOwner,
+      );
+
+      const [
+        activeUserId,
+        isolationApplied,
+      ] =
+        await Promise.all([
+          AsyncStorage.getItem(
+            ACTIVE_SCENE_USER_KEY,
+          ),
+
+          AsyncStorage.getItem(
+            isolationKey(
+              expectedOwner.userId,
+            ),
+          ),
+        ]);
+
+      await assertSceneCacheOwner(
+        expectedOwner,
+      );
+
+      const accountChanged =
+        activeUserId !==
+        expectedOwner.userId;
+
+      const requiresOneTimeCleanup =
+        isolationApplied !==
+        "complete";
+
+      if (
+        accountChanged ||
+        requiresOneTimeCleanup
+      ) {
+        await clearScenes();
+
+        await assertSceneCacheOwner(
+          expectedOwner,
+        );
+      }
+
+      await AsyncStorage.multiSet([
+        [
+          ACTIVE_SCENE_USER_KEY,
+          expectedOwner.userId,
+        ],
+
+        [
+          isolationKey(
+            expectedOwner.userId,
+          ),
+          "complete",
+        ],
+      ]);
+
+      await assertSceneCacheOwner(
+        expectedOwner,
+      );
+    },
+  );
+}
+
+export async function capturePreparedSceneCacheOwner(): Promise<
+  SceneCacheOwner
+> {
+  const owner =
+    await captureSceneCacheOwner();
+
+  await prepareCapturedSceneCacheOwner(
+    owner,
+  );
+
+  return owner;
+}
+
+export async function writeScenesForSceneCacheOwner(
+  expectedOwner: SceneCacheOwner,
+  scenes: StoredScene[],
+): Promise<void> {
+  await withSceneCacheMutationLock(
+    async () => {
+      await assertSceneCacheOwner(
+        expectedOwner,
+      );
+
+      const activeUserId =
+        await AsyncStorage.getItem(
+          ACTIVE_SCENE_USER_KEY,
+        );
+
+      await assertSceneCacheOwner(
+        expectedOwner,
+      );
+
+      if (
+        activeUserId !==
+        expectedOwner.userId
+      ) {
+        throw sceneCacheOwnerChangedError();
+      }
+
+      await writeScenes(
+        scenes,
+      );
+
+      try {
+        await assertSceneCacheOwner(
+          expectedOwner,
+        );
+      } catch (error) {
+        /*
+         * The shared cache may briefly contain the
+         * former account's write. Clear it before
+         * allowing the next account's preparation
+         * to acquire this lock.
+         */
+        await clearScenes();
+
+        await AsyncStorage.removeItem(
+          ACTIVE_SCENE_USER_KEY,
+        );
+
+        throw error;
+      }
+    },
+  );
+}
+
 /*
  * Canal previously stored every account's Scenes
  * under one AsyncStorage key. This guard empties
@@ -158,68 +416,46 @@ async function getCurrentUserId(): Promise<string> {
 export async function prepareSceneLibraryForUser(
   userId: string,
 ): Promise<void> {
-  const [
-    activeUserId,
-    isolationApplied,
-  ] =
-    await Promise.all([
-      AsyncStorage.getItem(
-        ACTIVE_SCENE_USER_KEY,
-      ),
-
-      AsyncStorage.getItem(
-        isolationKey(
-          userId,
-        ),
-      ),
-    ]);
-
-  const accountChanged =
-    activeUserId !==
-    userId;
-
-  const requiresOneTimeCleanup =
-    isolationApplied !==
-    "complete";
+  const currentUserId =
+    await getCurrentUserId();
 
   if (
-    accountChanged ||
-    requiresOneTimeCleanup
+    currentUserId !==
+    userId
   ) {
-    await clearScenes();
+    observeSceneUser(
+      currentUserId,
+    );
+
+    throw sceneCacheOwnerChangedError();
   }
 
-  await AsyncStorage.multiSet([
-    [
-      ACTIVE_SCENE_USER_KEY,
+  const owner =
+    observeSceneUser(
       userId,
-    ],
+    ) as SceneCacheOwner;
 
-    [
-      isolationKey(
-        userId,
-      ),
-      "complete",
-    ],
-  ]);
+  await prepareCapturedSceneCacheOwner(
+    owner,
+  );
 }
 
 export async function uploadSceneToCloud(
   scene: StoredScene,
 ): Promise<void> {
-  const userId =
-    await getCurrentUserId();
-
-  await prepareSceneLibraryForUser(
-    userId,
-  );
+  const owner =
+    await capturePreparedSceneCacheOwner();
 
   const payload = {
     ...scene,
 
     ownerId:
-      userId,
+      owner.userId,
   };
+
+  await assertSceneCacheOwner(
+    owner,
+  );
 
   const {
     error,
@@ -231,7 +467,7 @@ export async function uploadSceneToCloud(
       .upsert(
         {
           user_id:
-            userId,
+            owner.userId,
 
           id:
             scene.id,
@@ -258,13 +494,21 @@ export async function uploadSceneToCloud(
       `The Scene was saved on this device, but Canal could not upload it to Supabase: ${error.message}`,
     );
   }
+
+  await assertSceneCacheOwner(
+    owner,
+  );
 }
 
 export async function deleteSceneFromCloud(
   sceneId: string,
 ): Promise<void> {
-  const userId =
-    await getCurrentUserId();
+  const owner =
+    await capturePreparedSceneCacheOwner();
+
+  await assertSceneCacheOwner(
+    owner,
+  );
 
   const {
     error,
@@ -276,7 +520,7 @@ export async function deleteSceneFromCloud(
       .delete()
       .eq(
         "user_id",
-        userId,
+        owner.userId,
       )
       .eq(
         "id",
@@ -288,20 +532,27 @@ export async function deleteSceneFromCloud(
       `Canal could not delete the cloud Scene: ${error.message}`,
     );
   }
+
+  await assertSceneCacheOwner(
+    owner,
+  );
 }
 
-async function performSceneSync(): Promise<
+async function performSceneSync(
+  owner: SceneCacheOwner,
+): Promise<
   SceneSyncResult
 > {
-  const userId =
-    await getCurrentUserId();
-
-  await prepareSceneLibraryForUser(
-    userId,
+  await prepareCapturedSceneCacheOwner(
+    owner,
   );
 
   const localScenes =
     await readScenes();
+
+  await assertSceneCacheOwner(
+    owner,
+  );
 
   const {
     data,
@@ -316,7 +567,7 @@ async function performSceneSync(): Promise<
       )
       .eq(
         "user_id",
-        userId,
+        owner.userId,
       );
 
   if (error) {
@@ -324,6 +575,10 @@ async function performSceneSync(): Promise<
       `Canal could not read this account's cloud Scenes: ${error.message}`,
     );
   }
+
+  await assertSceneCacheOwner(
+    owner,
+  );
 
   const remoteRows =
     (
@@ -398,7 +653,7 @@ async function performSceneSync(): Promise<
     if (!remoteRow) {
       uploads.push({
         user_id:
-          userId,
+          owner.userId,
 
         id:
           localScene.id,
@@ -407,7 +662,7 @@ async function performSceneSync(): Promise<
           ...localScene,
 
           ownerId:
-            userId,
+            owner.userId,
         },
 
         created_at:
@@ -438,7 +693,7 @@ async function performSceneSync(): Promise<
     ) {
       uploads.push({
         user_id:
-          userId,
+          owner.userId,
 
         id:
           localScene.id,
@@ -447,7 +702,7 @@ async function performSceneSync(): Promise<
           ...localScene,
 
           ownerId:
-            userId,
+            owner.userId,
         },
 
         created_at:
@@ -491,6 +746,10 @@ async function performSceneSync(): Promise<
     uploads.length >
     0
   ) {
+    await assertSceneCacheOwner(
+      owner,
+    );
+
     const {
       error: uploadError,
     } =
@@ -511,6 +770,10 @@ async function performSceneSync(): Promise<
         `Canal could not upload this account's Scenes: ${uploadError.message}`,
       );
     }
+
+    await assertSceneCacheOwner(
+      owner,
+    );
   }
 
   for (
@@ -552,7 +815,8 @@ async function performSceneSync(): Promise<
         ),
     );
 
-  await writeScenes(
+  await writeScenesForSceneCacheOwner(
+    owner,
     mergedScenes,
   );
 
@@ -573,18 +837,49 @@ async function performSceneSync(): Promise<
 export async function syncScenesWithCloud(): Promise<
   SceneSyncResult
 > {
-  if (activeSync) {
-    return activeSync;
+  const owner =
+    await captureSceneCacheOwner();
+
+  const existing =
+    activeSyncs.get(
+      owner.userId,
+    );
+
+  if (
+    existing &&
+    sameSceneCacheOwner(
+      existing.owner,
+      owner,
+    )
+  ) {
+    return existing.promise;
   }
 
-  activeSync =
-    performSceneSync();
+  const active: ActiveSceneSync = {
+    owner,
+    promise:
+      performSceneSync(
+        owner,
+      ),
+  };
+
+  activeSyncs.set(
+    owner.userId,
+    active,
+  );
 
   try {
-    return await activeSync;
+    return await active.promise;
   } finally {
-    activeSync =
-      null;
+    if (
+      activeSyncs.get(
+        owner.userId,
+      ) === active
+    ) {
+      activeSyncs.delete(
+        owner.userId,
+      );
+    }
   }
 }
 
@@ -594,7 +889,17 @@ export async function syncScenesWithCloud(): Promise<
  * clear the shared local cache before hydration.
  */
 export async function clearSceneSyncOwnership(): Promise<void> {
-  await AsyncStorage.removeItem(
-    ACTIVE_SCENE_USER_KEY,
+  observeSceneUser(
+    null,
+  );
+
+  activeSyncs.clear();
+
+  await withSceneCacheMutationLock(
+    async () => {
+      await AsyncStorage.removeItem(
+        ACTIVE_SCENE_USER_KEY,
+      );
+    },
   );
 }

@@ -20,16 +20,18 @@ import {
 import {
     clearSpotifySession,
     fetchSpotifyProfile,
+    getValidSpotifySession,
     getSpotifyErrorMessage,
-    loadSpotifyProfile,
     saveSpotifySession,
-    SPOTIFY_SCOPES,
-    spotifyClientId,
-    spotifyDiscovery,
     SpotifyProfile,
-    spotifyRedirectUri,
-    StoredSpotifySession,
-} from "../lib/spotify-session";
+    SpotifySession,
+} from "../lib/spotify-auth";
+import {
+    getSpotifyClientId,
+    getSpotifyRedirectUri,
+    SPOTIFY_SCOPES,
+    spotifyDiscovery,
+} from "../lib/spotify-config";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -49,6 +51,12 @@ type SpotifyConnectionState = {
 export function useSpotifyConnection(
   returnRoute: SpotifyReturnRoute,
 ): SpotifyConnectionState {
+  const spotifyClientId =
+    getSpotifyClientId();
+
+  const spotifyRedirectUri =
+    getSpotifyRedirectUri();
+
   const [
     profile,
     setProfile,
@@ -89,7 +97,9 @@ export function useSpotifyConnection(
         AuthSession.ResponseType.Code,
       redirectUri:
         spotifyRedirectUri,
-      scopes: SPOTIFY_SCOPES,
+      scopes: [
+        ...SPOTIFY_SCOPES,
+      ],
       usePKCE: true,
       extraParams: {
         show_dialog: "true",
@@ -103,10 +113,13 @@ export function useSpotifyConnection(
       try {
         setIsLoading(true);
 
-        const storedProfile =
-          await loadSpotifyProfile();
+        const storedSession =
+          await getValidSpotifySession();
 
-        setProfile(storedProfile);
+        setProfile(
+          storedSession?.profile ??
+            null,
+        );
       } catch (error) {
         console.error(
           "Unable to load Spotify connection:",
@@ -136,11 +149,13 @@ export function useSpotifyConnection(
         response.type === "dismiss"
       ) {
         setIsConnecting(false);
+        await clearSpotifyReturnRoute();
         return;
       }
 
       if (response.type === "error") {
         setIsConnecting(false);
+        await clearSpotifyReturnRoute();
 
         Alert.alert(
           "Spotify connection failed",
@@ -215,33 +230,47 @@ export function useSpotifyConnection(
             spotifyDiscovery,
           );
 
+        const connectedProfile =
+          await fetchSpotifyProfile(
+            tokenResponse.accessToken,
+          );
+
+        const expiresIn =
+          tokenResponse.expiresIn ??
+          3600;
+
         const session:
-          StoredSpotifySession = {
+          SpotifySession = {
             accessToken:
               tokenResponse.accessToken,
             refreshToken:
               tokenResponse.refreshToken,
             expiresIn:
-              tokenResponse.expiresIn,
-            issuedAt: Math.floor(
-              Date.now() / 1000,
-            ),
+              expiresIn,
+            expiresAt:
+              Date.now() +
+              expiresIn * 1000 -
+              60_000,
             scope:
-              tokenResponse.scope,
+              tokenResponse.scope ??
+              SPOTIFY_SCOPES.join(
+                " ",
+              ),
             tokenType:
-              tokenResponse.tokenType,
+              tokenResponse.tokenType ??
+              "Bearer",
+            profile:
+              connectedProfile,
           };
 
         await saveSpotifySession(
           session,
+          {
+            syncLibrary: true,
+          },
         );
 
         await clearSpotifyApiCache();
-
-        const connectedProfile =
-          await fetchSpotifyProfile(
-            session.accessToken,
-          );
 
         setProfile(
           connectedProfile,
@@ -278,14 +307,19 @@ export function useSpotifyConnection(
     }
 
     void handleResponse();
-  }, [request, response]);
+  }, [
+    request,
+    response,
+    spotifyClientId,
+    spotifyRedirectUri,
+  ]);
 
   const connect =
     useCallback(async () => {
       if (!spotifyClientId) {
         Alert.alert(
           "Spotify Client ID missing",
-          "Add EXPO_PUBLIC_SPOTIFY_CLIENT_ID to the .env file and restart Expo.",
+          "Add EXPO_PUBLIC_SPOTIFY_CLIENT_ID to the project's .env.local file and fully reload Canal.",
         );
 
         return;
@@ -326,11 +360,13 @@ export function useSpotifyConnection(
           ),
         );
       }
-    }, [
-      promptAsync,
-      request,
-      returnRoute,
-    ]);
+  }, [
+    promptAsync,
+    request,
+    returnRoute,
+    spotifyClientId,
+    spotifyRedirectUri,
+  ]);
 
   const disconnect =
     useCallback(async () => {

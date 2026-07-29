@@ -8,6 +8,18 @@ import {
   supabase,
 } from "./supabase";
 
+import {
+  canonicalSpotifyTrackUrl,
+} from "./spotify-track-links";
+
+import {
+  isSnapshotTemplateTheme,
+} from "./snapshot-templates";
+
+import type {
+  SnapshotTemplateTheme,
+} from "./snapshot-templates";
+
 type SnapshotRow = {
   id: string;
   user_id: string;
@@ -23,6 +35,9 @@ type SnapshotRow = {
   visibility:
     | "public"
     | "private";
+  template_id: string | null;
+  template_brand_label: string | null;
+  template_theme: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -40,9 +55,26 @@ const SNAPSHOT_COLUMNS = [
   "note",
   "mood",
   "visibility",
+  "template_id",
+  "template_brand_label",
+  "template_theme",
   "created_at",
   "updated_at",
 ].join(", ");
+
+const SNAPSHOT_ACCOUNT_CHANGED_ERROR_NAME =
+  "SnapshotAccountChangedError";
+
+class SnapshotAccountChangedError extends Error {
+  constructor() {
+    super(
+      "The active Snapshot account changed while Canal was working. Try again for the current account.",
+    );
+
+    this.name =
+      SNAPSHOT_ACCOUNT_CHANGED_ERROR_NAME;
+  }
+}
 
 export async function getSnapshotSessionUserId(): Promise<
   string | null
@@ -61,12 +93,15 @@ export async function getSnapshotSessionUserId(): Promise<
   return session?.user.id ?? null;
 }
 
-export async function listOwnCloudSnapshots(): Promise<{
+export async function listOwnCloudSnapshots(
+  expectedUserId: string,
+): Promise<{
   userId: string;
   snapshots: Snapshot[];
 }> {
-  const userId =
-    await requireSnapshotUserId();
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const {
     data,
@@ -81,7 +116,7 @@ export async function listOwnCloudSnapshots(): Promise<{
       )
       .eq(
         "user_id",
-        userId,
+        expectedUserId,
       )
       .order(
         "updated_at",
@@ -91,6 +126,10 @@ export async function listOwnCloudSnapshots(): Promise<{
         },
       );
 
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
+
   if (error) {
     throw new Error(
       `Canal could not load cloud Snapshots: ${error.message}`,
@@ -98,7 +137,8 @@ export async function listOwnCloudSnapshots(): Promise<{
   }
 
   return {
-    userId,
+    userId:
+      expectedUserId,
 
     snapshots:
       (
@@ -107,7 +147,7 @@ export async function listOwnCloudSnapshots(): Promise<{
         .map((row) =>
           snapshotFromRow(
             row,
-            userId,
+            expectedUserId,
           ),
         )
         .filter(
@@ -121,9 +161,11 @@ export async function listOwnCloudSnapshots(): Promise<{
 
 export async function readCloudSnapshot(
   snapshotId: string,
+  expectedUserId: string,
 ): Promise<Snapshot | null> {
-  const userId =
-    await requireSnapshotUserId();
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const {
     data,
@@ -142,6 +184,10 @@ export async function readCloudSnapshot(
       )
       .maybeSingle();
 
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
+
   if (error) {
     throw new Error(
       `Canal could not load this cloud Snapshot: ${error.message}`,
@@ -151,21 +197,23 @@ export async function readCloudSnapshot(
   return data
     ? snapshotFromRow(
         data as unknown as SnapshotRow,
-        userId,
+        expectedUserId,
       )
     : null;
 }
 
 export async function upsertCloudSnapshot(
   snapshot: Snapshot,
+  expectedUserId: string,
 ): Promise<Snapshot> {
-  const userId =
-    await requireSnapshotUserId();
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   if (
     snapshot.ownerId &&
     snapshot.ownerId !==
-      userId
+      expectedUserId
   ) {
     throw new Error(
       "Canal will not save another listener's Snapshot.",
@@ -186,7 +234,7 @@ export async function upsertCloudSnapshot(
             snapshot.id,
 
           user_id:
-            userId,
+            expectedUserId,
 
           scene_id:
             snapshot.sceneId,
@@ -223,6 +271,10 @@ export async function upsertCloudSnapshot(
           visibility:
             snapshot.visibility,
 
+          template_id:
+            snapshot.templateId ??
+            null,
+
           created_at:
             snapshot.createdAt,
 
@@ -239,6 +291,10 @@ export async function upsertCloudSnapshot(
       )
       .single();
 
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
+
   if (error) {
     throw new Error(
       `Canal could not sync this Snapshot: ${error.message}`,
@@ -248,7 +304,7 @@ export async function upsertCloudSnapshot(
   const syncedSnapshot =
     snapshotFromRow(
       data as unknown as SnapshotRow,
-      userId,
+      expectedUserId,
     );
 
   if (!syncedSnapshot) {
@@ -262,9 +318,11 @@ export async function upsertCloudSnapshot(
 
 export async function deleteCloudSnapshot(
   snapshotId: string,
+  expectedUserId: string,
 ): Promise<void> {
-  const userId =
-    await requireSnapshotUserId();
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   const {
     error,
@@ -280,13 +338,31 @@ export async function deleteCloudSnapshot(
       )
       .eq(
         "user_id",
-        userId,
+        expectedUserId,
       );
+
+  await assertExpectedSnapshotUser(
+    expectedUserId,
+  );
 
   if (error) {
     throw new Error(
       `Canal could not delete this cloud Snapshot: ${error.message}`,
     );
+  }
+}
+
+async function assertExpectedSnapshotUser(
+  expectedUserId: string,
+): Promise<void> {
+  const actualUserId =
+    await requireSnapshotUserId();
+
+  if (
+    actualUserId !==
+    expectedUserId
+  ) {
+    throw new SnapshotAccountChangedError();
   }
 }
 
@@ -341,6 +417,11 @@ function snapshotFromRow(
     return null;
   }
 
+  const templateProvenance =
+    templateProvenanceFromRow(
+      row,
+    );
+
   return {
     id,
     sceneId,
@@ -362,9 +443,10 @@ function snapshotFromRow(
       ),
 
     spotifyUrl:
-      cleanOptionalString(
+      canonicalSpotifyTrackUrl(
         row.spotify_url,
-      ),
+      ) ??
+      undefined,
 
     positionMs:
       typeof row.position_ms ===
@@ -393,6 +475,8 @@ function snapshotFromRow(
       "public"
         ? "public"
         : "private",
+
+    ...templateProvenance,
 
     createdAt:
       cleanRequiredString(
@@ -441,3 +525,53 @@ function cleanOptionalString(
   return cleaned ||
     undefined;
 }
+
+function templateProvenanceFromRow(
+  row: SnapshotRow,
+): {
+  templateId?: string;
+  templateBrandLabel?: string;
+  templateTheme?: SnapshotTemplateTheme;
+} {
+  const templateId =
+    cleanRequiredString(
+      row.template_id,
+    );
+
+  const templateBrandLabel =
+    cleanRequiredString(
+      row.template_brand_label,
+    );
+
+  if (
+    !UUID_PATTERN.test(
+      templateId,
+    ) ||
+    !templateBrandLabel ||
+    Array.from(
+      templateBrandLabel,
+    ).length >
+      32 ||
+    CONTROL_CHARACTER_PATTERN.test(
+      templateBrandLabel,
+    ) ||
+    !isSnapshotTemplateTheme(
+      row.template_theme,
+    )
+  ) {
+    return {};
+  }
+
+  return {
+    templateId,
+    templateBrandLabel,
+    templateTheme:
+      row.template_theme,
+  };
+}
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const CONTROL_CHARACTER_PATTERN =
+  /[\u0000-\u001f\u007f]/;

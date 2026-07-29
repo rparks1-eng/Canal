@@ -1,6 +1,8 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -24,8 +26,11 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  advancePlayerSession,
   clearPlayerSession,
+  constrainPlayerSessionToScene,
   createPlayerSession,
+  movePlayerSession,
   readPlayerSession,
   writePlayerSession,
 } from "../lib/canal-player";
@@ -44,8 +49,18 @@ import type {
 } from "../lib/scenes";
 
 import {
+  canonicalSpotifyTrackUrl,
+} from "../lib/spotify-track-links";
+
+import {
   recordListeningHistory,
 } from "../lib/canal-session";
+
+import CanalBottomNav from "../components/CanalBottomNav";
+
+import {
+  useAuth,
+} from "../providers/auth-provider";
 
 function formatTime(
   totalSeconds: number,
@@ -76,7 +91,10 @@ async function openSpotify(
   uri?: string,
 ): Promise<void> {
   const target =
-    url || uri;
+    canonicalSpotifyTrackUrl(
+      url,
+      uri,
+    );
 
   if (!target) {
     return;
@@ -94,7 +112,26 @@ async function openSpotify(
   }
 }
 
+function playerIssueMessage(
+  error: unknown,
+): string {
+  const detail =
+    error instanceof Error
+      ? error.message
+      : "Canal could not access saved playback progress.";
+
+  return `${detail} Your Scene is still available. Retry to resume saving progress.`;
+}
+
 export default function NowPlayingScreen() {
+  const {
+    user,
+  } = useAuth();
+
+  const accountKey =
+    user?.id ??
+    "";
+
   const params =
     useLocalSearchParams<{
       sceneId?: string;
@@ -132,84 +169,405 @@ export default function NowPlayingScreen() {
     setMessage,
   ] = useState("");
 
-  useEffect(() => {
-    const load =
+  const [
+    storageIssue,
+    setStorageIssue,
+  ] = useState("");
+
+  const [
+    storageBusy,
+    setStorageBusy,
+  ] = useState(false);
+
+  const mountedRef =
+    useRef(false);
+
+  const playerLoadGenerationRef =
+    useRef(0);
+
+  const requestedSceneIdRef =
+    useRef(requestedSceneId);
+
+  const requestedSceneAccountKeyRef =
+    useRef(accountKey);
+
+  if (
+    requestedSceneIdRef.current !==
+    requestedSceneId
+  ) {
+    requestedSceneIdRef.current =
+      requestedSceneId;
+
+    requestedSceneAccountKeyRef.current =
+      accountKey;
+  } else if (
+    !requestedSceneAccountKeyRef.current &&
+    accountKey
+  ) {
+    requestedSceneAccountKeyRef.current =
+      accountKey;
+  }
+
+  const accountKeyRef =
+    useRef(accountKey);
+
+  accountKeyRef.current =
+    accountKey;
+
+  const playerLoadAccountKeyRef =
+    useRef(accountKey);
+
+  const finishingRef =
+    useRef(false);
+
+  const isCurrentPlayerLoad =
+    useCallback(
+      (
+        generation: number,
+      ): boolean =>
+        mountedRef.current &&
+        !finishingRef.current &&
+        playerLoadGenerationRef.current ===
+          generation &&
+        playerLoadAccountKeyRef.current ===
+          accountKeyRef.current,
+      [],
+    );
+
+  const showStorageIssue =
+    useCallback(
+      (
+        error: unknown,
+      ): void => {
+        if (!mountedRef.current) {
+          return;
+        }
+
+        setStorageIssue(
+          playerIssueMessage(
+            error,
+          ),
+        );
+      },
+      [],
+    );
+
+  const persistPlayerSession =
+    useCallback(
+      async (
+        next: CanalPlayerSession,
+        generation: number,
+      ): Promise<boolean> => {
+        if (
+          !isCurrentPlayerLoad(
+            generation,
+          )
+        ) {
+          return false;
+        }
+
+        try {
+          await writePlayerSession(
+            next,
+          );
+
+          if (
+            !isCurrentPlayerLoad(
+              generation,
+            )
+          ) {
+            return false;
+          }
+
+          setStorageIssue(
+            "",
+          );
+
+          return true;
+        } catch (error) {
+          if (
+            isCurrentPlayerLoad(
+              generation,
+            )
+          ) {
+            showStorageIssue(
+              error,
+            );
+          }
+
+          return false;
+        }
+      },
+      [
+        isCurrentPlayerLoad,
+        showStorageIssue,
+      ],
+    );
+
+  const loadPlayer =
+    useCallback(
       async (): Promise<void> => {
-        setLoading(true);
+        const loadGeneration =
+          playerLoadGenerationRef.current +
+          1;
 
-        const storedSession =
-          await readPlayerSession();
+        const requestedSceneForAccount =
+          requestedSceneAccountKeyRef.current ===
+          accountKey
+            ? requestedSceneId
+            : "";
 
-        const sceneId =
-          requestedSceneId ||
-          storedSession?.sceneId ||
-          "";
+        playerLoadGenerationRef.current =
+          loadGeneration;
 
-        const storedScene =
-          sceneId
-            ? await getSceneById(
-                sceneId,
-              )
-            : null;
+        playerLoadAccountKeyRef.current =
+          accountKey;
+
+        finishingRef.current =
+          false;
+
+        if (!mountedRef.current) {
+          return;
+        }
 
         setScene(
-          storedScene,
+          null,
         );
 
-        if (storedScene) {
+        setSession(
+          null,
+        );
+
+        setMessage(
+          "",
+        );
+
+        setStorageIssue(
+          "",
+        );
+
+        if (!accountKey) {
+          setStorageBusy(
+            false,
+          );
+
+          setLoading(
+            false,
+          );
+
+          return;
+        }
+
+        setLoading(
+          true,
+        );
+
+        setStorageBusy(
+          true,
+        );
+
+        try {
+          const storedSession =
+            await readPlayerSession();
+
           if (
-            storedSession &&
-            storedSession.sceneId ===
-              storedScene.id
+            !isCurrentPlayerLoad(
+              loadGeneration,
+            )
           ) {
+            return;
+          }
+
+          const sceneId =
+            requestedSceneForAccount ||
+            storedSession?.sceneId ||
+            "";
+
+          const storedScene =
+            sceneId
+              ? await getSceneById(
+                  sceneId,
+                )
+              : null;
+
+          if (
+            !isCurrentPlayerLoad(
+              loadGeneration,
+            )
+          ) {
+            return;
+          }
+
+          setScene(
+            storedScene,
+          );
+
+          if (!storedScene) {
             setSession(
-              storedSession,
+              null,
+            );
+
+            setStorageIssue(
+              "",
+            );
+
+            return;
+          }
+
+          const restoredSession =
+            storedSession
+              ? constrainPlayerSessionToScene(
+                  storedSession,
+                  storedScene,
+                )
+              : null;
+
+          if (restoredSession) {
+            setSession(
+              restoredSession,
+            );
+
+            await persistPlayerSession(
+              restoredSession,
+              loadGeneration,
             );
           } else {
-            setSession(
+            const createdSession =
               await createPlayerSession(
                 storedScene,
-              ),
+              );
+
+            if (
+              !isCurrentPlayerLoad(
+                loadGeneration,
+              )
+            ) {
+              await clearPlayerSession(
+                createdSession.id,
+              );
+
+              return;
+            }
+
+            setSession(
+              createdSession,
+            );
+
+            setStorageIssue(
+              "",
+            );
+          }
+        } catch (error) {
+          if (
+            isCurrentPlayerLoad(
+              loadGeneration,
+            )
+          ) {
+            showStorageIssue(
+              error,
+            );
+          }
+        } finally {
+          if (
+            isCurrentPlayerLoad(
+              loadGeneration,
+            )
+          ) {
+            setStorageBusy(
+              false,
+            );
+
+            setLoading(
+              false,
             );
           }
         }
+      },
+      [
+        isCurrentPlayerLoad,
+        accountKey,
+        persistPlayerSession,
+        requestedSceneId,
+        showStorageIssue,
+      ],
+    );
 
-        setLoading(false);
-      };
+  useEffect(() => {
+    mountedRef.current =
+      true;
 
-    void load();
-  }, [requestedSceneId]);
+    return () => {
+      mountedRef.current =
+        false;
+
+      finishingRef.current =
+        true;
+
+      playerLoadGenerationRef.current +=
+        1;
+    };
+  }, []);
+
+  useEffect(() => {
+    void loadPlayer();
+  }, [
+    loadPlayer,
+  ]);
 
   useEffect(() => {
     if (
-      !session?.isPlaying
+      !session?.isPlaying ||
+      !scene
     ) {
       return;
     }
 
+    const loadGeneration =
+      playerLoadGenerationRef.current;
+
     const timer =
       setInterval(() => {
+        if (
+          !isCurrentPlayerLoad(
+            loadGeneration,
+          )
+        ) {
+          return;
+        }
+
         setSession(
           (current) => {
-            if (!current) {
+            if (
+              !current ||
+              !isCurrentPlayerLoad(
+                loadGeneration,
+              )
+            ) {
               return current;
             }
 
-            const updated: CanalPlayerSession = {
-              ...current,
+            const updated =
+              advancePlayerSession(
+                current,
+                scene,
+              );
 
-              elapsedSeconds:
-                current.elapsedSeconds +
-                1,
-            };
+            if (!updated) {
+              return null;
+            }
 
             if (
               updated.elapsedSeconds %
                 5 ===
-              0
+                0 ||
+              updated.currentIndex !==
+                current.currentIndex ||
+              updated.isPlaying !==
+                current.isPlaying
             ) {
-              void writePlayerSession(
+              void persistPlayerSession(
                 updated,
+                loadGeneration,
               );
             }
 
@@ -221,7 +579,12 @@ export default function NowPlayingScreen() {
     return () => {
       clearInterval(timer);
     };
-  }, [session?.isPlaying]);
+  }, [
+    isCurrentPlayerLoad,
+    persistPlayerSession,
+    scene,
+    session?.isPlaying,
+  ]);
 
   const currentTrack =
     scene &&
@@ -247,8 +610,10 @@ export default function NowPlayingScreen() {
 
   const estimatedTrackElapsed =
     session
-      ? session.elapsedSeconds %
-        currentDurationSeconds
+      ? Math.min(
+          currentDurationSeconds,
+          session.trackElapsedSeconds,
+        )
       : 0;
 
   const progress =
@@ -276,15 +641,35 @@ export default function NowPlayingScreen() {
     );
 
   const saveSession =
-    async (
-      next: CanalPlayerSession,
-    ): Promise<void> => {
-      setSession(next);
+    useCallback(
+      async (
+        next: CanalPlayerSession,
+      ): Promise<void> => {
+        const loadGeneration =
+          playerLoadGenerationRef.current;
 
-      await writePlayerSession(
-        next,
-      );
-    };
+        if (
+          !isCurrentPlayerLoad(
+            loadGeneration,
+          )
+        ) {
+          return;
+        }
+
+        setSession(
+          next,
+        );
+
+        await persistPlayerSession(
+          next,
+          loadGeneration,
+        );
+      },
+      [
+        isCurrentPlayerLoad,
+        persistPlayerSession,
+      ],
+    );
 
   const togglePlay =
     async (): Promise<void> => {
@@ -300,6 +685,13 @@ export default function NowPlayingScreen() {
 
         isPlaying:
           !session.isPlaying,
+
+        trackElapsedSeconds:
+          !session.isPlaying &&
+          session.trackElapsedSeconds >=
+            currentDurationSeconds
+            ? 0
+            : session.trackElapsedSeconds,
       };
 
       await saveSession(next);
@@ -327,25 +719,16 @@ export default function NowPlayingScreen() {
         return;
       }
 
-      const nextIndex =
-        Math.min(
-          scene.tracks.length -
-            1,
-          Math.max(
-            0,
-            session.currentIndex +
-              direction,
-          ),
+      const nextSession =
+        movePlayerSession(
+          session,
+          scene,
+          direction,
         );
 
-      const nextSession: CanalPlayerSession = {
-        ...session,
-
-        currentIndex:
-          nextIndex,
-
-        elapsedSeconds: 0,
-      };
+      if (!nextSession) {
+        return;
+      }
 
       await saveSession(
         nextSession,
@@ -353,7 +736,7 @@ export default function NowPlayingScreen() {
 
       const track =
         scene.tracks[
-          nextIndex
+          nextSession.currentIndex
         ];
 
       if (
@@ -371,55 +754,198 @@ export default function NowPlayingScreen() {
     async (): Promise<void> => {
       if (
         !session ||
-        !scene
+        !scene ||
+        !session.ownerId ||
+        session.ownerId !==
+          accountKeyRef.current ||
+        playerLoadAccountKeyRef.current !==
+          accountKeyRef.current ||
+        storageBusy ||
+        finishingRef.current
       ) {
         return;
       }
 
-      await Promise.all([
-        recordListeningHistory({
-          sceneId:
+      finishingRef.current =
+        true;
+
+      playerLoadGenerationRef.current +=
+        1;
+
+      const finishGeneration =
+        playerLoadGenerationRef.current;
+
+      const finishOwnerId =
+        session.ownerId;
+
+      setSession(
+        (current) =>
+          current?.id ===
+          session.id
+            ? {
+                ...current,
+                isPlaying:
+                  false,
+              }
+            : current,
+      );
+
+      setStorageBusy(
+        true,
+      );
+
+      try {
+        const persistedSession =
+          await readPlayerSession();
+
+        if (
+          !mountedRef.current ||
+          playerLoadGenerationRef.current !==
+            finishGeneration ||
+          accountKeyRef.current !==
+            finishOwnerId
+        ) {
+          return;
+        }
+
+        if (
+          !persistedSession ||
+          persistedSession.id !==
+            session.id ||
+          persistedSession.ownerId !==
+            finishOwnerId
+        ) {
+          throw new Error(
+            "Playback changed before Canal could finish this session.",
+          );
+        }
+
+        await Promise.all([
+          recordListeningHistory({
+            sceneId:
+              scene.id,
+
+            sceneName:
+              scene.name,
+
+            startedAt:
+              session.startedAt,
+
+            completedAt:
+              new Date().toISOString(),
+
+            tracksPlayed:
+              Math.min(
+                scene.tracks.length,
+                session.currentIndex +
+                  1,
+              ),
+
+            durationSeconds:
+              session.elapsedSeconds,
+          }),
+
+          recordScenePlay(
             scene.id,
+          ),
+        ]);
 
-          sceneName:
-            scene.name,
+        await clearPlayerSession(
+          session.id,
+        );
 
-          startedAt:
-            session.startedAt,
+        if (
+          mountedRef.current &&
+          finishingRef.current &&
+          accountKeyRef.current ===
+            finishOwnerId &&
+          playerLoadGenerationRef.current ===
+            finishGeneration
+        ) {
+          setStorageIssue(
+            "",
+          );
 
-          completedAt:
-            new Date().toISOString(),
+          router.replace({
+            pathname:
+              "/scene-feedback",
 
-          tracksPlayed:
-            Math.min(
-              scene.tracks.length,
-              session.currentIndex +
-                1,
-            ),
+            params: {
+              sceneId:
+                scene.id,
+            },
+          });
+        }
+      } catch (error) {
+        if (
+          mountedRef.current &&
+          accountKeyRef.current ===
+            finishOwnerId &&
+          playerLoadGenerationRef.current ===
+            finishGeneration
+        ) {
+          finishingRef.current =
+            false;
 
-          durationSeconds:
-            session.elapsedSeconds,
-        }),
-
-        recordScenePlay(
-          scene.id,
-        ),
-      ]);
-
-      await clearPlayerSession();
-
-      router.replace({
-        pathname:
-          "/scene-feedback",
-
-        params: {
-          sceneId:
-            scene.id,
-        },
-      });
+          showStorageIssue(
+            error,
+          );
+        }
+      } finally {
+        if (
+          mountedRef.current &&
+          accountKeyRef.current ===
+            finishOwnerId &&
+          playerLoadGenerationRef.current ===
+            finishGeneration
+        ) {
+          setStorageBusy(
+            false,
+          );
+        }
+      }
     };
 
-  if (loading) {
+  const recoverStorage =
+    async (): Promise<void> => {
+      if (storageBusy) {
+        return;
+      }
+
+      if (!session) {
+        await loadPlayer();
+
+        return;
+      }
+
+      setStorageBusy(
+        true,
+      );
+
+      const loadGeneration =
+        playerLoadGenerationRef.current;
+
+      await persistPlayerSession(
+        session,
+        loadGeneration,
+      );
+
+      if (
+        isCurrentPlayerLoad(
+          loadGeneration,
+        )
+      ) {
+        setStorageBusy(
+          false,
+        );
+      }
+    };
+
+  if (
+    loading ||
+    playerLoadAccountKeyRef.current !==
+      accountKey
+  ) {
     return (
       <SafeAreaView
         style={styles.safeArea}
@@ -437,8 +963,7 @@ export default function NowPlayingScreen() {
 
   if (
     !scene ||
-    !session ||
-    !currentTrack
+    !session
   ) {
     return (
       <SafeAreaView
@@ -454,18 +979,142 @@ export default function NowPlayingScreen() {
               styles.missingTitle
             }
           >
-            Nothing is playing
+            {storageIssue
+              ? "Playback needs attention"
+              : "Nothing is playing"}
           </Text>
 
+          {storageIssue ? (
+            <Text
+              selectable
+              style={
+                styles.missingCopy
+              }
+            >
+              {storageIssue}
+            </Text>
+          ) : null}
+
+          {storageIssue ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{
+                busy:
+                  storageBusy,
+                disabled:
+                  storageBusy,
+              }}
+              disabled={
+                storageBusy
+              }
+              onPress={() =>
+                void recoverStorage()
+              }
+              style={
+                styles.primaryButton
+              }
+            >
+              {storageBusy ? (
+                <ActivityIndicator
+                  color="#FFFFFF"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.primaryButtonText
+                  }
+                >
+                  Retry Playback
+                </Text>
+              )}
+            </Pressable>
+          ) : null}
+
           <Pressable
+            accessibilityRole="button"
             onPress={() =>
               router.replace(
                 "/(tabs)/library",
               )
             }
+            style={[
+              styles.primaryButton,
+
+              storageIssue &&
+                styles.centerSecondaryButton,
+            ]}
+          >
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              Open Library
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!currentTrack) {
+    return (
+      <SafeAreaView
+        style={styles.safeArea}
+      >
+        <View
+          style={
+            styles.center
+          }
+        >
+          <Text
+            style={
+              styles.missingTitle
+            }
+          >
+            This Scene has no tracks
+          </Text>
+
+          <Text
+            selectable
+            style={
+              styles.missingCopy
+            }
+          >
+            Add at least one track before starting playback.
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              router.push(
+                "/scene-preview",
+              )
+            }
             style={
               styles.primaryButton
             }
+          >
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              Edit Scene
+            </Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              router.replace(
+                "/(tabs)/library",
+              )
+            }
+            style={[
+              styles.primaryButton,
+              styles.centerSecondaryButton,
+            ]}
           >
             <Text
               style={
@@ -539,8 +1188,11 @@ export default function NowPlayingScreen() {
 
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Edit Scene"
           onPress={() =>
-            void finish()
+            router.push(
+              "/scene-preview",
+            )
           }
           style={({ pressed }) => [
             styles.doneButton,
@@ -554,7 +1206,7 @@ export default function NowPlayingScreen() {
               styles.doneText
             }
           >
-            Done
+            Edit
           </Text>
         </Pressable>
       </View>
@@ -712,6 +1364,68 @@ export default function NowPlayingScreen() {
           </View>
         ) : null}
 
+        {storageIssue ? (
+          <View
+            style={
+              styles.storageNotice
+            }
+          >
+            <Text
+              selectable
+              style={
+                styles.storageNoticeTitle
+              }
+            >
+              Playback progress needs attention
+            </Text>
+
+            <Text
+              selectable
+              style={
+                styles.storageNoticeText
+              }
+            >
+              {storageIssue}
+            </Text>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{
+                busy:
+                  storageBusy,
+                disabled:
+                  storageBusy,
+              }}
+              disabled={
+                storageBusy
+              }
+              onPress={() =>
+                void recoverStorage()
+              }
+              style={({ pressed }) => [
+                styles.storageRetryButton,
+
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              {storageBusy ? (
+                <ActivityIndicator
+                  color="#8F2D1D"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.storageRetryText
+                  }
+                >
+                  Retry saving progress
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
+
         <View style={styles.sceneProfile}>
           <Text
             style={
@@ -782,6 +1496,21 @@ export default function NowPlayingScreen() {
                     styles.queueRow
                   }
                 >
+                  <View
+                    style={[
+                      styles.queueImage,
+                      styles.queueImagePlaceholder,
+                    ]}
+                  >
+                    <Text
+                      style={
+                        styles.queueImageText
+                      }
+                    >
+                      ♪
+                    </Text>
+                  </View>
+
                   <Text
                     style={
                       styles.queueNumber
@@ -842,6 +1571,8 @@ export default function NowPlayingScreen() {
           </Text>
         </Pressable>
       </ScrollView>
+
+      <CanalBottomNav />
     </SafeAreaView>
   );
 }
@@ -868,6 +1599,16 @@ const styles =
       fontSize: 22,
       fontWeight: "900",
       marginBottom: 15,
+      textAlign: "center",
+    },
+
+    missingCopy: {
+      color: "#746D67",
+      fontSize: 14,
+      lineHeight: 21,
+      marginBottom: 18,
+      maxWidth: 360,
+      textAlign: "center",
     },
 
     header: {
@@ -1112,6 +1853,56 @@ const styles =
       textAlign: "center",
     },
 
+    storageNotice: {
+      width: "100%",
+      backgroundColor:
+        "#FDEAE5",
+      borderColor:
+        "#F1B8AA",
+      borderWidth: 1,
+      borderRadius: 17,
+      borderCurve:
+        "continuous",
+      padding: 14,
+      gap: 7,
+      marginTop: 16,
+    },
+
+    storageNoticeTitle: {
+      color: "#8F2D1D",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    storageNoticeText: {
+      color: "#7A4034",
+      fontSize: 11,
+      lineHeight: 17,
+    },
+
+    storageRetryButton: {
+      minHeight: 40,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      alignSelf:
+        "flex-start",
+      backgroundColor:
+        "#FFFFFF",
+      borderRadius: 12,
+      borderCurve:
+        "continuous",
+      paddingHorizontal: 14,
+      marginTop: 3,
+    },
+
+    storageRetryText: {
+      color: "#8F2D1D",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
     sceneProfile: {
       width: "100%",
       backgroundColor:
@@ -1181,6 +1972,29 @@ const styles =
       paddingVertical: 11,
     },
 
+    queueImage: {
+      width: 42,
+      height: 42,
+      borderRadius: 8,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#F1E7DF",
+      marginRight: 8,
+    },
+
+    queueImagePlaceholder: {
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+    },
+
+    queueImageText: {
+      color: "#8A827B",
+      fontSize: 18,
+    },
+
     queueNumber: {
       width: 25,
       color: "#948C85",
@@ -1243,6 +2057,12 @@ const styles =
       color: "#FFFFFF",
       fontSize: 15,
       fontWeight: "800",
+    },
+
+    centerSecondaryButton: {
+      backgroundColor:
+        "#2B1710",
+      marginTop: 10,
     },
 
     pressed: {

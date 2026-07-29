@@ -21,6 +21,35 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "../../components/recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../../hooks/use-reconnect-reload";
+
+import {
+  classifyRecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import type {
+  RecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import {
+  getLatestSpotifyLibrarySnapshot,
+  syncSpotifyLibrary,
+} from "../../lib/spotify-library";
+
+import type {
+  SpotifyLibrarySnapshot,
+} from "../../lib/spotify-library";
+
+import {
+  rankSceneRecommendations,
+} from "../../lib/scene-recommendations";
+
+import {
   getRecentScenes,
   readScenes,
   sceneDurationMinutes,
@@ -37,6 +66,10 @@ import {
 import type {
   ListeningHistoryEntry,
 } from "../../lib/canal-session";
+
+import {
+  useConnectivity,
+} from "../../providers/connectivity-provider";
 
 function SceneCard(props: {
   scene: StoredScene;
@@ -167,6 +200,14 @@ function EmptyScenes() {
 }
 
 export default function HomeScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const [
     scenes,
     setScenes,
@@ -182,7 +223,36 @@ export default function HomeScreen() {
     setHistory,
   ] = useState<
     ListeningHistoryEntry[]
-  >([]);
+    >([]);
+
+  const [
+    spotifySnapshot,
+    setSpotifySnapshot,
+  ] =
+    useState<SpotifyLibrarySnapshot | null>(
+      null,
+    );
+
+  const [
+    recommendationWarning,
+    setRecommendationWarning,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    recommendationIssue,
+    setRecommendationIssue,
+  ] =
+    useState<RecoveryIssue | null>(
+      null,
+    );
+
+  const [
+    refreshingRecommendations,
+    setRefreshingRecommendations,
+  ] = useState(false);
 
   const load =
     useCallback(() => {
@@ -192,11 +262,13 @@ export default function HomeScreen() {
             storedScenes,
             storedRecent,
             storedHistory,
+            latestSpotify,
           ] =
             await Promise.all([
               readScenes(),
               getRecentScenes(5),
               readListeningHistory(),
+              getLatestSpotifyLibrarySnapshot(),
             ]);
 
           setScenes(
@@ -210,6 +282,20 @@ export default function HomeScreen() {
           setHistory(
             storedHistory,
           );
+
+          setSpotifySnapshot(
+            latestSpotify.snapshot,
+          );
+
+          setRecommendationWarning(
+            latestSpotify.warning ??
+              null,
+          );
+
+          setRecommendationIssue(
+            latestSpotify.issue ??
+              null,
+          );
         };
 
       void run();
@@ -217,42 +303,88 @@ export default function HomeScreen() {
 
   useFocusEffect(load);
 
-  const recommended =
-    [...scenes]
-      .sort(
-        (first, second) => {
-          const firstScore =
-            (first.favorite
-              ? 100
-              : 0) +
-            (first.playCount ??
-              0) *
-              5 +
-            (first.feedback
-              ?.latestRating ===
-            "perfect"
-              ? 35
-              : 0);
+  const refreshRecommendations =
+    useCallback(
+      async (): Promise<void> => {
+        setRefreshingRecommendations(
+          true,
+        );
 
-          const secondScore =
-            (second.favorite
-              ? 100
-              : 0) +
-            (second.playCount ??
-              0) *
-              5 +
-            (second.feedback
-              ?.latestRating ===
-            "perfect"
-              ? 35
-              : 0);
+        try {
+          const snapshot =
+            await syncSpotifyLibrary();
 
-          return (
-            secondScore -
-            firstScore
+          setSpotifySnapshot(
+            snapshot,
           );
-        },
-      )
+
+          setRecommendationWarning(
+            null,
+          );
+
+          setRecommendationIssue(
+            null,
+          );
+        } catch (error) {
+          setRecommendationIssue(
+            classifyRecoveryIssue(
+              error,
+              {
+                service:
+                  "spotify",
+                connectivityStatus,
+              },
+            ),
+          );
+
+          setRecommendationWarning(
+            "Recommendations are using your last Spotify sync.",
+          );
+        } finally {
+          setRefreshingRecommendations(
+            false,
+          );
+        }
+      },
+      [
+        connectivityStatus,
+      ],
+    );
+
+  useReconnectReload(
+    refreshRecommendations,
+  );
+
+  const recoverRecommendations =
+    async (): Promise<void> => {
+      if (
+        recommendationIssue
+          ?.action ===
+        "reconnect-spotify"
+      ) {
+        router.push(
+          "/music-services",
+        );
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus !==
+        "offline"
+      ) {
+        await refreshRecommendations();
+      }
+    };
+
+  const recommended =
+    rankSceneRecommendations(
+      scenes,
+      spotifySnapshot,
+    )
       .slice(0, 3);
 
   return (
@@ -396,8 +528,9 @@ export default function HomeScreen() {
                     styles.sectionSubtitle
                   }
                 >
-                  Based on favorites, plays,
-                  and feedback.
+                  Based on your latest Spotify
+                  taste, favorites, plays, and
+                  feedback.
                 </Text>
               </View>
 
@@ -438,6 +571,29 @@ export default function HomeScreen() {
                 ),
               )}
             </ScrollView>
+
+            {recommendationIssue ? (
+              <RecoveryNotice
+                busy={
+                  refreshingRecommendations
+                }
+                issue={
+                  recommendationIssue
+                }
+                onAction={
+                  recoverRecommendations
+                }
+              />
+            ) : recommendationWarning ? (
+              <Text
+                selectable
+                style={
+                  styles.recommendationWarning
+                }
+              >
+                {recommendationWarning}
+              </Text>
+            ) : null}
 
             <View
               style={
@@ -736,6 +892,13 @@ const styles =
       paddingRight: 10,
       paddingBottom: 23,
       gap: 12,
+    },
+
+    recommendationWarning: {
+      color: "#7A5B12",
+      fontSize: 12,
+      lineHeight: 17,
+      paddingHorizontal: 2,
     },
 
     compactSceneCard: {

@@ -206,6 +206,7 @@ export default function SettingsScreen() {
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Back"
           onPress={safeBack}
           style={({ pressed }) => [
             styles.backButton,
@@ -398,6 +399,78 @@ export default function SettingsScreen() {
           </Text>
         </View>
 
+        <View style={styles.sectionCard}>
+          <Text
+            style={
+              styles.sectionTitle
+            }
+          >
+            Data and privacy
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open Data Controls"
+            accessibilityHint="Manage limited usage analytics, export local data, and clear data stored on this device."
+            onPress={() =>
+              router.push(
+                "/data-controls",
+              )
+            }
+            style={({ pressed }) => [
+              styles.serviceRow,
+
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <View
+              style={
+                styles.privacyMark
+              }
+            >
+              <Text
+                style={
+                  styles.privacyMarkText
+                }
+              >
+                ◉
+              </Text>
+            </View>
+
+            <View
+              style={
+                styles.serviceText
+              }
+            >
+              <Text
+                style={
+                  styles.serviceName
+                }
+              >
+                Data Controls
+              </Text>
+
+              <Text
+                style={
+                  styles.serviceStatus
+                }
+              >
+                Analytics, local export,
+                and device data
+              </Text>
+            </View>
+
+            <Text
+              style={
+                styles.arrow
+              }
+            >
+              ›
+            </Text>
+          </Pressable>
+        </View>
+
         <View style={styles.logoutCard}>
           <Text
             style={
@@ -542,6 +615,24 @@ const styles =
     spotifyMarkText: {
       color: "#FFFFFF",
       fontSize: 19,
+      fontWeight: "900",
+    },
+
+    privacyMark: {
+      width: 42,
+      height: 42,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 14,
+      backgroundColor:
+        "#FFF0E4",
+    },
+
+    privacyMarkText: {
+      color: "#D85E0D",
+      fontSize: 20,
       fontWeight: "900",
     },
 

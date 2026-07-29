@@ -49,6 +49,7 @@ jest.mock(
 import {
   createSnapshotWithStatus,
   readSnapshots,
+  syncSnapshotWithStatus,
   updateSnapshotWithStatus,
 } from "../lib/snapshots";
 
@@ -74,6 +75,8 @@ describe(
               " scene-1 ",
             sceneName:
               " Focus ",
+            templateId:
+              "00000000-0000-4000-8000-000000000001",
             positionMs:
               -25,
             note:
@@ -106,7 +109,139 @@ describe(
             true,
           pendingCloudSync:
             true,
+          templateId:
+            "00000000-0000-4000-8000-000000000001",
         });
+
+        await expect(
+          readSnapshots(),
+        ).resolves.toEqual([
+          expect.objectContaining({
+            templateId:
+              "00000000-0000-4000-8000-000000000001",
+            pendingCloudSync:
+              true,
+          }),
+        ]);
+      },
+    );
+
+    it(
+      "keeps complete trusted template provenance and drops malformed legacy fields",
+      async () => {
+        mockActiveUserId =
+          "user-a";
+
+        mockStorage.set(
+          "@canal/snapshots:user:user-a",
+          JSON.stringify([
+            {
+              id:
+                "snapshot-valid",
+              sceneId:
+                "scene-1",
+              sceneName:
+                "Valid brand",
+              note:
+                "",
+              positionMs:
+                0,
+              visibility:
+                "public",
+              createdAt:
+                "2026-07-29T00:00:00.000Z",
+              updatedAt:
+                "2026-07-29T00:00:00.000Z",
+              ownerId:
+                "user-a",
+              templateId:
+                "00000000-0000-4000-8000-000000000001",
+              templateBrandLabel:
+                "Ari FM",
+              templateTheme:
+                "paper",
+            },
+            {
+              id:
+                "snapshot-legacy",
+              sceneId:
+                "scene-2",
+              sceneName:
+                "Legacy",
+              note:
+                "",
+              positionMs:
+                0,
+              visibility:
+                "private",
+              createdAt:
+                "2026-07-28T00:00:00.000Z",
+              updatedAt:
+                "2026-07-28T00:00:00.000Z",
+              ownerId:
+                "user-a",
+              templateId:
+                "not-a-uuid",
+              templateBrandLabel:
+                "Untrusted",
+              templateTheme:
+                "custom-css",
+            },
+          ]),
+        );
+
+        const snapshots =
+          await readSnapshots();
+
+        expect(
+          snapshots[0],
+        ).toMatchObject({
+          templateId:
+            "00000000-0000-4000-8000-000000000001",
+          templateBrandLabel:
+            "Ari FM",
+          templateTheme:
+            "paper",
+        });
+
+        expect(
+          snapshots[1],
+        ).not.toHaveProperty(
+          "templateId",
+        );
+        expect(
+          snapshots[1],
+        ).not.toHaveProperty(
+          "templateBrandLabel",
+        );
+        expect(
+          snapshots[1],
+        ).not.toHaveProperty(
+          "templateTheme",
+        );
+      },
+    );
+
+    it(
+      "does not persist an untrusted Snapshot Spotify link",
+      async () => {
+        mockActiveUserId =
+          "user-a";
+
+        const result =
+          await createSnapshotWithStatus({
+            sceneId:
+              "scene-1",
+            sceneName:
+              "Unsafe link",
+            spotifyUrl:
+              "https://example.com/phishing",
+          });
+
+        expect(
+          result.value
+            .spotifyUrl,
+        ).toBeUndefined();
       },
     );
 
@@ -197,6 +332,47 @@ describe(
           note:
             "Revised",
         });
+      },
+    );
+
+    it(
+      "lets an unsynced Snapshot replace or clear a deleted template before retry",
+      async () => {
+        mockActiveUserId =
+          "user-a";
+
+        const created =
+          await createSnapshotWithStatus({
+            sceneId:
+              "scene-1",
+            sceneName:
+              "Retry brand",
+            templateId:
+              "00000000-0000-4000-8000-000000000001",
+          });
+
+        const retried =
+          await syncSnapshotWithStatus(
+            created.value.id,
+            {
+              templateId:
+                null,
+            },
+          );
+
+        expect(
+          retried.value
+            ?.templateId,
+        ).toBeUndefined();
+
+        await expect(
+          readSnapshots(),
+        ).resolves.toEqual([
+          expect.not.objectContaining({
+            templateId:
+              expect.anything(),
+          }),
+        ]);
       },
     );
   },

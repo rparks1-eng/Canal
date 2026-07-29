@@ -6,6 +6,7 @@ import {
 } from "expo-router";
 import {
     useCallback,
+    useRef,
     useState,
 } from "react";
 import {
@@ -23,8 +24,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+    RecoveryNotice,
+} from "../../components/recovery-notice";
+import {
+    useReconnectReload,
+} from "../../hooks/use-reconnect-reload";
+import {
     shareSnapshot,
 } from "../../lib/canal-share";
+import {
+    classifyRecoveryIssue,
+} from "../../lib/recovery-issue";
 import {
     deleteSnapshotWithStatus,
     readSnapshotWithStatus,
@@ -36,8 +46,47 @@ import {
     saveSoundscape,
     SoundscapeProfile,
 } from "../../lib/soundscape";
+import {
+    snapshotReturnAction,
+} from "../../lib/snapshot-navigation";
+import {
+  useConnectivity,
+} from "../../providers/connectivity-provider";
+
+import {
+  canonicalSpotifyTrackUrl,
+} from "../../lib/spotify-track-links";
+
+import type {
+  SnapshotTemplateTheme,
+} from "../../lib/snapshot-templates";
+
+function closeSnapshot(): void {
+  const action =
+    snapshotReturnAction(
+      router.canGoBack(),
+    );
+
+  if (action === "back") {
+    router.back();
+
+    return;
+  }
+
+  router.replace(
+    action,
+  );
+}
 
 export default function SnapshotDetailScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const params =
     useLocalSearchParams();
 
@@ -45,6 +94,17 @@ export default function SnapshotDetailScreen() {
     firstParam(
       params.snapshotId,
     );
+
+  const loadRequestId =
+    useRef(0);
+
+  const snapshotIdRef =
+    useRef(
+      snapshotId,
+    );
+
+  snapshotIdRef.current =
+    snapshotId;
 
   const [
     snapshot,
@@ -86,21 +146,75 @@ export default function SnapshotDetailScreen() {
     setCloudWarning,
   ] = useState("");
 
+  const [
+    loadError,
+    setLoadError,
+  ] = useState<unknown>(
+    null,
+  );
+
   const loadSnapshot =
     useCallback(async () => {
+      if (
+        snapshotIdRef.current !==
+        snapshotId
+      ) {
+        return;
+      }
+
+      const requestId =
+        loadRequestId.current +
+        1;
+
+      loadRequestId.current =
+        requestId;
+
+      const isCurrentRequest =
+        (): boolean => {
+          return (
+            loadRequestId.current ===
+              requestId &&
+            snapshotIdRef.current ===
+              snapshotId
+          );
+        };
+
       try {
         setIsLoading(true);
+        setLoadError(
+          null,
+        );
 
-        const [
-          snapshotResult,
-          storedSoundscape,
-        ] = await Promise.all([
-          readSnapshotWithStatus(
+        const snapshotResult =
+          await readSnapshotWithStatus(
             snapshotId,
-          ),
+          );
 
-          readSoundscape(),
-        ]);
+        if (
+          !isCurrentRequest()
+        ) {
+          return;
+        }
+
+        let storedSoundscape:
+          SoundscapeProfile | null =
+            null;
+
+        try {
+          storedSoundscape =
+            await readSoundscape();
+        } catch (error) {
+          console.warn(
+            "Snapshot loaded, but Soundscape membership could not be read:",
+            error,
+          );
+        }
+
+        if (
+          !isCurrentRequest()
+        ) {
+          return;
+        }
 
         setSnapshot(
           snapshotResult.value,
@@ -109,10 +223,6 @@ export default function SnapshotDetailScreen() {
         setCloudWarning(
           snapshotResult.warning ??
           "",
-        );
-
-        setSoundscape(
-          storedSoundscape,
         );
 
         setNote(
@@ -124,26 +234,108 @@ export default function SnapshotDetailScreen() {
           snapshotResult.value?.mood ??
             "",
         );
+
+        setSoundscape(
+          storedSoundscape,
+        );
+
+        if (
+          !snapshotResult.value &&
+          snapshotResult.warning
+        ) {
+          setLoadError(
+            new Error(
+              snapshotResult.warning,
+            ),
+          );
+        }
       } catch (error) {
+        if (
+          !isCurrentRequest()
+        ) {
+          return;
+        }
+
         console.error(
           "Unable to load Snapshot:",
           error,
         );
 
-        Alert.alert(
-          "Unable to load",
-          "Canal could not load this Snapshot.",
+        const loadFailure =
+          error ??
+          new Error(
+            "Canal could not load this Snapshot.",
+          );
+
+        setSnapshot(
+          null,
+        );
+
+        setLoadError(
+          () =>
+            loadFailure,
         );
       } finally {
-        setIsLoading(false);
+        if (
+          isCurrentRequest()
+        ) {
+          setIsLoading(
+            false,
+          );
+        }
       }
     }, [snapshotId]);
 
   useFocusEffect(
     useCallback(() => {
       void loadSnapshot();
+
+      return () => {
+        loadRequestId.current +=
+          1;
+      };
     }, [loadSnapshot]),
   );
+
+  useReconnectReload(
+    loadSnapshot,
+  );
+
+  const loadIssue =
+    loadError
+      ? classifyRecoveryIssue(
+          loadError,
+          {
+            service:
+              "canal",
+            connectivityStatus,
+          },
+        )
+      : null;
+
+  const recoverSnapshot =
+    async (): Promise<void> => {
+      if (
+        loadIssue?.action ===
+        "sign-in"
+      ) {
+        router.push(
+          "/login" as never,
+        );
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus !==
+        "offline"
+      ) {
+        await loadSnapshot();
+      }
+    };
 
   async function saveChanges() {
     if (!snapshot) {
@@ -348,13 +540,18 @@ export default function SnapshotDetailScreen() {
   }
 
   async function openSpotify() {
-    if (!snapshot?.spotifyUrl) {
+    const spotifyUrl =
+      canonicalSpotifyTrackUrl(
+        snapshot?.spotifyUrl,
+      );
+
+    if (!spotifyUrl) {
       return;
     }
 
     try {
       await Linking.openURL(
-        snapshot.spotifyUrl,
+        spotifyUrl,
       );
     } catch (error) {
       console.error(
@@ -466,6 +663,52 @@ export default function SnapshotDetailScreen() {
   }
 
   if (!snapshot) {
+    if (loadIssue) {
+      return (
+        <SafeAreaView
+          style={styles.screen}
+        >
+          <View
+            style={styles.centered}
+          >
+            <View
+              style={styles.recovery}
+            >
+              <RecoveryNotice
+                issue={
+                  loadIssue
+                }
+                onAction={
+                  recoverSnapshot
+                }
+              />
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={
+                closeSnapshot
+              }
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                styles.recoveryReturnButton,
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                style={
+                  styles.secondaryButtonText
+                }
+              >
+                Return to Snapshots
+              </Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
     return (
       <SafeAreaView
         style={styles.screen}
@@ -488,6 +731,7 @@ export default function SnapshotDetailScreen() {
           </Text>
 
           <Text
+            selectable
             style={
               styles.notFoundText
             }
@@ -498,10 +742,8 @@ export default function SnapshotDetailScreen() {
 
           <Pressable
             accessibilityRole="button"
-            onPress={() =>
-              router.replace(
-                "/snapshots",
-              )
+            onPress={
+              closeSnapshot
             }
             style={({ pressed }) => [
               styles.primaryButton,
@@ -537,11 +779,17 @@ export default function SnapshotDetailScreen() {
     mood.trim() !==
       (snapshot.mood ?? "");
 
+  const templateStyle =
+    snapshotTemplateStyle(
+      snapshot.templateTheme,
+    );
+
   return (
     <SafeAreaView
       style={styles.screen}
     >
       <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={
           styles.page
         }
@@ -553,10 +801,9 @@ export default function SnapshotDetailScreen() {
         <View style={styles.header}>
           <Pressable
             accessibilityRole="button"
-            onPress={() =>
-              router.replace(
-                "/snapshots",
-              )
+            accessibilityLabel="Go back"
+            onPress={
+              closeSnapshot
             }
             style={({ pressed }) => [
               styles.headerButton,
@@ -602,13 +849,42 @@ export default function SnapshotDetailScreen() {
 
         <View style={styles.hero}>
           <View
-            style={styles.snapshotArtwork}
+            style={[
+              styles.snapshotArtwork,
+              templateStyle && {
+                backgroundColor:
+                  templateStyle.backgroundColor,
+              },
+            ]}
           >
             <Ionicons
               name="camera"
               size={45}
-              color="#ff9a50"
+              color={
+                templateStyle
+                  ?.accentColor ??
+                "#ff9a50"
+              }
             />
+
+            {snapshot.templateBrandLabel ? (
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.artworkBrand,
+                  {
+                    color:
+                      templateStyle
+                        ?.textColor ??
+                      "#FFFFFF",
+                  },
+                ]}
+              >
+                {
+                  snapshot.templateBrandLabel
+                }
+              </Text>
+            ) : null}
           </View>
 
           <View
@@ -660,6 +936,52 @@ export default function SnapshotDetailScreen() {
             )}
           </Text>
         </View>
+
+        {snapshot.templateBrandLabel ? (
+          <View
+            accessibilityLabel={`Creator template ${snapshot.templateBrandLabel}`}
+            style={
+              styles.templateProvenance
+            }
+          >
+            <View
+              style={[
+                styles.templateProvenanceMark,
+                {
+                  backgroundColor:
+                    templateStyle
+                      ?.accentColor ??
+                    "#ff9a50",
+                },
+              ]}
+            />
+
+            <View
+              style={
+                styles.templateProvenanceCopy
+              }
+            >
+              <Text
+                style={
+                  styles.templateProvenanceLabel
+                }
+              >
+                CREATOR TEMPLATE
+              </Text>
+
+              <Text
+                selectable
+                style={
+                  styles.templateProvenanceName
+                }
+              >
+                {
+                  snapshot.templateBrandLabel
+                }
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {cloudWarning ? (
           <View
@@ -1078,6 +1400,51 @@ function formatSnapshotDate(
   );
 }
 
+function snapshotTemplateStyle(
+  theme:
+    SnapshotTemplateTheme
+    | undefined,
+): {
+  backgroundColor: string;
+  accentColor: string;
+  textColor: string;
+} | null {
+  switch (theme) {
+    case "sunset":
+      return {
+        backgroundColor:
+          "#3E1734",
+        accentColor:
+          "#FF9A50",
+        textColor:
+          "#FFF8F2",
+      };
+
+    case "midnight":
+      return {
+        backgroundColor:
+          "#101B34",
+        accentColor:
+          "#79A7FF",
+        textColor:
+          "#F6F8FF",
+      };
+
+    case "paper":
+      return {
+        backgroundColor:
+          "#FFF4E8",
+        accentColor:
+          "#C64B2D",
+        textColor:
+          "#2B2520",
+      };
+
+    default:
+      return null;
+  }
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -1102,6 +1469,16 @@ const styles = StyleSheet.create({
     color: "#8f9891",
     fontSize: 14,
     textAlign: "center",
+  },
+
+  recovery: {
+    width: "100%",
+    maxWidth: 520,
+  },
+
+  recoveryReturnButton: {
+    width: "100%",
+    maxWidth: 520,
   },
 
   page: {
@@ -1156,6 +1533,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#2b1d14",
   },
 
+  artworkBrand: {
+    position: "absolute",
+    left: 13,
+    right: 13,
+    bottom: 13,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+
   visibilityBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1190,6 +1579,44 @@ const styles = StyleSheet.create({
     marginTop: 7,
     color: "#8f9891",
     fontSize: 11,
+  },
+
+  templateProvenance: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#343A36",
+    borderRadius: 18,
+    borderCurve:
+      "continuous",
+    backgroundColor: "#171B18",
+    padding: 13,
+  },
+
+  templateProvenanceMark: {
+    width: 8,
+    alignSelf: "stretch",
+    borderRadius: 4,
+  },
+
+  templateProvenanceCopy: {
+    flex: 1,
+    gap: 3,
+  },
+
+  templateProvenanceLabel: {
+    color: "#8F9891",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  templateProvenanceName: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
   },
 
   syncWarning: {

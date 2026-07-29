@@ -1,6 +1,8 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -9,6 +11,7 @@ import {
   Linking,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -24,6 +27,30 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
+  classifyAnalyticsFailure,
+  recordAnalyticsEvent,
+  recordAnalyticsFailure,
+} from "../lib/analytics";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
+
+import {
+  captureScenePlaylistExportAccount,
+  recordScenePlaylistExport,
+} from "../lib/playlist-exports";
+
+import {
+  publicSceneShareUrl,
+  sceneShareText,
+} from "../lib/scenes";
+
+import {
   loadPublicScene,
   savePublicSceneToLibrary,
 } from "../lib/social";
@@ -33,8 +60,12 @@ import type {
 } from "../lib/social";
 
 import {
-  exportSceneToSpotify,
-} from "../lib/spotify-scene-tools";
+  exportSceneToMusicProvider,
+} from "../lib/scene-music-export";
+
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
 
 function safeBack(): void {
   if (
@@ -51,6 +82,14 @@ function safeBack(): void {
 }
 
 export default function PublicSceneScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const params =
     useLocalSearchParams<{
       ownerId?: string;
@@ -90,9 +129,27 @@ export default function PublicSceneScreen() {
   ] = useState(false);
 
   const [
+    sharing,
+    setSharing,
+  ] = useState(false);
+
+  const [
     exporting,
     setExporting,
   ] = useState(false);
+
+  const [
+    checkingConnection,
+    setCheckingConnection,
+  ] = useState(false);
+
+  const [
+    exportErrorCause,
+    setExportErrorCause,
+  ] =
+    useState<unknown>(
+      null,
+    );
 
   const [
     playlistUrl,
@@ -113,6 +170,9 @@ export default function PublicSceneScreen() {
     errorMessage,
     setErrorMessage,
   ] = useState("");
+
+  const exportInFlight =
+    useRef(false);
 
   const load =
     useCallback(
@@ -137,11 +197,18 @@ export default function PublicSceneScreen() {
         );
 
         try {
-          setItem(
+          const publicScene =
             await loadPublicScene(
               ownerId,
               sceneId,
-            ),
+            );
+
+          setItem(
+            publicScene,
+          );
+
+          setErrorMessage(
+            "",
           );
         } catch (error) {
           setErrorMessage(
@@ -182,6 +249,9 @@ export default function PublicSceneScreen() {
 
       setMessage("");
       setErrorMessage("");
+      setExportErrorCause(
+        null,
+      );
 
       try {
         await savePublicSceneToLibrary(
@@ -211,14 +281,88 @@ export default function PublicSceneScreen() {
       }
     };
 
-  const exportToSpotify =
+  const share =
     async (): Promise<void> => {
       if (
         !item ||
-        exporting
+        sharing
       ) {
         return;
       }
+
+      setSharing(
+        true,
+      );
+      setErrorMessage("");
+
+      try {
+        const returnUrl =
+          publicSceneShareUrl(
+            item.ownerId,
+            item.sceneId,
+          );
+
+        await Share.share({
+          title:
+            item.scene.name,
+          message:
+            sceneShareText(
+              item.scene,
+              returnUrl,
+            ),
+          url:
+            returnUrl,
+        });
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not share this public Scene.",
+        );
+      } finally {
+        setSharing(
+          false,
+        );
+      }
+    };
+
+  const exportToSpotify =
+    async (
+      confirmedConnectivityStatus =
+        connectivityStatus,
+    ): Promise<void> => {
+      if (
+        !item ||
+        exporting ||
+        checkingConnection ||
+        exportInFlight.current
+      ) {
+        return;
+      }
+
+      if (
+        confirmedConnectivityStatus ===
+        "offline"
+      ) {
+        void recordAnalyticsFailure(
+          "scene_export",
+          "offline",
+        );
+
+        setMessage("");
+        setErrorMessage("");
+
+        setExportErrorCause(
+          new Error(
+            "Canal is offline.",
+          ),
+        );
+
+        return;
+      }
+
+      exportInFlight.current =
+        true;
 
       setExporting(
         true,
@@ -226,36 +370,181 @@ export default function PublicSceneScreen() {
 
       setMessage("");
       setErrorMessage("");
+      setExportErrorCause(
+        null,
+      );
       setPlaylistUrl(
         null,
       );
 
       try {
+        const exportAccount =
+          await captureScenePlaylistExportAccount();
+
         const result =
-          await exportSceneToSpotify(
+          await exportSceneToMusicProvider(
             item.scene,
-            `A public Canal Scene by ${item.creator.displayName} ${item.creator.handle}.`,
+            {
+              providerId:
+                "spotify",
+              description:
+                `A public Canal Scene by ${item.creator.displayName} ${item.creator.handle}.`,
+            },
           );
 
+        void recordAnalyticsEvent({
+          name:
+            "scene_export_completed",
+        });
+
         setPlaylistUrl(
-          result.playlistUrl,
+          result.collectionUrl,
         );
 
+        let historyMessage =
+          "";
+
+        try {
+          await recordScenePlaylistExport(
+            item.scene,
+            {
+              playlistId:
+                result
+                  .collectionId,
+              playlistUrl:
+                result
+                  .collectionUrl,
+              trackCount:
+                result
+                  .exportedTrackCount,
+            },
+            {
+              sourceOwnerId:
+                item.ownerId,
+              sourceSceneId:
+                item.sceneId,
+              account:
+                exportAccount,
+            },
+          );
+        } catch (
+          historyError
+        ) {
+          console.warn(
+            "Canal created the Spotify playlist but could not save its profile history:",
+            historyError,
+          );
+
+          historyMessage =
+            " The playlist was created, but its Canal history could not be saved.";
+        }
+
         setMessage(
-          `Exported ${result.trackCount} track${result.trackCount === 1 ? "" : "s"} to your Spotify. ${
-            result.skippedCount > 0
-              ? `${result.skippedCount} unmatched track${result.skippedCount === 1 ? " was" : "s were"} skipped.`
+          `Exported ${result.exportedTrackCount} track${result.exportedTrackCount === 1 ? "" : "s"} to your Spotify. ${
+            result.skippedTrackCount > 0
+              ? `${result.skippedTrackCount} unmatched track${result.skippedTrackCount === 1 ? " was" : "s were"} skipped.`
               : ""
-          }`,
+          }${historyMessage}`,
+        );
+
+        setExportErrorCause(
+          null,
         );
       } catch (error) {
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Canal could not export this Scene to Spotify.",
+        void recordAnalyticsFailure(
+          "scene_export",
+          classifyAnalyticsFailure(
+            error,
+          ),
+        );
+
+        setExportErrorCause(
+          () =>
+            error ??
+            new Error(
+              "Canal could not export this Scene to Spotify.",
+            ),
         );
       } finally {
+        exportInFlight.current =
+          false;
+
         setExporting(
+          false,
+        );
+      }
+    };
+
+  const exportRecoveryIssue =
+    useMemo(
+      () => {
+        const cause =
+          exportErrorCause ??
+          (
+            item &&
+            connectivityStatus ===
+              "offline"
+              ? new Error(
+                  "Canal is offline.",
+                )
+              : null
+          );
+
+        return cause
+          ? classifyRecoveryIssue(
+              cause,
+              {
+                service:
+                  "spotify",
+                connectivityStatus,
+              },
+            )
+          : null;
+      },
+      [
+        connectivityStatus,
+        exportErrorCause,
+        item,
+      ],
+    );
+
+  const recoverExport =
+    async (): Promise<void> => {
+      if (
+        exportRecoveryIssue
+          ?.action ===
+        "reconnect-spotify"
+      ) {
+        router.push(
+          "/music-services" as never,
+        );
+
+        return;
+      }
+
+      const shouldRetryExport =
+        exportErrorCause !==
+        null;
+
+      setCheckingConnection(
+        true,
+      );
+
+      try {
+        const nextStatus =
+          await refreshConnectivity();
+
+        if (
+          nextStatus !==
+            "offline" &&
+          shouldRetryExport
+        ) {
+          await exportToSpotify(
+            nextStatus,
+          );
+        }
+      } finally {
+        setCheckingConnection(
           false,
         );
       }
@@ -398,22 +687,51 @@ export default function PublicSceneScreen() {
                     By{" "}
                     {item.creator.displayName}{" "}
                     {item.creator.handle}
+                    {item.creator
+                      .isCanal
+                      ? " · CANAL"
+                      : item.creator
+                          .isVerified
+                        ? " · VERIFIED"
+                        : ""}
                   </Text>
                 </Pressable>
 
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityState={{
+                    busy:
+                      exporting ||
+                      checkingConnection,
+                    disabled:
+                      exporting ||
+                      checkingConnection ||
+                      connectivityStatus ===
+                        "offline",
+                  }}
                   disabled={
-                    exporting
+                    exporting ||
+                    checkingConnection ||
+                    connectivityStatus ===
+                      "offline"
                   }
                   onPress={() =>
                     void exportToSpotify()
                   }
-                  style={
-                    styles.spotifyButton
-                  }
+                  style={[
+                    styles.spotifyButton,
+
+                    (
+                      exporting ||
+                      checkingConnection ||
+                      connectivityStatus ===
+                        "offline"
+                    ) &&
+                      styles.disabledButton,
+                  ]}
                 >
-                  {exporting ? (
+                  {exporting ||
+                  checkingConnection ? (
                     <ActivityIndicator
                       color="#07130B"
                     />
@@ -466,6 +784,58 @@ export default function PublicSceneScreen() {
                     </Text>
                   )}
                 </Pressable>
+
+                <Pressable
+                  accessibilityHint="Opens your device sharing options."
+                  accessibilityLabel={`Share ${item.scene.name}`}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    busy:
+                      sharing,
+                    disabled:
+                      sharing,
+                  }}
+                  disabled={
+                    sharing
+                  }
+                  onPress={() =>
+                    void share()
+                  }
+                  style={[
+                    styles.shareButton,
+
+                    sharing &&
+                      styles.disabledButton,
+                  ]}
+                >
+                  {sharing ? (
+                    <View
+                      style={
+                        styles.shareBusy
+                      }
+                    >
+                      <ActivityIndicator
+                        color="#1B1B1B"
+                      />
+
+                      <Text
+                        style={
+                          styles.shareButtonText
+                        }
+                      >
+                        Sharing…
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text
+                      style={
+                        styles.shareButtonText
+                      }
+                    >
+                      Share Public Scene
+                    </Text>
+                  )}
+                </Pressable>
               </View>
 
               {message ? (
@@ -506,8 +876,25 @@ export default function PublicSceneScreen() {
                 </View>
               ) : null}
 
+              {exportRecoveryIssue ? (
+                <RecoveryNotice
+                  busy={
+                    exporting ||
+                    checkingConnection
+                  }
+                  issue={
+                    exportRecoveryIssue
+                  }
+                  onAction={
+                    recoverExport
+                  }
+                />
+              ) : null}
+
               {errorMessage ? (
                 <View
+                  accessibilityLiveRegion="polite"
+                  accessibilityRole="alert"
                   style={
                     styles.errorBox
                   }
@@ -519,33 +906,6 @@ export default function PublicSceneScreen() {
                   >
                     {errorMessage}
                   </Text>
-
-                  {errorMessage.includes(
-                    "connect",
-                  ) ||
-                  errorMessage.includes(
-                    "authorization",
-                  ) ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() =>
-                        router.push(
-                          "/music-services" as never,
-                        )
-                      }
-                      style={
-                        styles.connectButton
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.connectText
-                        }
-                      >
-                        Open Music Services
-                      </Text>
-                    </Pressable>
-                  ) : null}
                 </View>
               ) : null}
 
@@ -852,6 +1212,32 @@ const styles =
 
     saveButtonText: {
       color: "#F47A24",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    shareButton: {
+      width: "100%",
+      minHeight: 50,
+      borderRadius: 17,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#F4EEE9",
+      marginTop: 10,
+    },
+
+    shareBusy: {
+      flexDirection: "row",
+      alignItems:
+        "center",
+      gap: 8,
+    },
+
+    shareButtonText: {
+      color: "#1B1B1B",
       fontSize: 13,
       fontWeight: "900",
     },

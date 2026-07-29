@@ -1,6 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
+  recordAnalyticsEvent,
+} from "./analytics";
+
+import {
   supabase,
 } from "./supabase";
 
@@ -22,8 +26,19 @@ type OnboardingRecord =
   | "required"
   | "complete";
 
+export type OnboardingDestination =
+  | "/(tabs)"
+  | "/scene-studio";
+
+export type OnboardingUpdate = {
+  required: boolean;
+  destination:
+    | OnboardingDestination
+    | null;
+};
+
 type OnboardingListener = (
-  required: boolean,
+  update: OnboardingUpdate,
 ) => void;
 
 const listenersByUser =
@@ -31,6 +46,23 @@ const listenersByUser =
     string,
     Set<OnboardingListener>
   >();
+
+const pendingDestinationsByUser =
+  new Map<
+    string,
+    OnboardingDestination
+  >();
+
+export function readPendingOnboardingDestination(
+  userId: string,
+): OnboardingDestination | null {
+  return (
+    pendingDestinationsByUser.get(
+      userId,
+    ) ??
+    null
+  );
+}
 
 function userOnboardingKey(
   userId: string,
@@ -49,9 +81,41 @@ function normalizeEmail(
   );
 }
 
+async function assertOnboardingAccount(
+  expectedUserId: string,
+): Promise<void> {
+  const {
+    data: {
+      user,
+    },
+    error,
+  } =
+    await supabase.auth.getUser();
+
+  if (error) {
+    throw error;
+  }
+
+  if (
+    !user ||
+    user.id !==
+      expectedUserId
+  ) {
+    throw Object.assign(
+      new Error(
+        "The Canal account changed while onboarding was being completed.",
+      ),
+      {
+        code:
+          "CANAL_ONBOARDING_ACCOUNT_CHANGED",
+      },
+    );
+  }
+}
+
 function notifyUser(
   userId: string,
-  required: boolean,
+  update: OnboardingUpdate,
 ): void {
   const listeners =
     listenersByUser.get(
@@ -61,7 +125,7 @@ function notifyUser(
   listeners?.forEach(
     (listener) => {
       listener(
-        required,
+        update,
       );
     },
   );
@@ -97,52 +161,59 @@ export async function markOnboardingRequired(
 
   notifyUser(
     userId,
-    true,
+    {
+      required: true,
+      destination: null,
+    },
   );
 }
 
 export async function completeOnboarding(
   userId: string,
+  destination: OnboardingDestination,
 ): Promise<void> {
-  await AsyncStorage.setItem(
-    userOnboardingKey(
-      userId,
-    ),
-    "complete",
-  );
-
-  notifyUser(
+  await assertOnboardingAccount(
     userId,
-    false,
   );
 
-  /*
-   * Keep completion on the auth profile too, so a
-   * user who changes devices does not repeat the
-   * first-run flow. Local completion remains valid
-   * if this best-effort sync is unavailable.
-   */
-  try {
-    const {
-      error,
-    } =
-      await supabase.auth.updateUser({
-        data: {
-          [ONBOARDING_METADATA_KEY]:
-            ONBOARDING_VERSION,
-        },
-      });
+  pendingDestinationsByUser.set(
+    userId,
+    destination,
+  );
 
-    if (error) {
-      console.warn(
-        "Canal could not sync onboarding completion to the account:",
-        error.message,
-      );
-    }
-  } catch (error) {
-    console.warn(
-      "Canal could not sync onboarding completion to the account:",
-      error,
+  try {
+    await AsyncStorage.setItem(
+      userOnboardingKey(
+        userId,
+      ),
+      "complete",
+    );
+
+    /*
+     * Storage can settle after an account switch.
+     * The record is scoped to the captured user,
+     * but navigation must never be published into
+     * the next account's root navigator.
+     */
+    await assertOnboardingAccount(
+      userId,
+    );
+
+    notifyUser(
+      userId,
+      {
+        required: false,
+        destination,
+      },
+    );
+
+    void recordAnalyticsEvent({
+      name:
+        "onboarding_completed",
+    });
+  } finally {
+    pendingDestinationsByUser.delete(
+      userId,
     );
   }
 }
@@ -226,7 +297,10 @@ export async function isOnboardingRequired(
 
     notifyUser(
       userId,
-      true,
+      {
+        required: true,
+        destination: null,
+      },
     );
 
     return true;

@@ -2,12 +2,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
   ActivityIndicator,
-  Image,
   Linking,
   Pressable,
   ScrollView,
@@ -26,6 +26,14 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
+
+import {
   readGeneratedScenePreview,
   saveGeneratedSceneToLibrary,
   writeGeneratedScenePreview,
@@ -36,18 +44,41 @@ import type {
 } from "../lib/scene-studio";
 
 import {
-  addSpotifyTrackToGeneratedScene,
+  addMusicTrackToGeneratedScene,
+  musicCatalogTrackSceneId,
   removeTrackFromGeneratedSceneEditor,
 } from "../lib/scene-preview-editor";
 
 import {
-  exportSceneToSpotify,
-  searchSpotifySceneTracks,
-} from "../lib/spotify-scene-tools";
+  exportSceneToMusicProvider,
+} from "../lib/scene-music-export";
+
+import {
+  classifyAnalyticsFailure,
+  recordAnalyticsEvent,
+  recordAnalyticsFailure,
+} from "../lib/analytics";
+
+import {
+  getMusicLibraryTrackSuggestions,
+} from "../lib/music-library-suggestions";
 
 import type {
-  SpotifySceneSearchTrack,
-} from "../lib/spotify-scene-tools";
+  MusicCatalogTrack,
+  MusicLibrarySnapshot,
+} from "../lib/music-provider-model";
+
+import {
+  musicProviders,
+} from "../lib/music-services";
+
+import {
+  createPlayerSession,
+} from "../lib/canal-player";
+
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
 
 function safeBack(): void {
   if (
@@ -64,7 +95,7 @@ function safeBack(): void {
 }
 
 function artistNames(
-  track: SpotifySceneSearchTrack,
+  track: MusicCatalogTrack,
 ): string {
   return track.artists
     .map(
@@ -110,6 +141,14 @@ function durationText(
 }
 
 export default function ScenePreviewScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const [
     result,
     setResult,
@@ -135,8 +174,16 @@ export default function ScenePreviewScreen() {
     setSearchResults,
   ] =
     useState<
-      SpotifySceneSearchTrack[]
+      MusicCatalogTrack[]
     >([]);
+
+  const [
+    librarySnapshot,
+    setLibrarySnapshot,
+  ] =
+    useState<MusicLibrarySnapshot | null>(
+      null,
+    );
 
   const [
     searching,
@@ -173,6 +220,20 @@ export default function ScenePreviewScreen() {
     setErrorMessage,
   ] = useState("");
 
+  const [
+    exportErrorCause,
+    setExportErrorCause,
+  ] =
+    useState<unknown>(
+      null,
+    );
+
+  const searchRequestId =
+    useRef(0);
+
+  const exportInFlight =
+    useRef(false);
+
   const load =
     useCallback(
       async (): Promise<void> => {
@@ -181,8 +242,19 @@ export default function ScenePreviewScreen() {
         );
 
         try {
-          const stored =
-            await readGeneratedScenePreview();
+          const [
+            stored,
+            storedLibrary,
+          ] =
+            await Promise.all([
+              readGeneratedScenePreview(),
+              musicProviders
+                .require(
+                  "spotify",
+                  "library-sync",
+                )
+                .readLibrarySnapshot(),
+            ]);
 
           if (!stored) {
             throw new Error(
@@ -192,6 +264,10 @@ export default function ScenePreviewScreen() {
 
           setResult(
             stored,
+          );
+
+          setLibrarySnapshot(
+            storedLibrary,
           );
         } catch (error) {
           setErrorMessage(
@@ -229,6 +305,161 @@ export default function ScenePreviewScreen() {
       ],
     );
 
+  const localSuggestions =
+    useMemo(
+      () =>
+        getMusicLibraryTrackSuggestions(
+          librarySnapshot,
+          query,
+        ),
+      [
+        librarySnapshot,
+        query,
+      ],
+    );
+
+  useEffect(() => {
+    setExportErrorCause(
+      null,
+    );
+
+    const cleanedQuery =
+      query.trim();
+
+    const requestId =
+      searchRequestId.current +
+      1;
+
+    searchRequestId.current =
+      requestId;
+
+    if (!cleanedQuery) {
+      setSearchResults([]);
+      setSearching(false);
+
+      return;
+    }
+
+    setSearchResults(
+      localSuggestions,
+    );
+
+    if (
+      localSuggestions.length >
+      0
+    ) {
+      setSearching(false);
+
+      return;
+    }
+
+    if (
+      cleanedQuery.length <
+      3
+    ) {
+      setSearching(false);
+
+      return;
+    }
+
+    setSearching(true);
+
+    const timer =
+      setTimeout(() => {
+        const search =
+          async (): Promise<void> => {
+            try {
+              const liveResults =
+                await musicProviders
+                  .require(
+                    "spotify",
+                    "catalog-search",
+                  )
+                  .searchCatalog({
+                    query:
+                      cleanedQuery,
+                    limit:
+                      10,
+                  });
+
+              if (
+                searchRequestId.current !==
+                requestId
+              ) {
+                return;
+              }
+
+              const merged =
+                new Map<
+                  string,
+                  MusicCatalogTrack
+                >();
+
+              for (
+                const track of [
+                  ...localSuggestions,
+                  ...liveResults,
+                ]
+              ) {
+                if (
+                  !merged.has(
+                    musicCatalogTrackSceneId(
+                      track,
+                    ),
+                  )
+                ) {
+                  merged.set(
+                    musicCatalogTrackSceneId(
+                      track,
+                    ),
+                    track,
+                  );
+                }
+              }
+
+              setSearchResults(
+                Array.from(
+                  merged.values(),
+                ).slice(0, 10),
+              );
+
+              setErrorMessage("");
+            } catch (error) {
+              if (
+                searchRequestId.current !==
+                  requestId ||
+                localSuggestions.length >
+                  0
+              ) {
+                return;
+              }
+
+              setErrorMessage(
+                error instanceof Error
+                  ? error.message
+                  : "Canal could not search Spotify.",
+              );
+            } finally {
+              if (
+                searchRequestId.current ===
+                requestId
+              ) {
+                setSearching(false);
+              }
+            }
+          };
+
+        void search();
+      }, 600);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [
+    localSuggestions,
+    query,
+  ]);
+
   const persistResult =
     async (
       next: GeneratedSceneResult,
@@ -242,49 +473,21 @@ export default function ScenePreviewScreen() {
       );
     };
 
-  const runSearch =
-    async (): Promise<void> => {
-      if (searching) {
-        return;
-      }
-
-      setSearching(
-        true,
-      );
-
-      setMessage("");
-      setErrorMessage("");
-
-      try {
-        setSearchResults(
-          await searchSpotifySceneTracks(
-            query,
-          ),
-        );
-      } catch (error) {
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Canal could not search Spotify.",
-        );
-      } finally {
-        setSearching(
-          false,
-        );
-      }
-    };
-
   const addTrack =
     async (
-      track: SpotifySceneSearchTrack,
+      track: MusicCatalogTrack,
     ): Promise<void> => {
       if (!result) {
         return;
       }
 
+      setExportErrorCause(
+        null,
+      );
+
       try {
         const next =
-          addSpotifyTrackToGeneratedScene(
+          addMusicTrackToGeneratedScene(
             result,
             track,
           );
@@ -314,6 +517,10 @@ export default function ScenePreviewScreen() {
       if (!result) {
         return;
       }
+
+      setExportErrorCause(
+        null,
+      );
 
       try {
         const next =
@@ -355,19 +562,33 @@ export default function ScenePreviewScreen() {
 
       setMessage("");
       setErrorMessage("");
+      setExportErrorCause(
+        null,
+      );
 
       try {
         await writeGeneratedScenePreview(
           result,
         );
 
-        await saveGeneratedSceneToLibrary(
-          result,
+        const savedScene =
+          await saveGeneratedSceneToLibrary(
+            result,
+          );
+
+        await createPlayerSession(
+          savedScene,
         );
 
-        setMessage(
-          `"${result.scene.name}" was saved to your Library.`,
-        );
+        router.replace({
+          pathname:
+            "/now-playing",
+
+          params: {
+            sceneId:
+              savedScene.id,
+          },
+        });
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -382,53 +603,147 @@ export default function ScenePreviewScreen() {
     };
 
   const exportToSpotify =
-    async (): Promise<void> => {
+    async (
+      refreshBeforeExport = false,
+      attempt:
+        | "initial"
+        | "retry" =
+          "initial",
+    ): Promise<void> => {
       if (
         !result ||
-        exporting
+        exportInFlight.current
       ) {
         return;
       }
+
+      exportInFlight.current =
+        true;
 
       setExporting(
         true,
       );
 
-      setMessage("");
-      setErrorMessage("");
-      setPlaylistUrl(
-        null,
-      );
-
       try {
+        if (
+          refreshBeforeExport
+        ) {
+          const nextStatus =
+            await refreshConnectivity();
+
+          if (
+            nextStatus ===
+            "offline"
+          ) {
+            return;
+          }
+        }
+
+        setMessage("");
+        setErrorMessage("");
+        setExportErrorCause(
+          null,
+        );
+        setPlaylistUrl(
+          null,
+        );
+
         const exportResult =
-          await exportSceneToSpotify(
+          await exportSceneToMusicProvider(
             result.scene,
+            {
+              providerId:
+                "spotify",
+            },
           );
+
+        void recordAnalyticsEvent({
+          name:
+            "scene_export_completed",
+          attempt,
+        });
 
         setPlaylistUrl(
           exportResult
-            .playlistUrl,
+            .collectionUrl,
         );
 
         setMessage(
-          `Exported ${exportResult.trackCount} track${exportResult.trackCount === 1 ? "" : "s"} to your Spotify. ${
-            exportResult.skippedCount > 0
-              ? `${exportResult.skippedCount} unmatched track${exportResult.skippedCount === 1 ? " was" : "s were"} skipped.`
+          `Exported ${exportResult.exportedTrackCount} track${exportResult.exportedTrackCount === 1 ? "" : "s"} to your Spotify. ${
+            exportResult.skippedTrackCount > 0
+              ? `${exportResult.skippedTrackCount} unmatched track${exportResult.skippedTrackCount === 1 ? " was" : "s were"} skipped.`
               : ""
           }`,
         );
+
+        setExportErrorCause(
+          null,
+        );
       } catch (error) {
+        void recordAnalyticsFailure(
+          "scene_export",
+          classifyAnalyticsFailure(
+            error,
+          ),
+          attempt,
+        );
+
+        setExportErrorCause(
+          () => error,
+        );
+
         setErrorMessage(
           error instanceof Error
             ? error.message
             : "Canal could not export this Scene to Spotify.",
         );
       } finally {
+        exportInFlight.current =
+          false;
+
         setExporting(
           false,
         );
       }
+    };
+
+  const exportRecoveryIssue =
+    useMemo(
+      () =>
+        exportErrorCause
+          ? classifyRecoveryIssue(
+              exportErrorCause,
+              {
+                service:
+                  "spotify",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        connectivityStatus,
+        exportErrorCause,
+      ],
+    );
+
+  const recoverExport =
+    async (): Promise<void> => {
+      if (
+        exportRecoveryIssue
+          ?.action ===
+        "reconnect-spotify"
+      ) {
+        router.push(
+          "/music-services" as never,
+        );
+
+        return;
+      }
+
+      await exportToSpotify(
+        true,
+        "retry",
+      );
     };
 
   if (loading) {
@@ -583,7 +898,19 @@ export default function ScenePreviewScreen() {
               </View>
             ) : null}
 
-            {errorMessage ? (
+            {exportRecoveryIssue ? (
+              <RecoveryNotice
+                busy={
+                  exporting
+                }
+                issue={
+                  exportRecoveryIssue
+                }
+                onAction={
+                  recoverExport
+                }
+              />
+            ) : errorMessage ? (
               <View
                 style={
                   styles.errorBox
@@ -644,7 +971,7 @@ export default function ScenePreviewScreen() {
                   styles.sectionSubtitle
                 }
               >
-                Search the connected Spotify account, then add tracks directly to this Scene.
+                Suggestions update as you type. Recent and liked music appears first, then Canal adds live Spotify matches.
               </Text>
 
               <View
@@ -659,10 +986,7 @@ export default function ScenePreviewScreen() {
                   onChangeText={
                     setQuery
                   }
-                  onSubmitEditing={() =>
-                    void runSearch()
-                  }
-                  placeholder="Song, artist, or album"
+                  placeholder="Type a song or artist"
                   placeholderTextColor="#9A938C"
                   returnKeyType="search"
                   style={
@@ -670,33 +994,13 @@ export default function ScenePreviewScreen() {
                   }
                 />
 
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={
-                    searching
-                  }
-                  onPress={() =>
-                    void runSearch()
-                  }
-                  style={
-                    styles.searchButton
-                  }
-                >
-                  {searching ? (
-                    <ActivityIndicator
-                      size="small"
-                      color="#FFFFFF"
-                    />
-                  ) : (
-                    <Text
-                      style={
-                        styles.searchButtonText
-                      }
-                    >
-                      Search
-                    </Text>
-                  )}
-                </Pressable>
+                {searching ? (
+                  <ActivityIndicator
+                    accessibilityLabel="Searching Spotify"
+                    size="small"
+                    color="#F47A24"
+                  />
+                ) : null}
               </View>
 
               {searchResults.length >
@@ -710,49 +1014,36 @@ export default function ScenePreviewScreen() {
                     (track) => {
                       const included =
                         includedIds.has(
-                          track.id,
+                          musicCatalogTrackSceneId(
+                            track,
+                          ),
                         );
-
-                      const imageUrl =
-                        track.album
-                          ?.images?.[0]
-                          ?.url;
 
                       return (
                         <View
                           key={
-                            track.id
+                            musicCatalogTrackSceneId(
+                              track,
+                            )
                           }
                           style={
                             styles.searchResult
                           }
                         >
-                          {imageUrl ? (
-                            <Image
-                              source={{
-                                uri:
-                                  imageUrl,
-                              }}
+                          <View
+                            style={[
+                              styles.trackImage,
+                              styles.placeholderImage,
+                            ]}
+                          >
+                            <Text
                               style={
-                                styles.trackImage
+                                styles.placeholderText
                               }
-                            />
-                          ) : (
-                            <View
-                              style={[
-                                styles.trackImage,
-                                styles.placeholderImage,
-                              ]}
                             >
-                              <Text
-                                style={
-                                  styles.placeholderText
-                                }
-                              >
-                                ♪
-                              </Text>
-                            </View>
-                          )}
+                              ♪
+                            </Text>
+                          </View>
 
                           <View
                             style={
@@ -783,7 +1074,7 @@ export default function ScenePreviewScreen() {
                               )}{" "}
                               ·{" "}
                               {durationText(
-                                track.duration_ms,
+                                track.durationMs,
                               )}
                             </Text>
                           </View>
@@ -823,6 +1114,15 @@ export default function ScenePreviewScreen() {
                     },
                   )}
                 </View>
+              ) : query.trim() &&
+                !searching ? (
+                <Text
+                  style={
+                    styles.noSearchResults
+                  }
+                >
+                  No matching songs or artists yet.
+                </Text>
               ) : null}
             </View>
 
@@ -868,12 +1168,6 @@ export default function ScenePreviewScreen() {
                   signal,
                   index,
                 ) => {
-                  const imageUrl =
-                    signal.track
-                      .album
-                      ?.images?.[0]
-                      ?.url;
-
                   return (
                     <View
                       key={
@@ -883,32 +1177,20 @@ export default function ScenePreviewScreen() {
                         styles.currentTrack
                       }
                     >
-                      {imageUrl ? (
-                        <Image
-                          source={{
-                            uri:
-                              imageUrl,
-                          }}
+                      <View
+                        style={[
+                          styles.trackImage,
+                          styles.placeholderImage,
+                        ]}
+                      >
+                        <Text
                           style={
-                            styles.trackImage
+                            styles.placeholderText
                           }
-                        />
-                      ) : (
-                        <View
-                          style={[
-                            styles.trackImage,
-                            styles.placeholderImage,
-                          ]}
                         >
-                          <Text
-                            style={
-                              styles.placeholderText
-                            }
-                          >
-                            ♪
-                          </Text>
-                        </View>
-                      )}
+                          ♪
+                        </Text>
+                      </View>
 
                       <View
                         style={
@@ -1032,7 +1314,7 @@ export default function ScenePreviewScreen() {
                       styles.primaryText
                     }
                   >
-                    Save Scene
+                    Save & Play Scene
                   </Text>
                 )}
               </Pressable>
@@ -1310,6 +1592,13 @@ const styles =
 
     searchResults: {
       marginTop: 10,
+    },
+
+    noSearchResults: {
+      color: "#817972",
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 12,
     },
 
     searchResult: {

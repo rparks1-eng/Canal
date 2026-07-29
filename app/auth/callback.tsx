@@ -56,7 +56,7 @@ export default function AuthCallbackScreen() {
 
         if (!cancelled) {
           router.replace(
-            "/(tabs)" as never,
+            "/login" as never,
           );
         }
       };

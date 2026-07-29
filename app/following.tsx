@@ -1,16 +1,17 @@
-import { Ionicons } from "@expo/vector-icons";
 import {
   router,
   useFocusEffect,
+  useLocalSearchParams,
 } from "expo-router";
 import {
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,388 +19,854 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+} from "react-native-safe-area-context";
 
 import {
-  readFollowing,
+  captureProfileSocialAccount,
+  loadProfileConnectionSummary,
+  loadProfileFollowers,
+  loadProfileFollowing,
+} from "../lib/profile-social";
+import type {
+  ProfileConnection,
+  ProfileConnectionSummary,
+} from "../lib/profile-social";
+import {
+  followUser,
   unfollowUser,
 } from "../lib/relationships";
 import {
-  DirectoryUser,
-  getDirectoryUser,
-} from "../lib/user-directory";
+  useAuth,
+} from "../providers/auth-provider";
+
+type ConnectionMode =
+  | "following"
+  | "followers";
+
+function firstParam(
+  value:
+    | string
+    | string[]
+    | undefined,
+): string {
+  return Array.isArray(
+    value,
+  )
+    ? value[0] ??
+        ""
+    : value ??
+        "";
+}
+
+function connectionInitials(
+  connection: ProfileConnection,
+): string {
+  return (
+    connection.profile.displayName
+      .trim()
+      .split(
+        /\s+/,
+      )
+      .filter(
+        Boolean,
+      )
+      .slice(
+        0,
+        2,
+      )
+      .map(
+        (word) =>
+          word
+            .charAt(
+              0,
+            )
+            .toUpperCase(),
+      )
+      .join("") ||
+    "C"
+  );
+}
 
 export default function FollowingScreen() {
-  const [
-    followingUsers,
-    setFollowingUsers,
-  ] = useState<DirectoryUser[]>([]);
+  const {
+    user,
+  } =
+    useAuth();
 
-  const [query, setQuery] =
-    useState("");
+  const params =
+    useLocalSearchParams<{
+      mode?:
+        | string
+        | string[];
+      profileId?:
+        | string
+        | string[];
+    }>();
 
-  const [
-    operationUsername,
-    setOperationUsername,
-  ] = useState("");
+  const requestedMode =
+    firstParam(
+      params.mode,
+    );
 
-  const [isLoading, setIsLoading] =
-    useState(true);
+  const mode:
+    ConnectionMode =
+      requestedMode ===
+      "followers"
+        ? "followers"
+        : "following";
 
-  const loadFollowing =
-    useCallback(async () => {
-      try {
-        setIsLoading(true);
+  const viewerId =
+    user?.id ??
+    "";
 
-        const usernames =
-          await readFollowing();
+  const explicitProfileId =
+    firstParam(
+      params.profileId,
+    );
 
-        const users =
-          usernames.map(
-            (username) =>
-              getDirectoryUser(
-                username,
-              ) ??
-              createFallbackUser(
-                username,
-              ),
-          );
+  const profileId =
+    explicitProfileId ||
+    viewerId;
 
-        setFollowingUsers(users);
-      } catch (error) {
-        console.error(
-          "Unable to load following:",
-          error,
-        );
-
-        Alert.alert(
-          "Unable to load",
-          "Canal could not load your Following list.",
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      void loadFollowing();
-    }, [loadFollowing]),
+  const loadIdentity = [
+    viewerId,
+    profileId,
+    mode,
+  ].join(
+    ":",
   );
 
-  const visibleUsers =
-    useMemo(() => {
-      const normalizedQuery =
-        query.trim().toLowerCase();
+  const [
+    connections,
+    setConnections,
+  ] =
+    useState<
+      ProfileConnection[]
+    >([]);
 
-      if (!normalizedQuery) {
-        return followingUsers;
-      }
+  const [
+    summary,
+    setSummary,
+  ] =
+    useState<
+      ProfileConnectionSummary | null
+    >(
+      null,
+    );
 
-      return followingUsers.filter(
-        (user) =>
-          [
-            user.displayName,
-            user.username,
-            user.bio,
-            ...user.genres,
-          ].some((value) =>
-            value
-              .toLowerCase()
-              .includes(
-                normalizedQuery,
-              ),
-          ),
+  const [
+    query,
+    setQuery,
+  ] = useState("");
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    operationId,
+    setOperationId,
+  ] = useState("");
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
+
+  const [
+    loadedIdentity,
+    setLoadedIdentity,
+  ] = useState("");
+
+  const loadSequenceRef =
+    useRef(0);
+
+  const activeLoadIdentityRef =
+    useRef(
+      loadIdentity,
+    );
+
+  activeLoadIdentityRef.current =
+    loadIdentity;
+
+  useEffect(
+    () => {
+      loadSequenceRef.current +=
+        1;
+      setConnections(
+        [],
       );
-    }, [
-      followingUsers,
-      query,
-    ]);
+      setSummary(
+        null,
+      );
+      setErrorMessage(
+        "",
+      );
+      setOperationId(
+        "",
+      );
+      setLoadedIdentity(
+        "",
+      );
+      setLoading(
+        true,
+      );
+    },
+    [
+      loadIdentity,
+    ],
+  );
 
-  function openUser(
-    username: string,
-  ) {
-    router.push({
+  const load =
+    useCallback(
+      async (): Promise<void> => {
+        const expectedIdentity =
+          loadIdentity;
+
+        const loadSequence =
+          loadSequenceRef.current +
+          1;
+
+        loadSequenceRef.current =
+          loadSequence;
+
+        setConnections(
+          [],
+        );
+        setSummary(
+          null,
+        );
+        setErrorMessage(
+          "",
+        );
+
+        if (
+          !viewerId ||
+          !profileId
+        ) {
+          setErrorMessage(
+            "Sign in to view profile connections.",
+          );
+          setLoadedIdentity(
+            expectedIdentity,
+          );
+          setLoading(
+            false,
+          );
+          return;
+        }
+
+        setLoading(
+          true,
+        );
+
+        try {
+          const account =
+            await captureProfileSocialAccount(
+              viewerId,
+            );
+
+          const [
+            nextConnections,
+            nextSummary,
+          ] =
+            await Promise.all([
+              mode ===
+                "followers"
+                ? loadProfileFollowers(
+                    profileId,
+                    {
+                      account,
+                    },
+                  )
+                : loadProfileFollowing(
+                    profileId,
+                    {
+                      account,
+                    },
+                  ),
+              loadProfileConnectionSummary(
+                profileId,
+                {
+                  account,
+                },
+                ),
+            ]);
+
+          if (
+            loadSequence !==
+              loadSequenceRef.current ||
+            expectedIdentity !==
+              activeLoadIdentityRef.current
+          ) {
+            return;
+          }
+
+          setConnections(
+            nextConnections,
+          );
+          setSummary(
+            nextSummary,
+          );
+          setErrorMessage(
+            "",
+          );
+          setLoadedIdentity(
+            expectedIdentity,
+          );
+        } catch (error) {
+          if (
+            loadSequence !==
+              loadSequenceRef.current ||
+            expectedIdentity !==
+              activeLoadIdentityRef.current
+          ) {
+            return;
+          }
+
+          setErrorMessage(
+            error instanceof
+              Error
+              ? error.message
+              : "Canal could not load these profiles.",
+          );
+          setLoadedIdentity(
+            expectedIdentity,
+          );
+        } finally {
+          if (
+            loadSequence ===
+              loadSequenceRef.current &&
+            expectedIdentity ===
+              activeLoadIdentityRef.current
+          ) {
+            setLoading(
+              false,
+            );
+          }
+        }
+      },
+      [
+        loadIdentity,
+        mode,
+        profileId,
+        viewerId,
+      ],
+    );
+
+  useFocusEffect(
+    useCallback(
+      () => {
+        void load();
+
+        return () => {
+          loadSequenceRef.current +=
+            1;
+        };
+      },
+      [
+        load,
+      ],
+    ),
+  );
+
+  const isCurrentIdentity =
+    loadedIdentity ===
+    loadIdentity;
+
+  const currentSummary =
+    isCurrentIdentity
+      ? summary
+      : null;
+
+  const currentErrorMessage =
+    isCurrentIdentity
+      ? errorMessage
+      : "";
+
+  const currentLoading =
+    loading ||
+    !isCurrentIdentity;
+
+  const visibleConnections =
+    useMemo(
+      () => {
+        const currentConnections =
+          isCurrentIdentity
+            ? connections
+            : [];
+
+        const normalizedQuery =
+          query
+            .trim()
+            .toLowerCase();
+
+        if (!normalizedQuery) {
+          return currentConnections;
+        }
+
+        return currentConnections.filter(
+          (connection) =>
+            [
+              connection.profile
+                .displayName,
+              connection.profile
+                .handle,
+              connection.profile
+                .bio,
+              connection.profile
+                .favoriteActivities,
+            ].some(
+              (value) =>
+                value
+                  .toLowerCase()
+                  .includes(
+                    normalizedQuery,
+                  ),
+            ),
+        );
+      },
+      [
+        connections,
+        isCurrentIdentity,
+        query,
+      ],
+    );
+
+  function showMode(
+    nextMode:
+      ConnectionMode,
+  ): void {
+    router.replace({
       pathname:
-        "/friend/[username]",
+        "/following",
       params: {
-        username,
+        profileId,
+        mode:
+          nextMode,
       },
     });
   }
 
-  function confirmUnfollow(
-    user: DirectoryUser,
-  ) {
-    Alert.alert(
-      `Unfollow ${user.displayName}?`,
-      `@${user.username} will be removed from your Following list.`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Unfollow",
-          style: "destructive",
-          onPress: () => {
-            void removeFollowing(
-              user,
-            );
-          },
-        },
-      ],
+  async function toggleFollow(
+    connection:
+      ProfileConnection,
+  ): Promise<void> {
+    const {
+      profile,
+      viewerIsFollowing,
+    } =
+      connection;
+
+    if (
+      operationId ||
+      profile.id ===
+        viewerId
+    ) {
+      return;
+    }
+
+    const operationIdentity =
+      loadIdentity;
+
+    setOperationId(
+      profile.id,
     );
-  }
+    setErrorMessage(
+      "",
+    );
 
-  async function removeFollowing(
-    user: DirectoryUser,
-  ) {
     try {
-      setOperationUsername(
-        user.username,
-      );
-
-      const state =
+      if (
+        viewerIsFollowing
+      ) {
         await unfollowUser(
-          user.username,
-          user.displayName,
+          profile
+            .normalizedHandle,
+          profile.displayName,
+          profile.id,
         );
+      } else {
+        await followUser(
+          profile
+            .normalizedHandle,
+          profile.displayName,
+          profile.id,
+        );
+      }
 
-      setFollowingUsers(
-        followingUsers.filter(
-          (item) =>
-            item.username !==
-          user.username,
-        ),
+      if (
+        operationIdentity !==
+        activeLoadIdentityRef.current
+      ) {
+        return;
+      }
+
+      setConnections(
+        (current) =>
+          current.map(
+            (item) =>
+              item.profile
+                .id ===
+              profile.id
+                ? {
+                    ...item,
+                    viewerIsFollowing:
+                      !viewerIsFollowing,
+                  }
+                : item,
+          ),
       );
 
       if (
-        state.syncStatus ===
-        "pending"
+        profileId ===
+        viewerId
       ) {
-        Alert.alert(
-          "Saved on this device",
-          "Canal will sync this change to your account when the connection returns.",
+        setSummary(
+          (current) =>
+            current
+              ? {
+                  ...current,
+                  followingCount:
+                    Math.max(
+                      0,
+                      current
+                        .followingCount +
+                        (
+                          viewerIsFollowing
+                            ? -1
+                            : 1
+                        ),
+                    ),
+                }
+              : current,
         );
       }
     } catch (error) {
-      console.error(
-        "Unable to unfollow:",
-        error,
-      );
+      if (
+        operationIdentity !==
+        activeLoadIdentityRef.current
+      ) {
+        return;
+      }
 
-      Alert.alert(
-        "Unable to unfollow",
-        "Canal could not update your Following list.",
+      setErrorMessage(
+        error instanceof
+          Error
+          ? error.message
+          : "Canal could not update this follow.",
       );
     } finally {
-      setOperationUsername("");
+      if (
+        operationIdentity ===
+        activeLoadIdentityRef.current
+      ) {
+        setOperationId(
+          "",
+        );
+      }
     }
   }
 
+  const ownList =
+    profileId ===
+    viewerId;
+
   return (
     <SafeAreaView
-      style={styles.screen}
+      style={
+        styles.screen
+      }
+      edges={[
+        "top",
+        "left",
+        "right",
+      ]}
     >
       <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={
           styles.page
         }
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={
-          false
-        }
       >
-        <View style={styles.header}>
+        <View
+          style={
+            styles.header
+          }
+        >
           <Pressable
             accessibilityRole="button"
             onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace("/(tabs)");
-            }
-          }}
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Text
-              style={styles.backText}
-            >
-              ‹ You
-            </Text>
-          </Pressable>
-
-          <Text
+              if (
+                router.canGoBack()
+              ) {
+                router.back();
+              } else {
+                router.replace(
+                  "/(tabs)/profile",
+                );
+              }
+            }}
             style={
-              styles.headerTitle
+              styles.backButton
             }
-          >
-            Following
-          </Text>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              router.push(
-                "/friends",
-              )
-            }
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed &&
-                styles.pressed,
-            ]}
           >
             <Text
               style={
-                styles.headerAction
+                styles.backText
               }
             >
-              Find
+              ‹
+            </Text>
+          </Pressable>
+
+          <View
+            style={
+              styles.headerCopy
+            }
+          >
+            <Text
+              selectable
+              style={
+                styles.title
+              }
+            >
+              Connections
+            </Text>
+
+            <Text
+              selectable
+              style={
+                styles.subtitle
+              }
+            >
+              {ownList
+                ? "Your Canal network"
+                : "Public profile network"}
+            </Text>
+          </View>
+
+          <View
+            style={
+              styles.headerSpacer
+            }
+          />
+        </View>
+
+        <View
+          style={
+            styles.segment
+          }
+        >
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{
+              selected:
+                mode ===
+                "following",
+            }}
+            onPress={() =>
+              showMode(
+                "following",
+              )
+            }
+            style={[
+              styles.segmentButton,
+              mode ===
+                "following" &&
+                styles.segmentButtonActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.segmentText,
+                mode ===
+                  "following" &&
+                  styles.segmentTextActive,
+              ]}
+            >
+              Following{" "}
+              {currentSummary
+                ?.followingCount ??
+                "—"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{
+              selected:
+                mode ===
+                "followers",
+            }}
+            onPress={() =>
+              showMode(
+                "followers",
+              )
+            }
+            style={[
+              styles.segmentButton,
+              mode ===
+                "followers" &&
+                styles.segmentButtonActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.segmentText,
+                mode ===
+                  "followers" &&
+                  styles.segmentTextActive,
+              ]}
+            >
+              Followers{" "}
+              {currentSummary
+                ?.followerCount ??
+                "—"}
             </Text>
           </Pressable>
         </View>
 
-        <View>
-          <Text style={styles.eyebrow}>
-            YOUR PEOPLE
-          </Text>
+        <TextInput
+          accessibilityLabel="Search profile connections"
+          value={
+            query
+          }
+          onChangeText={
+            setQuery
+          }
+          placeholder="Search people"
+          placeholderTextColor="#8E8781"
+          autoCapitalize="none"
+          autoCorrect={
+            false
+          }
+          style={
+            styles.search
+          }
+        />
 
-          <Text style={styles.heading}>
-            Following.
-          </Text>
-
-          <Text
-            style={styles.description}
+        {currentErrorMessage ? (
+          <View
+            accessibilityRole="alert"
+            style={
+              styles.error
+            }
           >
-            Return to the people and
-            public Soundscapes you
-            follow.
-          </Text>
-        </View>
-
-        <View
-          style={styles.searchBox}
-        >
-          <Ionicons
-            name="search-outline"
-            size={20}
-            color="#8f9891"
-          />
-
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search Following"
-            placeholderTextColor="#777f79"
-            style={styles.searchInput}
-          />
-
-          {query ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                setQuery("")
+            <Text
+              selectable
+              style={
+                styles.errorText
               }
             >
-              <Ionicons
-                name="close-circle"
-                size={20}
-                color="#777f79"
-              />
-            </Pressable>
-          ) : null}
-        </View>
-
-        {isLoading ? (
-          <View
-            style={styles.centered}
-          >
-            <ActivityIndicator
-              size="large"
-              color="#ff7a1a"
-            />
-          </View>
-        ) : visibleUsers.length ===
-          0 ? (
-          <View
-            style={styles.emptyCard}
-          >
-            <Ionicons
-              name="person-add-outline"
-              size={31}
-              color="#ff9a50"
-            />
-
-            <Text
-              style={styles.emptyTitle}
-            >
-              Nobody here yet
-            </Text>
-
-            <Text
-              style={styles.emptyText}
-            >
-              Follow people from
-              Discover or Find Friends.
+              {currentErrorMessage}
             </Text>
 
             <Pressable
               accessibilityRole="button"
               onPress={() =>
-                router.push(
-                  "/friends",
-                )
+                void load()
               }
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed &&
-                  styles.pressed,
-              ]}
+              style={
+                styles.retryButton
+              }
             >
               <Text
                 style={
-                  styles.primaryButtonText
+                  styles.retryText
                 }
               >
-                Find Friends
+                Try again
               </Text>
             </Pressable>
           </View>
+        ) : null}
+
+        {currentLoading ? (
+          <View
+            style={
+              styles.loading
+            }
+          >
+            <ActivityIndicator
+              size="large"
+              color="#F47A24"
+            />
+          </View>
+        ) : visibleConnections
+            .length ===
+          0 ? (
+          <View
+            style={
+              styles.empty
+            }
+          >
+            <Text
+              selectable
+              style={
+                styles.emptyTitle
+              }
+            >
+              {query
+                ? "No matching profiles"
+                : mode ===
+                    "following"
+                  ? "Not following anyone yet"
+                  : "No followers yet"}
+            </Text>
+
+            <Text
+              selectable
+              style={
+                styles.emptyText
+              }
+            >
+              Discover public creators and follow the people whose Scenes you want to revisit.
+            </Text>
+          </View>
         ) : (
           <View
-            style={styles.userList}
+            style={
+              styles.list
+            }
           >
-            {visibleUsers.map(
-              (user) => {
-                const isOperating =
-                  operationUsername ===
-                  user.username;
+            {visibleConnections.map(
+              (
+                connection,
+              ) => {
+                const {
+                  profile,
+                } =
+                  connection;
 
                 return (
                   <View
-                    key={user.username}
+                    key={
+                      profile.id
+                    }
                     style={
-                      styles.userCard
+                      styles.card
                     }
                   >
                     <Pressable
                       accessibilityRole="button"
                       onPress={() =>
-                        openUser(
-                          user.username,
-                        )
+                        router.push({
+                          pathname:
+                            "/creator/[userId]",
+                          params: {
+                            userId:
+                              profile.id,
+                          },
+                        })
                       }
-                      style={({ pressed }) => [
-                        styles.userMain,
-                        pressed &&
-                          styles.pressed,
-                      ]}
+                      style={
+                        styles.profileButton
+                      }
                     >
                       <View
                         style={
@@ -411,120 +878,102 @@ export default function FollowingScreen() {
                             styles.avatarText
                           }
                         >
-                          {user.initials}
+                          {connectionInitials(
+                            connection,
+                          )}
                         </Text>
                       </View>
 
                       <View
                         style={
-                          styles.userInformation
+                          styles.profileCopy
                         }
                       >
-                        <Text
-                          numberOfLines={1}
+                        <View
                           style={
-                            styles.displayName
+                            styles.nameRow
                           }
                         >
-                          {user.displayName}
-                        </Text>
+                          <Text
+                            numberOfLines={
+                              1
+                            }
+                            style={
+                              styles.name
+                            }
+                          >
+                            {
+                              profile.displayName
+                            }
+                          </Text>
+
+                          {profile.isCanal ||
+                          profile.isVerified ? (
+                            <Text
+                              style={
+                                styles.verified
+                              }
+                            >
+                              {profile.isCanal
+                                ? "CANAL"
+                                : "VERIFIED"}
+                            </Text>
+                          ) : null}
+                        </View>
 
                         <Text
-                          numberOfLines={1}
                           style={
-                            styles.username
+                            styles.handle
                           }
                         >
-                          @{user.username}
-                        </Text>
-
-                        <Text
-                          numberOfLines={1}
-                          style={
-                            styles.musicTaste
+                          {
+                            profile.handle
                           }
-                        >
-                          {user.genres
-                            .slice(0, 3)
-                            .join(" · ") ||
-                            "Public Soundscape"}
                         </Text>
                       </View>
-
-                      <Ionicons
-                        name="chevron-forward"
-                        size={19}
-                        color="#717a73"
-                      />
                     </Pressable>
 
-                    <View
-                      style={
-                        styles.cardFooter
-                      }
-                    >
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() =>
-                          openUser(
-                            user.username,
-                          )
-                        }
-                        style={({ pressed }) => [
-                          styles.footerAction,
-                          pressed &&
-                            styles.pressed,
-                        ]}
-                      >
-                        <Text
-                          style={
-                            styles.footerActionText
-                          }
-                        >
-                          View Soundscape
-                        </Text>
-                      </Pressable>
-
-                      <View
-                        style={
-                          styles.footerDivider
-                        }
-                      />
-
+                    {profile.id !==
+                    viewerId ? (
                       <Pressable
                         accessibilityRole="button"
                         disabled={
-                          isOperating
-                        }
-                        onPress={() =>
-                          confirmUnfollow(
-                            user,
+                          Boolean(
+                            operationId,
                           )
                         }
-                        style={({ pressed }) => [
-                          styles.footerAction,
-                          isOperating &&
-                            styles.disabled,
-                          pressed &&
-                            styles.pressed,
+                        onPress={() =>
+                          void toggleFollow(
+                            connection,
+                          )
+                        }
+                        style={[
+                          styles.followButton,
+                          connection
+                            .viewerIsFollowing &&
+                            styles.followButtonActive,
                         ]}
                       >
-                        {isOperating ? (
+                        {operationId ===
+                        profile.id ? (
                           <ActivityIndicator
                             size="small"
-                            color="#ff9187"
+                            color="#FFFFFF"
                           />
                         ) : (
                           <Text
                             style={
-                              styles.unfollowText
+                              styles.followText
                             }
                           >
-                            Unfollow
+                            {connection
+                              .viewerIsFollowing
+                              ? "Following"
+                              : "Follow"}
                           </Text>
                         )}
                       </Pressable>
-                    </View>
+                    ) : null}
                   </View>
                 );
               },
@@ -536,252 +985,247 @@ export default function FollowingScreen() {
   );
 }
 
-function createFallbackUser(
-  username: string,
-): DirectoryUser {
-  return {
-    username,
-    displayName: username,
-    initials:
-      username
-        .slice(0, 2)
-        .toUpperCase(),
-    bio: "",
-    genres: [],
-    favoriteArtists: [],
-    recentScenes: [],
-    visibility: "public",
-  };
-}
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#0d100e",
-  },
-
-  page: {
-    paddingHorizontal: 22,
-    paddingTop: 10,
-    paddingBottom: 42,
-    gap: 21,
-  },
-
-  header: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  headerButton: {
-    width: 80,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-
-  backText: {
-    color: "#c5cbc6",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-
-  headerTitle: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-
-  headerAction: {
-    color: "#ff9a50",
-    fontSize: 14,
-    fontWeight: "700",
-    textAlign: "right",
-  },
-
-  eyebrow: {
-    marginBottom: 8,
-    color: "#ff9a50",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-  },
-
-  heading: {
-    color: "#ffffff",
-    fontSize: 30,
-    fontWeight: "700",
-  },
-
-  description: {
-    marginTop: 10,
-    color: "#aeb6b0",
-    fontSize: 15,
-    lineHeight: 22,
-  },
-
-  searchBox: {
-    minHeight: 53,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 15,
-    borderWidth: 1,
-    borderColor: "#303833",
-    borderRadius: 17,
-    backgroundColor: "#171c19",
-  },
-
-  searchInput: {
-    flex: 1,
-    color: "#ffffff",
-    fontSize: 14,
-  },
-
-  centered: {
-    minHeight: 220,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  emptyCard: {
-    alignItems: "center",
-    gap: 10,
-    padding: 24,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "#3c4540",
-    borderRadius: 21,
-  },
-
-  emptyTitle: {
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-
-  emptyText: {
-    color: "#8f9891",
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: "center",
-  },
-
-  primaryButton: {
-    minHeight: 50,
-    alignSelf: "stretch",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 5,
-    borderRadius: 16,
-    backgroundColor: "#ff7a1a",
-  },
-
-  primaryButtonText: {
-    color: "#17110c",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-
-  userList: {
-    gap: 12,
-  },
-
-  userCard: {
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#303833",
-    borderRadius: 20,
-    backgroundColor: "#171c19",
-  },
-
-  userMain: {
-    minHeight: 91,
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-  },
-
-  avatar: {
-    width: 57,
-    height: 57,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-    borderRadius: 29,
-    backgroundColor: "#2b1d14",
-  },
-
-  avatarText: {
-    color: "#ff9a50",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-
-  userInformation: {
-    flex: 1,
-    paddingRight: 8,
-  },
-
-  displayName: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-
-  username: {
-    marginTop: 4,
-    color: "#ff9a50",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-
-  musicTaste: {
-    marginTop: 5,
-    color: "#8f9891",
-    fontSize: 11,
-  },
-
-  cardFooter: {
-    minHeight: 47,
-    flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: "#303833",
-  },
-
-  footerAction: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  footerActionText: {
-    color: "#ff9a50",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  unfollowText: {
-    color: "#ff9187",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  footerDivider: {
-    width: 1,
-    backgroundColor: "#303833",
-  },
-
-  disabled: {
-    opacity: 0.5,
-  },
-
-  pressed: {
-    opacity: 0.72,
-    transform: [
-      {
-        scale: 0.99,
-      },
-    ],
-  },
-});
+const styles =
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor:
+        "#FFF9F4",
+    },
+    page: {
+      paddingHorizontal: 20,
+      paddingBottom: 42,
+      gap: 16,
+    },
+    header: {
+      minHeight: 58,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+    },
+    backButton: {
+      width: 44,
+      height: 44,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 22,
+      backgroundColor:
+        "#F4EAE2",
+    },
+    backText: {
+      color: "#241B16",
+      fontSize: 32,
+      lineHeight: 34,
+    },
+    headerCopy: {
+      flex: 1,
+      alignItems:
+        "center",
+    },
+    headerSpacer: {
+      width: 44,
+    },
+    title: {
+      color: "#241B16",
+      fontSize: 21,
+      fontWeight: "900",
+    },
+    subtitle: {
+      color: "#7A716A",
+      fontSize: 11,
+      marginTop: 2,
+    },
+    segment: {
+      flexDirection:
+        "row",
+      gap: 8,
+      borderRadius: 16,
+      padding: 4,
+      backgroundColor:
+        "#F1E7DF",
+    },
+    segmentButton: {
+      flex: 1,
+      alignItems:
+        "center",
+      borderRadius: 12,
+      paddingVertical: 11,
+    },
+    segmentButtonActive: {
+      backgroundColor:
+        "#FFFFFF",
+    },
+    segmentText: {
+      color: "#7A716A",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    segmentTextActive: {
+      color: "#241B16",
+    },
+    search: {
+      minHeight: 48,
+      borderWidth: 1,
+      borderColor:
+        "#E7D8CC",
+      borderRadius: 15,
+      backgroundColor:
+        "#FFFFFF",
+      color: "#241B16",
+      fontSize: 14,
+      paddingHorizontal: 16,
+    },
+    loading: {
+      minHeight: 220,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+    },
+    list: {
+      gap: 10,
+    },
+    card: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 12,
+      borderWidth: 1,
+      borderColor:
+        "#ECDDD2",
+      borderRadius: 18,
+      backgroundColor:
+        "#FFFFFF",
+      padding: 13,
+    },
+    profileButton: {
+      flex: 1,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 11,
+    },
+    avatar: {
+      width: 46,
+      height: 46,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 23,
+      backgroundColor:
+        "#F47A24",
+    },
+    avatarText: {
+      color: "#FFFFFF",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    profileCopy: {
+      flex: 1,
+      gap: 3,
+    },
+    nameRow: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 6,
+    },
+    name: {
+      flexShrink: 1,
+      color: "#241B16",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    handle: {
+      color: "#7A716A",
+      fontSize: 11,
+    },
+    verified: {
+      borderRadius: 6,
+      backgroundColor:
+        "#FFF0E5",
+      color: "#B9500B",
+      fontSize: 8,
+      fontWeight: "900",
+      paddingHorizontal: 5,
+      paddingVertical: 3,
+    },
+    followButton: {
+      minWidth: 78,
+      minHeight: 38,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 12,
+      backgroundColor:
+        "#F47A24",
+      paddingHorizontal: 12,
+    },
+    followButtonActive: {
+      backgroundColor:
+        "#51463E",
+    },
+    followText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    error: {
+      borderRadius: 16,
+      backgroundColor:
+        "#FCE7E5",
+      padding: 14,
+      gap: 10,
+    },
+    errorText: {
+      color: "#9E3029",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    retryButton: {
+      alignSelf:
+        "flex-start",
+      borderRadius: 10,
+      backgroundColor:
+        "#9E3029",
+      paddingHorizontal: 11,
+      paddingVertical: 8,
+    },
+    retryText: {
+      color: "#FFFFFF",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    empty: {
+      alignItems:
+        "center",
+      borderWidth: 1,
+      borderColor:
+        "#ECDDD2",
+      borderRadius: 18,
+      backgroundColor:
+        "#FFFFFF",
+      padding: 28,
+    },
+    emptyTitle: {
+      color: "#241B16",
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    emptyText: {
+      color: "#7A716A",
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign:
+        "center",
+      marginTop: 7,
+    },
+  });

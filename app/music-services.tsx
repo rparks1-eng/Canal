@@ -27,18 +27,31 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
   disconnectSpotifyOnly,
   logoutAllMusicPlatforms,
   markAppSignedIn,
 } from "../lib/app-session";
 
 import {
-  getSpotifyRedirectUri,
-} from "../lib/spotify-redirect";
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
 
 import {
+  getSpotifyClientId,
+  getSpotifyRedirectUri,
+  SPOTIFY_SCOPES,
+  spotifyDiscovery,
+} from "../lib/spotify-config";
+
+import {
+  getMissingSpotifyScopes,
   getValidSpotifySession,
   saveSpotifySession,
+  SpotifyAccessError,
 } from "../lib/spotify-auth";
 
 import type {
@@ -51,27 +64,15 @@ import {
   syncSpotifyLibrary,
 } from "../lib/spotify-library";
 
+import {
+  useReconnectReload,
+} from "../hooks/use-reconnect-reload";
+
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
+
 WebBrowser.maybeCompleteAuthSession();
-
-const discovery: AuthSession.DiscoveryDocument = {
-  authorizationEndpoint:
-    "https://accounts.spotify.com/authorize",
-
-  tokenEndpoint:
-    "https://accounts.spotify.com/api/token",
-};
-
-const SPOTIFY_SCOPES = [
-  "user-read-private",
-  "user-read-email",
-  "user-top-read",
-  "user-library-read",
-  "user-read-recently-played",
-  "playlist-read-private",
-  "playlist-read-collaborative",
-  "playlist-modify-private",
-  "playlist-modify-public",
-];
 
 type ConnectionState =
   | "loading"
@@ -97,6 +98,14 @@ function safeBack(
 }
 
 export default function MusicServicesScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const params =
     useLocalSearchParams<{
       mode?: string;
@@ -106,9 +115,7 @@ export default function MusicServicesScreen() {
     params.mode === "login";
 
   const clientId =
-    process.env
-      .EXPO_PUBLIC_SPOTIFY_CLIENT_ID ??
-    "";
+    getSpotifyClientId();
 
   const redirectUri =
     getSpotifyRedirectUri();
@@ -144,6 +151,14 @@ export default function MusicServicesScreen() {
     setErrorMessage,
   ] = useState("");
 
+  const [
+    errorCause,
+    setErrorCause,
+  ] =
+    useState<unknown>(
+      null,
+    );
+
   const processingCode =
     useRef<string | null>(
       null,
@@ -159,7 +174,9 @@ export default function MusicServicesScreen() {
         clientId,
 
         scopes:
-          SPOTIFY_SCOPES,
+          [
+            ...SPOTIFY_SCOPES,
+          ],
 
         redirectUri,
 
@@ -175,7 +192,7 @@ export default function MusicServicesScreen() {
         },
       },
 
-      discovery,
+      spotifyDiscovery,
     );
 
   useEffect(() => {
@@ -186,6 +203,7 @@ export default function MusicServicesScreen() {
         );
 
         setErrorMessage("");
+        setErrorCause(null);
 
         const validSession =
           await getValidSpotifySession();
@@ -211,6 +229,44 @@ export default function MusicServicesScreen() {
         let snapshot =
           await readSpotifyLibrarySnapshot();
 
+        const missingScopes =
+          getMissingSpotifyScopes(
+            validSession.scope,
+          );
+
+        if (
+          missingScopes.length >
+          0
+        ) {
+          setLibraryReady(
+            false,
+          );
+
+          setConnectionState(
+            "connected",
+          );
+
+          setErrorMessage(
+            "Spotify permission is required before Canal can refresh your library and export playlists.",
+          );
+
+          setErrorCause(
+            new SpotifyAccessError(
+              "permission",
+              "Spotify permission is required before Canal can refresh your library and export playlists.",
+              missingScopes,
+            ),
+          );
+
+          setStatusMessage(
+            snapshot
+              ? "Your last Spotify snapshot is still available while you reconnect."
+              : "Reconnect Spotify before creating a Scene.",
+          );
+
+          return;
+        }
+
         if (!snapshot) {
           setConnectionState(
             "syncing",
@@ -224,6 +280,10 @@ export default function MusicServicesScreen() {
             snapshot =
               await syncSpotifyLibrary();
           } catch (error) {
+            setErrorCause(
+              () => error,
+            );
+
             setErrorMessage(
               error instanceof Error
                 ? error.message
@@ -241,7 +301,23 @@ export default function MusicServicesScreen() {
         );
       };
 
-    void loadExistingConnection();
+    void loadExistingConnection().catch(
+      (error: unknown) => {
+        setConnectionState(
+          "disconnected",
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not verify the Spotify connection.",
+        );
+
+        setErrorCause(
+          () => error,
+        );
+      },
+    );
   }, []);
 
   useEffect(() => {
@@ -253,15 +329,26 @@ export default function MusicServicesScreen() {
         response?.type ===
         "error"
       ) {
+        const responseError =
+          new Error(
+            response.params
+              .error_description ||
+              response.params.error ||
+              "Spotify authorization failed.",
+          );
+
         setConnectionState(
-          "disconnected",
+          session
+            ? "connected"
+            : "disconnected",
         );
 
         setErrorMessage(
-          response.params
-            .error_description ||
-            response.params.error ||
-            "Spotify authorization failed.",
+          responseError.message,
+        );
+
+        setErrorCause(
+          responseError,
         );
       }
 
@@ -297,6 +384,7 @@ export default function MusicServicesScreen() {
         );
 
         setErrorMessage("");
+        setErrorCause(null);
 
         setStatusMessage(
           "Completing Spotify connection.",
@@ -315,7 +403,7 @@ export default function MusicServicesScreen() {
               },
             },
 
-            discovery,
+            spotifyDiscovery,
           );
 
         const profileResponse =
@@ -404,19 +492,39 @@ export default function MusicServicesScreen() {
           "Spotify connected. Canal is automatically importing your library.",
         );
 
-        const snapshot =
-          await syncSpotifyLibrary();
+        try {
+          const snapshot =
+            await syncSpotifyLibrary();
 
-        setLibraryReady(
-          Boolean(snapshot),
-        );
+          setLibraryReady(
+            Boolean(snapshot),
+          );
+
+          setStatusMessage(
+            "Spotify is connected and your library is ready.",
+          );
+        } catch (error) {
+          setLibraryReady(
+            false,
+          );
+
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Spotify connected, but the library could not be synced.",
+          );
+
+          setErrorCause(
+            () => error,
+          );
+
+          setStatusMessage(
+            "Spotify is connected. Retry the library import when your connection is available.",
+          );
+        }
 
         setConnectionState(
           "connected",
-        );
-
-        setStatusMessage(
-          "Spotify is connected and your library is ready.",
         );
 
         try {
@@ -429,13 +537,19 @@ export default function MusicServicesScreen() {
     completeConnection().catch(
       (error: unknown) => {
         setConnectionState(
-          "disconnected",
+          session
+            ? "connected"
+            : "disconnected",
         );
 
         setErrorMessage(
           error instanceof Error
             ? error.message
             : "Spotify connection failed.",
+        );
+
+        setErrorCause(
+          () => error,
         );
       },
     );
@@ -444,6 +558,7 @@ export default function MusicServicesScreen() {
     redirectUri,
     request?.codeVerifier,
     response,
+    session,
   ]);
 
   const accountName =
@@ -460,45 +575,104 @@ export default function MusicServicesScreen() {
   const connect =
     async (): Promise<void> => {
       if (!clientId) {
+        const configurationError =
+          new Error(
+            "EXPO_PUBLIC_SPOTIFY_CLIENT_ID is missing.",
+          );
+
         setErrorMessage(
-          "EXPO_PUBLIC_SPOTIFY_CLIENT_ID is missing.",
+          configurationError.message,
+        );
+
+        setErrorCause(
+          configurationError,
         );
 
         return;
       }
 
       if (!request) {
+        const requestError =
+          new Error(
+            "Spotify authorization is still loading.",
+          );
+
         setErrorMessage(
-          "Spotify authorization is still loading.",
+          requestError.message,
+        );
+
+        setErrorCause(
+          requestError,
         );
 
         return;
       }
+
+      const previousErrorMessage =
+        errorMessage;
+
+      const previousErrorCause =
+        errorCause;
+
+      const previousStatusMessage =
+        statusMessage;
 
       setConnectionState(
         "connecting",
       );
 
       setErrorMessage("");
+      setErrorCause(null);
 
       setStatusMessage(
         "Opening Spotify authorization.",
       );
 
-      const result =
-        await promptAsync();
+      try {
+        const result =
+          await promptAsync();
 
-      if (
-        result.type ===
-        "cancel" ||
-        result.type ===
-        "dismiss"
-      ) {
+        if (
+          result.type ===
+          "cancel" ||
+          result.type ===
+          "dismiss"
+        ) {
+          setConnectionState(
+            session
+              ? "connected"
+              : "disconnected",
+          );
+
+          setErrorMessage(
+            previousErrorMessage,
+          );
+
+          setErrorCause(
+            () =>
+              previousErrorCause,
+          );
+
+          setStatusMessage(
+            previousStatusMessage,
+          );
+        }
+      } catch (error) {
         setConnectionState(
-          "disconnected",
+          session
+            ? "connected"
+            : "disconnected",
         );
 
-        setStatusMessage("");
+        setErrorCause(
+          () => error,
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not open Spotify authorization.",
+        );
       }
     };
 
@@ -509,6 +683,7 @@ export default function MusicServicesScreen() {
       );
 
       setErrorMessage("");
+      setErrorCause(null);
 
       setStatusMessage(
         "Refreshing your Spotify library.",
@@ -539,8 +714,20 @@ export default function MusicServicesScreen() {
             ? error.message
             : "Spotify library sync failed.",
         );
+
+        setErrorCause(
+          () => error,
+        );
       }
     };
+
+  useReconnectReload(
+    async () => {
+      if (session) {
+        await syncAgain();
+      }
+    },
+  );
 
   const disconnect =
     async (): Promise<void> => {
@@ -549,6 +736,8 @@ export default function MusicServicesScreen() {
       setSession(null);
 
       setLibraryReady(false);
+      setErrorMessage("");
+      setErrorCause(null);
 
       setConnectionState(
         "disconnected",
@@ -573,6 +762,65 @@ export default function MusicServicesScreen() {
       router.replace(
         "/(tabs)",
       );
+    };
+
+  const recoveryIssue =
+    useMemo(
+      () => {
+        if (
+          !errorMessage &&
+          connectivityStatus !==
+            "offline"
+        ) {
+          return null;
+        }
+
+        return classifyRecoveryIssue(
+          errorCause ??
+            new Error(
+              errorMessage ||
+                "Canal is offline.",
+            ),
+          {
+            service:
+              "spotify",
+            connectivityStatus,
+          },
+        );
+      },
+      [
+        connectivityStatus,
+        errorCause,
+        errorMessage,
+      ],
+    );
+
+  const recover =
+    async (): Promise<void> => {
+      if (
+        recoveryIssue?.action ===
+        "reconnect-spotify"
+      ) {
+        await connect();
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus ===
+        "offline"
+      ) {
+        return;
+      }
+
+      if (session) {
+        await syncAgain();
+      } else {
+        await connect();
+      }
     };
 
   return (
@@ -724,7 +972,11 @@ export default function MusicServicesScreen() {
               >
                 {libraryReady
                   ? "Spotify Library ready"
-                  : "Spotify Library needs attention"}
+                  : recoveryIssue
+                      ?.action ===
+                    "reconnect-spotify"
+                    ? "Spotify permission needed"
+                    : "Spotify Library needs attention"}
               </Text>
 
               <Text
@@ -734,12 +986,25 @@ export default function MusicServicesScreen() {
               >
                 {libraryReady
                   ? "Scene Studio will use the saved Spotify snapshot. It will not request or sync account data during generation."
-                  : "Use Sync Spotify Library before creating a Scene."}
+                  : recoveryIssue
+                        ?.action ===
+                      "reconnect-spotify"
+                    ? "Your last snapshot stays available on this device. Reconnect Spotify to refresh it and export playlists."
+                    : "Use Sync Spotify Library before creating a Scene."}
               </Text>
             </View>
 
             <Pressable
               accessibilityRole="button"
+              accessibilityState={{
+                disabled:
+                  connectivityStatus ===
+                    "offline",
+              }}
+              disabled={
+                connectivityStatus ===
+                  "offline"
+              }
               onPress={() =>
                 void syncAgain()
               }
@@ -805,6 +1070,15 @@ export default function MusicServicesScreen() {
           "disconnected" ? (
           <Pressable
             accessibilityRole="button"
+            accessibilityState={{
+              disabled:
+                connectivityStatus ===
+                  "offline",
+            }}
+            disabled={
+              connectivityStatus ===
+                "offline"
+            }
             onPress={() =>
               void connect()
             }
@@ -837,24 +1111,21 @@ export default function MusicServicesScreen() {
           </View>
         ) : null}
 
-        {errorMessage ? (
-          <View style={styles.errorBox}>
-            <Text
-              style={
-                styles.errorTitle
-              }
-            >
-              Spotify error
-            </Text>
-
-            <Text
-              style={
-                styles.errorText
-              }
-            >
-              {errorMessage}
-            </Text>
-          </View>
+        {recoveryIssue ? (
+          <RecoveryNotice
+            busy={
+              connectionState ===
+                "connecting" ||
+              connectionState ===
+                "syncing"
+            }
+            issue={
+              recoveryIssue
+            }
+            onAction={
+              recover
+            }
+          />
         ) : null}
 
         <View style={styles.explanationCard}>

@@ -87,7 +87,7 @@ export default function SpotifyArtistPicker({
           cleanedQuery,
           requestId,
         );
-      }, 400);
+      }, 600);
 
     return () => {
       clearTimeout(timer);

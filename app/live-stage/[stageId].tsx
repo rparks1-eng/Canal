@@ -1,208 +1,1247 @@
-import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import {
-    router,
-    useFocusEffect,
-    useLocalSearchParams,
+  Stack,
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
 } from "expo-router";
 import {
-    useCallback,
-    useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import {
-    shareStageInvite,
+  RecoveryNotice,
+} from "../../components/recovery-notice";
+import {
+  useReconnectReload,
+} from "../../hooks/use-reconnect-reload";
+import {
+  shareStageInvite,
 } from "../../lib/canal-invites";
 import {
-    advanceLiveStageTrack,
-    endLiveStage,
-    getCurrentLiveStageTrack,
-    joinLiveStage,
-    leaveLiveStage,
-    LiveStage,
-    readLiveStage,
+  advanceLiveStageTrack,
+  endLiveStage,
+  getCurrentLiveStageTrack,
+  getLiveStageTrackImageUrl,
+  getLiveStageTrackSpotifyUrl,
+  joinLiveStage,
+  joinLiveStageByCode,
+  leaveLiveStage,
+  LiveStage,
+  LiveStageMessage,
+  type LiveStageReportReason,
+  LiveStageSubscriptionStatus,
+  moderateLiveStageMember,
+  moderateLiveStageMessage,
+  readLiveStageRoom,
+  reportLiveStageMessage,
+  sendLiveStageMessage,
+  subscribeToLiveStage,
 } from "../../lib/live-stages";
 import {
-    createSnapshot,
+  createSnapshot,
 } from "../../lib/snapshots";
 import {
-    readSoundscape,
-} from "../../lib/soundscape";
+  classifyRecoveryIssue,
+} from "../../lib/recovery-issue";
+import {
+  useAuth,
+} from "../../providers/auth-provider";
+import {
+  useConnectivity,
+} from "../../providers/connectivity-provider";
+
+const LIVE_STAGE_REPORT_REASONS:
+  readonly {
+    label: string;
+    value:
+      LiveStageReportReason;
+  }[] = [
+    {
+      label: "Spam",
+      value: "spam",
+    },
+    {
+      label: "Harassment",
+      value: "harassment",
+    },
+    {
+      label:
+        "Unsafe content",
+      value:
+        "unsafe_content",
+    },
+    {
+      label:
+        "Other safety concern",
+      value: "other",
+    },
+  ];
+
+function getStageKind(
+  stage: LiveStage,
+): LiveStage["stageKind"] {
+  return stage.stageKind;
+}
+
+function firstParam(
+  value:
+    | string
+    | string[]
+    | undefined,
+): string {
+  return Array.isArray(
+    value,
+  )
+    ? value[0] ?? ""
+    : value ?? "";
+}
+
+function chatTime(
+  value: string,
+): string {
+  const date =
+    new Date(value);
+
+  if (
+    !Number.isFinite(
+      date.getTime(),
+    )
+  ) {
+    return "";
+  }
+
+  return date.toLocaleTimeString(
+    [],
+    {
+      hour: "numeric",
+      minute: "2-digit",
+    },
+  );
+}
+
+function MessageRow(
+  props: {
+    canRemove: boolean;
+    canReport: boolean;
+    message:
+      LiveStageMessage;
+    removeDisabled:
+      boolean;
+    moderating: boolean;
+    onRemove: (
+      message:
+        LiveStageMessage,
+    ) => void;
+    onReport: (
+      message:
+        LiveStageMessage,
+    ) => void;
+    reportDisabled:
+      boolean;
+  },
+) {
+  return (
+    <View
+      style={[
+        styles.messageRow,
+        props.message
+          .isMine &&
+          styles.messageRowMine,
+      ]}
+    >
+      {!props.message
+        .isMine ? (
+        <View
+          style={
+            styles.messageAvatar
+          }
+        >
+          <Text
+            style={
+              styles.messageInitials
+            }
+          >
+            {
+              props.message
+                .initials
+            }
+          </Text>
+        </View>
+      ) : null}
+
+      <View
+        style={[
+          styles.messageContent,
+          props.message
+            .isMine &&
+            styles.messageContentMine,
+        ]}
+      >
+        {!props.message
+          .isMine ? (
+          <View
+            style={
+              styles.messageMeta
+            }
+          >
+            <Text
+              numberOfLines={1}
+              style={
+                styles.messageAuthor
+              }
+            >
+              {
+                props.message
+                  .displayName
+              }
+            </Text>
+
+            <Text
+              style={
+                styles.messageTime
+              }
+            >
+              {chatTime(
+                props.message
+                  .createdAt,
+              )}
+            </Text>
+          </View>
+        ) : null}
+
+        <View
+          style={[
+            styles.messageBubble,
+            props.message
+              .isMine &&
+              styles.messageBubbleMine,
+          ]}
+        >
+          <Text
+            selectable
+            style={[
+              styles.messageBody,
+              props.message
+                .isMine &&
+                styles.messageBodyMine,
+            ]}
+          >
+            {
+              props.message
+                .body
+            }
+          </Text>
+        </View>
+
+        {props.message
+          .isMine ? (
+          <Text
+            style={
+              styles.messageTimeMine
+            }
+          >
+            {chatTime(
+              props.message
+                .createdAt,
+            )}
+          </Text>
+        ) : null}
+
+        {props.canReport ||
+        props.canRemove ? (
+          <View
+            style={
+              styles.messageActions
+            }
+          >
+            {props.canReport ? (
+              <Pressable
+                accessibilityLabel={`Report message from ${props.message.displayName}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  busy:
+                    props.moderating,
+                  disabled:
+                    props
+                      .reportDisabled,
+                }}
+                disabled={
+                  props
+                    .reportDisabled
+                }
+                onPress={() => {
+                  props.onReport(
+                    props.message,
+                  );
+                }}
+                style={({
+                  pressed,
+                }) => [
+                  styles.messageAction,
+                  props
+                    .reportDisabled &&
+                    styles.disabled,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.messageActionText
+                  }
+                >
+                  Report
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {props.canRemove ? (
+              <Pressable
+                accessibilityLabel={`Remove message from ${props.message.displayName}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  busy:
+                    props.moderating,
+                  disabled:
+                    props
+                      .removeDisabled,
+                }}
+                disabled={
+                  props
+                    .removeDisabled
+                }
+                onPress={() => {
+                  props.onRemove(
+                    props.message,
+                  );
+                }}
+                style={({
+                  pressed,
+                }) => [
+                  styles.messageAction,
+                  styles.messageRemoveAction,
+                  props
+                    .removeDisabled &&
+                    styles.disabled,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.messageActionText,
+                    styles.messageRemoveActionText,
+                  ]}
+                >
+                  Remove
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
 
 export default function LiveStageScreen() {
+  const {
+    configured,
+    profile,
+    user,
+  } = useAuth();
+
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } = useConnectivity();
+
   const params =
-    useLocalSearchParams();
+    useLocalSearchParams<{
+      stageId?:
+        | string
+        | string[];
+      code?:
+        | string
+        | string[];
+    }>();
 
   const stageId =
-    firstParam(params.stageId);
-
-  const [stage, setStage] =
-    useState<LiveStage | null>(
-      null,
+    firstParam(
+      params.stageId,
     );
 
+  const inviteCode =
+    firstParam(
+      params.code,
+    );
+
+  const accountKey =
+    user?.id ??
+    (
+      configured
+        ? "configured:signed-out"
+        : `local:${profile?.createdAt ?? "default"}:${profile?.handle ?? ""}`
+    );
+
+  const roomKey = [
+    accountKey,
+    stageId,
+    inviteCode,
+  ].join(
+    "\u0000",
+  );
+
+  const insets =
+    useSafeAreaInsets();
+
+  const listRef =
+    useRef<
+      FlatList<LiveStageMessage>
+    >(null);
+
+  const roomKeyRef =
+    useRef(
+      roomKey,
+    );
+
+  const roomRequestIdRef =
+    useRef(0);
+
+  const focusedRef =
+    useRef(false);
+
+  const roomCacheRef =
+    useRef<{
+      roomKey: string;
+      stage: LiveStage | null;
+    }>({
+      roomKey: "",
+      stage: null,
+    });
+
+  const updatingRef =
+    useRef(false);
+
+  const updateOperationIdRef =
+    useRef(0);
+
+  const sendingRef =
+    useRef(false);
+
+  const sendOperationIdRef =
+    useRef(0);
+
+  const snapshotRef =
+    useRef(false);
+
+  const snapshotOperationIdRef =
+    useRef(0);
+
+  const moderationRef =
+    useRef(false);
+
+  const moderationOperationIdRef =
+    useRef(0);
+
+  roomKeyRef.current =
+    roomKey;
+
   const [
-    currentUsername,
-    setCurrentUsername,
+    storedStage,
+    setStage,
+  ] = useState<
+    LiveStage | null
+  >(null);
+
+  const [
+    storedMessages,
+    setMessages,
+  ] = useState<
+    LiveStageMessage[]
+  >([]);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    updating,
+    setUpdating,
+  ] = useState(false);
+
+  const [
+    sending,
+    setSending,
+  ] = useState(false);
+
+  const [
+    capturingSnapshot,
+    setCapturingSnapshot,
+  ] = useState(false);
+
+  const [
+    messageBody,
+    setMessageBody,
   ] = useState("");
 
-  const [isLoading, setIsLoading] =
-    useState(true);
+  const [
+    error,
+    setError,
+  ] = useState("");
 
-  const [isUpdating, setIsUpdating] =
-    useState(false);
+  const [
+    realtimeStatus,
+    setRealtimeStatus,
+  ] =
+    useState<LiveStageSubscriptionStatus>(
+      "connecting",
+    );
 
   const [
     newSnapshotId,
     setNewSnapshotId,
   ] = useState("");
 
-  const loadStage =
-    useCallback(async () => {
-      try {
-        setIsLoading(true);
+  const [
+    committedRoomKey,
+    setCommittedRoomKey,
+  ] = useState("");
 
-        const [
-          storedStage,
-          profile,
-        ] = await Promise.all([
-          readLiveStage(
-            stageId,
-          ),
-          readSoundscape(),
-        ]);
+  const [
+    subscriptionRetryEpoch,
+    setSubscriptionRetryEpoch,
+  ] = useState(0);
 
-        setStage(storedStage);
+  const [
+    moderatingTarget,
+    setModeratingTarget,
+  ] = useState("");
 
-        setCurrentUsername(
-          profile.username,
-        );
-      } catch (error) {
-        console.error(
-          "Unable to load Stage:",
-          error,
-        );
+  const [
+    moderationFeedback,
+    setModerationFeedback,
+  ] = useState("");
 
-        Alert.alert(
-          "Unable to load",
-          "Canal could not load this Stage.",
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    }, [stageId]);
+  const [
+    reportDraft,
+    setReportDraft,
+  ] = useState<{
+    displayName: string;
+    messageId: string;
+  } | null>(null);
+
+  const [
+    reportReason,
+    setReportReason,
+  ] =
+    useState<LiveStageReportReason | null>(
+      null,
+    );
+
+  const stage =
+    committedRoomKey ===
+    roomKey
+      ? storedStage
+      : null;
+
+  const messages =
+    committedRoomKey ===
+    roomKey
+      ? storedMessages
+      : [];
+
+  const loadRoom =
+    useCallback(
+      async (
+        showLoading =
+          false,
+      ) => {
+        if (!focusedRef.current) {
+          return;
+        }
+
+        const requestId =
+          roomRequestIdRef
+            .current +
+          1;
+
+        roomRequestIdRef.current =
+          requestId;
+
+        const requestedRoomKey =
+          roomKey;
+
+        const hasCachedStage =
+          roomCacheRef.current
+            .roomKey ===
+            requestedRoomKey &&
+          Boolean(
+            roomCacheRef.current
+              .stage,
+          );
+
+        if (
+          showLoading &&
+          !hasCachedStage
+        ) {
+          setLoading(
+            true,
+          );
+        }
+
+        try {
+          let room =
+            await readLiveStageRoom(
+              stageId,
+            );
+
+          if (
+            requestId !==
+              roomRequestIdRef
+                .current ||
+            requestedRoomKey !==
+              roomKeyRef.current ||
+            !focusedRef.current
+          ) {
+            return;
+          }
+
+          if (
+            !room.stage &&
+            inviteCode
+          ) {
+            const joined =
+              await joinLiveStageByCode(
+                inviteCode,
+                stageId,
+              );
+
+            if (joined) {
+              if (
+                joined.id !==
+                stageId
+              ) {
+                throw new Error(
+                  "This Stage invitation does not match the room link. Ask the host for a new invitation.",
+                );
+              }
+
+              room =
+                await readLiveStageRoom(
+                  joined.id,
+                );
+            }
+          }
+
+          if (
+            requestId !==
+              roomRequestIdRef
+                .current ||
+            requestedRoomKey !==
+              roomKeyRef.current ||
+            !focusedRef.current
+          ) {
+            return;
+          }
+
+          roomCacheRef.current = {
+            roomKey:
+              requestedRoomKey,
+            stage:
+              room.stage,
+          };
+
+          setStage(
+            room.stage,
+          );
+          setMessages(
+            room.messages,
+          );
+          setCommittedRoomKey(
+            requestedRoomKey,
+          );
+          setError("");
+        } catch (
+          loadError
+        ) {
+          if (
+            requestId !==
+              roomRequestIdRef
+                .current ||
+            requestedRoomKey !==
+              roomKeyRef.current ||
+            !focusedRef.current
+          ) {
+            return;
+          }
+
+          setError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Canal could not load this Stage.",
+          );
+        } finally {
+          if (
+            requestId !==
+              roomRequestIdRef
+                .current ||
+            requestedRoomKey !==
+              roomKeyRef.current ||
+            !focusedRef.current
+          ) {
+            return;
+          }
+
+          setLoading(
+            false,
+          );
+        }
+      },
+      [
+        inviteCode,
+        roomKey,
+        stageId,
+      ],
+    );
+
+  useEffect(() => {
+    roomRequestIdRef.current +=
+      1;
+    updateOperationIdRef
+      .current +=
+      1;
+    sendOperationIdRef
+      .current +=
+      1;
+    snapshotOperationIdRef
+      .current +=
+      1;
+    moderationOperationIdRef
+      .current +=
+      1;
+
+    updatingRef.current =
+      false;
+    sendingRef.current =
+      false;
+    snapshotRef.current =
+      false;
+    moderationRef.current =
+      false;
+
+    setUpdating(
+      false,
+    );
+    setSending(
+      false,
+    );
+    setCapturingSnapshot(
+      false,
+    );
+    setModeratingTarget("");
+    setModerationFeedback("");
+    setReportDraft(null);
+    setReportReason(null);
+    setLoading(
+      true,
+    );
+    setError("");
+    setMessageBody("");
+    setNewSnapshotId("");
+    setRealtimeStatus(
+      "connecting",
+    );
+  }, [
+    roomKey,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadStage();
-    }, [loadStage]),
+      focusedRef.current =
+        true;
+      void loadRoom(true);
+
+      return () => {
+        focusedRef.current =
+          false;
+        roomRequestIdRef
+          .current +=
+          1;
+      };
+    }, [
+      loadRoom,
+    ]),
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!stage?.id) {
+        return;
+      }
+
+      if (
+        subscriptionRetryEpoch >
+        0
+      ) {
+        setRealtimeStatus(
+          "connecting",
+        );
+      }
+
+      const subscriptionRoomKey =
+        roomKey;
+
+      return subscribeToLiveStage(
+        stage.id,
+        () => {
+          void loadRoom();
+        },
+        (status) => {
+          if (
+            focusedRef.current &&
+            roomKeyRef.current ===
+              subscriptionRoomKey
+          ) {
+            setRealtimeStatus(
+              status,
+            );
+          }
+        },
+      );
+    }, [
+      loadRoom,
+      roomKey,
+      stage?.id,
+      subscriptionRetryEpoch,
+    ]),
+  );
+
+  const reloadAfterReconnect =
+    useCallback(
+      async (): Promise<void> => {
+        setSubscriptionRetryEpoch(
+          (current) =>
+            current + 1,
+        );
+        await loadRoom();
+      },
+      [
+        loadRoom,
+      ],
+    );
+
+  useReconnectReload(
+    reloadAfterReconnect,
+  );
+
+  const currentTrack =
+    useMemo(
+      () =>
+        stage
+          ? getCurrentLiveStageTrack(
+              stage,
+            )
+          : null,
+      [stage],
+    );
+
+  const currentTrackSpotifyUrl =
+    useMemo(
+      () =>
+        getLiveStageTrackSpotifyUrl(
+          currentTrack,
+        ),
+      [currentTrack],
+    );
+
+  const currentTrackImageUrl =
+    useMemo(
+      () =>
+        getLiveStageTrackImageUrl(
+          currentTrack,
+        ),
+      [currentTrack],
+    );
+
+  const stageKind =
+    stage
+      ? getStageKind(
+          stage,
+        )
+      : "community";
+
+  const provenanceLabel =
+    stageKind ===
+    "canal"
+      ? "Canal original"
+      : stageKind ===
+          "verified"
+        ? "Verified creator"
+        : "Community host";
+
+  const provenanceCopy =
+    stageKind ===
+    "canal"
+      ? "Produced by Canal."
+      : stageKind ===
+          "verified"
+        ? "Hosted by a verified Canal creator."
+        : "Hosted by a member of the Canal community.";
+
+  const isHost =
+    stage?.membershipRole ===
+    "host";
+
+  const isMember =
+    Boolean(
+      stage?.membershipRole,
+    );
+
+  const isEnded =
+    stage?.status ===
+    "ended";
+
+  const cloudIsOffline =
+    configured &&
+    connectivityStatus ===
+      "offline";
+
   async function joinStage() {
-    if (!stage) {
+    if (
+      !stage ||
+      updatingRef.current ||
+      cloudIsOffline
+    ) {
       return;
     }
 
-    try {
-      setIsUpdating(true);
+    updatingRef.current =
+      true;
 
-      const updatedStage =
+    const operationId =
+      updateOperationIdRef
+        .current +
+      1;
+
+    updateOperationIdRef.current =
+      operationId;
+
+    const operationRoomKey =
+      roomKey;
+
+    try {
+      setUpdating(
+        true,
+      );
+      setError("");
+
+      const updated =
         await joinLiveStage(
           stage.id,
         );
 
-      setStage(updatedStage);
-    } catch (error) {
-      console.error(
-        "Unable to join Stage:",
-        error,
-      );
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
 
-      Alert.alert(
-        "Unable to join",
-        "Canal could not join this Stage.",
+      if (updated) {
+        roomCacheRef.current = {
+          roomKey:
+            operationRoomKey,
+          stage:
+            updated,
+        };
+        setStage(
+          updated,
+        );
+      }
+
+      if (
+        process.env
+          .EXPO_OS ===
+        "ios"
+      ) {
+        void Haptics
+          .notificationAsync(
+            Haptics
+              .NotificationFeedbackType
+              .Success,
+          );
+      }
+
+      await loadRoom();
+    } catch (
+      joinError
+    ) {
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
+
+      setError(
+        joinError instanceof
+          Error
+          ? joinError.message
+          : "Canal could not join this Stage.",
       );
     } finally {
-      setIsUpdating(false);
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current
+      ) {
+        return;
+      }
+
+      updatingRef.current =
+        false;
+      setUpdating(
+        false,
+      );
     }
   }
 
   async function leaveStage() {
-    if (!stage) {
+    if (
+      !stage ||
+      updatingRef.current ||
+      cloudIsOffline
+    ) {
       return;
     }
 
+    updatingRef.current =
+      true;
+
+    const operationId =
+      updateOperationIdRef
+        .current +
+      1;
+
+    updateOperationIdRef.current =
+      operationId;
+
+    const operationRoomKey =
+      roomKey;
+
     try {
-      setIsUpdating(true);
+      setUpdating(
+        true,
+      );
 
       await leaveLiveStage(
-        stage.id,
+        stage,
       );
+
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
 
       router.replace(
         "/(tabs)/live",
       );
-    } catch (error) {
-      console.error(
-        "Unable to leave Stage:",
-        error,
-      );
+    } catch (
+      leaveError
+    ) {
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
 
-      Alert.alert(
-        "Unable to leave",
-        "Canal could not leave this Stage.",
+      setError(
+        leaveError instanceof
+          Error
+          ? leaveError.message
+          : "Canal could not leave this Stage.",
       );
     } finally {
-      setIsUpdating(false);
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current
+      ) {
+        return;
+      }
+
+      updatingRef.current =
+        false;
+      setUpdating(
+        false,
+      );
     }
   }
 
   async function advanceTrack() {
-    if (!stage) {
+    if (
+      !stage ||
+      updatingRef.current ||
+      cloudIsOffline
+    ) {
       return;
     }
 
-    try {
-      setIsUpdating(true);
+    updatingRef.current =
+      true;
 
-      const updatedStage =
+    const operationId =
+      updateOperationIdRef
+        .current +
+      1;
+
+    updateOperationIdRef.current =
+      operationId;
+
+    const operationRoomKey =
+      roomKey;
+
+    try {
+      setUpdating(
+        true,
+      );
+
+      const updated =
         await advanceLiveStageTrack(
-          stage.id,
+          stage,
         );
 
-      setStage(updatedStage);
-    } catch (error) {
-      console.error(
-        "Unable to advance track:",
-        error,
-      );
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
 
-      Alert.alert(
-        "Unable to update",
-        "Canal could not move to the next track.",
+      setError("");
+
+      if (updated) {
+        roomCacheRef.current = {
+          roomKey:
+            operationRoomKey,
+          stage:
+            updated,
+        };
+        setStage(
+          updated,
+        );
+      }
+
+      if (
+        process.env
+          .EXPO_OS ===
+        "ios"
+      ) {
+        void Haptics
+          .impactAsync(
+            Haptics
+              .ImpactFeedbackStyle
+              .Light,
+          );
+      }
+    } catch (
+      updateError
+    ) {
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
+
+      setError(
+        updateError instanceof
+          Error
+          ? updateError.message
+          : "Canal could not advance the Stage.",
       );
     } finally {
-      setIsUpdating(false);
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current
+      ) {
+        return;
+      }
+
+      updatingRef.current =
+        false;
+      setUpdating(
+        false,
+      );
     }
   }
 
   function confirmEndStage() {
-    if (!stage) {
+    if (
+      updatingRef.current ||
+      cloudIsOffline
+    ) {
       return;
     }
 
     Alert.alert(
       "End this Stage?",
-      "Everyone will see that the Stage has ended.",
+      "The queue and chat will become read-only for everyone.",
       [
         {
           text: "Cancel",
@@ -210,7 +1249,8 @@ export default function LiveStageScreen() {
         },
         {
           text: "End Stage",
-          style: "destructive",
+          style:
+            "destructive",
           onPress: () => {
             void finishStage();
           },
@@ -220,78 +1260,653 @@ export default function LiveStageScreen() {
   }
 
   async function finishStage() {
-    if (!stage) {
+    if (
+      !stage ||
+      updatingRef.current ||
+      cloudIsOffline
+    ) {
       return;
     }
 
-    try {
-      setIsUpdating(true);
+    updatingRef.current =
+      true;
 
-      const updatedStage =
+    const operationId =
+      updateOperationIdRef
+        .current +
+      1;
+
+    updateOperationIdRef.current =
+      operationId;
+
+    const operationRoomKey =
+      roomKey;
+
+    try {
+      setUpdating(
+        true,
+      );
+
+      const updated =
         await endLiveStage(
-          stage.id,
-        );
-
-      setStage(updatedStage);
-    } catch (error) {
-      console.error(
-        "Unable to end Stage:",
-        error,
-      );
-
-      Alert.alert(
-        "Unable to end",
-        "Canal could not end this Stage.",
-      );
-    } finally {
-      setIsUpdating(false);
-    }
-  }
-
-  async function handleShare() {
-    if (!stage) {
-      return;
-    }
-
-    try {
-      const result =
-        await shareStageInvite(
           stage,
         );
 
       if (
-        result.method ===
-        "clipboard"
+        operationId !==
+          updateOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
       ) {
-        Alert.alert(
-          "Stage invite copied",
-          "The Stage invite and code were copied to your clipboard.",
+        return;
+      }
+
+      setError("");
+
+      if (updated) {
+        roomCacheRef.current = {
+          roomKey:
+            operationRoomKey,
+          stage:
+            updated,
+        };
+        setStage(
+          updated,
         );
       }
-    } catch (error) {
-      Alert.alert(
-        "Unable to share",
-        error instanceof Error
-          ? error.message
+
+      if (
+        process.env
+          .EXPO_OS ===
+        "ios"
+      ) {
+        void Haptics
+          .notificationAsync(
+            Haptics
+              .NotificationFeedbackType
+              .Success,
+          );
+      }
+    } catch (
+      endError
+    ) {
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
+
+      setError(
+        endError instanceof
+          Error
+          ? endError.message
+          : "Canal could not end this Stage.",
+      );
+    } finally {
+      if (
+        operationId !==
+          updateOperationIdRef
+            .current
+      ) {
+        return;
+      }
+
+      updatingRef.current =
+        false;
+      setUpdating(
+        false,
+      );
+    }
+  }
+
+  async function sendMessage() {
+    if (
+      !stage ||
+      !messageBody.trim() ||
+      sendingRef.current ||
+      cloudIsOffline
+    ) {
+      return;
+    }
+
+    sendingRef.current =
+      true;
+
+    const operationId =
+      sendOperationIdRef
+        .current +
+      1;
+
+    sendOperationIdRef.current =
+      operationId;
+
+    const operationRoomKey =
+      roomKey;
+
+    const submittedBody =
+      messageBody;
+
+    try {
+      setSending(
+        true,
+      );
+      setError("");
+
+      const message =
+        await sendLiveStageMessage(
+          stage.id,
+          submittedBody,
+        );
+
+      if (
+        operationId !==
+          sendOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
+
+      setMessages(
+        (current) =>
+          current.some(
+            (item) =>
+              item.id ===
+              message.id,
+          )
+            ? current
+            : [
+                ...current,
+                message,
+              ],
+      );
+      setMessageBody(
+        (current) =>
+          current ===
+          submittedBody
+            ? ""
+            : current,
+      );
+      requestAnimationFrame(
+        () => {
+          listRef.current
+            ?.scrollToEnd({
+              animated: true,
+            });
+        },
+      );
+
+      if (
+        process.env
+          .EXPO_OS ===
+        "ios"
+      ) {
+        void Haptics
+          .selectionAsync();
+      }
+    } catch (
+      sendError
+    ) {
+      if (
+        operationId !==
+          sendOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
+
+      setError(
+        sendError instanceof
+          Error
+          ? sendError.message
+          : "Canal could not send this message.",
+      );
+    } finally {
+      if (
+        operationId !==
+          sendOperationIdRef
+            .current
+      ) {
+        return;
+      }
+
+      sendingRef.current =
+        false;
+      setSending(
+        false,
+      );
+    }
+  }
+
+  async function performModeration(
+    target: string,
+    operation: (
+      targetStage:
+        LiveStage,
+    ) => Promise<void>,
+    successMessage: string,
+    allowEnded = false,
+  ) {
+    if (
+      !stage ||
+      moderationRef.current ||
+      cloudIsOffline ||
+      (
+        isEnded &&
+        !allowEnded
+      )
+    ) {
+      return;
+    }
+
+    moderationRef.current =
+      true;
+
+    const operationId =
+      moderationOperationIdRef
+        .current +
+      1;
+
+    moderationOperationIdRef.current =
+      operationId;
+
+    const operationRoomKey =
+      roomKey;
+
+    try {
+      setModeratingTarget(
+        target,
+      );
+      setModerationFeedback(
+        "",
+      );
+      setError("");
+
+      await operation(
+        stage,
+      );
+
+      if (
+        operationId !==
+          moderationOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
+
+      setModerationFeedback(
+        successMessage,
+      );
+
+      if (
+        process.env
+          .EXPO_OS ===
+        "ios"
+      ) {
+        void Haptics
+          .notificationAsync(
+            Haptics
+              .NotificationFeedbackType
+              .Success,
+          );
+      }
+
+      await loadRoom();
+    } catch (
+      moderationError
+    ) {
+      if (
+        operationId !==
+          moderationOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
+
+      setError(
+        moderationError instanceof
+          Error
+          ? moderationError
+              .message
+          : "Canal could not complete this moderation action.",
+      );
+    } finally {
+      if (
+        operationId !==
+          moderationOperationIdRef
+            .current
+      ) {
+        return;
+      }
+
+      moderationRef.current =
+        false;
+      setModeratingTarget("");
+    }
+  }
+
+  function openReportMessage(
+    message:
+      LiveStageMessage,
+  ) {
+    if (
+      message.isMine ||
+      moderationRef.current ||
+      cloudIsOffline
+    ) {
+      return;
+    }
+
+    setReportDraft({
+      displayName:
+        message.displayName,
+      messageId:
+        message.id,
+    });
+    setReportReason(null);
+  }
+
+  function closeReportMessage() {
+    if (moderationRef.current) {
+      return;
+    }
+
+    setReportDraft(null);
+    setReportReason(null);
+  }
+
+  function confirmReportMessage() {
+    if (
+      !stage ||
+      !reportDraft ||
+      !reportReason ||
+      moderationRef.current ||
+      cloudIsOffline
+    ) {
+      return;
+    }
+
+    const currentMessage =
+      messages.find(
+        (message) =>
+          message.id ===
+          reportDraft.messageId,
+      );
+
+    if (
+      !currentMessage ||
+      currentMessage.isMine
+    ) {
+      closeReportMessage();
+      return;
+    }
+
+    const selectedReason =
+      LIVE_STAGE_REPORT_REASONS
+        .find(
+          (reason) =>
+            reason.value ===
+            reportReason,
+        );
+
+    if (!selectedReason) {
+      return;
+    }
+
+    const draft =
+      reportDraft;
+    const reason =
+      reportReason;
+
+    Alert.alert(
+      "Report this message?",
+      `Report ${draft.displayName}'s message for ${selectedReason.label.toLowerCase()}?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text:
+            "Report message",
+          style:
+            "destructive",
+          onPress: () => {
+            setReportDraft(
+              null,
+            );
+            setReportReason(
+              null,
+            );
+            void performModeration(
+              `message:${draft.messageId}`,
+              (
+                targetStage,
+              ) =>
+                reportLiveStageMessage(
+                  targetStage.id,
+                  draft.messageId,
+                  reason,
+              ),
+              `Report submitted for ${selectedReason.label.toLowerCase()}.`,
+              true,
+            );
+          },
+        },
+      ],
+    );
+  }
+
+  function confirmRemoveMessage(
+    message:
+      LiveStageMessage,
+  ) {
+    const messageIsFromHost =
+      stage?.hostId
+        ? message.userId ===
+          stage.hostId
+        : message.isMine;
+
+    if (
+      !stage ||
+      !isHost ||
+      messageIsFromHost ||
+      moderationRef.current ||
+      cloudIsOffline ||
+      isEnded
+    ) {
+      return;
+    }
+
+    Alert.alert(
+      "Remove this message?",
+      `Remove ${message.displayName}'s message from Stage chat?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text:
+            "Remove message",
+          style:
+            "destructive",
+          onPress: () => {
+            void performModeration(
+              `message:${message.id}`,
+              (
+                targetStage,
+              ) =>
+                moderateLiveStageMessage(
+                  targetStage.id,
+                  message.id,
+                ),
+              `Message from ${message.displayName} removed from Stage chat.`,
+            );
+          },
+        },
+      ],
+    );
+  }
+
+  function confirmMemberAction(
+    participant:
+      LiveStage["participants"][number],
+    action:
+      | "promote"
+      | "demote"
+      | "remove",
+  ) {
+    if (
+      !stage ||
+      !isHost ||
+      !participant.userId ||
+      participant.role ===
+        "host" ||
+      moderationRef.current ||
+      cloudIsOffline ||
+      isEnded
+    ) {
+      return;
+    }
+
+    const actionLabel =
+      action === "promote"
+        ? "Promote"
+        : action ===
+            "demote"
+          ? "Demote"
+          : "Remove";
+
+    const confirmation =
+      action === "promote"
+        ? `Change ${participant.displayName}'s role to collaborator?`
+        : action ===
+            "demote"
+          ? `Change ${participant.displayName}'s role to listener?`
+          : `Remove ${participant.displayName} from this Stage? They will not be able to rejoin this Stage.`;
+
+    Alert.alert(
+      `${actionLabel} ${participant.displayName}?`,
+      confirmation,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text:
+            action ===
+            "remove"
+              ? "Remove member"
+              : actionLabel,
+          style:
+            action ===
+            "remove"
+              ? "destructive"
+              : "default",
+          onPress: () => {
+            const userId =
+              participant.userId;
+
+            if (!userId) {
+              return;
+            }
+
+            void performModeration(
+              `member:${userId}`,
+              (
+                targetStage,
+              ) =>
+                moderateLiveStageMember(
+                  targetStage.id,
+                  userId,
+                  action,
+                ),
+              action ===
+                "promote"
+                ? `${participant.displayName} is now a collaborator.`
+                : action ===
+                    "demote"
+                  ? `${participant.displayName} is now a listener.`
+                  : `${participant.displayName} was removed and cannot rejoin this Stage.`,
+            );
+          },
+        },
+      ],
+    );
+  }
+
+  async function shareStage() {
+    if (!stage) {
+      return;
+    }
+
+    try {
+      await shareStageInvite(
+        stage,
+      );
+    } catch (
+      shareError
+    ) {
+      setError(
+        shareError instanceof
+          Error
+          ? shareError.message
           : "Canal could not share this Stage.",
       );
     }
   }
 
   async function captureSnapshot() {
-    if (!stage) {
+    if (
+      !stage ||
+      snapshotRef.current
+    ) {
       return;
     }
 
-    const currentTrack =
-      getCurrentLiveStageTrack(
-        stage,
-      );
+    snapshotRef.current =
+      true;
+
+    const operationId =
+      snapshotOperationIdRef
+        .current +
+      1;
+
+    snapshotOperationIdRef.current =
+      operationId;
+
+    const operationRoomKey =
+      roomKey;
 
     try {
+      setCapturingSnapshot(
+        true,
+      );
+
       const snapshot =
         await createSnapshot({
           sceneId:
+            stage.sceneId ??
             `stage-${stage.id}`,
           sceneName:
             stage.name,
@@ -302,7 +1917,8 @@ export default function LiveStageScreen() {
           trackArtist:
             currentTrack?.artist,
           spotifyUrl:
-            currentTrack?.spotifyUrl,
+            currentTrackSpotifyUrl ??
+            undefined,
           positionMs: 0,
           note:
             "Captured during a live Canal Stage.",
@@ -312,397 +1928,559 @@ export default function LiveStageScreen() {
             stage.visibility,
         });
 
+      if (
+        operationId !==
+          snapshotOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
+
       setNewSnapshotId(
         snapshot.id,
       );
 
       Alert.alert(
         "Snapshot captured",
-        "This Stage moment was saved.",
+        "This live moment is now in your Snapshots.",
       );
-    } catch (error) {
-      console.error(
-        "Unable to capture Snapshot:",
-        error,
-      );
+    } catch (
+      snapshotError
+    ) {
+      if (
+        operationId !==
+          snapshotOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
 
-      Alert.alert(
-        "Unable to capture",
-        "Canal could not save this Snapshot.",
+      setError(
+        snapshotError instanceof
+          Error
+          ? snapshotError.message
+          : "Canal could not capture this moment.",
+      );
+    } finally {
+      if (
+        operationId !==
+          snapshotOperationIdRef
+            .current
+      ) {
+        return;
+      }
+
+      snapshotRef.current =
+        false;
+      setCapturingSnapshot(
+        false,
       );
     }
   }
 
-  if (isLoading) {
-    return (
-      <SafeAreaView
-        style={styles.screen}
-      >
-        <View
-          style={styles.centered}
-        >
-          <ActivityIndicator
-            size="large"
-            color="#ff7a1a"
-          />
-        </View>
-      </SafeAreaView>
-    );
+  async function openCurrentTrack() {
+    if (
+      !currentTrackSpotifyUrl
+    ) {
+      return;
+    }
+
+    try {
+      await Linking.openURL(
+        currentTrackSpotifyUrl,
+      );
+    } catch {
+      setError(
+        "Canal could not open this track in Spotify.",
+      );
+    }
   }
 
-  if (!stage) {
-    return (
-      <SafeAreaView
-        style={styles.screen}
+  const recoveryIssue =
+    useMemo(
+      () => {
+        if (error) {
+          return classifyRecoveryIssue(
+            error,
+            {
+              service:
+                "canal",
+              connectivityStatus,
+            },
+          );
+        }
+
+        if (
+          configured &&
+          connectivityStatus ===
+          "offline"
+        ) {
+          return classifyRecoveryIssue(
+            new Error(
+              "This Stage is offline.",
+            ),
+            {
+              service:
+                "canal",
+              connectivityStatus,
+            },
+          );
+        }
+
+        if (
+          realtimeStatus ===
+          "error"
+        ) {
+          return classifyRecoveryIssue(
+            new Error(
+              "Canal Live lost its realtime connection.",
+            ),
+            {
+              service:
+                "canal",
+              connectivityStatus,
+            },
+          );
+        }
+
+        return null;
+      },
+      [
+        configured,
+        connectivityStatus,
+        error,
+        realtimeStatus,
+      ],
+    );
+
+  const recoverRoom =
+    useCallback(
+      async (): Promise<void> => {
+        if (
+          recoveryIssue
+            ?.action ===
+          "sign-in"
+        ) {
+          router.push(
+            "/login" as never,
+          );
+
+          return;
+        }
+
+        const nextStatus =
+          await refreshConnectivity();
+
+        if (
+          nextStatus !==
+          "offline"
+        ) {
+          setSubscriptionRetryEpoch(
+            (current) =>
+              current + 1,
+          );
+          await loadRoom(true);
+        }
+      },
+      [
+        loadRoom,
+        recoveryIssue,
+        refreshConnectivity,
+      ],
+    );
+
+  const header =
+    stage ? (
+      <View
+        style={
+          styles.roomHeader
+        }
       >
         <View
-          style={styles.centered}
+          style={
+            styles.stageIdentity
+          }
         >
-          <Text
-            style={
-              styles.notFoundTitle
-            }
-          >
-            Stage not found
-          </Text>
-
-          <Text
-            style={
-              styles.notFoundText
-            }
-          >
-            This Stage may have been
-            removed.
-          </Text>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              router.replace(
-                "/(tabs)/live",
-              )
-            }
-            style={
-              styles.primaryButton
-            }
-          >
-            <Text
-              style={
-                styles.primaryButtonText
-              }
-            >
-              Return to Live
-            </Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const currentTrack =
-    getCurrentLiveStageTrack(
-      stage,
-    );
-
-  const isHost =
-    stage.hostUsername ===
-    currentUsername;
-
-  const hasJoined =
-    stage.participants.some(
-      (participant) =>
-        participant.username ===
-        currentUsername,
-    );
-
-  const isEnded =
-    stage.status === "ended";
-
-  return (
-    <SafeAreaView
-      style={styles.screen}
-    >
-      <ScrollView
-        contentContainerStyle={
-          styles.page
-        }
-        showsVerticalScrollIndicator={
-          false
-        }
-      >
-        <View style={styles.header}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              router.replace(
-                "/(tabs)/live",
-              )
-            }
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Text
-              style={styles.backText}
-            >
-              ‹ Live
-            </Text>
-          </Pressable>
-
-          <Text
-            style={
-              styles.headerTitle
-            }
-          >
-            Stage
-          </Text>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              void handleShare();
-            }}
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Text
-              style={
-                styles.headerAction
-              }
-            >
-              Invite
-            </Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.hero}>
           <View
-            style={[
-              styles.stageArtwork,
-              isEnded &&
-                styles.endedArtwork,
-            ]}
-          >
-            <Ionicons
-              name={
-                isEnded
-                  ? "stop-circle-outline"
-                  : "radio"
-              }
-              size={45}
-              color={
-                isEnded
-                  ? "#8f9891"
-                  : "#ff9a50"
-              }
-            />
-          </View>
-
-          <View
-            style={[
-              styles.statusBadge,
-              isEnded &&
-                styles.endedBadge,
-            ]}
+            style={
+              styles.stageStatusRow
+            }
           >
             <View
               style={[
-                styles.statusDot,
+                styles.statusPill,
                 isEnded &&
-                  styles.endedDot,
-              ]}
-            />
-
-            <Text
-              style={[
-                styles.statusText,
-                isEnded &&
-                  styles.endedStatusText,
+                  styles.statusPillEnded,
               ]}
             >
-              {isEnded
-                ? "ENDED"
-                : "LIVE"}
-            </Text>
-          </View>
-
-          <Text
-            style={styles.heading}
-          >
-            {stage.name}
-          </Text>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              router.push({
-                pathname:
-                  "/friend/[username]",
-                params: {
-                  username:
-                    stage.hostUsername,
-                },
-              })
-            }
-          >
-            <Text
-              style={styles.hostText}
-            >
-              Hosted by{" "}
-              {stage.hostName}
-            </Text>
-
-            <Text
-              style={
-                styles.hostUsername
-              }
-            >
-              @{stage.hostUsername}
-            </Text>
-          </Pressable>
-
-          <Text
-            style={styles.activityText}
-          >
-            {stage.activity}
-          </Text>
-        </View>
-
-        <View
-          style={styles.codeCard}
-        >
-          <View>
-            <Text
-              style={styles.codeLabel}
-            >
-              STAGE CODE
-            </Text>
-
-            <Text
-              style={styles.codeText}
-            >
-              {stage.code}
-            </Text>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              void handleShare();
-            }}
-            style={({ pressed }) => [
-              styles.codeShareButton,
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Ionicons
-              name="share-social-outline"
-              size={19}
-              color="#ff9a50"
-            />
-
-            <Text
-              style={
-                styles.codeShareText
-              }
-            >
-              Share
-            </Text>
-          </Pressable>
-        </View>
-
-        <View
-          style={styles.nowPlayingCard}
-        >
-          <Text
-            style={
-              styles.cardEyebrow
-            }
-          >
-            {isEnded
-              ? "LAST PLAYED"
-              : "NOW PLAYING"}
-          </Text>
-
-          {currentTrack ? (
-            <>
               <View
-                style={
-                  styles.trackArtwork
-                }
-              >
-                <Ionicons
-                  name="musical-note"
-                  size={31}
-                  color="#ff9a50"
-                />
-              </View>
+                style={[
+                  styles.liveDot,
+                  isEnded &&
+                    styles.liveDotEnded,
+                ]}
+              />
 
               <Text
-                style={
-                  styles.trackTitle
-                }
+                style={[
+                  styles.statusPillText,
+                  isEnded &&
+                    styles.statusPillTextEnded,
+                ]}
               >
-                {currentTrack.title}
+                {isEnded
+                  ? "ENDED"
+                  : "LIVE"}
               </Text>
+            </View>
 
-              <Text
-                style={
-                  styles.trackArtist
-                }
-              >
-                {currentTrack.artist}
-              </Text>
-
-              <Text
-                style={
-                  styles.trackPosition
-                }
-              >
-                Track{" "}
-                {stage.currentTrackIndex +
-                  1}{" "}
-                of {stage.tracks.length}
-              </Text>
-            </>
-          ) : (
-            <Text
-              style={styles.emptyText}
+            <View
+              style={
+                styles.realtimeStatus
+              }
             >
-              No track selected.
-            </Text>
-          )}
-
-          {!isEnded ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                void captureSnapshot();
-              }}
-              style={({ pressed }) => [
-                styles.snapshotButton,
-                pressed &&
-                  styles.pressed,
-              ]}
-            >
-              <Ionicons
-                name="camera-outline"
-                size={20}
-                color="#17110c"
+              <View
+                style={[
+                  styles.realtimeDot,
+                  realtimeStatus ===
+                    "connected" &&
+                    styles.realtimeDotConnected,
+                  realtimeStatus ===
+                    "error" &&
+                    styles.realtimeDotError,
+                ]}
               />
 
               <Text
                 style={
-                  styles.snapshotButtonText
+                  styles.realtimeText
                 }
               >
-                Capture Snapshot
+                {realtimeStatus ===
+                "connected"
+                  ? "Synced"
+                  : realtimeStatus ===
+                      "error"
+                    ? "Reconnecting"
+                    : "Connecting"}
+              </Text>
+            </View>
+          </View>
+
+          <Text
+            selectable
+            style={
+              styles.stageName
+            }
+          >
+            {stage.name}
+          </Text>
+
+          {stage.hostId ? (
+            <Pressable
+              accessibilityLabel={`View ${stage.hostName}'s creator profile`}
+              accessibilityRole="button"
+              onPress={() => {
+                router.push({
+                  pathname:
+                    "/creator/[userId]",
+                  params: {
+                    userId:
+                      stage.hostId,
+                  },
+                });
+              }}
+            >
+              <Text
+                selectable
+                style={
+                  styles.stageMeta
+                }
+              >
+                Hosted by @
+                {stage.hostUsername} ·{" "}
+                {stage.activity}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text
+              selectable
+              style={
+                styles.stageMeta
+              }
+            >
+              Hosted by @
+              {stage.hostUsername} ·{" "}
+              {stage.activity}
+            </Text>
+          )}
+
+          <View
+            accessible
+            accessibilityLabel={`${provenanceLabel}. ${provenanceCopy}`}
+            style={[
+              styles.provenance,
+              stageKind ===
+                "canal"
+                ? styles.provenanceCanal
+                : stageKind ===
+                    "verified"
+                  ? styles.provenanceVerified
+                  : styles.provenanceCommunity,
+            ]}
+          >
+            <Text
+              style={[
+                styles.provenanceLabel,
+                stageKind ===
+                  "canal"
+                  ? styles.provenanceLabelCanal
+                  : stageKind ===
+                      "verified"
+                    ? styles.provenanceLabelVerified
+                    : styles.provenanceLabelCommunity,
+              ]}
+            >
+              {provenanceLabel.toUpperCase()}
+            </Text>
+
+            <Text
+              selectable
+              style={
+                styles.provenanceCopy
+              }
+            >
+              {provenanceCopy}
+            </Text>
+          </View>
+        </View>
+
+        {isMember &&
+        !isEnded ? (
+          <View
+            style={
+              styles.stageCodeRow
+            }
+          >
+            <View>
+              <Text
+                style={
+                  styles.codeLabel
+                }
+              >
+                STAGE CODE
+              </Text>
+
+              <Text
+                selectable
+                accessibilityLabel={`Stage code ${stage.code
+                  .split("")
+                  .join(" ")}`}
+                style={
+                  styles.stageCode
+                }
+              >
+                {stage.code}
+              </Text>
+            </View>
+
+            <Pressable
+              accessibilityLabel="Invite people to this Stage"
+              accessibilityRole="button"
+              onPress={() => {
+                void shareStage();
+              }}
+              style={({
+                pressed,
+              }) => [
+                styles.shareButton,
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                style={
+                  styles.shareIcon
+                }
+              >
+                ↗
+              </Text>
+
+              <Text
+                style={
+                  styles.shareText
+                }
+              >
+                Invite
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <View
+          style={
+            styles.nowPlayingCard
+          }
+        >
+          {currentTrackImageUrl ? (
+            <Image
+              source={
+                currentTrackImageUrl
+              }
+              contentFit="cover"
+              transition={180}
+              style={
+                styles.artwork
+              }
+            />
+          ) : (
+            <View
+              style={
+                styles.artworkFallback
+              }
+            >
+              <Text
+                style={
+                  styles.artworkNote
+                }
+              >
+                ♪
+              </Text>
+            </View>
+          )}
+
+          <View
+            style={
+              styles.nowPlayingCopy
+            }
+          >
+            <Text
+              style={
+                styles.nowPlayingLabel
+              }
+            >
+              NOW PLAYING
+            </Text>
+
+            <Text
+              selectable
+              numberOfLines={1}
+              style={
+                styles.trackTitle
+              }
+            >
+              {currentTrack?.title ??
+                "Queue ready"}
+            </Text>
+
+            <Text
+              selectable
+              numberOfLines={1}
+              style={
+                styles.trackArtist
+              }
+            >
+              {currentTrack?.artist ??
+                "The host has not selected a track"}
+            </Text>
+
+            <Text
+              style={
+                styles.trackProgress
+              }
+            >
+              {stage.tracks.length >
+              0
+                ? `${
+                    stage
+                      .currentTrackIndex +
+                    1
+                  } of ${
+                    stage.tracks
+                      .length
+                  }`
+                : "No tracks"}
+            </Text>
+          </View>
+
+          {currentTrackSpotifyUrl ? (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="Open current track in Spotify"
+              onPress={() => {
+                void openCurrentTrack();
+              }}
+              style={({
+                pressed,
+              }) => [
+                styles.openTrackButton,
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                style={
+                  styles.openTrackText
+                }
+              >
+                ↗
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View
+          style={
+            styles.quickActions
+          }
+        >
+          {!isEnded ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{
+                busy:
+                  capturingSnapshot,
+                disabled:
+                  capturingSnapshot,
+              }}
+              disabled={
+                capturingSnapshot
+              }
+              onPress={() => {
+                void captureSnapshot();
+              }}
+              style={({
+                pressed,
+              }) => [
+                styles.quickAction,
+                capturingSnapshot &&
+                  styles.disabled,
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                style={
+                  styles.quickActionIcon
+                }
+              >
+                ◫
+              </Text>
+
+              <Text
+                style={
+                  styles.quickActionText
+                }
+              >
+                {capturingSnapshot
+                  ? "Capturing…"
+                  : "Snapshot"}
               </Text>
             </Pressable>
           ) : null}
@@ -710,7 +2488,7 @@ export default function LiveStageScreen() {
           {newSnapshotId ? (
             <Pressable
               accessibilityRole="button"
-              onPress={() =>
+              onPress={() => {
                 router.push({
                   pathname:
                     "/snapshots/[snapshotId]",
@@ -718,736 +2496,2313 @@ export default function LiveStageScreen() {
                     snapshotId:
                       newSnapshotId,
                   },
-                })
-              }
-              style={({ pressed }) => [
-                styles.secondaryButton,
+                });
+              }}
+              style={({
+                pressed,
+              }) => [
+                styles.quickAction,
                 pressed &&
                   styles.pressed,
               ]}
             >
               <Text
                 style={
-                  styles.secondaryButtonText
+                  styles.quickActionText
                 }
               >
-                View New Snapshot
+                View capture
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {isHost &&
+          !isEnded ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={
+                updating ||
+                cloudIsOffline
+              }
+              onPress={() => {
+                void advanceTrack();
+              }}
+              style={({
+                pressed,
+              }) => [
+                styles.quickAction,
+                styles.hostAction,
+                (
+                  updating ||
+                  cloudIsOffline
+                ) &&
+                  styles.disabled,
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                style={
+                  styles.hostActionText
+                }
+              >
+                Next track →
               </Text>
             </Pressable>
           ) : null}
         </View>
 
-        <View style={styles.section}>
+        {stage.tracks.length >
+        1 ? (
           <View
             style={
-              styles.sectionHeader
+              styles.queueSection
+            }
+          >
+            <Text
+              selectable
+              style={
+                styles.sectionEyebrow
+              }
+            >
+              UP NEXT
+            </Text>
+
+            {stage.tracks
+              .slice(
+                stage
+                  .currentTrackIndex +
+                  1,
+                stage
+                  .currentTrackIndex +
+                  4,
+              )
+              .map(
+                (
+                  track,
+                  index,
+                ) => (
+                  <View
+                    key={
+                      track.id
+                    }
+                    style={
+                      styles.queueRow
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.queueNumber
+                      }
+                    >
+                      {index + 1}
+                    </Text>
+
+                    <View
+                      style={
+                        styles.queueCopy
+                      }
+                    >
+                      <Text
+                        selectable
+                        numberOfLines={
+                          1
+                        }
+                        style={
+                          styles.queueTitle
+                        }
+                      >
+                        {
+                          track.title
+                        }
+                      </Text>
+
+                      <Text
+                        selectable
+                        numberOfLines={
+                          1
+                        }
+                        style={
+                          styles.queueArtist
+                        }
+                      >
+                        {
+                          track.artist
+                        }
+                      </Text>
+                    </View>
+                  </View>
+                ),
+              )}
+          </View>
+        ) : null}
+
+        <View
+          style={
+            styles.peopleSection
+          }
+        >
+          <View
+            style={
+              styles.sectionTitleRow
             }
           >
             <View>
               <Text
+                selectable
                 style={
                   styles.sectionTitle
                 }
               >
-                In this Stage
+                In the room
               </Text>
 
               <Text
                 style={
-                  styles.sectionDescription
+                  styles.sectionSubtitle
                 }
               >
-                People currently
-                participating.
+                {
+                  stage
+                    .participantCount
+                }{" "}
+                connected
               </Text>
             </View>
 
-            <Text
-              style={
-                styles.participantTotal
-              }
-            >
-              {
-                stage.participants
-                  .length
-              }
-            </Text>
+            {!isMember &&
+            !isEnded ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={
+                  updating ||
+                  cloudIsOffline
+                }
+                onPress={() => {
+                  void joinStage();
+                }}
+                style={({
+                  pressed,
+                }) => [
+                  styles.joinRoomButton,
+                  (
+                    updating ||
+                    cloudIsOffline
+                  ) &&
+                    styles.disabled,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.joinRoomText
+                  }
+                >
+                  Join room
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
 
           <View
-            style={styles.participantList}
+            style={
+              styles.peopleList
+            }
           >
             {stage.participants.map(
-              (participant) => (
-                <Pressable
+              (participant) => {
+                const canModerateParticipant =
+                  isHost &&
+                  participant.role !==
+                    "host" &&
+                  Boolean(
+                    participant.userId,
+                  );
+                const roleAction =
+                  participant.role ===
+                  "collaborator"
+                    ? "demote"
+                    : "promote";
+                const roleActionLabel =
+                  roleAction ===
+                  "demote"
+                    ? "Demote"
+                    : "Promote";
+                const participantBusy =
+                  moderatingTarget ===
+                  `member:${participant.userId}`;
+                const moderationDisabled =
+                  Boolean(
+                    moderatingTarget,
+                  ) ||
+                  cloudIsOffline ||
+                  isEnded;
+
+                return (
+                <View
                   key={
-                    participant.username
+                    participant
+                      .userId ??
+                    participant
+                      .username
                   }
-                  accessibilityRole="button"
-                  onPress={() =>
-                    router.push({
-                      pathname:
-                        "/friend/[username]",
-                      params: {
-                        username:
-                          participant.username,
-                      },
-                    })
+                  style={
+                    styles.person
                   }
-                  style={({ pressed }) => [
-                    styles.participantRow,
-                    pressed &&
-                      styles.pressed,
-                  ]}
                 >
-                  <View
-                    style={
-                      styles.participantAvatar
-                    }
+                  <Pressable
+                    accessibilityLabel={`View ${participant.displayName}'s profile`}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      if (
+                        participant.userId
+                      ) {
+                        router.push({
+                          pathname:
+                            "/creator/[userId]",
+                          params: {
+                            userId:
+                              participant.userId,
+                          },
+                        });
+                      } else {
+                        router.push({
+                          pathname:
+                            "/friend/[username]",
+                          params: {
+                            username:
+                              participant.username,
+                          },
+                        });
+                      }
+                    }}
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.personProfile,
+                      pressed &&
+                        styles.pressed,
+                    ]}
                   >
-                    <Text
-                      style={
-                        styles.participantInitials
-                      }
-                    >
-                      {
-                        participant.initials
-                      }
-                    </Text>
-                  </View>
-
-                  <View
-                    style={
-                      styles.participantInformation
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.participantName
-                      }
-                    >
-                      {
-                        participant.displayName
-                      }
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.participantUsername
-                      }
-                    >
-                      @
-                      {
-                        participant.username
-                      }
-                    </Text>
-                  </View>
-
-                  {participant.username ===
-                  stage.hostUsername ? (
                     <View
                       style={
-                        styles.hostBadge
+                        styles.personAvatar
                       }
                     >
                       <Text
                         style={
-                          styles.hostBadgeText
+                          styles.personInitials
                         }
                       >
-                        HOST
+                        {
+                          participant
+                            .initials
+                        }
                       </Text>
                     </View>
+
+                    <View
+                      style={
+                        styles.personCopy
+                      }
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={
+                          styles.personName
+                        }
+                      >
+                        {
+                          participant
+                            .displayName
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.personRole
+                        }
+                      >
+                        {participant.role.toUpperCase()}
+                      </Text>
+                    </View>
+                  </Pressable>
+
+                  {canModerateParticipant ? (
+                    <View
+                      style={
+                        styles.memberActions
+                      }
+                    >
+                      <Pressable
+                        accessibilityLabel={`${roleActionLabel} ${participant.displayName} to ${roleAction === "promote" ? "collaborator" : "listener"}`}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          busy:
+                            participantBusy,
+                          disabled:
+                            moderationDisabled,
+                        }}
+                        disabled={
+                          moderationDisabled
+                        }
+                        onPress={() => {
+                          confirmMemberAction(
+                            participant,
+                            roleAction,
+                          );
+                        }}
+                        style={({
+                          pressed,
+                        }) => [
+                          styles.memberAction,
+                          moderationDisabled &&
+                            styles.disabled,
+                          pressed &&
+                            styles.pressed,
+                        ]}
+                      >
+                        <Text
+                          style={
+                            styles.memberActionText
+                          }
+                        >
+                          {roleActionLabel}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityLabel={`Remove ${participant.displayName} from Stage`}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          busy:
+                            participantBusy,
+                          disabled:
+                            moderationDisabled,
+                        }}
+                        disabled={
+                          moderationDisabled
+                        }
+                        onPress={() => {
+                          confirmMemberAction(
+                            participant,
+                            "remove",
+                          );
+                        }}
+                        style={({
+                          pressed,
+                        }) => [
+                          styles.memberAction,
+                          styles.memberRemoveAction,
+                          moderationDisabled &&
+                            styles.disabled,
+                          pressed &&
+                            styles.pressed,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.memberActionText,
+                            styles.memberRemoveActionText,
+                          ]}
+                        >
+                          Remove
+                        </Text>
+                      </Pressable>
+                    </View>
                   ) : null}
-                </Pressable>
-              ),
+                </View>
+                );
+              },
             )}
           </View>
         </View>
 
-        {!isEnded ? (
+        {moderationFeedback ? (
           <View
-            style={styles.actions}
+            accessible
+            accessibilityLiveRegion="polite"
+            style={
+              styles.moderationFeedback
+            }
           >
-            {!hasJoined ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={isUpdating}
-                onPress={() => {
-                  void joinStage();
-                }}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  isUpdating &&
-                    styles.disabled,
-                  pressed &&
-                    styles.pressed,
-                ]}
-              >
-                <Text
-                  style={
-                    styles.primaryButtonText
-                  }
-                >
-                  Join Stage
-                </Text>
-              </Pressable>
-            ) : null}
-
-            {isHost ? (
-              <>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={isUpdating}
-                  onPress={() => {
-                    void advanceTrack();
-                  }}
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    isUpdating &&
-                      styles.disabled,
-                    pressed &&
-                      styles.pressed,
-                  ]}
-                >
-                  {isUpdating ? (
-                    <ActivityIndicator
-                      color="#17110c"
-                    />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="play-skip-forward"
-                        size={20}
-                        color="#17110c"
-                      />
-
-                      <Text
-                        style={
-                          styles.primaryButtonText
-                        }
-                      >
-                        Next Track
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={
-                    confirmEndStage
-                  }
-                  style={({ pressed }) => [
-                    styles.endButton,
-                    pressed &&
-                      styles.pressed,
-                  ]}
-                >
-                  <Text
-                    style={
-                      styles.endButtonText
-                    }
-                  >
-                    End Stage
-                  </Text>
-                </Pressable>
-              </>
-            ) : hasJoined ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={isUpdating}
-                onPress={() => {
-                  void leaveStage();
-                }}
-                style={({ pressed }) => [
-                  styles.leaveButton,
-                  isUpdating &&
-                    styles.disabled,
-                  pressed &&
-                    styles.pressed,
-                ]}
-              >
-                <Text
-                  style={
-                    styles.leaveButtonText
-                  }
-                >
-                  Leave Stage
-                </Text>
-              </Pressable>
-            ) : null}
+            <Text
+              selectable
+              style={
+                styles.moderationFeedbackText
+              }
+            >
+              {moderationFeedback}
+            </Text>
           </View>
-        ) : (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              router.replace(
-                "/(tabs)/live",
+        ) : null}
+
+        {recoveryIssue ? (
+          <RecoveryNotice
+            busy={
+              loading ||
+              updating ||
+              sending ||
+              capturingSnapshot ||
+              Boolean(
+                moderatingTarget,
               )
             }
-            style={({ pressed }) => [
-              styles.secondaryButton,
+            issue={
+              recoveryIssue
+            }
+            onAction={
+              recoverRoom
+            }
+          />
+        ) : null}
+
+        {isHost ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={
+              updating ||
+              isEnded ||
+              cloudIsOffline
+            }
+            onPress={
+              confirmEndStage
+            }
+            style={({
+              pressed,
+            }) => [
+              styles.endButton,
+              (
+                isEnded ||
+                cloudIsOffline
+              ) &&
+                styles.disabled,
               pressed &&
                 styles.pressed,
             ]}
           >
             <Text
               style={
-                styles.secondaryButtonText
+                styles.endButtonText
               }
             >
-              Return to Live
+              {isEnded
+                ? "Stage ended"
+                : "End Stage"}
             </Text>
           </Pressable>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+        ) : isMember ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={
+              updating ||
+              cloudIsOffline
+            }
+            onPress={() => {
+              void leaveStage();
+            }}
+            style={({
+              pressed,
+            }) => [
+              styles.leaveButton,
+              (
+                updating ||
+                cloudIsOffline
+              ) &&
+                styles.disabled,
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.leaveButtonText
+              }
+            >
+              Leave Stage
+            </Text>
+          </Pressable>
+        ) : null}
+
+        <View
+          style={
+            styles.chatHeader
+          }
+        >
+          <View>
+            <Text
+              selectable
+              style={
+                styles.chatTitle
+              }
+            >
+              Stage chat
+            </Text>
+
+            <Text
+              selectable
+              style={
+                styles.chatSubtitle
+              }
+            >
+              {isEnded
+                ? "Chat is read-only."
+                : isMember
+                  ? "You’re live with the room."
+                  : "Join the room to send messages."}
+            </Text>
+          </View>
+
+          <Text
+            style={
+              styles.chatCount
+            }
+          >
+            {messages.length}
+          </Text>
+        </View>
+      </View>
+    ) : null;
+
+  if (loading) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            headerShown:
+              true,
+            title:
+              "Live Stage",
+            headerBackTitle:
+              "Live",
+            headerShadowVisible:
+              false,
+            headerStyle: {
+              backgroundColor:
+                "#100D0B",
+            },
+            headerTintColor:
+              "#FFFFFF",
+          }}
+        />
+
+        <View
+          style={
+            styles.loading
+          }
+        >
+          <ActivityIndicator
+            size="large"
+            color="#F47A24"
+          />
+
+          <Text
+            style={
+              styles.loadingText
+            }
+          >
+            Entering the Stage…
+          </Text>
+        </View>
+      </>
+    );
+  }
+
+  if (!stage) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            headerShown:
+              true,
+            title:
+              "Live Stage",
+            headerBackTitle:
+              "Live",
+            headerShadowVisible:
+              false,
+            headerStyle: {
+              backgroundColor:
+                "#100D0B",
+            },
+            headerTintColor:
+              "#FFFFFF",
+          }}
+        />
+
+        <View
+          style={
+            styles.notFound
+          }
+        >
+          <View
+            style={
+              styles.notFoundIcon
+            }
+          >
+            <Text
+              style={
+                styles.notFoundIconText
+              }
+            >
+              ◌
+            </Text>
+          </View>
+
+          <Text
+            selectable
+            style={
+              styles.notFoundTitle
+            }
+          >
+            Stage unavailable
+          </Text>
+
+          {recoveryIssue ? (
+            <RecoveryNotice
+              busy={
+                loading
+              }
+              issue={
+                recoveryIssue
+              }
+              onAction={
+                recoverRoom
+              }
+            />
+          ) : (
+            <Text
+              selectable
+              style={
+                styles.notFoundText
+              }
+            >
+              This private Stage
+              needs its invitation
+              code, or the host may
+              have removed it.
+            </Text>
+          )}
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              router.replace(
+                "/join-stage",
+              );
+            }}
+            style={({
+              pressed,
+            }) => [
+              styles.notFoundButton,
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.notFoundButtonText
+              }
+            >
+              Enter a Stage code
+            </Text>
+          </Pressable>
+        </View>
+      </>
+    );
+  }
+
+  const canChat =
+    isMember &&
+    !isEnded;
+
+  const moderationDisabled =
+    Boolean(
+      moderatingTarget,
+    ) ||
+    cloudIsOffline ||
+    isEnded;
+
+  const reportDisabled =
+    Boolean(
+      moderatingTarget,
+    ) ||
+    cloudIsOffline;
+
+  return (
+    <>
+      <Stack.Screen
+        options={{
+          headerShown:
+            true,
+          title:
+            stage.name,
+          headerBackTitle:
+            "Live",
+          headerShadowVisible:
+            false,
+          headerStyle: {
+            backgroundColor:
+              "#100D0B",
+          },
+          headerTintColor:
+            "#FFFFFF",
+          headerTitleStyle: {
+            fontWeight:
+              "800",
+          },
+        }}
+      />
+
+      <Modal
+        animationType="fade"
+        onRequestClose={
+          closeReportMessage
+        }
+        transparent
+        visible={
+          Boolean(
+            reportDraft,
+          )
+        }
+      >
+        <View
+          style={
+            styles.reportBackdrop
+          }
+        >
+          <View
+            accessibilityViewIsModal
+            style={
+              styles.reportDialog
+            }
+          >
+            <Text
+              selectable
+              style={
+                styles.reportTitle
+              }
+            >
+              Report message
+            </Text>
+
+            <Text
+              selectable
+              style={
+                styles.reportCopy
+              }
+            >
+              Choose a reason for
+              reporting{" "}
+              {reportDraft
+                ?.displayName ??
+                "this member"}
+              ’s message.
+            </Text>
+
+            <View
+              style={
+                styles.reportReasons
+              }
+            >
+              {LIVE_STAGE_REPORT_REASONS.map(
+                (reason) => (
+                  <Pressable
+                    key={
+                      reason.value
+                    }
+                    accessibilityLabel={`Report reason: ${reason.label}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{
+                      checked:
+                        reportReason ===
+                        reason.value,
+                    }}
+                    onPress={() => {
+                      setReportReason(
+                        reason.value,
+                      );
+                    }}
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.reportReason,
+                      reportReason ===
+                        reason.value &&
+                        styles.reportReasonSelected,
+                      pressed &&
+                        styles.pressed,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.reportRadio,
+                        reportReason ===
+                          reason.value &&
+                          styles.reportRadioSelected,
+                      ]}
+                    />
+
+                    <Text
+                      style={
+                        styles.reportReasonText
+                      }
+                    >
+                      {reason.label}
+                    </Text>
+                  </Pressable>
+                ),
+              )}
+            </View>
+
+            <View
+              style={
+                styles.reportDialogActions
+              }
+            >
+              <Pressable
+                accessibilityLabel="Cancel message report"
+                accessibilityRole="button"
+                disabled={
+                  Boolean(
+                    moderatingTarget,
+                  )
+                }
+                onPress={
+                  closeReportMessage
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.reportCancel,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.reportCancelText
+                  }
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityLabel={`Confirm report of message from ${reportDraft?.displayName ?? "this member"}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  busy:
+                    Boolean(
+                      moderatingTarget,
+                    ),
+                  disabled:
+                    !reportReason ||
+                    reportDisabled,
+                }}
+                disabled={
+                  !reportReason ||
+                  reportDisabled
+                }
+                onPress={
+                  confirmReportMessage
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.reportSubmit,
+                  (
+                    !reportReason ||
+                    reportDisabled
+                  ) &&
+                    styles.disabled,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.reportSubmitText
+                  }
+                >
+                  Review report
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <KeyboardAvoidingView
+        behavior={
+          process.env
+            .EXPO_OS ===
+          "ios"
+            ? "padding"
+            : undefined
+        }
+        keyboardVerticalOffset={
+          process.env
+            .EXPO_OS ===
+          "ios"
+            ? 88
+            : 0
+        }
+        style={styles.screen}
+      >
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={
+            (message) =>
+              message.id
+          }
+          renderItem={({
+            item,
+          }) => {
+            const messageIsFromHost =
+              stage.hostId
+                ? item.userId ===
+                  stage.hostId
+                : item.isMine &&
+                  isHost;
+
+            return (
+              <MessageRow
+                canRemove={
+                  isHost &&
+                  !messageIsFromHost
+                }
+                canReport={
+                  !item.isMine
+                }
+                message={item}
+                removeDisabled={
+                  moderationDisabled
+                }
+                moderating={
+                  moderatingTarget ===
+                  `message:${item.id}`
+                }
+                onRemove={
+                  confirmRemoveMessage
+                }
+                onReport={
+                  openReportMessage
+                }
+                reportDisabled={
+                  reportDisabled
+                }
+              />
+            );
+          }}
+          ListHeaderComponent={
+            header
+          }
+          ListEmptyComponent={
+            <View
+              style={
+                styles.emptyChat
+              }
+            >
+              <Text
+                selectable
+                style={
+                  styles.emptyChatTitle
+                }
+              >
+                Start the conversation
+              </Text>
+
+              <Text
+                selectable
+                style={
+                  styles.emptyChatText
+                }
+              >
+                Reactions, track
+                notes, and room plans
+                will appear here.
+              </Text>
+            </View>
+          }
+          contentInsetAdjustmentBehavior="automatic"
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={
+            styles.listContent
+          }
+        />
+
+        <View
+          style={[
+            styles.composer,
+            {
+              paddingBottom:
+                Math.max(
+                  insets.bottom,
+                  10,
+                ),
+            },
+          ]}
+        >
+          {canChat ? (
+            <>
+              <View
+                style={
+                  styles.inputWrap
+                }
+              >
+                <TextInput
+                  value={
+                    messageBody
+                  }
+                  onChangeText={
+                    setMessageBody
+                  }
+                  onSubmitEditing={() => {
+                    void sendMessage();
+                  }}
+                  accessibilityLabel="Message Stage chat"
+                  placeholder="Message the Stage…"
+                  placeholderTextColor="#8B7E76"
+                  maxLength={500}
+                  multiline
+                  returnKeyType="send"
+                  blurOnSubmit={
+                    false
+                  }
+                  style={
+                    styles.messageInput
+                  }
+                />
+
+                {messageBody.length >
+                420 ? (
+                  <Text
+                    style={
+                      styles.messageCounter
+                    }
+                  >
+                    {
+                      messageBody.length
+                    }
+                    /500
+                  </Text>
+                ) : null}
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Send message"
+                disabled={
+                  sending ||
+                  !messageBody.trim() ||
+                  cloudIsOffline
+                }
+                onPress={() => {
+                  void sendMessage();
+                }}
+                style={({
+                  pressed,
+                }) => [
+                  styles.sendButton,
+                  (
+                    sending ||
+                    !messageBody.trim() ||
+                    cloudIsOffline
+                  ) &&
+                    styles.disabled,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                {sending ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.sendText
+                    }
+                  >
+                    ↑
+                  </Text>
+                )}
+              </Pressable>
+            </>
+          ) : !isEnded ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={
+                updating ||
+                cloudIsOffline
+              }
+              onPress={() => {
+                void joinStage();
+              }}
+              style={({
+                pressed,
+              }) => [
+                styles.joinComposerButton,
+                (
+                  updating ||
+                  cloudIsOffline
+                ) &&
+                  styles.disabled,
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                style={
+                  styles.joinComposerText
+                }
+              >
+                Join Stage to chat
+              </Text>
+            </Pressable>
+          ) : (
+            <Text
+              selectable
+              style={
+                styles.readOnlyText
+              }
+            >
+              This Stage has ended.
+              Chat is read-only.
+            </Text>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </>
   );
 }
 
-function firstParam(
-  value:
-    | string
-    | string[]
-    | undefined,
-): string {
-  if (Array.isArray(value)) {
-    return value[0] ?? "";
-  }
+const styles =
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor:
+        "#100D0B",
+    },
 
-  return value ?? "";
-}
+    loading: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 14,
+      backgroundColor:
+        "#100D0B",
+    },
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#0d100e",
-  },
+    loadingText: {
+      color: "#A99C94",
+      fontSize: 14,
+      fontWeight: "700",
+    },
 
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 11,
-    paddingHorizontal: 26,
-  },
+    notFound: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 12,
+      padding: 28,
+      backgroundColor:
+        "#100D0B",
+    },
 
-  notFoundTitle: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "700",
-  },
+    notFoundIcon: {
+      width: 70,
+      height: 70,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 24,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#281D17",
+    },
 
-  notFoundText: {
-    color: "#8f9891",
-    fontSize: 14,
-    textAlign: "center",
-  },
+    notFoundIconText: {
+      color: "#F47A24",
+      fontSize: 36,
+      fontWeight: "900",
+    },
 
-  page: {
-    paddingHorizontal: 23,
-    paddingTop: 10,
-    paddingBottom: 42,
-    gap: 23,
-  },
+    notFoundTitle: {
+      color: "#FFFFFF",
+      fontSize: 24,
+      fontWeight: "900",
+      textAlign: "center",
+    },
 
-  header: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+    notFoundText: {
+      maxWidth: 330,
+      color: "#A99C94",
+      fontSize: 15,
+      lineHeight: 22,
+      textAlign: "center",
+    },
 
-  headerButton: {
-    width: 80,
-    minHeight: 44,
-    justifyContent: "center",
-  },
+    notFoundButton: {
+      minHeight: 52,
+      justifyContent:
+        "center",
+      paddingHorizontal: 20,
+      marginTop: 8,
+      borderRadius: 17,
+      backgroundColor:
+        "#F47A24",
+    },
 
-  backText: {
-    color: "#c5cbc6",
-    fontSize: 15,
-    fontWeight: "600",
-  },
+    notFoundButtonText: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "900",
+    },
 
-  headerTitle: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+    listContent: {
+      paddingHorizontal: 18,
+      paddingBottom: 28,
+    },
 
-  headerAction: {
-    color: "#ff9a50",
-    fontSize: 14,
-    fontWeight: "700",
-    textAlign: "right",
-  },
+    roomHeader: {
+      gap: 18,
+      paddingTop: 12,
+      paddingBottom: 18,
+    },
 
-  hero: {
-    alignItems: "center",
-  },
+    stageIdentity: {
+      gap: 9,
+    },
 
-  stageArtwork: {
-    width: 142,
-    height: 142,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 42,
-    backgroundColor: "#2b1d14",
-  },
+    stageStatusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+    },
 
-  endedArtwork: {
-    backgroundColor: "#242925",
-  },
+    statusPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor:
+        "#3B1D14",
+    },
 
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 11,
-    backgroundColor: "#3b1c19",
-  },
+    statusPillEnded: {
+      backgroundColor:
+        "#28221E",
+    },
 
-  endedBadge: {
-    backgroundColor: "#2d332f",
-  },
+    liveDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor:
+        "#FF6741",
+    },
 
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: "#ff5f57",
-  },
+    liveDotEnded: {
+      backgroundColor:
+        "#81766E",
+    },
 
-  endedDot: {
-    backgroundColor: "#8f9891",
-  },
+    statusPillText: {
+      color: "#FF9A77",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
 
-  statusText: {
-    color: "#ff9187",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
+    statusPillTextEnded: {
+      color: "#A89D96",
+    },
 
-  endedStatusText: {
-    color: "#c5cbc6",
-  },
+    realtimeStatus: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
 
-  heading: {
-    marginTop: 10,
-    color: "#ffffff",
-    fontSize: 28,
-    fontWeight: "700",
-    textAlign: "center",
-  },
+    realtimeDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor:
+        "#C18B39",
+    },
 
-  hostText: {
-    marginTop: 9,
-    color: "#c5cbc6",
-    fontSize: 13,
-    textAlign: "center",
-  },
+    realtimeDotConnected: {
+      backgroundColor:
+        "#52B788",
+    },
 
-  hostUsername: {
-    marginTop: 3,
-    color: "#ff9a50",
-    fontSize: 12,
-    fontWeight: "700",
-    textAlign: "center",
-  },
+    realtimeDotError: {
+      backgroundColor:
+        "#E76F51",
+    },
 
-  activityText: {
-    marginTop: 10,
-    color: "#8f9891",
-    fontSize: 13,
-    textAlign: "center",
-  },
+    realtimeText: {
+      color: "#91857D",
+      fontSize: 11,
+      fontWeight: "700",
+    },
 
-  codeCard: {
-    minHeight: 82,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#5d3b24",
-    borderRadius: 20,
-    backgroundColor: "#211810",
-  },
+    stageName: {
+      color: "#FFFFFF",
+      fontSize: 32,
+      lineHeight: 37,
+      fontWeight: "900",
+      letterSpacing: -0.9,
+    },
 
-  codeLabel: {
-    color: "#bca99b",
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1,
-  },
+    stageMeta: {
+      color: "#A99C94",
+      fontSize: 14,
+      lineHeight: 20,
+    },
 
-  codeText: {
-    marginTop: 5,
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "800",
-    letterSpacing: 4,
-  },
+    provenance: {
+      alignSelf:
+        "flex-start",
+      gap: 3,
+      paddingHorizontal: 11,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderRadius: 13,
+      borderCurve:
+        "continuous",
+    },
 
-  codeShareButton: {
-    minHeight: 43,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 13,
-    borderWidth: 1,
-    borderColor: "#5d3b24",
-    borderRadius: 14,
-  },
+    provenanceCanal: {
+      borderColor:
+        "#7B421F",
+      backgroundColor:
+        "#2F1C10",
+    },
 
-  codeShareText: {
-    color: "#ff9a50",
-    fontSize: 12,
-    fontWeight: "800",
-  },
+    provenanceVerified: {
+      borderColor:
+        "#355F78",
+      backgroundColor:
+        "#142630",
+    },
 
-  nowPlayingCard: {
-    alignItems: "center",
-    gap: 8,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#303833",
-    borderRadius: 23,
-    backgroundColor: "#171c19",
-  },
+    provenanceCommunity: {
+      borderColor:
+        "#3A302A",
+      backgroundColor:
+        "#1A1512",
+    },
 
-  cardEyebrow: {
-    color: "#ff9a50",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
+    provenanceLabel: {
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
 
-  trackArtwork: {
-    width: 82,
-    height: 82,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 6,
-    borderRadius: 25,
-    backgroundColor: "#2b1d14",
-  },
+    provenanceLabelCanal: {
+      color: "#FFAA70",
+    },
 
-  trackTitle: {
-    marginTop: 5,
-    color: "#ffffff",
-    fontSize: 20,
-    fontWeight: "700",
-    textAlign: "center",
-  },
+    provenanceLabelVerified: {
+      color: "#9FD8F8",
+    },
 
-  trackArtist: {
-    color: "#aeb6b0",
-    fontSize: 13,
-  },
+    provenanceLabelCommunity: {
+      color: "#B4A69D",
+    },
 
-  trackPosition: {
-    color: "#777f79",
-    fontSize: 10,
-    fontWeight: "700",
-  },
+    provenanceCopy: {
+      color: "#BDB0A8",
+      fontSize: 11,
+      lineHeight: 15,
+    },
 
-  snapshotButton: {
-    minHeight: 51,
-    alignSelf: "stretch",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 8,
-    borderRadius: 16,
-    backgroundColor: "#ff7a1a",
-  },
+    stageCodeRow: {
+      minHeight: 68,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+      padding: 14,
+      borderWidth: 1,
+      borderColor: "#332924",
+      borderRadius: 19,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#1A1512",
+    },
 
-  snapshotButtonText: {
-    color: "#17110c",
-    fontSize: 14,
-    fontWeight: "800",
-  },
+    codeLabel: {
+      color: "#B27650",
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
 
-  section: {
-    gap: 11,
-  },
+    stageCode: {
+      color: "#FFFFFF",
+      fontSize: 23,
+      lineHeight: 28,
+      fontWeight: "900",
+      letterSpacing: 4,
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
 
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
+    shareButton: {
+      minHeight: 42,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      backgroundColor:
+        "#F47A24",
+    },
 
-  sectionTitle: {
-    color: "#ffffff",
-    fontSize: 20,
-    fontWeight: "700",
-  },
+    shareIcon: {
+      color: "#FFFFFF",
+      fontSize: 16,
+      fontWeight: "900",
+    },
 
-  sectionDescription: {
-    marginTop: 5,
-    color: "#8f9891",
-    fontSize: 12,
-  },
+    shareText: {
+      color: "#FFFFFF",
+      fontSize: 13,
+      fontWeight: "900",
+    },
 
-  participantTotal: {
-    color: "#ff9a50",
-    fontSize: 17,
-    fontWeight: "800",
-  },
+    nowPlayingCard: {
+      minHeight: 130,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      padding: 14,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#F2E7DE",
+    },
 
-  participantList: {
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#303833",
-    borderRadius: 19,
-    backgroundColor: "#171c19",
-  },
+    artwork: {
+      width: 94,
+      height: 94,
+      borderRadius: 18,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#DCCBC0",
+    },
 
-  participantRow: {
-    minHeight: 71,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 13,
-    borderBottomWidth: 1,
-    borderBottomColor: "#292f2b",
-  },
+    artworkFallback: {
+      width: 94,
+      height: 94,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 18,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#F47A24",
+    },
 
-  participantAvatar: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 11,
-    borderRadius: 22,
-    backgroundColor: "#2b1d14",
-  },
+    artworkNote: {
+      color: "#FFFFFF",
+      fontSize: 40,
+      fontWeight: "900",
+    },
 
-  participantInitials: {
-    color: "#ff9a50",
-    fontSize: 12,
-    fontWeight: "800",
-  },
+    nowPlayingCopy: {
+      flex: 1,
+      gap: 3,
+    },
 
-  participantInformation: {
-    flex: 1,
-  },
+    nowPlayingLabel: {
+      color: "#B9571A",
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
 
-  participantName: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
+    trackTitle: {
+      color: "#241B16",
+      fontSize: 19,
+      lineHeight: 23,
+      fontWeight: "900",
+    },
 
-  participantUsername: {
-    marginTop: 4,
-    color: "#8f9891",
-    fontSize: 11,
-  },
+    trackArtist: {
+      color: "#6E625A",
+      fontSize: 13,
+      lineHeight: 18,
+    },
 
-  hostBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 9,
-    backgroundColor: "#1d5b32",
-  },
+    trackProgress: {
+      color: "#9B8576",
+      fontSize: 10,
+      fontWeight: "800",
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
 
-  hostBadgeText: {
-    color: "#9ff3b5",
-    fontSize: 8,
-    fontWeight: "900",
-  },
+    openTrackButton: {
+      width: 38,
+      height: 38,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 13,
+      backgroundColor:
+        "#211711",
+    },
 
-  actions: {
-    gap: 11,
-  },
+    openTrackText: {
+      color: "#FFFFFF",
+      fontSize: 17,
+      fontWeight: "900",
+    },
 
-  primaryButton: {
-    minHeight: 54,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderRadius: 16,
-    backgroundColor: "#ff7a1a",
-  },
+    quickActions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
 
-  primaryButtonText: {
-    color: "#17110c",
-    fontSize: 14,
-    fontWeight: "800",
-  },
+    quickAction: {
+      minHeight: 44,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      paddingHorizontal: 13,
+      borderWidth: 1,
+      borderColor: "#39302A",
+      borderRadius: 15,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#201A17",
+    },
 
-  secondaryButton: {
-    minHeight: 51,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#39413c",
-    borderRadius: 16,
-    backgroundColor: "#171c19",
-  },
+    quickActionIcon: {
+      color: "#E89A68",
+      fontSize: 16,
+      fontWeight: "900",
+    },
 
-  secondaryButtonText: {
-    color: "#ff9a50",
-    fontSize: 13,
-    fontWeight: "700",
-  },
+    quickActionText: {
+      color: "#EDE3DC",
+      fontSize: 12,
+      fontWeight: "800",
+    },
 
-  leaveButton: {
-    minHeight: 51,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#5d3b24",
-    borderRadius: 16,
-    backgroundColor: "#211810",
-  },
+    hostAction: {
+      borderColor:
+        "#6F3820",
+      backgroundColor:
+        "#3A2116",
+    },
 
-  leaveButtonText: {
-    color: "#ff9a50",
-    fontSize: 13,
-    fontWeight: "700",
-  },
+    hostActionText: {
+      color: "#FFAA72",
+      fontSize: 12,
+      fontWeight: "900",
+    },
 
-  endButton: {
-    minHeight: 51,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#4f302d",
-    borderRadius: 16,
-    backgroundColor: "#1d1514",
-  },
+    queueSection: {
+      gap: 9,
+      padding: 16,
+      borderRadius: 20,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#191512",
+    },
 
-  endButtonText: {
-    color: "#ff9187",
-    fontSize: 13,
-    fontWeight: "700",
-  },
+    sectionEyebrow: {
+      color: "#B57750",
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
 
-  emptyText: {
-    color: "#8f9891",
-    fontSize: 13,
-  },
+    queueRow: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 11,
+      borderBottomWidth: 1,
+      borderBottomColor:
+        "#2B2420",
+    },
 
-  disabled: {
-    opacity: 0.5,
-  },
+    queueNumber: {
+      width: 18,
+      color: "#786D66",
+      fontSize: 11,
+      fontWeight: "900",
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
 
-  pressed: {
-    opacity: 0.72,
-    transform: [
-      {
-        scale: 0.99,
-      },
-    ],
-  },
-});
+    queueCopy: {
+      flex: 1,
+    },
+
+    queueTitle: {
+      color: "#EEE5DF",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    queueArtist: {
+      color: "#8F837C",
+      fontSize: 11,
+    },
+
+    peopleSection: {
+      gap: 12,
+      paddingVertical: 4,
+    },
+
+    sectionTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+    },
+
+    sectionTitle: {
+      color: "#FFFFFF",
+      fontSize: 20,
+      fontWeight: "900",
+    },
+
+    sectionSubtitle: {
+      color: "#8F837C",
+      fontSize: 12,
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+
+    joinRoomButton: {
+      minHeight: 40,
+      justifyContent:
+        "center",
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      backgroundColor:
+        "#F47A24",
+    },
+
+    joinRoomText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    peopleList: {
+      gap: 9,
+    },
+
+    person: {
+      minHeight: 72,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      padding: 9,
+      borderWidth: 1,
+      borderColor: "#302722",
+      borderRadius: 18,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#191512",
+    },
+
+    personProfile: {
+      minWidth: 0,
+      flex: 1,
+      minHeight: 52,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 4,
+      borderRadius: 14,
+      borderCurve: "continuous",
+    },
+
+    personCopy: {
+      minWidth: 0,
+      flex: 1,
+      gap: 3,
+    },
+
+    personAvatar: {
+      width: 42,
+      height: 42,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 15,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#3A271C",
+    },
+
+    personInitials: {
+      color: "#FFAA72",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    personName: {
+      maxWidth: "100%",
+      color: "#F1E8E2",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    personRole: {
+      color: "#8E8179",
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+
+    memberActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+
+    memberAction: {
+      minHeight: 40,
+      justifyContent:
+        "center",
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderColor: "#5B3A27",
+      borderRadius: 12,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#2D2019",
+    },
+
+    memberActionText: {
+      color: "#F1A574",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+
+    memberRemoveAction: {
+      borderColor: "#6A3028",
+      backgroundColor:
+        "#351B17",
+    },
+
+    memberRemoveActionText: {
+      color: "#FF9D87",
+    },
+
+    moderationFeedback: {
+      padding: 13,
+      borderWidth: 1,
+      borderColor: "#315C47",
+      borderRadius: 16,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#172A21",
+    },
+
+    moderationFeedbackText: {
+      color: "#A8E1C2",
+      fontSize: 12,
+      lineHeight: 18,
+      fontWeight: "700",
+    },
+
+    errorCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: "#663527",
+      borderRadius: 17,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#301A14",
+    },
+
+    errorText: {
+      flex: 1,
+      color: "#FFB39D",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    retryButton: {
+      minHeight: 36,
+      justifyContent:
+        "center",
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      backgroundColor:
+        "#6A3526",
+    },
+
+    retryText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "900",
+    },
+
+    endButton: {
+      minHeight: 46,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "#623224",
+      borderRadius: 16,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#2D1813",
+    },
+
+    endButtonText: {
+      color: "#F48F74",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    leaveButton: {
+      minHeight: 46,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "#40352F",
+      borderRadius: 16,
+      borderCurve: "continuous",
+    },
+
+    leaveButtonText: {
+      color: "#C5B8B0",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    chatHeader: {
+      minHeight: 74,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+      paddingTop: 8,
+      borderTopWidth: 1,
+      borderTopColor:
+        "#2B2420",
+    },
+
+    chatTitle: {
+      color: "#FFFFFF",
+      fontSize: 22,
+      fontWeight: "900",
+    },
+
+    chatSubtitle: {
+      color: "#8F837C",
+      fontSize: 12,
+    },
+
+    chatCount: {
+      color: "#E59159",
+      fontSize: 14,
+      fontWeight: "900",
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+
+    emptyChat: {
+      alignItems: "center",
+      gap: 6,
+      paddingVertical: 34,
+    },
+
+    emptyChatTitle: {
+      color: "#CFC3BC",
+      fontSize: 15,
+      fontWeight: "800",
+    },
+
+    emptyChatText: {
+      maxWidth: 280,
+      color: "#7F736C",
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign: "center",
+    },
+
+    messageRow: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      gap: 8,
+      paddingVertical: 6,
+    },
+
+    messageRowMine: {
+      justifyContent:
+        "flex-end",
+    },
+
+    messageAvatar: {
+      width: 30,
+      height: 30,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 11,
+      backgroundColor:
+        "#32231B",
+    },
+
+    messageInitials: {
+      color: "#F5A16A",
+      fontSize: 9,
+      fontWeight: "900",
+    },
+
+    messageContent: {
+      maxWidth: "78%",
+      alignItems:
+        "flex-start",
+      gap: 3,
+    },
+
+    messageContentMine: {
+      alignItems:
+        "flex-end",
+    },
+
+    messageMeta: {
+      maxWidth: "100%",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 7,
+      paddingHorizontal: 3,
+    },
+
+    messageAuthor: {
+      flexShrink: 1,
+      color: "#CDBFB6",
+      fontSize: 10,
+      fontWeight: "800",
+    },
+
+    messageTime: {
+      color: "#6F645D",
+      fontSize: 9,
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+
+    messageBubble: {
+      paddingHorizontal: 13,
+      paddingVertical: 10,
+      borderRadius: 17,
+      borderBottomLeftRadius:
+        5,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#28211D",
+    },
+
+    messageBubbleMine: {
+      borderBottomLeftRadius:
+        17,
+      borderBottomRightRadius:
+        5,
+      backgroundColor:
+        "#F47A24",
+    },
+
+    messageBody: {
+      color: "#F0E6E0",
+      fontSize: 14,
+      lineHeight: 20,
+    },
+
+    messageBodyMine: {
+      color: "#FFFFFF",
+    },
+
+    messageTimeMine: {
+      color: "#70645D",
+      fontSize: 9,
+      paddingHorizontal: 3,
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+
+    messageActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 3,
+    },
+
+    messageAction: {
+      minHeight: 34,
+      justifyContent:
+        "center",
+      paddingHorizontal: 9,
+      borderRadius: 10,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#211B17",
+    },
+
+    messageActionText: {
+      color: "#AFA19A",
+      fontSize: 9,
+      fontWeight: "800",
+    },
+
+    messageRemoveAction: {
+      backgroundColor:
+        "#351B17",
+    },
+
+    messageRemoveActionText: {
+      color: "#FF9D87",
+    },
+
+    reportBackdrop: {
+      flex: 1,
+      justifyContent:
+        "center",
+      padding: 20,
+      backgroundColor:
+        "rgba(8, 6, 5, 0.78)",
+    },
+
+    reportDialog: {
+      gap: 14,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: "#49352A",
+      borderRadius: 24,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#1B1512",
+    },
+
+    reportTitle: {
+      color: "#FFFFFF",
+      fontSize: 22,
+      fontWeight: "900",
+    },
+
+    reportCopy: {
+      color: "#B5A79F",
+      fontSize: 13,
+      lineHeight: 19,
+    },
+
+    reportReasons: {
+      gap: 8,
+    },
+
+    reportReason: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 13,
+      borderWidth: 1,
+      borderColor: "#3A2E28",
+      borderRadius: 14,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#211A17",
+    },
+
+    reportReasonSelected: {
+      borderColor: "#D76B2C",
+      backgroundColor:
+        "#362116",
+    },
+
+    reportRadio: {
+      width: 16,
+      height: 16,
+      borderWidth: 2,
+      borderColor: "#75665D",
+      borderRadius: 8,
+    },
+
+    reportRadioSelected: {
+      borderWidth: 5,
+      borderColor: "#F47A24",
+    },
+
+    reportReasonText: {
+      color: "#EFE5DF",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    reportDialogActions: {
+      flexDirection: "row",
+      justifyContent:
+        "flex-end",
+      gap: 8,
+    },
+
+    reportCancel: {
+      minHeight: 44,
+      justifyContent:
+        "center",
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#2B2420",
+    },
+
+    reportCancelText: {
+      color: "#CFC3BC",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    reportSubmit: {
+      minHeight: 44,
+      justifyContent:
+        "center",
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#C34E31",
+    },
+
+    reportSubmitText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    composer: {
+      minHeight: 72,
+      flexDirection: "row",
+      alignItems: "flex-end",
+      gap: 9,
+      paddingHorizontal: 12,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor:
+        "#2A231F",
+      backgroundColor:
+        "#15110F",
+    },
+
+    inputWrap: {
+      flex: 1,
+      minHeight: 48,
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "#3B312B",
+      borderRadius: 18,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#211B17",
+    },
+
+    messageInput: {
+      maxHeight: 112,
+      minHeight: 46,
+      paddingHorizontal: 14,
+      paddingTop: 12,
+      paddingBottom: 10,
+      color: "#FFFFFF",
+      fontSize: 15,
+      lineHeight: 20,
+    },
+
+    messageCounter: {
+      alignSelf:
+        "flex-end",
+      color: "#8A7C73",
+      fontSize: 9,
+      paddingRight: 11,
+      paddingBottom: 5,
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+
+    sendButton: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 17,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#F47A24",
+    },
+
+    sendText: {
+      color: "#FFFFFF",
+      fontSize: 23,
+      lineHeight: 25,
+      fontWeight: "900",
+    },
+
+    joinComposerButton: {
+      flex: 1,
+      minHeight: 50,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 17,
+      backgroundColor:
+        "#F47A24",
+    },
+
+    joinComposerText: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    readOnlyText: {
+      flex: 1,
+      color: "#948880",
+      fontSize: 13,
+      textAlign: "center",
+      paddingVertical: 14,
+    },
+
+    disabled: {
+      opacity: 0.48,
+    },
+
+    pressed: {
+      opacity: 0.7,
+      transform: [
+        {
+          scale: 0.99,
+        },
+      ],
+    },
+  });

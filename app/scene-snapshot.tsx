@@ -1,5 +1,7 @@
 import {
+  useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -24,13 +26,36 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
+  classifyAnalyticsFailure,
+  recordAnalyticsEvent,
+  recordAnalyticsFailure,
+} from "../lib/analytics";
+
+import {
   publishSnapshot as publishToLocalActivity,
 } from "../lib/canal-session";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
 
 import {
   createSnapshotWithStatus,
   syncSnapshotWithStatus,
 } from "../lib/snapshots";
+
+import {
+  listOwnSnapshotTemplates,
+} from "../lib/snapshot-templates";
+
+import type {
+  SnapshotTemplate,
+  SnapshotTemplateTheme,
+} from "../lib/snapshot-templates";
 
 import {
   getSceneById,
@@ -42,7 +67,71 @@ import type {
   StoredScene,
 } from "../lib/scenes";
 
+import {
+  useAuth,
+} from "../providers/auth-provider";
+
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
+
+type SnapshotPalette = {
+  backgroundColor: string;
+  accentColor: string;
+  secondaryAccentColor: string;
+  textColor: string;
+  mutedTextColor: string;
+};
+
+const CLASSIC_PALETTE: SnapshotPalette = {
+  backgroundColor:
+    "#2B1710",
+  accentColor:
+    "#F47A24",
+  secondaryAccentColor:
+    "#FFB781",
+  textColor:
+    "#FFFFFF",
+  mutedTextColor:
+    "#E2CBC0",
+};
+
+function closeSceneSnapshot(): void {
+  if (router.canGoBack()) {
+    router.back();
+
+    return;
+  }
+
+  router.replace(
+    "/(tabs)/library",
+  );
+}
+
 export default function SceneSnapshotScreen() {
+  const {
+    user,
+  } = useAuth();
+
+  return (
+    <SceneSnapshotContent
+      key={
+        user?.id ??
+        "signed-out"
+      }
+    />
+  );
+}
+
+function SceneSnapshotContent() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const params =
     useLocalSearchParams<{
       sceneId?: string;
@@ -63,8 +152,43 @@ export default function SceneSnapshotScreen() {
     );
 
   const [
+    isLoadingScene,
+    setIsLoadingScene,
+  ] = useState(true);
+
+  const [
+    sceneLoadError,
+    setSceneLoadError,
+  ] = useState<unknown>(
+    null,
+  );
+
+  const [
     caption,
     setCaption,
+  ] = useState("");
+
+  const [
+    templates,
+    setTemplates,
+  ] =
+    useState<
+      SnapshotTemplate[]
+    >([]);
+
+  const [
+    selectedTemplateId,
+    setSelectedTemplateId,
+  ] = useState("");
+
+  const [
+    isLoadingTemplates,
+    setIsLoadingTemplates,
+  ] = useState(true);
+
+  const [
+    templateWarning,
+    setTemplateWarning,
   ] = useState("");
 
   const [
@@ -83,24 +207,142 @@ export default function SceneSnapshotScreen() {
   ] = useState("");
 
   const [
-    publishError,
-    setPublishError,
-  ] = useState("");
+    publishErrorCause,
+    setPublishErrorCause,
+  ] = useState<unknown>(
+    null,
+  );
 
-  useEffect(() => {
-    const load =
+  const publishInFlight =
+    useRef(false);
+
+  const loadScene =
+    useCallback(
       async (): Promise<void> => {
-        if (sceneId) {
+        setIsLoadingScene(
+          true,
+        );
+
+        setSceneLoadError(
+          null,
+        );
+
+        if (!sceneId) {
+          setScene(
+            null,
+          );
+
+          setIsLoadingScene(
+            false,
+          );
+
+          return;
+        }
+
+        try {
           setScene(
             await getSceneById(
               sceneId,
             ),
           );
-        }
-      };
+        } catch (error) {
+          console.error(
+            "Unable to load Scene for Snapshot:",
+            error,
+          );
 
-    void load();
-  }, [sceneId]);
+          const loadFailure =
+            error ??
+            new Error(
+              "Canal could not load this Scene.",
+            );
+
+          setScene(
+            null,
+          );
+
+          setSceneLoadError(
+            () =>
+              loadFailure,
+          );
+        } finally {
+          setIsLoadingScene(
+            false,
+          );
+        }
+      },
+      [
+        sceneId,
+      ],
+    );
+
+  useEffect(() => {
+    void loadScene();
+  }, [
+    loadScene,
+  ]);
+
+  const loadTemplates =
+    useCallback(
+      async (): Promise<void> => {
+        try {
+          setIsLoadingTemplates(
+            true,
+          );
+          setTemplateWarning(
+            "",
+          );
+
+          const nextTemplates =
+            await listOwnSnapshotTemplates();
+
+          setTemplates(
+            nextTemplates,
+          );
+
+          const defaultTemplate =
+            nextTemplates.find(
+              (template) =>
+                template.isDefault,
+            );
+
+          setSelectedTemplateId(
+            (currentId) =>
+              nextTemplates.some(
+                (template) =>
+                  template.id ===
+                  currentId,
+              )
+                ? currentId
+                : defaultTemplate
+                    ?.id ??
+                  "",
+          );
+        } catch (error) {
+          setTemplates([]);
+          setSelectedTemplateId("");
+          setTemplateWarning(
+            error instanceof Error
+              ? error.message
+              : "Canal could not load your Snapshot templates.",
+          );
+        } finally {
+          setIsLoadingTemplates(
+            false,
+          );
+        }
+      },
+      [],
+    );
+
+  useEffect(
+    () => {
+      void loadTemplates();
+    },
+    [
+      loadTemplates,
+    ],
+  );
 
   const share =
     async (): Promise<void> => {
@@ -122,22 +364,60 @@ export default function SceneSnapshotScreen() {
     };
 
   const publish =
-    async (): Promise<void> => {
+    async (
+      refreshBeforePublish = false,
+    ): Promise<void> => {
+      const analyticsAttempt =
+        refreshBeforePublish
+          ? "retry" as const
+          : "initial" as const;
+
       if (
         !scene ||
-        isPublishing
+        published ||
+        publishInFlight.current
       ) {
         return;
       }
 
+      publishInFlight.current =
+        true;
       setIsPublishing(true);
-      setPublishError("");
 
       try {
+        if (
+          refreshBeforePublish
+        ) {
+          const nextStatus =
+            await refreshConnectivity();
+
+          if (
+            nextStatus ===
+            "offline"
+          ) {
+            void recordAnalyticsFailure(
+              "snapshot_publish",
+              "offline",
+              analyticsAttempt,
+            );
+
+            return;
+          }
+        }
+
+        setPublishErrorCause(
+          null,
+        );
+
         const result =
           pendingSnapshotId
             ? await syncSnapshotWithStatus(
                 pendingSnapshotId,
+                {
+                  templateId:
+                    selectedTemplateId ||
+                    null,
+                },
               )
             : await createSnapshotWithStatus({
                 sceneId:
@@ -155,12 +435,24 @@ export default function SceneSnapshotScreen() {
 
                 visibility:
                   "public",
+
+                templateId:
+                  selectedTemplateId ||
+                  undefined,
               });
 
         if (!result.value) {
-          setPublishError(
-            result.warning ||
-            "The pending Snapshot could not be found. Try posting again.",
+          void recordAnalyticsFailure(
+            "snapshot_publish",
+            "service",
+            analyticsAttempt,
+          );
+
+          setPublishErrorCause(
+            new Error(
+              result.warning ||
+              "The pending Snapshot could not be found. Try posting again.",
+            ),
           );
 
           setPendingSnapshotId("");
@@ -172,13 +464,24 @@ export default function SceneSnapshotScreen() {
           result.cloudStatus !==
           "synced"
         ) {
+          void recordAnalyticsFailure(
+            "snapshot_publish",
+            connectivityStatus ===
+              "offline"
+              ? "offline"
+              : "service",
+            analyticsAttempt,
+          );
+
           setPendingSnapshotId(
             result.value.id,
           );
 
-          setPublishError(
-            result.warning ||
-            "The Snapshot is saved on this device, but it has not been published to Canal.",
+          setPublishErrorCause(
+            new Error(
+              result.warning ||
+              "The Snapshot is saved on this device, but it has not been published to Canal.",
+            ),
           );
 
           return;
@@ -186,6 +489,16 @@ export default function SceneSnapshotScreen() {
 
         setPendingSnapshotId("");
         setPublished(true);
+        setPublishErrorCause(
+          null,
+        );
+
+        void recordAnalyticsEvent({
+          name:
+            "snapshot_published",
+          attempt:
+            analyticsAttempt,
+        });
 
         /*
          * Keep the existing local Activity card as an
@@ -230,17 +543,88 @@ export default function SceneSnapshotScreen() {
           );
         }
       } catch (error) {
-        setPublishError(
-          error instanceof Error
-            ? error.message
-            : "Canal could not publish this Snapshot.",
+        void recordAnalyticsFailure(
+          "snapshot_publish",
+          classifyAnalyticsFailure(
+            error,
+          ),
+          analyticsAttempt,
+        );
+
+        const publishFailure =
+          error ??
+          new Error(
+            "Canal could not publish this Snapshot.",
+          );
+
+        setPublishErrorCause(
+          () =>
+            publishFailure,
         );
       } finally {
+        publishInFlight.current =
+          false;
+
         setIsPublishing(false);
       }
     };
 
-  if (!scene) {
+  const sceneLoadIssue =
+    sceneLoadError
+      ? classifyRecoveryIssue(
+          sceneLoadError,
+          {
+            service:
+              "canal",
+          },
+        )
+      : null;
+
+  const publishIssue =
+    publishErrorCause
+      ? classifyRecoveryIssue(
+          publishErrorCause,
+          {
+            service:
+              "canal",
+            connectivityStatus,
+          },
+        )
+      : null;
+
+  const recoverPublish =
+    async (): Promise<void> => {
+      if (
+        publishIssue?.action ===
+        "sign-in"
+      ) {
+        router.push(
+          "/login" as never,
+        );
+
+        return;
+      }
+
+    await publish(
+      true,
+    );
+  };
+
+  const selectedTemplate =
+    templates.find(
+      (template) =>
+        template.id ===
+        selectedTemplateId,
+    );
+
+  const palette =
+    selectedTemplate
+      ? templatePalette(
+          selectedTemplate.theme,
+        )
+      : CLASSIC_PALETTE;
+
+  if (isLoadingScene) {
     return (
       <SafeAreaView
         style={styles.safeArea}
@@ -250,7 +634,107 @@ export default function SceneSnapshotScreen() {
             styles.center
           }
         >
-          <ActivityIndicator />
+          <ActivityIndicator
+            size="large"
+            color="#F47A24"
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (sceneLoadIssue) {
+    return (
+      <SafeAreaView
+        style={styles.safeArea}
+      >
+        <View
+          style={styles.center}
+        >
+          <View
+            style={
+              styles.recovery
+            }
+          >
+            <RecoveryNotice
+              issue={
+                sceneLoadIssue
+              }
+              onAction={
+                loadScene
+              }
+            />
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={
+              closeSceneSnapshot
+            }
+            style={({ pressed }) => [
+              styles.stateButton,
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.stateButtonText
+              }
+            >
+              Return to Library
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!scene) {
+    return (
+      <SafeAreaView
+        style={styles.safeArea}
+      >
+        <View
+          style={styles.center}
+        >
+          <Text
+            style={
+              styles.stateTitle
+            }
+          >
+            Scene not found
+          </Text>
+
+          <Text
+            selectable
+            style={
+              styles.stateText
+            }
+          >
+            It may have been removed from
+            your library.
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={
+              closeSceneSnapshot
+            }
+            style={({ pressed }) => [
+              styles.stateButton,
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.stateButtonText
+              }
+            >
+              Return to Library
+            </Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -267,13 +751,9 @@ export default function SceneSnapshotScreen() {
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace("/(tabs)");
-            }
-          }}
+          onPress={
+            closeSceneSnapshot
+          }
           style={({ pressed }) => [
             styles.backButton,
 
@@ -302,6 +782,7 @@ export default function SceneSnapshotScreen() {
       </View>
 
       <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={
           styles.content
         }
@@ -310,49 +791,103 @@ export default function SceneSnapshotScreen() {
         }
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.snapshot}>
-          <View style={styles.waveOne} />
-          <View style={styles.waveTwo} />
-          <View style={styles.waveThree} />
+        <View
+          style={[
+            styles.snapshot,
+            {
+              backgroundColor:
+                palette.backgroundColor,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.waveOne,
+              {
+                backgroundColor:
+                  palette.accentColor,
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.waveTwo,
+              {
+                backgroundColor:
+                  palette.accentColor,
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.waveThree,
+              {
+                backgroundColor:
+                  palette.secondaryAccentColor,
+              },
+            ]}
+          />
 
           <Text
-            style={
-              styles.snapshotBrand
-            }
+            style={[
+              styles.snapshotBrand,
+              {
+                color:
+                  palette.textColor,
+              },
+            ]}
           >
-            canal
+            {selectedTemplate
+              ?.brandLabel ||
+              "canal"}
           </Text>
 
           <View style={styles.snapshotBottom}>
             <Text
-              style={
-                styles.snapshotActivity
-              }
+              style={[
+                styles.snapshotActivity,
+                {
+                  color:
+                    palette.secondaryAccentColor,
+                },
+              ]}
             >
               {scene.activity}
             </Text>
 
             <Text
-              style={
-                styles.snapshotName
-              }
+              style={[
+                styles.snapshotName,
+                {
+                  color:
+                    palette.textColor,
+                },
+              ]}
             >
               {scene.name}
             </Text>
 
             <Text
-              style={
-                styles.snapshotMood
-              }
+              style={[
+                styles.snapshotMood,
+                {
+                  color:
+                    palette.mutedTextColor,
+                },
+              ]}
             >
               {scene.emotions ||
                 `${scene.energy} energy`}
             </Text>
 
             <Text
-              style={
-                styles.snapshotMeta
-              }
+              style={[
+                styles.snapshotMeta,
+                {
+                  color:
+                    palette.mutedTextColor,
+                },
+              ]}
             >
               {scene.tracks.length} tracks •{" "}
               {sceneDurationMinutes(
@@ -363,9 +898,13 @@ export default function SceneSnapshotScreen() {
 
             <Text
               numberOfLines={2}
-              style={
-                styles.snapshotArtists
-              }
+              style={[
+                styles.snapshotArtists,
+                {
+                  color:
+                    palette.mutedTextColor,
+                },
+              ]}
             >
               {scene.artists ||
                 scene.tracks
@@ -378,6 +917,135 @@ export default function SceneSnapshotScreen() {
             </Text>
           </View>
         </View>
+
+        <View
+          style={
+            styles.templateHeader
+          }
+        >
+          <View
+            style={
+              styles.templateHeaderCopy
+            }
+          >
+            <Text
+              style={
+                styles.templateLabel
+              }
+            >
+              Snapshot style
+            </Text>
+
+            <Text
+              style={
+                styles.templateDescription
+              }
+            >
+              Pick an accessible look for this post.
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              router.push(
+                "/snapshot-templates" as never,
+              )
+            }
+            style={({
+              pressed,
+            }) => [
+              styles.manageTemplatesButton,
+              pressed &&
+                styles.pressed,
+            ]}
+          >
+            <Text
+              style={
+                styles.manageTemplatesText
+              }
+            >
+              Manage
+            </Text>
+          </Pressable>
+        </View>
+
+        {isLoadingTemplates ? (
+          <ActivityIndicator
+            color="#F47A24"
+            size="small"
+            style={
+              styles.templateLoader
+            }
+          />
+        ) : (
+          <ScrollView
+            horizontal
+            accessibilityRole="radiogroup"
+            contentContainerStyle={
+              styles.templateChoices
+            }
+            showsHorizontalScrollIndicator={
+              false
+            }
+          >
+            <TemplateChoice
+              brandLabel="canal"
+              label="Canal Classic"
+              palette={
+                CLASSIC_PALETTE
+              }
+              selected={
+                !selectedTemplateId
+              }
+              onPress={() =>
+                setSelectedTemplateId(
+                  "",
+                )
+              }
+            />
+
+            {templates.map(
+              (template) => (
+                <TemplateChoice
+                  key={
+                    template.id
+                  }
+                  brandLabel={
+                    template.brandLabel
+                  }
+                  label={
+                    template.name
+                  }
+                  palette={templatePalette(
+                    template.theme,
+                  )}
+                  selected={
+                    template.id ===
+                    selectedTemplateId
+                  }
+                  onPress={() =>
+                    setSelectedTemplateId(
+                      template.id,
+                    )
+                  }
+                />
+              ),
+            )}
+          </ScrollView>
+        )}
+
+        {templateWarning ? (
+          <Text
+            accessibilityRole="alert"
+            selectable
+            style={
+              styles.templateWarning
+            }
+          >
+            {templateWarning} Canal Classic is still available.
+          </Text>
+        ) : null}
 
         <Text style={styles.captionLabel}>
           Caption
@@ -459,22 +1127,23 @@ export default function SceneSnapshotScreen() {
           </Pressable>
         </View>
 
-        {publishError ? (
+        {publishIssue ? (
           <View
-            accessibilityRole="alert"
-            style={styles.error}
+            style={
+              styles.publishRecovery
+            }
           >
-            <Text
-              style={styles.errorTitle}
-            >
-              Not published yet
-            </Text>
-
-            <Text
-              style={styles.errorText}
-            >
-              {publishError}
-            </Text>
+            <RecoveryNotice
+              busy={
+                isPublishing
+              }
+              issue={
+                publishIssue
+              }
+              onAction={
+                recoverPublish
+              }
+            />
           </View>
         ) : null}
 
@@ -521,6 +1190,135 @@ export default function SceneSnapshotScreen() {
   );
 }
 
+function TemplateChoice(
+  props: {
+    label: string;
+    brandLabel: string;
+    palette: SnapshotPalette;
+    selected: boolean;
+    onPress: () => void;
+  },
+) {
+  return (
+    <Pressable
+      accessibilityLabel={`${props.label} Snapshot style`}
+      accessibilityRole="radio"
+      accessibilityState={{
+        checked:
+          props.selected,
+      }}
+      onPress={
+        props.onPress
+      }
+      style={({
+        pressed,
+      }) => [
+        styles.templateChoice,
+        props.selected &&
+          styles.selectedTemplateChoice,
+        pressed &&
+          styles.pressed,
+      ]}
+    >
+      <View
+        style={[
+          styles.templateChoiceSwatch,
+          {
+            backgroundColor:
+              props.palette
+                .backgroundColor,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.templateChoiceAccent,
+            {
+              backgroundColor:
+                props.palette
+                  .accentColor,
+            },
+          ]}
+        />
+
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.templateChoiceBrand,
+            {
+              color:
+                props.palette
+                  .textColor,
+            },
+          ]}
+        >
+          {props.brandLabel}
+        </Text>
+      </View>
+
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.templateChoiceLabel,
+          props.selected &&
+            styles.selectedTemplateChoiceLabel,
+        ]}
+      >
+        {props.label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function templatePalette(
+  theme: SnapshotTemplateTheme,
+): SnapshotPalette {
+  switch (theme) {
+    case "midnight":
+      return {
+        backgroundColor:
+          "#101B34",
+        accentColor:
+          "#79A7FF",
+        secondaryAccentColor:
+          "#B9D0FF",
+        textColor:
+          "#F6F8FF",
+        mutedTextColor:
+          "#D0DAEF",
+      };
+
+    case "paper":
+      return {
+        backgroundColor:
+          "#FFF4E8",
+        accentColor:
+          "#C64B2D",
+        secondaryAccentColor:
+          "#E89C76",
+        textColor:
+          "#2B2520",
+        mutedTextColor:
+          "#66584E",
+      };
+
+    case "sunset":
+    default:
+      return {
+        backgroundColor:
+          "#3E1734",
+        accentColor:
+          "#FF9A50",
+        secondaryAccentColor:
+          "#FFD0A8",
+        textColor:
+          "#FFF8F2",
+        mutedTextColor:
+          "#F2D9E7",
+      };
+  }
+}
+
 const styles =
   StyleSheet.create({
     safeArea: {
@@ -535,6 +1333,47 @@ const styles =
         "center",
       justifyContent:
         "center",
+      gap: 14,
+      paddingHorizontal: 20,
+    },
+
+    recovery: {
+      width: "100%",
+      maxWidth: 520,
+    },
+
+    stateTitle: {
+      color: "#1B1B1B",
+      fontSize: 24,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+
+    stateText: {
+      color: "#6E6660",
+      fontSize: 14,
+      lineHeight: 20,
+      textAlign: "center",
+    },
+
+    stateButton: {
+      minHeight: 48,
+      minWidth: 190,
+      alignItems: "center",
+      justifyContent:
+        "center",
+      paddingHorizontal: 20,
+      borderRadius: 16,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#F47A24",
+    },
+
+    stateButtonText: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "900",
     },
 
     header: {
@@ -681,6 +1520,118 @@ const styles =
       marginBottom: 7,
     },
 
+    templateHeader: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      gap: 14,
+      marginTop: 18,
+    },
+
+    templateHeaderCopy: {
+      flex: 1,
+      gap: 2,
+    },
+
+    templateLabel: {
+      color: "#5E5752",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    templateDescription: {
+      color: "#8B837C",
+      fontSize: 11,
+      lineHeight: 16,
+    },
+
+    manageTemplatesButton: {
+      minHeight: 44,
+      justifyContent:
+        "center",
+      paddingHorizontal: 8,
+    },
+
+    manageTemplatesText: {
+      color: "#B9500B",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    templateLoader: {
+      marginVertical: 18,
+    },
+
+    templateChoices: {
+      gap: 10,
+      paddingVertical: 10,
+      paddingRight: 20,
+    },
+
+    templateChoice: {
+      width: 116,
+      gap: 7,
+      borderWidth: 1,
+      borderColor:
+        "#E5DDD7",
+      borderRadius: 16,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFFFFF",
+      padding: 8,
+    },
+
+    selectedTemplateChoice: {
+      borderColor:
+        "#F47A24",
+      backgroundColor:
+        "#FFF4EA",
+    },
+
+    templateChoiceSwatch: {
+      height: 64,
+      justifyContent:
+        "space-between",
+      borderRadius: 11,
+      borderCurve:
+        "continuous",
+      overflow: "hidden",
+      padding: 8,
+    },
+
+    templateChoiceAccent: {
+      width: 34,
+      height: 7,
+      borderRadius: 4,
+    },
+
+    templateChoiceBrand: {
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.5,
+    },
+
+    templateChoiceLabel: {
+      color: "#6E6660",
+      fontSize: 11,
+      fontWeight: "800",
+    },
+
+    selectedTemplateChoiceLabel: {
+      color: "#B9500B",
+    },
+
+    templateWarning: {
+      color: "#8B4D22",
+      fontSize: 11,
+      lineHeight: 16,
+      marginBottom: 4,
+    },
+
     captionInput: {
       minHeight: 94,
       borderWidth: 1,
@@ -747,28 +1698,8 @@ const styles =
       marginTop: 14,
     },
 
-    error: {
-      backgroundColor:
-        "#FFF0EA",
-      borderColor:
-        "#E9B29D",
-      borderWidth: 1,
-      borderRadius: 17,
-      padding: 14,
+    publishRecovery: {
       marginTop: 14,
-    },
-
-    errorTitle: {
-      color: "#9A3A1E",
-      fontSize: 12,
-      fontWeight: "900",
-    },
-
-    errorText: {
-      color: "#7D4938",
-      fontSize: 12,
-      lineHeight: 18,
-      marginTop: 5,
     },
 
     successText: {

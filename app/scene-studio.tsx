@@ -30,6 +30,22 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../hooks/use-reconnect-reload";
+
+import type {
+  RecoveryIssue,
+} from "../lib/recovery-issue";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
+
+import {
   clearSceneStudioDraft,
   DEFAULT_SCENE_STUDIO_DRAFT,
   generateSceneFromSpotify,
@@ -38,7 +54,9 @@ import {
   SCENE_ARC_OPTIONS,
   SCENE_ENERGY_OPTIONS,
   SCENE_FAMILIARITY_OPTIONS,
+  SCENE_GENRE_OPTIONS,
   SCENE_MOOD_OPTIONS,
+  saveGeneratedSceneToLibrary,
   writeGeneratedScenePreview,
   writeSceneStudioDraft,
 } from "../lib/scene-studio";
@@ -53,12 +71,21 @@ import type {
 } from "../lib/scene-studio";
 
 import {
-  readSpotifyLibrarySnapshot,
+  getLatestSpotifyLibrarySnapshot,
+  syncSpotifyLibrary,
 } from "../lib/spotify-library";
 
 import type {
   SpotifyLibrarySnapshot,
 } from "../lib/spotify-library";
+
+import {
+  createPlayerSession,
+} from "../lib/canal-player";
+
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
 
 const DURATION_OPTIONS = [
   15,
@@ -236,10 +263,22 @@ function freshSceneStudioDraft(): SceneStudioDraft {
     moods: [
       ...DEFAULT_SCENE_STUDIO_DRAFT.moods,
     ],
+
+    preferredGenres: [
+      ...DEFAULT_SCENE_STUDIO_DRAFT.preferredGenres,
+    ],
   };
 }
 
 export default function SceneStudioScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const sceneModeParams =
     useLocalSearchParams<{
       mode?: string;
@@ -258,6 +297,10 @@ export default function SceneStudioScreen() {
 
       moods: [
         ...DEFAULT_SCENE_STUDIO_DRAFT.moods,
+      ],
+
+      preferredGenres: [
+        ...DEFAULT_SCENE_STUDIO_DRAFT.preferredGenres,
       ],
     });
 
@@ -280,10 +323,31 @@ export default function SceneStudioScreen() {
   ] = useState(false);
 
   const [
+    syncingLibrary,
+    setSyncingLibrary,
+  ] = useState(false);
+
+  const [
     errorMessage,
     setErrorMessage,
   ] =
     useState<string | null>(
+      null,
+    );
+
+  const [
+    libraryWarning,
+    setLibraryWarning,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    libraryIssue,
+    setLibraryIssue,
+  ] =
+    useState<RecoveryIssue | null>(
       null,
     );
 
@@ -305,7 +369,7 @@ export default function SceneStudioScreen() {
 
             const [
               nextDraft,
-              storedSnapshot,
+              latestLibrary,
             ] =
               await Promise.all([
                 shouldResumeSceneDraft
@@ -314,7 +378,7 @@ export default function SceneStudioScreen() {
                       freshSceneStudioDraft(),
                     ),
 
-                readSpotifyLibrarySnapshot(),
+                getLatestSpotifyLibrarySnapshot(),
               ]);
 
             if (!active) {
@@ -326,7 +390,17 @@ export default function SceneStudioScreen() {
             );
 
             setSnapshot(
-              storedSnapshot,
+              latestLibrary.snapshot,
+            );
+
+            setLibraryWarning(
+              latestLibrary.warning ??
+                null,
+            );
+
+            setLibraryIssue(
+              latestLibrary.issue ??
+                null,
             );
           } catch (error) {
             if (active) {
@@ -353,6 +427,78 @@ export default function SceneStudioScreen() {
     ]),
   );
 
+  const retrySpotifyLibrary =
+    useCallback(
+      async (): Promise<void> => {
+        setSyncingLibrary(
+          true,
+        );
+
+        setLibraryIssue(
+          null,
+        );
+
+        setLibraryWarning(
+          null,
+        );
+
+        try {
+          const updated =
+            await syncSpotifyLibrary();
+
+          setSnapshot(
+            updated,
+          );
+        } catch (error) {
+          setLibraryIssue(
+            classifyRecoveryIssue(
+              error,
+              {
+                service:
+                  "spotify",
+                connectivityStatus,
+              },
+            ),
+          );
+        } finally {
+          setSyncingLibrary(
+            false,
+          );
+        }
+      },
+      [
+        connectivityStatus,
+      ],
+    );
+
+  useReconnectReload(
+    retrySpotifyLibrary,
+  );
+
+  const recoverSpotifyLibrary =
+    async (): Promise<void> => {
+      if (
+        libraryIssue?.action ===
+        "reconnect-spotify"
+      ) {
+        router.push(
+          "/music-services",
+        );
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus !==
+        "offline"
+      ) {
+        await retrySpotifyLibrary();
+      }
+    };
+
   const totalImportedTracks =
     useMemo(() => {
       if (!snapshot) {
@@ -367,6 +513,8 @@ export default function SceneStudioScreen() {
           ...snapshot.topTracks,
           ...snapshot.savedTracks,
           ...snapshot.recentTracks,
+          ...snapshot.playlistTracks,
+          ...snapshot.discoveryTracks,
         ]
       ) {
         if (track.id) {
@@ -376,6 +524,21 @@ export default function SceneStudioScreen() {
 
       return ids.size;
     }, [snapshot]);
+
+  const genreOptions =
+    useMemo(
+      () =>
+        Array.from(
+          new Set([
+            ...(snapshot?.topGenres.map(
+              (genre) =>
+                genre.name,
+            ) ?? []),
+            ...SCENE_GENRE_OPTIONS,
+          ]),
+        ).slice(0, 18),
+      [snapshot],
+    );
 
   const updateDraft = <
     Key extends keyof SceneStudioDraft,
@@ -454,6 +617,47 @@ export default function SceneStudioScreen() {
     );
   };
 
+  const toggleGenre = (
+    genre: string,
+  ): void => {
+    setErrorMessage(null);
+
+    setDraft(
+      (current) => {
+        const selected =
+          current.preferredGenres.includes(
+            genre,
+          );
+
+        if (selected) {
+          return {
+            ...current,
+            preferredGenres:
+              current.preferredGenres.filter(
+                (item) =>
+                  item !== genre,
+              ),
+          };
+        }
+
+        if (
+          current.preferredGenres.length >=
+          5
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          preferredGenres: [
+            ...current.preferredGenres,
+            genre,
+          ],
+        };
+      },
+    );
+  };
+
   const generateScene =
     async (): Promise<void> => {
       if (generating) {
@@ -465,19 +669,37 @@ export default function SceneStudioScreen() {
 
       try {
         /*
-         * Scene Studio does not sync Spotify.
-         *
-         * It only reads the snapshot that
-         * should already have been created
-         * during connection or in Settings.
+         * Refresh only when the snapshot is
+         * stale. The helper deduplicates the
+         * request and falls back to cached
+         * listening data when offline.
          */
+        const latestLibrary =
+          await getLatestSpotifyLibrarySnapshot();
+
         const latestSnapshot =
-          snapshot ??
-          (await readSpotifyLibrarySnapshot());
+          latestLibrary.snapshot ??
+          snapshot;
+
+        setLibraryWarning(
+          latestLibrary.warning ??
+            null,
+        );
+
+        setLibraryIssue(
+          latestLibrary.issue ??
+            null,
+        );
 
         if (!latestSnapshot) {
+          if (
+            latestLibrary.issue
+          ) {
+            return;
+          }
+
           throw new Error(
-            "Your Spotify Library is not ready. Open Settings, connect Spotify, and sync the library before creating a Scene.",
+            "Your Spotify Library is not ready. Open Music Services, connect Spotify, and sync the library before creating a Scene.",
           );
         }
 
@@ -489,6 +711,8 @@ export default function SceneStudioScreen() {
             ...latestSnapshot.topTracks,
             ...latestSnapshot.savedTracks,
             ...latestSnapshot.recentTracks,
+            ...latestSnapshot.playlistTracks,
+            ...latestSnapshot.discoveryTracks,
           ]
         ) {
           if (track.id) {
@@ -501,8 +725,14 @@ export default function SceneStudioScreen() {
         if (
           latestTrackIds.size < 3
         ) {
+          if (
+            latestLibrary.issue
+          ) {
+            return;
+          }
+
           throw new Error(
-            "Canal needs at least three imported Spotify tracks. Open Settings and sync your Spotify Library again.",
+            "Canal did not find enough music yet. Listen to or save a few tracks in Spotify, then sync again.",
           );
         }
 
@@ -537,13 +767,28 @@ export default function SceneStudioScreen() {
           result,
         );
 
+        const savedScene =
+          await saveGeneratedSceneToLibrary(
+            result,
+          );
+
+        await createPlayerSession(
+          savedScene,
+        );
+
         setSnapshot(
           latestSnapshot,
         );
 
-        router.push(
-          "/scene-preview",
-        );
+        router.replace({
+          pathname:
+            "/now-playing",
+
+          params: {
+            sceneId:
+              savedScene.id,
+          },
+        });
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -635,7 +880,9 @@ export default function SceneStudioScreen() {
         }
         keyboardShouldPersistTaps="handled"
       >
-        {snapshot ? (
+        {snapshot &&
+        totalImportedTracks >=
+          3 ? (
           <View style={styles.spotifyCard}>
             <View style={styles.spotifyMark}>
               <Text
@@ -676,29 +923,41 @@ export default function SceneStudioScreen() {
               </Text>
             </View>
           </View>
-        ) : (
+        ) : libraryIssue ? null : (
           <View style={styles.missingCard}>
             <Text
               style={styles.missingTitle}
             >
-              Spotify Library not ready
+              {snapshot
+                ? "We didn’t find enough music yet"
+                : "Spotify Library not ready"}
             </Text>
 
             <Text
               style={styles.missingText}
             >
-              Connect and sync Spotify in
-              Settings before creating a
-              Scene. Scene Studio does not
-              connect or sync music accounts.
+              {snapshot
+                ? "Listen to or save a few tracks in Spotify, then sync again so Canal has enough music to shape a Scene."
+                : "Connect and sync Spotify before creating a Scene. Canal needs a taste snapshot with at least three tracks."}
             </Text>
 
             <Pressable
               accessibilityRole="button"
+              accessibilityState={{
+                busy:
+                  syncingLibrary,
+                disabled:
+                  syncingLibrary,
+              }}
+              disabled={
+                syncingLibrary
+              }
               onPress={() =>
-                router.push(
-                  "/settings",
-                )
+                snapshot
+                  ? void retrySpotifyLibrary()
+                  : router.push(
+                      "/music-services",
+                    )
               }
               style={({ pressed }) => [
                 styles.primaryButton,
@@ -712,11 +971,46 @@ export default function SceneStudioScreen() {
                   styles.primaryButtonText
                 }
               >
-                Open Settings
+                {syncingLibrary
+                  ? "Syncing Spotify…"
+                  : snapshot
+                    ? "Sync Spotify again"
+                    : "Open Music Services"}
               </Text>
             </Pressable>
           </View>
         )}
+
+        {libraryIssue ? (
+          <RecoveryNotice
+            busy={
+              syncingLibrary
+            }
+            issue={
+              libraryIssue
+            }
+            onAction={
+              recoverSpotifyLibrary
+            }
+          />
+        ) : libraryWarning ? (
+          <View
+            accessibilityLiveRegion="polite"
+            accessibilityRole="alert"
+            style={
+              styles.warningCard
+            }
+          >
+            <Text
+              selectable
+              style={
+                styles.warningText
+              }
+            >
+              {libraryWarning}
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.sectionCard}>
           <SectionTitle
@@ -794,6 +1088,42 @@ export default function SceneStudioScreen() {
               ),
             )}
           </View>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <SectionTitle
+            title="Genres"
+            subtitle="Optional. Choose up to five. Your latest Spotify genres appear first."
+          />
+
+          <View style={styles.chipWrap}>
+            {genreOptions.map(
+              (genre) => (
+                <ChoiceChip
+                  key={genre}
+                  label={genre}
+                  selected={
+                    draft.preferredGenres.includes(
+                      genre,
+                    )
+                  }
+                  onPress={() =>
+                    toggleGenre(
+                      genre,
+                    )
+                  }
+                />
+              ),
+            )}
+          </View>
+
+          <Text
+            style={
+              styles.characterCount
+            }
+          >
+            {draft.preferredGenres.length}/5 selected
+          </Text>
         </View>
 
         <View style={styles.sectionCard}>
@@ -988,12 +1318,22 @@ export default function SceneStudioScreen() {
         </View>
 
         {errorMessage ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorTitle}>
+          <View
+            accessibilityLiveRegion="polite"
+            accessibilityRole="alert"
+            style={styles.errorBox}
+          >
+            <Text
+              selectable
+              style={styles.errorTitle}
+            >
               Scene generation error
             </Text>
 
-            <Text style={styles.errorText}>
+            <Text
+              selectable
+              style={styles.errorText}
+            >
               {errorMessage}
             </Text>
           </View>
@@ -1001,14 +1341,33 @@ export default function SceneStudioScreen() {
 
         <Pressable
           accessibilityRole="button"
-          disabled={generating}
+          accessibilityState={{
+            busy:
+              generating,
+            disabled:
+              generating ||
+              !snapshot ||
+              totalImportedTracks <
+                3,
+          }}
+          disabled={
+            generating ||
+            !snapshot ||
+            totalImportedTracks <
+              3
+          }
           onPress={() =>
             void generateScene()
           }
           style={({ pressed }) => [
             styles.generateButton,
 
-            generating &&
+            (
+              generating ||
+              !snapshot ||
+              totalImportedTracks <
+                3
+            ) &&
               styles.disabledButton,
 
             pressed &&
@@ -1026,7 +1385,7 @@ export default function SceneStudioScreen() {
                   styles.generateButtonText
                 }
               >
-                Generate Scene
+                Create & Play Scene
               </Text>
 
               <Text
@@ -1034,7 +1393,7 @@ export default function SceneStudioScreen() {
                   styles.generateButtonSubtext
                 }
               >
-                Build a sequenced soundtrack
+                Save it and open the player
               </Text>
             </>
           )}
@@ -1179,6 +1538,19 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 6,
     marginBottom: 15,
+  },
+
+  warningCard: {
+    borderRadius: 16,
+    borderCurve: "continuous",
+    backgroundColor: "#FFF2CC",
+    padding: 14,
+  },
+
+  warningText: {
+    color: "#6B5200",
+    fontSize: 13,
+    lineHeight: 19,
   },
 
   sectionCard: {

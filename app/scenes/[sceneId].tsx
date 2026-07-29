@@ -1,5 +1,7 @@
 import {
   useCallback,
+  useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -26,9 +28,31 @@ import {
 } from "react-native-safe-area-context";
 
 import {
-  addSpotifyItemsToPlaylist,
-  createSpotifyPlaylist,
-} from "../../lib/spotify-api";
+  RecoveryNotice,
+} from "../../components/recovery-notice";
+
+import {
+  classifyAnalyticsFailure,
+  recordAnalyticsEvent,
+  recordAnalyticsFailure,
+} from "../../lib/analytics";
+
+import {
+  classifyRecoveryIssue,
+} from "../../lib/recovery-issue";
+
+import {
+  captureScenePlaylistExportAccount,
+  recordScenePlaylistExport,
+} from "../../lib/playlist-exports";
+
+import {
+  removeSavedSceneCompletely,
+} from "../../lib/saved-scene-management";
+
+import {
+  exportSceneToMusicProvider,
+} from "../../lib/scene-music-export";
 
 import {
   deleteScene,
@@ -44,15 +68,30 @@ import type {
 } from "../../lib/scenes";
 
 import {
+  canonicalSpotifyTrackUrl,
+} from "../../lib/spotify-track-links";
+
+import {
   createPlayerSession,
 } from "../../lib/canal-player";
+
+import {
+  useAuth,
+} from "../../providers/auth-provider";
+
+import {
+  useConnectivity,
+} from "../../providers/connectivity-provider";
 
 async function openTrack(
   url?: string,
   uri?: string,
 ): Promise<void> {
   const target =
-    url || uri;
+    canonicalSpotifyTrackUrl(
+      url,
+      uri,
+    );
 
   if (!target) {
     return;
@@ -71,6 +110,19 @@ async function openTrack(
 }
 
 export default function SceneDetailScreen() {
+  const {
+    user,
+  } =
+    useAuth();
+
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const params =
     useLocalSearchParams<{
       sceneId?: string;
@@ -101,9 +153,25 @@ export default function SceneDetailScreen() {
   ] = useState(false);
 
   const [
+    checkingConnection,
+    setCheckingConnection,
+  ] = useState(false);
+
+  const [
+    exportErrorCause,
+    setExportErrorCause,
+  ] =
+    useState<unknown>(
+      null,
+    );
+
+  const [
     message,
     setMessage,
   ] = useState("");
+
+  const exportInFlight =
+    useRef(false);
 
   const load =
     useCallback(() => {
@@ -210,79 +278,234 @@ export default function SceneDetailScreen() {
     };
 
   const exportToSpotify =
-    async (): Promise<void> => {
-      if (!scene) {
+    async (
+      confirmedConnectivityStatus =
+        connectivityStatus,
+      attempt:
+        | "initial"
+        | "retry" =
+          "initial",
+    ): Promise<void> => {
+      if (
+        !scene ||
+        exporting ||
+        checkingConnection ||
+        exportInFlight.current
+      ) {
         return;
       }
 
-      const uris =
-        Array.from(
-          new Set(
-            scene.tracks
-              .map(
-                (track) =>
-                  track.spotifyUri,
-              )
-              .filter(
-                (
-                  uri,
-                ): uri is string =>
-                  typeof uri ===
-                    "string" &&
-                  uri.startsWith(
-                    "spotify:track:",
-                  ),
-              ),
+      if (
+        confirmedConnectivityStatus ===
+        "offline"
+      ) {
+        setMessage("");
+
+        setExportErrorCause(
+          new Error(
+            "Canal is offline.",
           ),
         );
 
-      if (uris.length === 0) {
+        return;
+      }
+
+      exportInFlight.current =
+        true;
+
+      setExporting(true);
+      setMessage("");
+      setExportErrorCause(
+        null,
+      );
+
+      try {
+        const exportAccount =
+          await captureScenePlaylistExportAccount();
+
+        const exportResult =
+          await exportSceneToMusicProvider(
+            scene,
+            {
+              providerId:
+                "spotify",
+              description:
+                `A private Scene created in Canal for ${scene.activity.toLowerCase()}.`,
+            },
+          );
+
+        void recordAnalyticsEvent({
+          name:
+            "scene_export_completed",
+          attempt,
+        });
+
+        let historyMessage =
+          "";
+
+        try {
+          await recordScenePlaylistExport(
+            scene,
+            {
+              playlistId:
+                exportResult
+                  .collectionId,
+              playlistUrl:
+                exportResult
+                  .collectionUrl,
+              trackCount:
+                exportResult
+                  .exportedTrackCount,
+            },
+            {
+              sourceOwnerId:
+                typeof scene
+                  .sourceOwnerId ===
+                  "string"
+                  ? scene
+                      .sourceOwnerId
+                  : null,
+              sourceSceneId:
+                typeof scene
+                  .sourceSceneId ===
+                  "string"
+                  ? scene
+                      .sourceSceneId
+                  : scene.id,
+              account:
+                exportAccount,
+            },
+          );
+        } catch (
+          historyError
+        ) {
+          console.warn(
+            "Canal created the Spotify playlist but could not save its profile history:",
+            historyError,
+          );
+
+          historyMessage =
+            " Its Canal history could not be saved.";
+        }
+
         setMessage(
-          "This Scene does not contain exportable Spotify tracks.",
+          `Created a Spotify playlist with ${exportResult.exportedTrackCount} tracks.${historyMessage}`,
+        );
+
+        setExportErrorCause(
+          null,
+        );
+
+        const url =
+          exportResult
+            .collectionUrl;
+
+        if (url) {
+          try {
+            await openTrack(url);
+          } catch {
+            setMessage(
+              `Created a Spotify playlist with ${exportResult.exportedTrackCount} tracks. Open Spotify to find it.`,
+            );
+          }
+        }
+      } catch (error) {
+        void recordAnalyticsFailure(
+          "scene_export",
+          classifyAnalyticsFailure(
+            error,
+          ),
+          attempt,
+        );
+
+        setExportErrorCause(
+          () =>
+            error ??
+            new Error(
+              "Canal could not export this Scene.",
+            ),
+        );
+
+        setMessage("");
+      } finally {
+        exportInFlight.current =
+          false;
+
+        setExporting(false);
+      }
+    };
+
+  const exportRecoveryIssue =
+    useMemo(
+      () => {
+        const cause =
+          exportErrorCause ??
+          (
+            connectivityStatus ===
+              "offline"
+              ? new Error(
+                  "Canal is offline.",
+                )
+              : null
+          );
+
+        return cause
+          ? classifyRecoveryIssue(
+              cause,
+              {
+                service:
+                  "spotify",
+                connectivityStatus,
+              },
+            )
+          : null;
+      },
+      [
+        connectivityStatus,
+        exportErrorCause,
+      ],
+    );
+
+  const recoverExport =
+    async (): Promise<void> => {
+      if (
+        exportRecoveryIssue
+          ?.action ===
+        "reconnect-spotify"
+      ) {
+        router.push(
+          "/music-services",
         );
 
         return;
       }
 
-      setExporting(true);
-      setMessage("");
+      const shouldRetryExport =
+        exportErrorCause !==
+        null;
+
+      setCheckingConnection(
+        true,
+      );
 
       try {
-        const playlist =
-          await createSpotifyPlaylist({
-            name:
-              `Canal: ${scene.name}`,
+        const nextStatus =
+          await refreshConnectivity();
 
-            description:
-              `A private Scene created in Canal for ${scene.activity.toLowerCase()}.`,
-
-            isPublic: false,
-          });
-
-        await addSpotifyItemsToPlaylist(
-          playlist.id,
-          uris,
-        );
-
-        setMessage(
-          `Created a Spotify playlist with ${uris.length} tracks.`,
-        );
-
-        const url =
-          playlist.external_urls
-            ?.spotify;
-
-        if (url) {
-          await openTrack(url);
+        if (
+          nextStatus !==
+            "offline" &&
+          shouldRetryExport
+        ) {
+          await exportToSpotify(
+            nextStatus,
+            "retry",
+          );
         }
-      } catch (error) {
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : "Canal could not export this Scene.",
-        );
       } finally {
-        setExporting(false);
+        setCheckingConnection(
+          false,
+        );
       }
     };
 
@@ -308,9 +531,18 @@ export default function SceneDetailScreen() {
             onPress: () => {
               const run =
                 async (): Promise<void> => {
-                  await deleteScene(
-                    scene.id,
-                  );
+                  if (
+                    scene.libraryType ===
+                    "saved"
+                  ) {
+                    await removeSavedSceneCompletely(
+                      scene,
+                    );
+                  } else {
+                    await deleteScene(
+                      scene.id,
+                    );
+                  }
 
                   router.replace(
                     "/(tabs)/library",
@@ -581,6 +813,50 @@ export default function SceneDetailScreen() {
             </Text>
           </Pressable>
 
+          {scene.libraryType ===
+            "created" &&
+          user?.id ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Manage Scene collaboration"
+              onPress={() =>
+                router.push({
+                  pathname:
+                    "/scene-collaboration",
+
+                  params: {
+                    ownerId:
+                      user.id,
+                    sceneId:
+                      scene.id,
+                  },
+                } as never)
+              }
+              style={({ pressed }) => [
+                styles.actionButton,
+
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                style={
+                  styles.actionTitle
+                }
+              >
+                Collaborate
+              </Text>
+
+              <Text
+                style={
+                  styles.actionText
+                }
+              >
+                Invite an editor
+              </Text>
+            </Pressable>
+          ) : null}
+
           <Pressable
             accessibilityRole="button"
             onPress={() =>
@@ -641,14 +917,34 @@ export default function SceneDetailScreen() {
 
           <Pressable
             accessibilityRole="button"
-            disabled={exporting}
+            accessibilityState={{
+              busy:
+                exporting ||
+                checkingConnection,
+              disabled:
+                exporting ||
+                checkingConnection ||
+                connectivityStatus ===
+                  "offline",
+            }}
+            disabled={
+              exporting ||
+              checkingConnection ||
+              connectivityStatus ===
+                "offline"
+            }
             onPress={() =>
               void exportToSpotify()
             }
             style={({ pressed }) => [
               styles.actionButton,
 
-              exporting &&
+              (
+                exporting ||
+                checkingConnection ||
+                connectivityStatus ===
+                  "offline"
+              ) &&
                 styles.disabled,
 
               pressed &&
@@ -662,6 +958,8 @@ export default function SceneDetailScreen() {
             >
               {exporting
                 ? "Exporting"
+                : checkingConnection
+                  ? "Checking"
                 : "Spotify"}
             </Text>
 
@@ -674,6 +972,21 @@ export default function SceneDetailScreen() {
             </Text>
           </Pressable>
         </View>
+
+        {exportRecoveryIssue ? (
+          <RecoveryNotice
+            busy={
+              exporting ||
+              checkingConnection
+            }
+            issue={
+              exportRecoveryIssue
+            }
+            onAction={
+              recoverExport
+            }
+          />
+        ) : null}
 
         {message ? (
           <View style={styles.message}>
@@ -783,13 +1096,20 @@ export default function SceneDetailScreen() {
                       styles.pressed,
                   ]}
                 >
-                  <Text
-                    style={
-                      styles.trackNumber
-                    }
+                  <View
+                    style={[
+                      styles.trackImage,
+                      styles.trackImagePlaceholder,
+                    ]}
                   >
-                    {index + 1}
-                  </Text>
+                    <Text
+                      style={
+                        styles.trackNumber
+                      }
+                    >
+                      {index + 1}
+                    </Text>
+                  </View>
 
                   <View
                     style={
@@ -1104,12 +1424,28 @@ const styles =
     },
 
     trackNumber: {
-      width: 27,
       color: "#918981",
       fontSize: 11,
       fontWeight: "800",
       textAlign: "center",
-      marginRight: 8,
+    },
+
+    trackImage: {
+      width: 48,
+      height: 48,
+      borderRadius: 10,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#F1E7DF",
+      marginRight: 10,
+    },
+
+    trackImagePlaceholder: {
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
     },
 
     trackText: {

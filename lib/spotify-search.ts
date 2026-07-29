@@ -45,7 +45,7 @@ export async function searchSpotifyArtists(
   const cleanedQuery =
     query.trim();
 
-  if (cleanedQuery.length < 2) {
+  if (cleanedQuery.length < 1) {
     return [];
   }
 

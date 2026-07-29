@@ -86,6 +86,22 @@ function metadataString(
     : "";
 }
 
+function normalizeDisplayName(
+  value: string,
+): string {
+  return (
+    Array.from(
+      value.trim(),
+    )
+      .slice(
+        0,
+        60,
+      )
+      .join("") ||
+    "Canal Listener"
+  );
+}
+
 function rowToProfile(
   row: ProfileRow,
 ): LocalProfile {
@@ -179,18 +195,20 @@ async function insertProfile(
   handle: string,
 ): Promise<ProfileRow> {
   const displayName =
-    metadataString(
-      user,
-      "display_name",
-    ) ||
-    metadataString(
-      user,
-      "full_name",
-    ) ||
-    user.email?.split(
-      "@",
-    )[0] ||
-    "Canal Listener";
+    normalizeDisplayName(
+      metadataString(
+        user,
+        "display_name",
+      ) ||
+      metadataString(
+        user,
+        "full_name",
+      ) ||
+      user.email?.split(
+        "@",
+      )[0] ||
+      "Canal Listener",
+    );
 
   const {
     data,
@@ -344,13 +362,9 @@ export async function saveOwnCanalProfile(
     await getCurrentUser();
 
   const displayName =
-    input.displayName
-      .trim()
-      .slice(
-        0,
-        60,
-      ) ||
-    "Canal Listener";
+    normalizeDisplayName(
+      input.displayName,
+    );
 
   const handle =
     normalizeHandle(

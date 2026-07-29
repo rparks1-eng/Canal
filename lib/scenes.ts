@@ -1,5 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import * as Linking from "expo-linking";
+
+import {
+  classifyAnalyticsFailure,
+  recordAnalyticsEvent,
+  recordAnalyticsFailure,
+} from "./analytics";
+
+import {
+  normalizeSpotifyTrackLinks,
+} from "./spotify-track-links";
+
 export type SceneVisibility =
   | "private"
   | "public";
@@ -180,20 +192,20 @@ function normalizeTrack(
       "Unknown artist",
     );
 
-  const spotifyUri =
-    readOptionalString(
-      track.spotifyUri,
-    ) ??
-    readOptionalString(
-      track.uri,
-    );
-
-  const spotifyUrl =
-    readOptionalString(
-      track.spotifyUrl,
-    ) ??
-    readOptionalString(
-      track.spotify_url,
+  const spotifyLinks =
+    normalizeSpotifyTrackLinks(
+      readOptionalString(
+        track.spotifyUri,
+      ) ??
+        readOptionalString(
+          track.uri,
+        ),
+      readOptionalString(
+        track.spotifyUrl,
+      ) ??
+        readOptionalString(
+          track.spotify_url,
+        ),
     );
 
   const durationMs =
@@ -229,8 +241,7 @@ function normalizeTrack(
         track.source,
       ),
 
-    spotifyUri,
-    spotifyUrl,
+    ...spotifyLinks,
     durationMs,
     imageUrl,
     intensity,
@@ -438,6 +449,14 @@ function normalizeScene(
         scene.feedback,
       ),
   };
+}
+
+export function normalizeStoredScene(
+  value: unknown,
+): StoredScene | null {
+  return normalizeScene(
+    value,
+  );
 }
 
 async function readArrayFromKey(
@@ -775,9 +794,28 @@ export async function createScene(
       ),
   };
 
-  return upsertScene(
-    scene,
-  );
+  try {
+    const createdScene =
+      await upsertScene(
+        scene,
+      );
+
+    void recordAnalyticsEvent({
+      name:
+        "first_scene_created",
+    });
+
+    return createdScene;
+  } catch (error) {
+    void recordAnalyticsFailure(
+      "scene_create",
+      classifyAnalyticsFailure(
+        error,
+      ),
+    );
+
+    throw error;
+  }
 }
 
 export async function deleteScene(
@@ -1096,6 +1134,7 @@ export function sceneDurationMinutes(
 
 export function sceneShareText(
   scene: StoredScene,
+  returnUrl = "",
 ): string {
   const artists =
     scene.artists ||
@@ -1122,8 +1161,130 @@ export function sceneShareText(
       ? `Artists: ${artists}`
       : "",
 
+    returnUrl.trim(),
+
     "Created with Canal.",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function publicSceneShareIdentifier(
+  value: string,
+  label: string,
+): string {
+  const normalized =
+    value.trim();
+
+  if (
+    !normalized ||
+    normalized.length > 200 ||
+    /[\u0000-\u001F\u007F]/u.test(
+      normalized,
+    )
+  ) {
+    throw new Error(
+      `This public Scene's ${label} is unavailable.`,
+    );
+  }
+
+  return normalized;
+}
+
+function configuredCanalShareBaseUrl():
+  | URL
+  | null {
+  const shareBaseUrl =
+    process.env
+      .EXPO_PUBLIC_CANAL_SHARE_BASE_URL
+      ?.trim();
+  const legacyWebUrl =
+    process.env
+      .EXPO_PUBLIC_CANAL_WEB_URL
+      ?.trim();
+  const configuredUrl =
+    shareBaseUrl ||
+    legacyWebUrl ||
+    "";
+
+  if (!configuredUrl) {
+    return null;
+  }
+
+  try {
+    const parsedUrl =
+      new URL(
+        configuredUrl,
+      );
+
+    if (
+      parsedUrl.protocol !==
+        "https:" ||
+      parsedUrl.username ||
+      parsedUrl.password ||
+      parsedUrl.search ||
+      parsedUrl.hash
+    ) {
+      return null;
+    }
+
+    return parsedUrl;
+  } catch {
+    return null;
+  }
+}
+
+export function publicSceneShareUrl(
+  ownerId: string,
+  sceneId: string,
+): string {
+  const queryParams = {
+    ownerId:
+      publicSceneShareIdentifier(
+        ownerId,
+        "creator address",
+      ),
+
+    sceneId:
+      publicSceneShareIdentifier(
+        sceneId,
+        "address",
+      ),
+  };
+
+  const webBaseUrl =
+    configuredCanalShareBaseUrl();
+
+  if (webBaseUrl) {
+    const webUrl =
+      new URL(
+        webBaseUrl.toString(),
+      );
+    const basePath =
+      webUrl.pathname.replace(
+        /\/+$/,
+        "",
+      );
+
+    webUrl.pathname =
+      `${basePath}/public-scene`;
+
+    webUrl.searchParams.set(
+      "ownerId",
+      queryParams.ownerId,
+    );
+    webUrl.searchParams.set(
+      "sceneId",
+      queryParams.sceneId,
+    );
+
+    return webUrl.toString();
+  }
+
+  return Linking.createURL(
+    "public-scene",
+    {
+      queryParams,
+    },
+  );
 }

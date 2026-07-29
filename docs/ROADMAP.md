@@ -29,13 +29,42 @@ Phase 1 is complete when a new tester can install Canal, recover an account, con
 Spotify, build a Scene, export it, publish a Snapshot, and sign into a second account
 without seeing the first account's private data.
 
+## Current completion sprint — implementation complete, external verification deferred
+
+- [x] Normalize native authentication links and add an HTTPS password-reset fallback
+      when `EXPO_PUBLIC_CANAL_WEB_URL` is configured.
+- [x] Route a newly created Scene directly into playback and keep Home, Library,
+      Create, Activity, and Profile available from the player.
+- [x] Preserve real track artwork and durations across generation, storage, Scene
+      detail, queue, and playback.
+- [x] Align generated track count to the requested duration using actual Spotify
+      track lengths.
+- [x] Add first-character song and artist typeahead using recent, top, liked,
+      playlist, and cached discovery data before debounced live results.
+- [x] Rank Home recommendations against the latest available Spotify taste snapshot
+      and refresh stale provider data automatically with offline fallback.
+- [x] Add accessible genre selection to Scene Studio.
+- [x] Paginate all liked songs and playlists, index playlist tracks, infer track
+      genres from catalog artist metadata, and keep a genre-linked discovery pool
+      outside the saved/listened library.
+- [ ] Verify the new password-reset, full-library sync, genre inference, typeahead,
+      duration, artwork, direct-play, and persistent-navigation behavior on a rebuilt
+      native app with real Supabase and Spotify accounts.
+
+Roadmap sequencing decision (July 28, 2026): the product/release owner authorized
+further development and accepted the risk that the remaining human-only native,
+provider, and device checks were not independently witnessed or captured in a
+release record. This decision closes the completion sprint for backlog sequencing
+only. It does not mark the two verification items above complete, establish
+production release readiness, or substitute for an exact-candidate smoke test.
+
 ## Phase 2: retention and social proof
 
 - [x] Replace remaining local-only relationship and activity data with Supabase tables
   and row-level security.
-- Add a public Snapshot feed and profile Snapshot grid.
-- Add explicit empty, offline, reconnect, and permission-recovery states.
-- Add analytics for onboarding completion, first Scene creation, export, Snapshot
+- [x] Add a public Snapshot feed and profile Snapshot grid.
+- [x] Add explicit empty, offline, reconnect, and permission-recovery states.
+- [x] Add analytics for onboarding completion, first Scene creation, export, Snapshot
   publication, seven-day return, and failure points. Analytics must not include
   Spotify access tokens, passwords, email reset links, or private Scene payloads.
 - Run usability tests with a small closed-beta group before changing the main
@@ -45,15 +74,24 @@ without seeing the first account's private data.
 
 - Add Apple Music only after a MusicKit developer token can be generated on a secure
   backend. Never embed an Apple private key or long-lived developer token in the app.
-- Move provider-specific behavior behind a music-service adapter so Spotify and Apple
-  Music share one Scene workflow.
-- Add invited Scene collaboration with clear ownership and conflict handling.
+- [x] Move provider-specific behavior behind a music-service adapter so Spotify and
+  Apple Music share one Scene workflow.
+- [x] Add invited Scene collaboration with clear ownership and conflict handling.
 - Promote Live Stages from local prototype storage to a synchronized backend after
   the single-user Scene loop is stable.
 
+An implementation draft for synchronized Live Stages may be developed ahead of this
+sequence, but it remains behind the Supabase migration, multi-account Realtime,
+moderation, native-device, and Phase 1 release gates. The roadmap item stays incomplete
+until those gates pass. Release readiness also requires block enforcement, retained
+moderation evidence, chat abuse limits and reporting, host moderation controls, bounded
+track payloads, associated native/universal invite links, and disabled public Realtime
+channel access.
+
 ## Phase 4: creator and event products
 
-- Creator-branded Snapshot templates and public Scene collections
+- [x] Creator-branded Snapshot templates
+- [x] Public Scene collections
 - Collaborative releases and audience participation
 - Event, venue, and DJ controls
 - Licensing, moderation, reporting, and administrative tools required for broader

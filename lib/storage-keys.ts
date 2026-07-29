@@ -10,8 +10,14 @@ export const STORAGE_KEYS = {
   blockedUsers:
     "@canal/blocked-users",
 
+  blockedUserReferences:
+    "@canal/blocked-user-references",
+
   relationshipMutations:
     "@canal/relationship-mutations",
+
+  relationshipMutationQuarantine:
+    "@canal/relationship-mutation-quarantine",
 
   settings:
     "@canal/settings",
@@ -48,6 +54,9 @@ export const STORAGE_KEYS = {
 
   spotifyCachePrefix:
     "@canal/spotify-cache:",
+
+  analyticsQueue:
+    "@canal/analytics/v1/queue",
 } as const;
 
 export const CANAL_STORAGE_PREFIX =

@@ -7,7 +7,6 @@ import {
 
 import {
   Tabs,
-  router,
 } from "expo-router";
 
 function TabIcon(props: {
@@ -121,47 +120,70 @@ export default function TabLayout() {
             () => null,
 
           tabBarButton:
-            () => (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Create Scene"
-                onPress={() =>
-                  router.push(
-                    "/scene-studio",
-                  )
-                }
-                style={({
-                  pressed,
-                }) => [
-                  styles.createButton,
-
-                  pressed &&
-                    styles.pressed,
-                ]}
-              >
-                <View
-                  style={
-                    styles.createIcon
+            (
+              {
+                accessibilityLabel,
+                accessibilityState,
+                onLongPress,
+                onPress,
+                style,
+                testID,
+              },
+            ) => {
+              return (
+                <Pressable
+                  accessibilityLabel={
+                    accessibilityLabel ??
+                    "Create"
                   }
+                  accessibilityRole="button"
+                  accessibilityState={
+                    accessibilityState
+                  }
+                  onLongPress={
+                    onLongPress
+                  }
+                  onPress={
+                    onPress
+                  }
+                  testID={
+                    testID
+                  }
+                  style={({
+                    pressed,
+                  }) => [
+                    style,
+
+                    styles.createButton,
+
+                    pressed &&
+                      styles.pressed,
+                  ]}
                 >
-                  <Text
+                  <View
                     style={
-                      styles.createIconText
+                      styles.createIcon
                     }
                   >
-                    +
-                  </Text>
-                </View>
+                    <Text
+                      style={
+                        styles.createIconText
+                      }
+                    >
+                      +
+                    </Text>
+                  </View>
 
-                <Text
-                  style={
-                    styles.createLabel
-                  }
-                >
-                  Create
-                </Text>
-              </Pressable>
-            ),
+                  <Text
+                    style={
+                      styles.createLabel
+                    }
+                  >
+                    Create
+                  </Text>
+                </Pressable>
+              );
+            },
         }}
       />
 
@@ -202,6 +224,24 @@ export default function TabLayout() {
         name="explore"
         options={{
           title: "Explore",
+
+          tabBarIcon: ({
+            color,
+          }) => (
+            <TabIcon
+              symbol="⌕"
+              label="Explore"
+              color={color}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="live"
+        options={{
+          href: null,
+          title: "Live",
         }}
       />
 

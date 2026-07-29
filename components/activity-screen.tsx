@@ -19,6 +19,22 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  RecoveryNotice,
+} from "./recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../hooks/use-reconnect-reload";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
+
+import type {
+  RecoveryIssue,
+} from "../lib/recovery-issue";
+
+import {
   CanalActivityItem,
   CanalActivityType,
   clearActivity,
@@ -26,10 +42,22 @@ import {
   readActivity,
 } from "../lib/relationships";
 
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
+
 type IoniconName =
   keyof typeof Ionicons.glyphMap;
 
 export default function ActivityScreen() {
+  const {
+    refresh:
+      refreshConnectivity,
+    status:
+      connectivityStatus,
+  } =
+    useConnectivity();
+
   const [
     activity,
     setActivity,
@@ -40,10 +68,21 @@ export default function ActivityScreen() {
   const [isLoading, setIsLoading] =
     useState(true);
 
+  const [
+    loadIssue,
+    setLoadIssue,
+  ] =
+    useState<RecoveryIssue | null>(
+      null,
+    );
+
   const loadActivity =
     useCallback(async () => {
       try {
         setIsLoading(true);
+        setLoadIssue(
+          null,
+        );
 
         const storedActivity =
           await readActivity();
@@ -59,14 +98,22 @@ export default function ActivityScreen() {
           error,
         );
 
-        Alert.alert(
-          "Unable to load",
-          "Canal could not load activity history.",
+        setLoadIssue(
+          classifyRecoveryIssue(
+            error,
+            {
+              service:
+                "canal",
+              connectivityStatus,
+            },
+          ),
         );
       } finally {
         setIsLoading(false);
       }
-    }, []);
+    }, [
+      connectivityStatus,
+    ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -74,10 +121,38 @@ export default function ActivityScreen() {
     }, [loadActivity]),
   );
 
+  useReconnectReload(
+    loadActivity,
+  );
+
+  const recoverActivity =
+    async (): Promise<void> => {
+      if (
+        loadIssue?.action ===
+        "sign-in"
+      ) {
+        router.replace(
+          "/login" as never,
+        );
+
+        return;
+      }
+
+      const nextStatus =
+        await refreshConnectivity();
+
+      if (
+        nextStatus !==
+        "offline"
+      ) {
+        await loadActivity();
+      }
+    };
+
   function confirmClear() {
     Alert.alert(
       "Clear activity history?",
-      "This removes local activity records from this device.",
+      "This removes synced activity history from your Canal account and this device.",
       [
         {
           text: "Cancel",
@@ -142,27 +217,11 @@ export default function ActivityScreen() {
         }
       >
         <View style={styles.header}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace("/(tabs)");
+          <View
+            style={
+              styles.headerSpacer
             }
-          }}
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Text
-              style={styles.backText}
-            >
-              ‹ You
-            </Text>
-          </Pressable>
+          />
 
           <Text
             style={
@@ -174,6 +233,7 @@ export default function ActivityScreen() {
 
           {activity.length > 0 ? (
             <Pressable
+              accessibilityLabel="Clear Activity history"
               accessibilityRole="button"
               onPress={
                 confirmClear
@@ -219,6 +279,20 @@ export default function ActivityScreen() {
           </Text>
         </View>
 
+        {loadIssue ? (
+          <RecoveryNotice
+            busy={
+              isLoading
+            }
+            issue={
+              loadIssue
+            }
+            onAction={
+              recoverActivity
+            }
+          />
+        ) : null}
+
         {isLoading ? (
           <View
             style={styles.centered}
@@ -228,7 +302,10 @@ export default function ActivityScreen() {
               color="#ff7a1a"
             />
           </View>
-        ) : activity.length === 0 ? (
+        ) : loadIssue &&
+          activity.length ===
+            0 ? null : activity.length ===
+          0 ? (
           <View
             style={styles.emptyCard}
           >
@@ -291,6 +368,7 @@ export default function ActivityScreen() {
               return (
                 <Pressable
                   key={item.id}
+                  accessibilityLabel={`${item.title}. ${item.description}`}
                   accessibilityRole="button"
                   disabled={
                     !item.username
@@ -568,12 +646,6 @@ const styles = StyleSheet.create({
 
   headerSpacer: {
     width: 80,
-  },
-
-  backText: {
-    color: "#c5cbc6",
-    fontSize: 15,
-    fontWeight: "600",
   },
 
   headerTitle: {

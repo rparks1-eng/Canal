@@ -11,14 +11,18 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
+    "launcher:test": "bash -n script/build_and_run.sh && node script/validate_public_env.test.cjs && node script/build_and_run.test.cjs && node script/release_preflight.test.cjs",
+    "release:preflight": "node script/release_preflight.cjs",
     "dependencies:check": "expo install --check",
     "config:check": "expo config --type public --json",
     "web:export": "expo export --platform web --clear",
-    "validate": "npm run dependencies:check && npm run lint && npm run typecheck && npm run test -- --ci && npm run config:check && npm run web:export"
+    "validate": "npm run dependencies:check && npm run lint && npm run typecheck && npm run test -- --ci && npm run launcher:test && npm run config:check && npm run web:export"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
+    "@react-native-community/netinfo": "11.4.1",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
@@ -51,12 +55,14 @@
     "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
+    "@expo/env": "~2.0.12",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "jest": "^29.7.0",
     "jest-expo": "~54.0.17",
+    "supabase": "2.110.0",
     "typescript": "~5.9.2"
   },
   "private": true

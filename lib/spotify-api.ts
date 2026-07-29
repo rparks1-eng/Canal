@@ -1,9 +1,12 @@
 import {
-  clearSpotifySession,
-  getValidSpotifySession,
+  assertSpotifyConnectionGuardCurrent,
+  getSpotifyConnectionGeneration,
+  spotifyAuthenticatedFetch,
+  SpotifySessionChangedError,
 } from "./spotify-auth";
 
 import type {
+  SpotifyConnectionGuard,
   SpotifyImage,
   SpotifyProfile,
 } from "./spotify-auth";
@@ -107,6 +110,11 @@ export type SpotifyRecentItem = {
   track: SpotifyTrack;
 };
 
+export type SpotifyPlaylistTrackItem = {
+  track?: SpotifyTrack | null;
+  item?: SpotifyTrack | null;
+};
+
 export type SpotifySavedTrackItem = {
   added_at: string;
   track: SpotifyTrack;
@@ -128,14 +136,22 @@ type SpotifyRequestOptions = {
     | "DELETE";
 
   body?: unknown;
+
+  connectionGuard?:
+    SpotifyConnectionGuard;
+
+  cacheTtlMs?: number;
 };
 
 type SpotifyErrorPayload = {
+  reason?: string;
+
   error?:
     | string
     | {
         status?: number;
         message?: string;
+        reason?: string;
       };
 
   error_description?: string;
@@ -144,11 +160,13 @@ type SpotifyErrorPayload = {
 export class SpotifyApiError extends Error {
   status: number;
   retryAfterSeconds?: number;
+  reason?: string;
 
   constructor(
     message: string,
     status: number,
     retryAfterSeconds?: number,
+    reason?: string,
   ) {
     super(message);
 
@@ -159,8 +177,37 @@ export class SpotifyApiError extends Error {
 
     this.retryAfterSeconds =
       retryAfterSeconds;
+
+    this.reason =
+      reason;
   }
 }
+
+type SpotifyGetCacheEntry = {
+  connectionGeneration: number;
+  expiresAt: number;
+  value: unknown;
+};
+
+type SpotifyGetInFlight = {
+  connectionGeneration: number;
+  promise: Promise<unknown>;
+};
+
+const DEFAULT_GET_CACHE_TTL_MS =
+  60 * 1000;
+
+const spotifyGetCache =
+  new Map<
+    string,
+    SpotifyGetCacheEntry
+  >();
+
+const spotifyGetInFlight =
+  new Map<
+    string,
+    SpotifyGetInFlight
+  >();
 
 function buildSpotifyUrl(
   path: string,
@@ -219,50 +266,39 @@ function readSpotifyErrorMessage(
   return fallback;
 }
 
-async function spotifyRequest<T>(
+async function performSpotifyRequest<T>(
   path: string,
   options: SpotifyRequestOptions = {},
 ): Promise<T> {
-  const session =
-    await getValidSpotifySession();
+  const response =
+    await spotifyAuthenticatedFetch(
+      buildSpotifyUrl(path),
+      {
+        method:
+          options.method ??
+          "GET",
 
-  if (!session) {
-    throw new SpotifyApiError(
-      "Spotify is not connected. Connect Spotify again.",
-      401,
-    );
-  }
+        headers: {
+          Accept:
+            "application/json",
 
-  const response = await fetch(
-    buildSpotifyUrl(path),
-    {
-      method:
-        options.method ??
-        "GET",
+          ...(options.body !== undefined
+            ? {
+                "Content-Type":
+                  "application/json",
+              }
+            : {}),
+        },
 
-      headers: {
-        Authorization:
-          `Bearer ${session.accessToken}`,
-
-        Accept:
-          "application/json",
-
-        ...(options.body !== undefined
-          ? {
-              "Content-Type":
-                "application/json",
-            }
-          : {}),
+        body:
+          options.body !== undefined
+            ? JSON.stringify(
+                options.body,
+              )
+            : undefined,
       },
-
-      body:
-        options.body !== undefined
-          ? JSON.stringify(
-              options.body,
-            )
-          : undefined,
-    },
-  );
+      options.connectionGuard,
+    );
 
   if (
     response.status === 204
@@ -285,12 +321,6 @@ async function spotifyRequest<T>(
   }
 
   if (!response.ok) {
-    if (
-      response.status === 401
-    ) {
-      await clearSpotifySession();
-    }
-
     const retryAfterHeader =
       response.headers.get(
         "Retry-After",
@@ -309,6 +339,25 @@ async function spotifyRequest<T>(
         `Spotify request failed with status ${response.status}.`,
       );
 
+    const spotifyError =
+      (
+        payload as
+          | SpotifyErrorPayload
+          | null
+      )?.error;
+
+    const reason =
+      typeof spotifyError ===
+        "object" &&
+      spotifyError !==
+        null
+        ? spotifyError.reason
+        : (
+            payload as
+              | SpotifyErrorPayload
+              | null
+          )?.reason;
+
     throw new SpotifyApiError(
       message,
       response.status,
@@ -317,10 +366,160 @@ async function spotifyRequest<T>(
       )
         ? retryAfterSeconds
         : undefined,
+      reason,
     );
   }
 
   return payload as T;
+}
+
+async function assertSpotifyRequestCurrent(
+  connectionGeneration: number,
+  connectionGuard?:
+    SpotifyConnectionGuard,
+): Promise<void> {
+  if (connectionGuard) {
+    await assertSpotifyConnectionGuardCurrent(
+      connectionGuard,
+    );
+  }
+
+  if (
+    getSpotifyConnectionGeneration() !==
+    connectionGeneration
+  ) {
+    throw new SpotifySessionChangedError();
+  }
+}
+
+async function spotifyRequest<T>(
+  path: string,
+  options: SpotifyRequestOptions = {},
+): Promise<T> {
+  const method =
+    options.method ??
+    "GET";
+
+  if (
+    method !==
+      "GET" ||
+    options.body !==
+      undefined
+  ) {
+    return performSpotifyRequest<T>(
+      path,
+      options,
+    );
+  }
+
+  const requestUrl =
+    buildSpotifyUrl(
+      path,
+    );
+
+  const connectionGeneration =
+    getSpotifyConnectionGeneration();
+
+  await assertSpotifyRequestCurrent(
+    connectionGeneration,
+    options.connectionGuard,
+  );
+
+  const existingCache =
+    spotifyGetCache.get(
+      requestUrl,
+    );
+
+  if (
+    existingCache &&
+    existingCache
+      .connectionGeneration ===
+      connectionGeneration &&
+    existingCache.expiresAt >
+      Date.now()
+  ) {
+    return existingCache.value as T;
+  }
+
+  const existingRequest =
+    spotifyGetInFlight.get(
+      requestUrl,
+    );
+
+  if (
+    existingRequest &&
+    existingRequest
+      .connectionGeneration ===
+      connectionGeneration
+  ) {
+    const existingValue =
+      await existingRequest
+        .promise as T;
+
+    await assertSpotifyRequestCurrent(
+      connectionGeneration,
+      options.connectionGuard,
+    );
+
+    return existingValue;
+  }
+
+  const request =
+    performSpotifyRequest<T>(
+      requestUrl,
+      options,
+    );
+
+  spotifyGetInFlight.set(
+    requestUrl,
+    {
+      connectionGeneration,
+      promise:
+        request,
+    },
+  );
+
+  try {
+    const value =
+      await request;
+
+    await assertSpotifyRequestCurrent(
+      connectionGeneration,
+      options.connectionGuard,
+    );
+
+    const cacheTtlMs =
+      options.cacheTtlMs ??
+      DEFAULT_GET_CACHE_TTL_MS;
+
+    if (
+      cacheTtlMs >
+      0
+    ) {
+      spotifyGetCache.set(
+        requestUrl,
+        {
+          connectionGeneration,
+          expiresAt:
+            Date.now() +
+            cacheTtlMs,
+          value,
+        },
+      );
+    }
+
+    return value;
+  } finally {
+    if (
+      spotifyGetInFlight.get(
+        requestUrl,
+      )?.promise === request
+    ) {
+      spotifyGetInFlight.delete(
+        requestUrl,
+      );
+    }
+  }
 }
 
 export async function getSpotifyProfile(): Promise<
@@ -333,6 +532,10 @@ export async function getSpotifyProfile(): Promise<
 
 export async function getSpotifyTopArtists(
   limit = 20,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyPage<SpotifyArtist>> {
   const safeLimit =
     Math.min(
@@ -344,11 +547,19 @@ export async function getSpotifyTopArtists(
     SpotifyPage<SpotifyArtist>
   >(
     `/me/top/artists?time_range=medium_term&limit=${safeLimit}`,
+    {
+      connectionGuard:
+        options.connectionGuard,
+    },
   );
 }
 
 export async function getSpotifyTopTracks(
   limit = 20,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyPage<SpotifyTrack>> {
   const safeLimit =
     Math.min(
@@ -360,11 +571,19 @@ export async function getSpotifyTopTracks(
     SpotifyPage<SpotifyTrack>
   >(
     `/me/top/tracks?time_range=medium_term&limit=${safeLimit}`,
+    {
+      connectionGuard:
+        options.connectionGuard,
+    },
   );
 }
 
 export async function getSpotifyRecentlyPlayed(
   limit = 20,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyRecentResponse> {
   const safeLimit =
     Math.min(
@@ -374,11 +593,19 @@ export async function getSpotifyRecentlyPlayed(
 
   return spotifyRequest<SpotifyRecentResponse>(
     `/me/player/recently-played?limit=${safeLimit}`,
+    {
+      connectionGuard:
+        options.connectionGuard,
+    },
   );
 }
 
 export async function getSpotifySavedTracks(
   limit = 20,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<
   SpotifyPage<SpotifySavedTrackItem>
 > {
@@ -392,11 +619,19 @@ export async function getSpotifySavedTracks(
     SpotifyPage<SpotifySavedTrackItem>
   >(
     `/me/tracks?limit=${safeLimit}&offset=0`,
+    {
+      connectionGuard:
+        options.connectionGuard,
+    },
   );
 }
 
 export async function getSpotifyPlaylists(
   limit = 20,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyPage<SpotifyPlaylist>> {
   const safeLimit =
     Math.min(
@@ -408,7 +643,184 @@ export async function getSpotifyPlaylists(
     SpotifyPage<SpotifyPlaylist>
   >(
     `/me/playlists?limit=${safeLimit}&offset=0`,
+    {
+      connectionGuard:
+        options.connectionGuard,
+    },
   );
+}
+
+async function collectSpotifyPages<T>(
+  firstPath: string,
+): Promise<T[]> {
+  const items: T[] = [];
+  const visited =
+    new Set<string>();
+  let next:
+    | string
+    | null =
+      firstPath;
+
+  while (
+    next &&
+    !visited.has(
+      next,
+    )
+  ) {
+    visited.add(next);
+
+    const page:
+      SpotifyPage<T> =
+      await spotifyRequest<
+        SpotifyPage<T>
+      >(next);
+
+    items.push(
+      ...(page.items ?? []),
+    );
+
+    next =
+      page.next ??
+      null;
+  }
+
+  return items;
+}
+
+export async function getAllSpotifySavedTracks(): Promise<
+  SpotifySavedTrackItem[]
+> {
+  return collectSpotifyPages<SpotifySavedTrackItem>(
+    "/me/tracks?limit=50&offset=0",
+  );
+}
+
+export async function getAllSpotifyPlaylists(): Promise<
+  SpotifyPlaylist[]
+> {
+  return collectSpotifyPages<SpotifyPlaylist>(
+    "/me/playlists?limit=50&offset=0",
+  );
+}
+
+export async function getAllSpotifyPlaylistTracks(
+  playlistId: string,
+): Promise<SpotifyTrack[]> {
+  const items =
+    await collectSpotifyPages<SpotifyPlaylistTrackItem>(
+      `/playlists/${encodeURIComponent(
+        playlistId,
+      )}/items?limit=50&offset=0`,
+    );
+
+  return items
+    .map(
+      (entry) =>
+        entry.track ??
+        entry.item ??
+        null,
+    )
+    .filter(
+      (
+        track,
+      ): track is SpotifyTrack =>
+        Boolean(
+          track?.id &&
+            track.uri &&
+            !track.is_local,
+        ),
+    );
+}
+
+export async function getSpotifyArtistsByIds(
+  artistIds: string[],
+): Promise<SpotifyArtist[]> {
+  const uniqueIds =
+    Array.from(
+      new Set(
+        artistIds.filter(
+          Boolean,
+        ),
+      ),
+    );
+
+  const artists:
+    SpotifyArtist[] = [];
+
+  for (
+    let index = 0;
+    index <
+    uniqueIds.length;
+    index += 50
+  ) {
+    const batch =
+      uniqueIds.slice(
+        index,
+        index + 50,
+      );
+
+    const response =
+      await spotifyRequest<{
+        artists?: (
+          SpotifyArtist | null
+        )[];
+      }>(
+        `/artists?ids=${encodeURIComponent(
+          batch.join(","),
+        )}`,
+      );
+
+    artists.push(
+      ...(response.artists ?? [])
+        .filter(
+          (
+            artist,
+          ): artist is SpotifyArtist =>
+            artist !== null,
+        ),
+    );
+  }
+
+  return artists;
+}
+
+export async function searchSpotifyCatalogTracks(
+  query: string,
+  limit = 10,
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
+): Promise<SpotifyTrack[]> {
+  const safeLimit =
+    Math.min(
+      Math.max(
+        limit,
+        1,
+      ),
+      10,
+    );
+
+  const response =
+    await spotifyRequest<{
+      tracks?: SpotifyPage<SpotifyTrack>;
+    }>(
+      `/search?type=track&limit=${safeLimit}&q=${encodeURIComponent(
+        query,
+      )}`,
+      {
+        cacheTtlMs:
+          15 *
+          60 *
+          1000,
+        connectionGuard:
+          options.connectionGuard,
+      },
+    );
+
+  return response.tracks
+    ?.items ??
+    [];
 }
 
 export async function createSpotifyPlaylist(
@@ -417,6 +829,10 @@ export async function createSpotifyPlaylist(
     description?: string;
     isPublic?: boolean;
   },
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<SpotifyPlaylist> {
   return spotifyRequest<SpotifyPlaylist>(
     "/me/playlists",
@@ -434,6 +850,9 @@ export async function createSpotifyPlaylist(
           input.isPublic ??
           false,
       },
+
+      connectionGuard:
+        options.connectionGuard,
     },
   );
 }
@@ -441,6 +860,10 @@ export async function createSpotifyPlaylist(
 export async function addSpotifyItemsToPlaylist(
   playlistId: string,
   uris: string[],
+  options: {
+    connectionGuard?:
+      SpotifyConnectionGuard;
+  } = {},
 ): Promise<void> {
   const uniqueUris =
     Array.from(
@@ -484,6 +907,9 @@ export async function addSpotifyItemsToPlaylist(
         body: {
           uris: batch,
         },
+
+        connectionGuard:
+          options.connectionGuard,
       },
     );
   }
