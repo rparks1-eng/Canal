@@ -92,7 +92,8 @@ channel access.
 
 - [x] Creator-branded Snapshot templates
 - [x] Public Scene collections
-- Collaborative releases and audience participation
+- [x] Release Ballots with frozen public-collection revisions, contributor consent,
+  private listener votes, and owner-closed results
 - Event, venue, and DJ controls
 - Licensing, moderation, reporting, and administrative tools required for broader
   distribution

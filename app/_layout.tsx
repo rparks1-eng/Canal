@@ -558,6 +558,18 @@ function CanalNavigator() {
       />
 
       <Stack.Screen
+        name="releases/index"
+      />
+
+      <Stack.Screen
+        name="releases/new"
+      />
+
+      <Stack.Screen
+        name="releases/[releaseId]"
+      />
+
+      <Stack.Screen
         name="event-run-sheet"
       />
 
