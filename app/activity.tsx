@@ -29,7 +29,13 @@ import {
 type IoniconName =
   keyof typeof Ionicons.glyphMap;
 
-export default function ActivityScreen() {
+type ActivityScreenProps = {
+  embeddedInTabs?: boolean;
+};
+
+export default function ActivityScreen({
+  embeddedInTabs = false,
+}: ActivityScreenProps) {
   const [
     activity,
     setActivity,
@@ -77,7 +83,7 @@ export default function ActivityScreen() {
   function confirmClear() {
     Alert.alert(
       "Clear activity history?",
-      "This removes local activity records from this device.",
+      "This removes synced activity history from your Canal account and this device.",
       [
         {
           text: "Cancel",
@@ -142,27 +148,38 @@ export default function ActivityScreen() {
         }
       >
         <View style={styles.header}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace("/(tabs)");
-            }
-          }}
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Text
-              style={styles.backText}
+          {embeddedInTabs ? (
+            <View
+              style={
+                styles.headerSpacer
+              }
+            />
+          ) : (
+            <Pressable
+              accessibilityLabel="Go back from Activity"
+              accessibilityRole="button"
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace(
+                    "/(tabs)/index",
+                  );
+                }
+              }}
+              style={({ pressed }) => [
+                styles.headerButton,
+                pressed &&
+                  styles.pressed,
+              ]}
             >
-              ‹ You
-            </Text>
-          </Pressable>
+              <Text
+                style={styles.backText}
+              >
+                ‹ You
+              </Text>
+            </Pressable>
+          )}
 
           <Text
             style={
@@ -174,6 +191,7 @@ export default function ActivityScreen() {
 
           {activity.length > 0 ? (
             <Pressable
+              accessibilityLabel="Clear Activity history"
               accessibilityRole="button"
               onPress={
                 confirmClear
@@ -291,6 +309,7 @@ export default function ActivityScreen() {
               return (
                 <Pressable
                   key={item.id}
+                  accessibilityLabel={`${item.title}. ${item.description}`}
                   accessibilityRole="button"
                   disabled={
                     !item.username
