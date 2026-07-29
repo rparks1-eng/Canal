@@ -345,17 +345,14 @@ export default function SceneCollectionScreen() {
               </View>
 
               {isOwner ? (
-                <View
-                  style={
-                    styles.ownerActions
-                  }
-                >
+                <>
                   <Pressable
+                    accessibilityLabel={`Plan an event with ${collection.title}`}
                     accessibilityRole="button"
                     onPress={() =>
                       router.push({
                         pathname:
-                          "/collections/new",
+                          "/event-run-sheet",
                         params: {
                           collectionId:
                             collection.id,
@@ -363,45 +360,94 @@ export default function SceneCollectionScreen() {
                       } as never)
                     }
                     style={
-                      styles.editButton
+                      styles.planEventButton
                     }
                   >
+                    <View>
+                      <Text
+                        style={
+                          styles.planEventEyebrow
+                        }
+                      >
+                        PRIVATE CREATOR TOOL
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.planEventText
+                        }
+                      >
+                        Plan event
+                      </Text>
+                    </View>
+
                     <Text
                       style={
-                        styles.editText
+                        styles.planEventArrow
                       }
                     >
-                      Edit collection
+                      ›
                     </Text>
                   </Pressable>
 
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={
-                      deleting
-                    }
-                    onPress={
-                      confirmDelete
-                    }
+                  <View
                     style={
-                      styles.deleteButton
+                      styles.ownerActions
                     }
                   >
-                    {deleting ? (
-                      <ActivityIndicator
-                        color="#A6352B"
-                      />
-                    ) : (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        router.push({
+                          pathname:
+                            "/collections/new",
+                          params: {
+                            collectionId:
+                              collection.id,
+                          },
+                        } as never)
+                      }
+                      style={
+                        styles.editButton
+                      }
+                    >
                       <Text
                         style={
-                          styles.deleteText
+                          styles.editText
                         }
                       >
-                        Delete
+                        Edit collection
                       </Text>
-                    )}
-                  </Pressable>
-                </View>
+                    </Pressable>
+
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={
+                        deleting
+                      }
+                      onPress={
+                        confirmDelete
+                      }
+                      style={
+                        styles.deleteButton
+                      }
+                    >
+                      {deleting ? (
+                        <ActivityIndicator
+                          color="#A6352B"
+                        />
+                      ) : (
+                        <Text
+                          style={
+                            styles.deleteText
+                          }
+                        >
+                          Delete
+                        </Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </>
               ) : null}
 
               <View
@@ -649,6 +695,38 @@ const styles =
     ownerActions: {
       flexDirection: "row",
       gap: 9,
+    },
+    planEventButton: {
+      minHeight: 66,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      borderRadius: 18,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#2B1710",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    planEventEyebrow: {
+      color: "#FFB781",
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    planEventText: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    planEventArrow: {
+      color: "#FFB781",
+      fontSize: 28,
     },
     editButton: {
       flex: 1,

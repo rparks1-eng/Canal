@@ -348,6 +348,10 @@ function CanalNavigator() {
       />
 
       <Stack.Screen
+        name="event-run-sheet"
+      />
+
+      <Stack.Screen
         name="scene-preview"
       />
 
