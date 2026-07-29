@@ -1191,13 +1191,21 @@ function publicSceneShareIdentifier(
   return normalized;
 }
 
-function configuredCanalWebUrl():
+function configuredCanalShareBaseUrl():
   | URL
   | null {
-  const configuredUrl =
+  const shareBaseUrl =
+    process.env
+      .EXPO_PUBLIC_CANAL_SHARE_BASE_URL
+      ?.trim();
+  const legacyWebUrl =
     process.env
       .EXPO_PUBLIC_CANAL_WEB_URL
       ?.trim();
+  const configuredUrl =
+    shareBaseUrl ||
+    legacyWebUrl ||
+    "";
 
   if (!configuredUrl) {
     return null;
@@ -1245,14 +1253,21 @@ export function publicSceneShareUrl(
   };
 
   const webBaseUrl =
-    configuredCanalWebUrl();
+    configuredCanalShareBaseUrl();
 
   if (webBaseUrl) {
     const webUrl =
       new URL(
-        "/public-scene",
-        webBaseUrl.origin,
+        webBaseUrl.toString(),
       );
+    const basePath =
+      webUrl.pathname.replace(
+        /\/+$/,
+        "",
+      );
+
+    webUrl.pathname =
+      `${basePath}/public-scene`;
 
     webUrl.searchParams.set(
       "ownerId",

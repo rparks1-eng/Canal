@@ -19,6 +19,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Linking,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -49,8 +50,12 @@ import {
   leaveLiveStage,
   LiveStage,
   LiveStageMessage,
+  type LiveStageReportReason,
   LiveStageSubscriptionStatus,
+  moderateLiveStageMember,
+  moderateLiveStageMessage,
   readLiveStageRoom,
+  reportLiveStageMessage,
   sendLiveStageMessage,
   subscribeToLiveStage,
 } from "../../lib/live-stages";
@@ -66,6 +71,33 @@ import {
 import {
   useConnectivity,
 } from "../../providers/connectivity-provider";
+
+const LIVE_STAGE_REPORT_REASONS:
+  readonly {
+    label: string;
+    value:
+      LiveStageReportReason;
+  }[] = [
+    {
+      label: "Spam",
+      value: "spam",
+    },
+    {
+      label: "Harassment",
+      value: "harassment",
+    },
+    {
+      label:
+        "Unsafe content",
+      value:
+        "unsafe_content",
+    },
+    {
+      label:
+        "Other safety concern",
+      value: "other",
+    },
+  ];
 
 function getStageKind(
   stage: LiveStage,
@@ -111,8 +143,23 @@ function chatTime(
 
 function MessageRow(
   props: {
+    canRemove: boolean;
+    canReport: boolean;
     message:
       LiveStageMessage;
+    removeDisabled:
+      boolean;
+    moderating: boolean;
+    onRemove: (
+      message:
+        LiveStageMessage,
+    ) => void;
+    onReport: (
+      message:
+        LiveStageMessage,
+    ) => void;
+    reportDisabled:
+      boolean;
   },
 ) {
   return (
@@ -221,6 +268,99 @@ function MessageRow(
             )}
           </Text>
         ) : null}
+
+        {props.canReport ||
+        props.canRemove ? (
+          <View
+            style={
+              styles.messageActions
+            }
+          >
+            {props.canReport ? (
+              <Pressable
+                accessibilityLabel={`Report message from ${props.message.displayName}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  busy:
+                    props.moderating,
+                  disabled:
+                    props
+                      .reportDisabled,
+                }}
+                disabled={
+                  props
+                    .reportDisabled
+                }
+                onPress={() => {
+                  props.onReport(
+                    props.message,
+                  );
+                }}
+                style={({
+                  pressed,
+                }) => [
+                  styles.messageAction,
+                  props
+                    .reportDisabled &&
+                    styles.disabled,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.messageActionText
+                  }
+                >
+                  Report
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {props.canRemove ? (
+              <Pressable
+                accessibilityLabel={`Remove message from ${props.message.displayName}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  busy:
+                    props.moderating,
+                  disabled:
+                    props
+                      .removeDisabled,
+                }}
+                disabled={
+                  props
+                    .removeDisabled
+                }
+                onPress={() => {
+                  props.onRemove(
+                    props.message,
+                  );
+                }}
+                style={({
+                  pressed,
+                }) => [
+                  styles.messageAction,
+                  styles.messageRemoveAction,
+                  props
+                    .removeDisabled &&
+                    styles.disabled,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.messageActionText,
+                    styles.messageRemoveActionText,
+                  ]}
+                >
+                  Remove
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -322,6 +462,12 @@ export default function LiveStageScreen() {
   const snapshotOperationIdRef =
     useRef(0);
 
+  const moderationRef =
+    useRef(false);
+
+  const moderationOperationIdRef =
+    useRef(0);
+
   roomKeyRef.current =
     roomKey;
 
@@ -391,6 +537,32 @@ export default function LiveStageScreen() {
     subscriptionRetryEpoch,
     setSubscriptionRetryEpoch,
   ] = useState(0);
+
+  const [
+    moderatingTarget,
+    setModeratingTarget,
+  ] = useState("");
+
+  const [
+    moderationFeedback,
+    setModerationFeedback,
+  ] = useState("");
+
+  const [
+    reportDraft,
+    setReportDraft,
+  ] = useState<{
+    displayName: string;
+    messageId: string;
+  } | null>(null);
+
+  const [
+    reportReason,
+    setReportReason,
+  ] =
+    useState<LiveStageReportReason | null>(
+      null,
+    );
 
   const stage =
     committedRoomKey ===
@@ -571,12 +743,17 @@ export default function LiveStageScreen() {
     snapshotOperationIdRef
       .current +=
       1;
+    moderationOperationIdRef
+      .current +=
+      1;
 
     updatingRef.current =
       false;
     sendingRef.current =
       false;
     snapshotRef.current =
+      false;
+    moderationRef.current =
       false;
 
     setUpdating(
@@ -588,6 +765,10 @@ export default function LiveStageScreen() {
     setCapturingSnapshot(
       false,
     );
+    setModeratingTarget("");
+    setModerationFeedback("");
+    setReportDraft(null);
+    setReportReason(null);
     setLoading(
       true,
     );
@@ -987,6 +1168,8 @@ export default function LiveStageScreen() {
         return;
       }
 
+      setError("");
+
       if (updated) {
         roomCacheRef.current = {
           roomKey:
@@ -1119,6 +1302,8 @@ export default function LiveStageScreen() {
       ) {
         return;
       }
+
+      setError("");
 
       if (updated) {
         roomCacheRef.current = {
@@ -1303,6 +1488,371 @@ export default function LiveStageScreen() {
         false,
       );
     }
+  }
+
+  async function performModeration(
+    target: string,
+    operation: (
+      targetStage:
+        LiveStage,
+    ) => Promise<void>,
+    successMessage: string,
+    allowEnded = false,
+  ) {
+    if (
+      !stage ||
+      moderationRef.current ||
+      cloudIsOffline ||
+      (
+        isEnded &&
+        !allowEnded
+      )
+    ) {
+      return;
+    }
+
+    moderationRef.current =
+      true;
+
+    const operationId =
+      moderationOperationIdRef
+        .current +
+      1;
+
+    moderationOperationIdRef.current =
+      operationId;
+
+    const operationRoomKey =
+      roomKey;
+
+    try {
+      setModeratingTarget(
+        target,
+      );
+      setModerationFeedback(
+        "",
+      );
+      setError("");
+
+      await operation(
+        stage,
+      );
+
+      if (
+        operationId !==
+          moderationOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
+
+      setModerationFeedback(
+        successMessage,
+      );
+
+      if (
+        process.env
+          .EXPO_OS ===
+        "ios"
+      ) {
+        void Haptics
+          .notificationAsync(
+            Haptics
+              .NotificationFeedbackType
+              .Success,
+          );
+      }
+
+      await loadRoom();
+    } catch (
+      moderationError
+    ) {
+      if (
+        operationId !==
+          moderationOperationIdRef
+            .current ||
+        operationRoomKey !==
+          roomKeyRef.current ||
+        !focusedRef.current
+      ) {
+        return;
+      }
+
+      setError(
+        moderationError instanceof
+          Error
+          ? moderationError
+              .message
+          : "Canal could not complete this moderation action.",
+      );
+    } finally {
+      if (
+        operationId !==
+          moderationOperationIdRef
+            .current
+      ) {
+        return;
+      }
+
+      moderationRef.current =
+        false;
+      setModeratingTarget("");
+    }
+  }
+
+  function openReportMessage(
+    message:
+      LiveStageMessage,
+  ) {
+    if (
+      message.isMine ||
+      moderationRef.current ||
+      cloudIsOffline
+    ) {
+      return;
+    }
+
+    setReportDraft({
+      displayName:
+        message.displayName,
+      messageId:
+        message.id,
+    });
+    setReportReason(null);
+  }
+
+  function closeReportMessage() {
+    if (moderationRef.current) {
+      return;
+    }
+
+    setReportDraft(null);
+    setReportReason(null);
+  }
+
+  function confirmReportMessage() {
+    if (
+      !stage ||
+      !reportDraft ||
+      !reportReason ||
+      moderationRef.current ||
+      cloudIsOffline
+    ) {
+      return;
+    }
+
+    const currentMessage =
+      messages.find(
+        (message) =>
+          message.id ===
+          reportDraft.messageId,
+      );
+
+    if (
+      !currentMessage ||
+      currentMessage.isMine
+    ) {
+      closeReportMessage();
+      return;
+    }
+
+    const selectedReason =
+      LIVE_STAGE_REPORT_REASONS
+        .find(
+          (reason) =>
+            reason.value ===
+            reportReason,
+        );
+
+    if (!selectedReason) {
+      return;
+    }
+
+    const draft =
+      reportDraft;
+    const reason =
+      reportReason;
+
+    Alert.alert(
+      "Report this message?",
+      `Report ${draft.displayName}'s message for ${selectedReason.label.toLowerCase()}?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text:
+            "Report message",
+          style:
+            "destructive",
+          onPress: () => {
+            setReportDraft(
+              null,
+            );
+            setReportReason(
+              null,
+            );
+            void performModeration(
+              `message:${draft.messageId}`,
+              (
+                targetStage,
+              ) =>
+                reportLiveStageMessage(
+                  targetStage.id,
+                  draft.messageId,
+                  reason,
+              ),
+              `Report submitted for ${selectedReason.label.toLowerCase()}.`,
+              true,
+            );
+          },
+        },
+      ],
+    );
+  }
+
+  function confirmRemoveMessage(
+    message:
+      LiveStageMessage,
+  ) {
+    const messageIsFromHost =
+      stage?.hostId
+        ? message.userId ===
+          stage.hostId
+        : message.isMine;
+
+    if (
+      !stage ||
+      !isHost ||
+      messageIsFromHost ||
+      moderationRef.current ||
+      cloudIsOffline ||
+      isEnded
+    ) {
+      return;
+    }
+
+    Alert.alert(
+      "Remove this message?",
+      `Remove ${message.displayName}'s message from Stage chat?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text:
+            "Remove message",
+          style:
+            "destructive",
+          onPress: () => {
+            void performModeration(
+              `message:${message.id}`,
+              (
+                targetStage,
+              ) =>
+                moderateLiveStageMessage(
+                  targetStage.id,
+                  message.id,
+                ),
+              `Message from ${message.displayName} removed from Stage chat.`,
+            );
+          },
+        },
+      ],
+    );
+  }
+
+  function confirmMemberAction(
+    participant:
+      LiveStage["participants"][number],
+    action:
+      | "promote"
+      | "demote"
+      | "remove",
+  ) {
+    if (
+      !stage ||
+      !isHost ||
+      !participant.userId ||
+      participant.role ===
+        "host" ||
+      moderationRef.current ||
+      cloudIsOffline ||
+      isEnded
+    ) {
+      return;
+    }
+
+    const actionLabel =
+      action === "promote"
+        ? "Promote"
+        : action ===
+            "demote"
+          ? "Demote"
+          : "Remove";
+
+    const confirmation =
+      action === "promote"
+        ? `Change ${participant.displayName}'s role to collaborator?`
+        : action ===
+            "demote"
+          ? `Change ${participant.displayName}'s role to listener?`
+          : `Remove ${participant.displayName} from this Stage? They will not be able to rejoin this Stage.`;
+
+    Alert.alert(
+      `${actionLabel} ${participant.displayName}?`,
+      confirmation,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text:
+            action ===
+            "remove"
+              ? "Remove member"
+              : actionLabel,
+          style:
+            action ===
+            "remove"
+              ? "destructive"
+              : "default",
+          onPress: () => {
+            const userId =
+              participant.userId;
+
+            if (!userId) {
+              return;
+            }
+
+            void performModeration(
+              `member:${userId}`,
+              (
+                targetStage,
+              ) =>
+                moderateLiveStageMember(
+                  targetStage.id,
+                  userId,
+                  action,
+                ),
+              action ===
+                "promote"
+                ? `${participant.displayName} is now a collaborator.`
+                : action ===
+                    "demote"
+                  ? `${participant.displayName} is now a listener.`
+                  : `${participant.displayName} was removed and cannot rejoin this Stage.`,
+            );
+          },
+        },
+      ],
+    );
   }
 
   async function shareStage() {
@@ -1632,16 +2182,44 @@ export default function LiveStageScreen() {
             {stage.name}
           </Text>
 
-          <Text
-            selectable
-            style={
-              styles.stageMeta
-            }
-          >
-            Hosted by @
-            {stage.hostUsername} ·{" "}
-            {stage.activity}
-          </Text>
+          {stage.hostId ? (
+            <Pressable
+              accessibilityLabel={`View ${stage.hostName}'s creator profile`}
+              accessibilityRole="button"
+              onPress={() => {
+                router.push({
+                  pathname:
+                    "/creator/[userId]",
+                  params: {
+                    userId:
+                      stage.hostId,
+                  },
+                });
+              }}
+            >
+              <Text
+                selectable
+                style={
+                  styles.stageMeta
+                }
+              >
+                Hosted by @
+                {stage.hostUsername} ·{" "}
+                {stage.activity}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text
+              selectable
+              style={
+                styles.stageMeta
+              }
+            >
+              Hosted by @
+              {stage.hostUsername} ·{" "}
+              {stage.activity}
+            </Text>
+          )}
 
           <View
             accessible
@@ -2133,74 +2711,232 @@ export default function LiveStageScreen() {
             }
           >
             {stage.participants.map(
-              (participant) => (
-                <Pressable
+              (participant) => {
+                const canModerateParticipant =
+                  isHost &&
+                  participant.role !==
+                    "host" &&
+                  Boolean(
+                    participant.userId,
+                  );
+                const roleAction =
+                  participant.role ===
+                  "collaborator"
+                    ? "demote"
+                    : "promote";
+                const roleActionLabel =
+                  roleAction ===
+                  "demote"
+                    ? "Demote"
+                    : "Promote";
+                const participantBusy =
+                  moderatingTarget ===
+                  `member:${participant.userId}`;
+                const moderationDisabled =
+                  Boolean(
+                    moderatingTarget,
+                  ) ||
+                  cloudIsOffline ||
+                  isEnded;
+
+                return (
+                <View
                   key={
                     participant
                       .userId ??
                     participant
                       .username
                   }
-                  accessibilityRole="button"
-                  onPress={() => {
-                    router.push({
-                      pathname:
-                        "/friend/[username]",
-                      params: {
-                        username:
-                          participant.username,
-                      },
-                    });
-                  }}
-                  style={({
-                    pressed,
-                  }) => [
-                    styles.person,
-                    pressed &&
-                      styles.pressed,
-                  ]}
+                  style={
+                    styles.person
+                  }
                 >
-                  <View
-                    style={
-                      styles.personAvatar
-                    }
+                  <Pressable
+                    accessibilityLabel={`View ${participant.displayName}'s profile`}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      if (
+                        participant.userId
+                      ) {
+                        router.push({
+                          pathname:
+                            "/creator/[userId]",
+                          params: {
+                            userId:
+                              participant.userId,
+                          },
+                        });
+                      } else {
+                        router.push({
+                          pathname:
+                            "/friend/[username]",
+                          params: {
+                            username:
+                              participant.username,
+                          },
+                        });
+                      }
+                    }}
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.personProfile,
+                      pressed &&
+                        styles.pressed,
+                    ]}
                   >
-                    <Text
+                    <View
                       style={
-                        styles.personInitials
+                        styles.personAvatar
                       }
                     >
-                      {
-                        participant
-                          .initials
+                      <Text
+                        style={
+                          styles.personInitials
+                        }
+                      >
+                        {
+                          participant
+                            .initials
+                        }
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.personCopy
                       }
-                    </Text>
-                  </View>
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={
+                          styles.personName
+                        }
+                      >
+                        {
+                          participant
+                            .displayName
+                        }
+                      </Text>
 
-                  <Text
-                    numberOfLines={1}
-                    style={
-                      styles.personName
-                    }
-                  >
-                    {
-                      participant
-                        .displayName
-                    }
-                  </Text>
+                      <Text
+                        style={
+                          styles.personRole
+                        }
+                      >
+                        {participant.role.toUpperCase()}
+                      </Text>
+                    </View>
+                  </Pressable>
 
-                  <Text
-                    style={
-                      styles.personRole
-                    }
-                  >
-                    {participant.role.toUpperCase()}
-                  </Text>
-                </Pressable>
-              ),
+                  {canModerateParticipant ? (
+                    <View
+                      style={
+                        styles.memberActions
+                      }
+                    >
+                      <Pressable
+                        accessibilityLabel={`${roleActionLabel} ${participant.displayName} to ${roleAction === "promote" ? "collaborator" : "listener"}`}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          busy:
+                            participantBusy,
+                          disabled:
+                            moderationDisabled,
+                        }}
+                        disabled={
+                          moderationDisabled
+                        }
+                        onPress={() => {
+                          confirmMemberAction(
+                            participant,
+                            roleAction,
+                          );
+                        }}
+                        style={({
+                          pressed,
+                        }) => [
+                          styles.memberAction,
+                          moderationDisabled &&
+                            styles.disabled,
+                          pressed &&
+                            styles.pressed,
+                        ]}
+                      >
+                        <Text
+                          style={
+                            styles.memberActionText
+                          }
+                        >
+                          {roleActionLabel}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityLabel={`Remove ${participant.displayName} from Stage`}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          busy:
+                            participantBusy,
+                          disabled:
+                            moderationDisabled,
+                        }}
+                        disabled={
+                          moderationDisabled
+                        }
+                        onPress={() => {
+                          confirmMemberAction(
+                            participant,
+                            "remove",
+                          );
+                        }}
+                        style={({
+                          pressed,
+                        }) => [
+                          styles.memberAction,
+                          styles.memberRemoveAction,
+                          moderationDisabled &&
+                            styles.disabled,
+                          pressed &&
+                            styles.pressed,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.memberActionText,
+                            styles.memberRemoveActionText,
+                          ]}
+                        >
+                          Remove
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+                );
+              },
             )}
           </View>
         </View>
+
+        {moderationFeedback ? (
+          <View
+            accessible
+            accessibilityLiveRegion="polite"
+            style={
+              styles.moderationFeedback
+            }
+          >
+            <Text
+              selectable
+              style={
+                styles.moderationFeedbackText
+              }
+            >
+              {moderationFeedback}
+            </Text>
+          </View>
+        ) : null}
 
         {recoveryIssue ? (
           <RecoveryNotice
@@ -2208,7 +2944,10 @@ export default function LiveStageScreen() {
               loading ||
               updating ||
               sending ||
-              capturingSnapshot
+              capturingSnapshot ||
+              Boolean(
+                moderatingTarget,
+              )
             }
             issue={
               recoveryIssue
@@ -2478,6 +3217,19 @@ export default function LiveStageScreen() {
     isMember &&
     !isEnded;
 
+  const moderationDisabled =
+    Boolean(
+      moderatingTarget,
+    ) ||
+    cloudIsOffline ||
+    isEnded;
+
+  const reportDisabled =
+    Boolean(
+      moderatingTarget,
+    ) ||
+    cloudIsOffline;
+
   return (
     <>
       <Stack.Screen
@@ -2502,6 +3254,185 @@ export default function LiveStageScreen() {
           },
         }}
       />
+
+      <Modal
+        animationType="fade"
+        onRequestClose={
+          closeReportMessage
+        }
+        transparent
+        visible={
+          Boolean(
+            reportDraft,
+          )
+        }
+      >
+        <View
+          style={
+            styles.reportBackdrop
+          }
+        >
+          <View
+            accessibilityViewIsModal
+            style={
+              styles.reportDialog
+            }
+          >
+            <Text
+              selectable
+              style={
+                styles.reportTitle
+              }
+            >
+              Report message
+            </Text>
+
+            <Text
+              selectable
+              style={
+                styles.reportCopy
+              }
+            >
+              Choose a reason for
+              reporting{" "}
+              {reportDraft
+                ?.displayName ??
+                "this member"}
+              ’s message.
+            </Text>
+
+            <View
+              style={
+                styles.reportReasons
+              }
+            >
+              {LIVE_STAGE_REPORT_REASONS.map(
+                (reason) => (
+                  <Pressable
+                    key={
+                      reason.value
+                    }
+                    accessibilityLabel={`Report reason: ${reason.label}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{
+                      checked:
+                        reportReason ===
+                        reason.value,
+                    }}
+                    onPress={() => {
+                      setReportReason(
+                        reason.value,
+                      );
+                    }}
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.reportReason,
+                      reportReason ===
+                        reason.value &&
+                        styles.reportReasonSelected,
+                      pressed &&
+                        styles.pressed,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.reportRadio,
+                        reportReason ===
+                          reason.value &&
+                          styles.reportRadioSelected,
+                      ]}
+                    />
+
+                    <Text
+                      style={
+                        styles.reportReasonText
+                      }
+                    >
+                      {reason.label}
+                    </Text>
+                  </Pressable>
+                ),
+              )}
+            </View>
+
+            <View
+              style={
+                styles.reportDialogActions
+              }
+            >
+              <Pressable
+                accessibilityLabel="Cancel message report"
+                accessibilityRole="button"
+                disabled={
+                  Boolean(
+                    moderatingTarget,
+                  )
+                }
+                onPress={
+                  closeReportMessage
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.reportCancel,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.reportCancelText
+                  }
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityLabel={`Confirm report of message from ${reportDraft?.displayName ?? "this member"}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  busy:
+                    Boolean(
+                      moderatingTarget,
+                    ),
+                  disabled:
+                    !reportReason ||
+                    reportDisabled,
+                }}
+                disabled={
+                  !reportReason ||
+                  reportDisabled
+                }
+                onPress={
+                  confirmReportMessage
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.reportSubmit,
+                  (
+                    !reportReason ||
+                    reportDisabled
+                  ) &&
+                    styles.disabled,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.reportSubmitText
+                  }
+                >
+                  Review report
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <KeyboardAvoidingView
         behavior={
@@ -2529,11 +3460,43 @@ export default function LiveStageScreen() {
           }
           renderItem={({
             item,
-          }) => (
-            <MessageRow
-              message={item}
-            />
-          )}
+          }) => {
+            const messageIsFromHost =
+              stage.hostId
+                ? item.userId ===
+                  stage.hostId
+                : item.isMine &&
+                  isHost;
+
+            return (
+              <MessageRow
+                canRemove={
+                  isHost &&
+                  !messageIsFromHost
+                }
+                canReport={
+                  !item.isMine
+                }
+                message={item}
+                removeDisabled={
+                  moderationDisabled
+                }
+                moderating={
+                  moderatingTarget ===
+                  `message:${item.id}`
+                }
+                onRemove={
+                  confirmRemoveMessage
+                }
+                onReport={
+                  openReportMessage
+                }
+                reportDisabled={
+                  reportDisabled
+                }
+              />
+            );
+          }}
           ListHeaderComponent={
             header
           }
@@ -3248,24 +4211,39 @@ const styles =
     },
 
     peopleList: {
-      flexDirection: "row",
-      flexWrap: "wrap",
       gap: 9,
     },
 
     person: {
-      width: 105,
-      minHeight: 104,
+      minHeight: 72,
+      flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
-      gap: 5,
-      padding: 10,
+      gap: 8,
+      padding: 9,
       borderWidth: 1,
       borderColor: "#302722",
       borderRadius: 18,
       borderCurve: "continuous",
       backgroundColor:
         "#191512",
+    },
+
+    personProfile: {
+      minWidth: 0,
+      flex: 1,
+      minHeight: 52,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 4,
+      borderRadius: 14,
+      borderCurve: "continuous",
+    },
+
+    personCopy: {
+      minWidth: 0,
+      flex: 1,
+      gap: 3,
     },
 
     personAvatar: {
@@ -3288,9 +4266,8 @@ const styles =
     personName: {
       maxWidth: "100%",
       color: "#F1E8E2",
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: "800",
-      textAlign: "center",
     },
 
     personRole: {
@@ -3298,6 +4275,58 @@ const styles =
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.7,
+    },
+
+    memberActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+
+    memberAction: {
+      minHeight: 40,
+      justifyContent:
+        "center",
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderColor: "#5B3A27",
+      borderRadius: 12,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#2D2019",
+    },
+
+    memberActionText: {
+      color: "#F1A574",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+
+    memberRemoveAction: {
+      borderColor: "#6A3028",
+      backgroundColor:
+        "#351B17",
+    },
+
+    memberRemoveActionText: {
+      color: "#FF9D87",
+    },
+
+    moderationFeedback: {
+      padding: 13,
+      borderWidth: 1,
+      borderColor: "#315C47",
+      borderRadius: 16,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#172A21",
+    },
+
+    moderationFeedbackText: {
+      color: "#A8E1C2",
+      fontSize: 12,
+      lineHeight: 18,
+      fontWeight: "700",
     },
 
     errorCard: {
@@ -3522,6 +4551,155 @@ const styles =
       fontVariant: [
         "tabular-nums",
       ],
+    },
+
+    messageActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 3,
+    },
+
+    messageAction: {
+      minHeight: 34,
+      justifyContent:
+        "center",
+      paddingHorizontal: 9,
+      borderRadius: 10,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#211B17",
+    },
+
+    messageActionText: {
+      color: "#AFA19A",
+      fontSize: 9,
+      fontWeight: "800",
+    },
+
+    messageRemoveAction: {
+      backgroundColor:
+        "#351B17",
+    },
+
+    messageRemoveActionText: {
+      color: "#FF9D87",
+    },
+
+    reportBackdrop: {
+      flex: 1,
+      justifyContent:
+        "center",
+      padding: 20,
+      backgroundColor:
+        "rgba(8, 6, 5, 0.78)",
+    },
+
+    reportDialog: {
+      gap: 14,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: "#49352A",
+      borderRadius: 24,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#1B1512",
+    },
+
+    reportTitle: {
+      color: "#FFFFFF",
+      fontSize: 22,
+      fontWeight: "900",
+    },
+
+    reportCopy: {
+      color: "#B5A79F",
+      fontSize: 13,
+      lineHeight: 19,
+    },
+
+    reportReasons: {
+      gap: 8,
+    },
+
+    reportReason: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 13,
+      borderWidth: 1,
+      borderColor: "#3A2E28",
+      borderRadius: 14,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#211A17",
+    },
+
+    reportReasonSelected: {
+      borderColor: "#D76B2C",
+      backgroundColor:
+        "#362116",
+    },
+
+    reportRadio: {
+      width: 16,
+      height: 16,
+      borderWidth: 2,
+      borderColor: "#75665D",
+      borderRadius: 8,
+    },
+
+    reportRadioSelected: {
+      borderWidth: 5,
+      borderColor: "#F47A24",
+    },
+
+    reportReasonText: {
+      color: "#EFE5DF",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    reportDialogActions: {
+      flexDirection: "row",
+      justifyContent:
+        "flex-end",
+      gap: 8,
+    },
+
+    reportCancel: {
+      minHeight: 44,
+      justifyContent:
+        "center",
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#2B2420",
+    },
+
+    reportCancelText: {
+      color: "#CFC3BC",
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    reportSubmit: {
+      minHeight: 44,
+      justifyContent:
+        "center",
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      borderCurve: "continuous",
+      backgroundColor:
+        "#C34E31",
+    },
+
+    reportSubmitText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "900",
     },
 
     composer: {

@@ -59,6 +59,9 @@ const mockCreateURL =
 const ORIGINAL_WEB_URL =
   process.env
     .EXPO_PUBLIC_CANAL_WEB_URL;
+const ORIGINAL_SHARE_BASE_URL =
+  process.env
+    .EXPO_PUBLIC_CANAL_SHARE_BASE_URL;
 
 const PUBLIC_SCENE =
   {
@@ -118,6 +121,8 @@ describe(
       () => {
         delete process.env
           .EXPO_PUBLIC_CANAL_WEB_URL;
+        delete process.env
+          .EXPO_PUBLIC_CANAL_SHARE_BASE_URL;
       },
     );
 
@@ -133,6 +138,18 @@ describe(
           process.env
             .EXPO_PUBLIC_CANAL_WEB_URL =
             ORIGINAL_WEB_URL;
+        }
+
+        if (
+          ORIGINAL_SHARE_BASE_URL ===
+          undefined
+        ) {
+          delete process.env
+            .EXPO_PUBLIC_CANAL_SHARE_BASE_URL;
+        } else {
+          process.env
+            .EXPO_PUBLIC_CANAL_SHARE_BASE_URL =
+            ORIGINAL_SHARE_BASE_URL;
         }
       },
     );
@@ -170,11 +187,14 @@ describe(
     );
 
     it(
-      "prefers a validated HTTPS Canal web URL",
+      "prefers the validated HTTPS Canal share base URL and preserves its path",
       () => {
         process.env
-          .EXPO_PUBLIC_CANAL_WEB_URL =
+          .EXPO_PUBLIC_CANAL_SHARE_BASE_URL =
           "https://canal.example/app/";
+        process.env
+          .EXPO_PUBLIC_CANAL_WEB_URL =
+          "https://fallback.example/";
 
         expect(
           publicSceneShareUrl(
@@ -182,12 +202,51 @@ describe(
             "scene/id",
           ),
         ).toBe(
-          "https://canal.example/public-scene?ownerId=owner+id&sceneId=scene%2Fid",
+          "https://canal.example/app/public-scene?ownerId=owner+id&sceneId=scene%2Fid",
         );
 
         expect(
           mockCreateURL,
         ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      "uses the legacy web URL only when the share base URL is absent",
+      () => {
+        process.env
+          .EXPO_PUBLIC_CANAL_WEB_URL =
+          "https://canal.example/app/";
+
+        expect(
+          publicSceneShareUrl(
+            "owner",
+            "scene",
+          ),
+        ).toBe(
+          "https://canal.example/app/public-scene?ownerId=owner&sceneId=scene",
+        );
+      },
+    );
+
+    it(
+      "uses the legacy web URL when the share base URL is blank",
+      () => {
+        process.env
+          .EXPO_PUBLIC_CANAL_SHARE_BASE_URL =
+          "   ";
+        process.env
+          .EXPO_PUBLIC_CANAL_WEB_URL =
+          "https://canal.example/";
+
+        expect(
+          publicSceneShareUrl(
+            "owner",
+            "scene",
+          ),
+        ).toBe(
+          "https://canal.example/public-scene?ownerId=owner&sceneId=scene",
+        );
       },
     );
 
@@ -200,7 +259,7 @@ describe(
       "falls back to the app link for an unsafe web URL: %s",
       (configuredUrl) => {
         process.env
-          .EXPO_PUBLIC_CANAL_WEB_URL =
+          .EXPO_PUBLIC_CANAL_SHARE_BASE_URL =
           configuredUrl;
 
         expect(

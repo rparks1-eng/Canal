@@ -9,12 +9,17 @@ import {
 import {
   createLiveStage,
   joinLiveStageByCode,
+  moderateLiveStageMember,
+  moderateLiveStageMessage,
   readLiveStage,
   readLiveStages,
+  reportLiveStageMessage,
   subscribeToLiveStage,
 } from "../lib/live-stages";
 import type {
+  LiveStageMemberModerationAction,
   LiveStageMemberRow,
+  LiveStageReportReason,
   LiveStageRow,
 } from "../lib/live-stages";
 import {
@@ -28,7 +33,9 @@ const VALID_SPOTIFY_IMAGE_TOKEN =
   "ab67616d0000b273d6f4a718b4b61e40";
 
 let mockBroadcastHandler:
-  (() => void) | null =
+  ((
+    payload?: unknown,
+  ) => void) | null =
     null;
 
 let mockSubscribeHandler:
@@ -56,7 +63,9 @@ const mockOn =
       _filter: {
         event: string;
       },
-      handler: () => void,
+      handler: (
+        payload?: unknown,
+      ) => void,
     ) => {
       mockBroadcastHandler =
         handler;
@@ -299,11 +308,15 @@ async function flushPromises(): Promise<void> {
   await Promise.resolve();
 }
 
-function emitBroadcast(): void {
+function emitBroadcast(
+  payload?: unknown,
+): void {
   const handler =
     mockBroadcastHandler;
 
-  handler?.();
+  handler?.(
+    payload,
+  );
 }
 
 function emitSubscriptionStatus(
@@ -630,13 +643,33 @@ describe(
           "connected",
         );
 
-        emitBroadcast();
+        emitBroadcast({
+          payload: {
+            stage_id:
+              "stage-1",
+            members: [
+              {
+                user_id:
+                  "untrusted-row",
+              },
+            ],
+            messages: [
+              {
+                body:
+                  "untrusted message",
+              },
+            ],
+          },
+        });
 
         expect(
           onChange,
         ).toHaveBeenCalledTimes(
           1,
         );
+        expect(
+          onChange,
+        ).toHaveBeenCalledWith();
 
         emitSubscriptionStatus(
           "CHANNEL_ERROR",
@@ -1012,6 +1045,244 @@ describe(
         expect(
           mockRpc,
         ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      "sends bounded report and moderation payloads through their exact RPCs",
+      async () => {
+        const stageId =
+          "00000000-0000-4000-8000-000000000001";
+        const messageId =
+          "00000000-0000-4000-8000-000000000002";
+        const targetUserId =
+          "00000000-0000-4000-8000-000000000003";
+
+        mockRpc.mockResolvedValue({
+          data: null,
+          error: null,
+        } as never);
+
+        await reportLiveStageMessage(
+          stageId,
+          messageId,
+          "harassment",
+        );
+        await moderateLiveStageMember(
+          stageId,
+          targetUserId,
+          "remove",
+          "  repeated abuse  ",
+        );
+        await moderateLiveStageMessage(
+          stageId,
+          messageId,
+        );
+
+        expect(
+          mockRpc.mock.calls,
+        ).toEqual([
+          [
+            "report_live_stage_message",
+            {
+              stage_id_value:
+                stageId,
+              message_id_value:
+                messageId,
+              reason_value:
+                "harassment",
+              expected_actor_id_value:
+                "user-current",
+            },
+          ],
+          [
+            "moderate_live_stage_member",
+            {
+              stage_id_value:
+                stageId,
+              target_user_id_value:
+                targetUserId,
+              action_value:
+                "remove",
+              reason_value:
+                "repeated abuse",
+              expected_actor_id_value:
+                "user-current",
+            },
+          ],
+          [
+            "moderate_live_stage_message",
+            {
+              stage_id_value:
+                stageId,
+              message_id_value:
+                messageId,
+              reason_value:
+                null,
+              expected_actor_id_value:
+                "user-current",
+            },
+          ],
+        ]);
+      },
+    );
+
+    it(
+      "rejects invalid moderation input before auth or RPC I/O",
+      async () => {
+        const stageId =
+          "00000000-0000-4000-8000-000000000001";
+        const messageId =
+          "00000000-0000-4000-8000-000000000002";
+        const targetUserId =
+          "00000000-0000-4000-8000-000000000003";
+
+        await expect(
+          reportLiveStageMessage(
+            "not-a-stage-id",
+            messageId,
+            "spam",
+          ),
+        ).rejects.toThrow(
+          "valid Stage",
+        );
+        await expect(
+          reportLiveStageMessage(
+            stageId,
+            "not-a-message-id",
+            "spam",
+          ),
+        ).rejects.toThrow(
+          "valid message",
+        );
+        await expect(
+          reportLiveStageMessage(
+            stageId,
+            messageId,
+            "phishing" as
+              LiveStageReportReason,
+          ),
+        ).rejects.toThrow(
+          "valid report reason",
+        );
+        await expect(
+          moderateLiveStageMember(
+            stageId,
+            "not-a-member-id",
+            "remove",
+          ),
+        ).rejects.toThrow(
+          "valid member",
+        );
+        await expect(
+          moderateLiveStageMember(
+            stageId,
+            targetUserId,
+            "ban" as
+              LiveStageMemberModerationAction,
+          ),
+        ).rejects.toThrow(
+          "valid moderation action",
+        );
+        await expect(
+          moderateLiveStageMessage(
+            stageId,
+            messageId,
+            "unsafe\nreason",
+          ),
+        ).rejects.toThrow(
+          "240 characters",
+        );
+        await expect(
+          moderateLiveStageMessage(
+            stageId,
+            messageId,
+            "😀".repeat(
+              241,
+            ),
+          ),
+        ).rejects.toThrow(
+          "240 characters",
+        );
+
+        expect(
+          mockGetUser,
+        ).not.toHaveBeenCalled();
+        expect(
+          mockRpc,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      "surfaces actionable moderation RPC errors",
+      async () => {
+        mockRpc.mockResolvedValueOnce({
+          data: null,
+          error: {
+            message:
+              "Only a Stage host can remove members.",
+          },
+        } as never);
+
+        await expect(
+          moderateLiveStageMember(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000003",
+            "remove",
+          ),
+        ).rejects.toThrow(
+          "Canal could not moderate this Stage member: Only a Stage host can remove members.",
+        );
+      },
+    );
+
+    it(
+      "rejects moderation success when the signed-in account changes during the RPC",
+      async () => {
+        mockGetUser
+          .mockResolvedValueOnce({
+            data: {
+              user: {
+                id:
+                  "user-current",
+              },
+            },
+            error: null,
+          } as never)
+          .mockResolvedValueOnce({
+            data: {
+              user: {
+                id:
+                  "user-replacement",
+              },
+            },
+            error: null,
+          } as never);
+        mockRpc.mockResolvedValueOnce({
+          data: null,
+          error: null,
+        } as never);
+
+        await expect(
+          reportLiveStageMessage(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+            "unsafe_content",
+          ),
+        ).rejects.toThrow(
+          "signed-in Canal account changed",
+        );
+
+        expect(
+          mockRpc,
+        ).toHaveBeenCalledWith(
+          "report_live_stage_message",
+          expect.objectContaining({
+            expected_actor_id_value:
+              "user-current",
+          }),
+        );
       },
     );
   },

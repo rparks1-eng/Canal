@@ -28,6 +28,17 @@ export type LiveStageRole =
   | "collaborator"
   | "listener";
 
+export type LiveStageReportReason =
+  | "spam"
+  | "harassment"
+  | "unsafe_content"
+  | "other";
+
+export type LiveStageMemberModerationAction =
+  | "promote"
+  | "demote"
+  | "remove";
+
 export type LiveStageTrack = {
   id: string;
   title: string;
@@ -158,6 +169,27 @@ const LOCAL_LIVE_STAGE_STORE_VERSION =
 
 const MAX_LIVE_STAGE_TRACKS =
   100;
+
+const MAX_LIVE_STAGE_MODERATION_REASON_CHARACTERS =
+  240;
+
+const MAX_LIVE_STAGE_MODERATION_REASON_BYTES =
+  960;
+
+const LIVE_STAGE_REPORT_REASONS:
+  readonly LiveStageReportReason[] = [
+    "spam",
+    "harassment",
+    "unsafe_content",
+    "other",
+  ];
+
+const LIVE_STAGE_MEMBER_MODERATION_ACTIONS:
+  readonly LiveStageMemberModerationAction[] = [
+    "promote",
+    "demote",
+    "remove",
+  ];
 
 const MAX_TRACK_ID_CHARACTERS =
   128;
@@ -1713,6 +1745,144 @@ export async function sendLiveStageMessage(
   );
 }
 
+export async function reportLiveStageMessage(
+  stageId: string,
+  messageId: string,
+  reason: LiveStageReportReason,
+): Promise<void> {
+  const action =
+    "report this Stage message";
+  const normalizedStageId =
+    validateLiveStageModerationUuid(
+      stageId,
+      "Stage",
+      action,
+    );
+  const normalizedMessageId =
+    validateLiveStageModerationUuid(
+      messageId,
+      "message",
+      action,
+    );
+
+  if (
+    !LIVE_STAGE_REPORT_REASONS.includes(
+      reason,
+    )
+  ) {
+    throw stageError(
+      action,
+      "Choose a valid report reason and try again.",
+    );
+  }
+
+  await runLiveStageModerationRpc(
+    action,
+    "report_live_stage_message",
+    {
+      stage_id_value:
+        normalizedStageId,
+      message_id_value:
+        normalizedMessageId,
+      reason_value:
+        reason,
+    },
+  );
+}
+
+export async function moderateLiveStageMember(
+  stageId: string,
+  targetUserId: string,
+  action: LiveStageMemberModerationAction,
+  reason?: string,
+): Promise<void> {
+  const stageAction =
+    "moderate this Stage member";
+  const normalizedStageId =
+    validateLiveStageModerationUuid(
+      stageId,
+      "Stage",
+      stageAction,
+    );
+  const normalizedTargetUserId =
+    validateLiveStageModerationUuid(
+      targetUserId,
+      "member",
+      stageAction,
+    );
+
+  if (
+    !LIVE_STAGE_MEMBER_MODERATION_ACTIONS.includes(
+      action,
+    )
+  ) {
+    throw stageError(
+      stageAction,
+      "Choose a valid moderation action and try again.",
+    );
+  }
+
+  const normalizedReason =
+    normalizeLiveStageModerationReason(
+      reason,
+      stageAction,
+    );
+
+  await runLiveStageModerationRpc(
+    stageAction,
+    "moderate_live_stage_member",
+    {
+      stage_id_value:
+        normalizedStageId,
+      target_user_id_value:
+        normalizedTargetUserId,
+      action_value:
+        action,
+      reason_value:
+        normalizedReason,
+    },
+  );
+}
+
+export async function moderateLiveStageMessage(
+  stageId: string,
+  messageId: string,
+  reason?: string,
+): Promise<void> {
+  const action =
+    "moderate this Stage message";
+  const normalizedStageId =
+    validateLiveStageModerationUuid(
+      stageId,
+      "Stage",
+      action,
+    );
+  const normalizedMessageId =
+    validateLiveStageModerationUuid(
+      messageId,
+      "message",
+      action,
+    );
+  const normalizedReason =
+    normalizeLiveStageModerationReason(
+      reason,
+      action,
+    );
+
+  await runLiveStageModerationRpc(
+    action,
+    "moderate_live_stage_message",
+    {
+      stage_id_value:
+        normalizedStageId,
+      message_id_value:
+        normalizedMessageId,
+      reason_value:
+        normalizedReason,
+    },
+  );
+}
+
 export function subscribeToLiveStage(
   stageId: string,
   onChange: () => void,
@@ -1961,6 +2131,127 @@ export function createStageCode(): string {
         900000,
     ),
   );
+}
+
+function validateLiveStageModerationUuid(
+  value: unknown,
+  label: string,
+  action: string,
+): string {
+  const normalized =
+    cleanText(
+      value,
+    );
+
+  if (
+    !isUuid(
+      normalized,
+    )
+  ) {
+    throw stageError(
+      action,
+      `Choose a valid ${label} and try again.`,
+    );
+  }
+
+  return normalized;
+}
+
+function normalizeLiveStageModerationReason(
+  value: unknown,
+  action: string,
+): string | null {
+  if (
+    value ===
+    undefined
+  ) {
+    return null;
+  }
+
+  if (
+    typeof value !==
+    "string"
+  ) {
+    throw stageError(
+      action,
+      "Use a valid moderation reason and try again.",
+    );
+  }
+
+  const normalized =
+    value.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    Array.from(
+      normalized,
+    ).length >
+      MAX_LIVE_STAGE_MODERATION_REASON_CHARACTERS ||
+    utf8ByteLength(
+      normalized,
+    ) >
+      MAX_LIVE_STAGE_MODERATION_REASON_BYTES ||
+    /[\u0000-\u001f\u007f]/.test(
+      normalized,
+    )
+  ) {
+    throw stageError(
+      action,
+      "Keep the moderation reason to 240 characters without control characters.",
+    );
+  }
+
+  return normalized;
+}
+
+async function runLiveStageModerationRpc(
+  action: string,
+  rpcName:
+    | "report_live_stage_message"
+    | "moderate_live_stage_member"
+    | "moderate_live_stage_message",
+  values: Record<
+    string,
+    string | null
+  >,
+): Promise<void> {
+  if (!isSupabaseConfigured) {
+    throw stageError(
+      action,
+      "Live Stage moderation requires Canal cloud services. Configure Supabase and try again.",
+    );
+  }
+
+  requireSupabaseConfiguration();
+
+  const currentUserId =
+    await getCurrentUserId();
+
+  const {
+    error,
+  } =
+    await supabase.rpc(
+      rpcName,
+      {
+        ...values,
+        expected_actor_id_value:
+          currentUserId,
+      },
+    );
+
+  await assertCurrentLiveStageUser(
+    currentUserId,
+  );
+
+  if (error) {
+    throw stageError(
+      action,
+      error.message,
+    );
+  }
 }
 
 async function readCloudMembers(
