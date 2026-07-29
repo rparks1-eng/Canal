@@ -8,9 +8,16 @@ import {
 
 import {
   readScenes,
+  writeScenes,
 } from "../lib/scenes";
+
+import type {
+  StoredScene,
+} from "../lib/scenes";
+
 import {
   clearSceneSyncOwnership,
+  prepareSceneLibraryForUser,
   syncScenesWithCloud,
 } from "../lib/scene-sync";
 import {
@@ -152,6 +159,44 @@ describe(
         );
 
         await clearSceneSyncOwnership();
+      },
+    );
+
+    it(
+      "clears account A's local Scene cache before account B can read it, without changing offline storage semantics",
+      async () => {
+        await prepareSceneLibraryForUser(
+          "user-a",
+        );
+
+        await writeScenes([
+          sceneRow(
+            "user-a",
+            "scene-a",
+          ).payload as StoredScene,
+        ]);
+
+        expect(
+          (
+            await readScenes()
+          ).map(
+            (scene) =>
+              scene.id,
+          ),
+        ).toEqual([
+          "scene-a",
+        ]);
+
+        currentUserId =
+          "user-b";
+
+        await prepareSceneLibraryForUser(
+          "user-b",
+        );
+
+        expect(
+          await readScenes(),
+        ).toEqual([]);
       },
     );
 

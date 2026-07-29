@@ -17,25 +17,64 @@ const STATUS_COPY: Record<
   CreatorRelease["status"],
   {
     label: string;
-    detail: string;
+    ownerDetail: string;
+    listenerDetail: string;
+    privacy: string;
   }
 > = {
   draft: {
     label: "DRAFT",
-    detail:
+    ownerDetail:
       "Review the collection before opening the ballot.",
+    listenerDetail:
+      "Voting has not opened yet.",
+    privacy:
+      "Scenes freeze when opened",
   },
   open: {
     label: "VOTING OPEN",
-    detail:
-      "Eligible listeners can choose one favorite Scene.",
+    ownerDetail:
+      "Results stay sealed until you close voting.",
+    listenerDetail:
+      "Choose or change one private favorite Scene.",
+    privacy:
+      "Individual votes stay private",
   },
   closed: {
     label: "CLOSED",
-    detail:
+    ownerDetail:
       "Final totals and the winning Scene are available.",
+    listenerDetail:
+      "View final totals and the winning Scene.",
+    privacy:
+      "Aggregate results only",
   },
 };
+
+function formatReleaseDate(
+  value: string,
+): string {
+  const date =
+    new Date(
+      value,
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return "Recently updated";
+  }
+
+  return `Updated ${date.toLocaleDateString(
+    undefined,
+    {
+      month: "short",
+      day: "numeric",
+    },
+  )}`;
+}
 
 export function CreatorReleaseCard(
   props: {
@@ -52,10 +91,21 @@ export function CreatorReleaseCard(
       release.status
     ];
 
+  const roleLabel =
+    props.isOwner
+      ? "OWNER"
+      : "LISTENER";
+
   return (
     <Pressable
-      accessibilityHint="Opens the release ballot details"
-      accessibilityLabel={`Open ${release.title}, ${status.label.toLowerCase()}`}
+      accessibilityHint={
+        release.status ===
+          "open" &&
+        !props.isOwner
+          ? "Opens the ballot where you can choose or change your favorite"
+          : "Opens the release ballot details"
+      }
+      accessibilityLabel={`Open ${release.title}, ${roleLabel.toLowerCase()}, ${status.label.toLowerCase()}. ${status.privacy}`}
       accessibilityRole="button"
       onPress={() => {
         router.push({
@@ -84,6 +134,9 @@ export function CreatorReleaseCard(
           style={[
             styles.statusBadge,
             release.status ===
+              "open" &&
+              styles.openBadge,
+            release.status ===
               "closed" &&
               styles.closedBadge,
           ]}
@@ -91,6 +144,9 @@ export function CreatorReleaseCard(
           <Text
             style={[
               styles.statusText,
+              release.status ===
+                "open" &&
+                styles.openStatusText,
               release.status ===
                 "closed" &&
                 styles.closedStatusText,
@@ -105,9 +161,7 @@ export function CreatorReleaseCard(
             styles.ownerLabel
           }
         >
-          {props.isOwner
-            ? "CREATED BY YOU"
-            : "AVAILABLE TO YOU"}
+          {roleLabel}
         </Text>
       </View>
 
@@ -145,7 +199,9 @@ export function CreatorReleaseCard(
             styles.detail
           }
         >
-          {status.detail}
+          {props.isOwner
+            ? status.ownerDetail
+            : status.listenerDetail}
         </Text>
 
         <Text
@@ -156,6 +212,30 @@ export function CreatorReleaseCard(
           }
         >
           ›
+        </Text>
+      </View>
+
+      <View
+        style={
+          styles.metaRow
+        }
+      >
+        <Text
+          style={
+            styles.privacy
+          }
+        >
+          {status.privacy}
+        </Text>
+
+        <Text
+          style={
+            styles.date
+          }
+        >
+          {formatReleaseDate(
+            release.updatedAt,
+          )}
         </Text>
       </View>
     </Pressable>
@@ -190,6 +270,7 @@ const styles =
 
     topRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
       alignItems:
         "center",
       justifyContent:
@@ -207,6 +288,11 @@ const styles =
         "#FFF0E5",
     },
 
+    openBadge: {
+      backgroundColor:
+        "#EAF1FF",
+    },
+
     closedBadge: {
       backgroundColor:
         "#EAF5EE",
@@ -217,6 +303,10 @@ const styles =
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.6,
+    },
+
+    openStatusText: {
+      color: "#315F9A",
     },
 
     closedStatusText: {
@@ -265,5 +355,30 @@ const styles =
       color: "#F47A24",
       fontSize: 28,
       lineHeight: 30,
+    },
+
+    metaRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      gap: 8,
+      paddingTop: 2,
+    },
+
+    privacy: {
+      color: "#A14B14",
+      fontSize: 9,
+      fontWeight: "800",
+    },
+
+    date: {
+      color: "#91867E",
+      fontSize: 9,
+      fontVariant: [
+        "tabular-nums",
+      ],
     },
   });

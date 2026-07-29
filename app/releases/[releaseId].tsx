@@ -47,6 +47,22 @@ import {
   respondCreatorReleaseCredit,
 } from "../../lib/creator-releases";
 
+import {
+  contributorConsentLabel,
+  createCreatorReleaseMutationLeaseGate,
+  creatorReleaseRoleCopy,
+  creatorReleaseViewerRole,
+  creatorReleaseVoteCopy,
+  creatorReleaseVotePercent,
+  rankCreatorReleaseResults,
+  shouldDiscardCreatorReleaseSnapshot,
+} from "../../lib/creator-release-interface";
+
+import type {
+  CreatorReleaseMutationLease,
+  CreatorReleaseMutationLeaseGate,
+} from "../../lib/creator-release-interface";
+
 import type {
   CreatorReleaseDetail,
 } from "../../lib/creator-releases";
@@ -88,94 +104,14 @@ type CreatorReleaseAccount =
   >;
 
 export type DetailMutationLease =
-  Readonly<{
-    owner: number;
-    commitEpoch: number;
-  }>;
+  CreatorReleaseMutationLease;
 
 export type DetailMutationLeaseGate =
-  Readonly<{
-    acquire:
-      () =>
-        | DetailMutationLease
-        | null;
-    canCommit: (
-      lease:
-        DetailMutationLease,
-    ) => boolean;
-    invalidateCommits:
-      () => void;
-    isBusy:
-      () => boolean;
-    release: (
-      lease:
-        DetailMutationLease,
-    ) => boolean;
-  }>;
+  CreatorReleaseMutationLeaseGate;
 
 export function createDetailMutationLeaseGate():
   DetailMutationLeaseGate {
-  let nextOwner = 0;
-
-  let activeOwner:
-    | number
-    | null = null;
-
-  let commitEpoch = 0;
-
-  return {
-    acquire: () => {
-      if (
-        activeOwner !==
-        null
-      ) {
-        return null;
-      }
-
-      nextOwner += 1;
-      activeOwner =
-        nextOwner;
-
-      return {
-        owner:
-          nextOwner,
-        commitEpoch,
-      };
-    },
-
-    canCommit: (
-      lease,
-    ) =>
-      activeOwner ===
-        lease.owner &&
-      commitEpoch ===
-        lease.commitEpoch,
-
-    invalidateCommits:
-      () => {
-        commitEpoch += 1;
-      },
-
-    isBusy: () =>
-      activeOwner !==
-      null,
-
-    release: (
-      lease,
-    ) => {
-      if (
-        activeOwner !==
-        lease.owner
-      ) {
-        return false;
-      }
-
-      activeOwner =
-        null;
-
-      return true;
-    },
-  };
+  return createCreatorReleaseMutationLeaseGate();
 }
 
 export type DetailSnapshotMutationGateInput =
@@ -662,6 +598,19 @@ function CreatorReleaseDetailContent(
               props.expectedUserId
           ) {
             return false;
+          }
+
+          if (
+            shouldDiscardCreatorReleaseSnapshot(
+              error,
+            )
+          ) {
+            setRelease(
+              null,
+            );
+            setSuccessMessage(
+              "",
+            );
           }
 
           setLoadError(
@@ -1194,6 +1143,22 @@ function CreatorReleaseDetailContent(
         props.expectedUserId,
     );
 
+  const viewerRole =
+    release
+      ? creatorReleaseViewerRole(
+          release,
+          props.expectedUserId,
+        )
+      : "listener";
+
+  const roleCopy =
+    release
+      ? creatorReleaseRoleCopy(
+          viewerRole,
+          release.status,
+        )
+      : null;
+
   const acceptedContributors =
     useMemo(
       () =>
@@ -1202,6 +1167,19 @@ function CreatorReleaseDetailContent(
               (contributor) =>
                 contributor.status ===
                   "accepted",
+            )
+          : [],
+      [
+        release,
+      ],
+    );
+
+  const rankedResults =
+    useMemo(
+      () =>
+        release?.results
+          ? rankCreatorReleaseResults(
+              release.results.items,
             )
           : [],
       [
@@ -1230,6 +1208,16 @@ function CreatorReleaseDetailContent(
     connectivityStatus ===
       "offline";
 
+  const acceptCreditDisabled =
+    actionsBlocked ||
+    release?.viewerContributorStatus ===
+      "accepted";
+
+  const declineCreditDisabled =
+    actionsBlocked ||
+    release?.viewerContributorStatus ===
+      "declined";
+
   const statusLabel =
     release?.status ===
       "open"
@@ -1256,8 +1244,10 @@ function CreatorReleaseDetailContent(
         }
       >
         <Pressable
+          accessibilityHint="Returns to the previous Canal screen"
           accessibilityLabel="Go back"
           accessibilityRole="button"
+          hitSlop={8}
           onPress={
             goBack
           }
@@ -1363,6 +1353,53 @@ function CreatorReleaseDetailContent(
             </View>
           ) : null}
 
+          {isLoading &&
+          release &&
+          !issue ? (
+            <View
+              accessibilityLiveRegion="polite"
+              style={
+                styles.refreshNotice
+              }
+            >
+              <ActivityIndicator
+                color="#A84B0E"
+                size="small"
+              />
+
+              <Text
+                selectable
+                style={
+                  styles.refreshText
+                }
+              >
+                Refreshing ballot status and access…
+              </Text>
+            </View>
+          ) : null}
+
+          {connectivityStatus ===
+            "offline" &&
+          release &&
+          !issue ? (
+            <View
+              accessibilityLiveRegion="assertive"
+              accessibilityRole="alert"
+              style={
+                styles.offlineNotice
+              }
+            >
+              <Text
+                selectable
+                style={
+                  styles.offlineText
+                }
+              >
+                Offline. This is the last loaded ballot; voting, contributor responses, and owner actions are paused.
+              </Text>
+            </View>
+          ) : null}
+
           {!isLoading &&
           !release &&
           !issue ? (
@@ -1428,9 +1465,10 @@ function CreatorReleaseDetailContent(
                       styles.roleLabel
                     }
                   >
-                    {isOwner
-                      ? "OWNER"
-                      : "LISTENER"}
+                    {
+                      roleCopy
+                        ?.label
+                    }
                   </Text>
                 </View>
 
@@ -1473,6 +1511,65 @@ function CreatorReleaseDetailContent(
                       : `Closed ${formatDate(release.closedAt)}`}
                 </Text>
               </View>
+
+              {roleCopy ? (
+                <View
+                  accessibilityLabel={`${roleCopy.label}. ${roleCopy.title} ${roleCopy.detail}`}
+                  style={
+                    styles.roleCard
+                  }
+                >
+                  <View
+                    style={
+                      styles.roleMarker
+                    }
+                  >
+                    <Text
+                      accessibilityElementsHidden
+                      importantForAccessibility="no"
+                      style={
+                        styles.roleMarkerText
+                      }
+                    >
+                      {viewerRole ===
+                        "owner"
+                        ? "O"
+                        : viewerRole ===
+                            "contributor"
+                          ? "C"
+                          : "L"}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.roleCopy
+                    }
+                  >
+                    <Text
+                      selectable
+                      style={
+                        styles.roleTitle
+                      }
+                    >
+                      {
+                        roleCopy.title
+                      }
+                    </Text>
+
+                    <Text
+                      selectable
+                      style={
+                        styles.roleDetail
+                      }
+                    >
+                      {
+                        roleCopy.detail
+                      }
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
 
               {successMessage ? (
                 <View
@@ -1682,19 +1779,39 @@ function CreatorReleaseDetailContent(
                     {release.status ===
                       "open"
                       ? "Accept to show your profile with this release, or decline to keep it off the public contributor list."
-                      : "Your response is read-only until the release is open, and after it closes."}{" "}
-                    Your current response is{" "}
+                      : "Your response is read-only until the release is open, and after it closes."}
+                  </Text>
+
+                  <View
+                    accessibilityLabel={`Current contributor response: ${contributorConsentLabel(release.viewerContributorStatus)}`}
+                    style={
+                      styles.consentStatusRow
+                    }
+                  >
                     <Text
                       style={
-                        styles.creditStatus
+                        styles.consentStatusLabel
                       }
                     >
-                      {
-                        release.viewerContributorStatus
-                      }
+                      Current response
                     </Text>
-                    .
-                  </Text>
+
+                    <View
+                      style={
+                        styles.consentStatusBadge
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.creditStatus
+                        }
+                      >
+                        {contributorConsentLabel(
+                          release.viewerContributorStatus,
+                        )}
+                      </Text>
+                    </View>
+                  </View>
 
                   {release.status ===
                   "open" ? (
@@ -1714,10 +1831,10 @@ function CreatorReleaseDetailContent(
                             release.viewerContributorStatus ===
                             "accepted",
                           disabled:
-                            actionsBlocked,
+                            acceptCreditDisabled,
                         }}
                         disabled={
-                          actionsBlocked
+                          acceptCreditDisabled
                         }
                         onPress={() => {
                           void respondToCredit(
@@ -1729,7 +1846,7 @@ function CreatorReleaseDetailContent(
                           release.viewerContributorStatus ===
                             "accepted" &&
                             styles.creditButtonSelected,
-                          actionsBlocked &&
+                          acceptCreditDisabled &&
                             styles.disabledButton,
                         ]}
                       >
@@ -1764,10 +1881,10 @@ function CreatorReleaseDetailContent(
                             release.viewerContributorStatus ===
                             "declined",
                           disabled:
-                            actionsBlocked,
+                            declineCreditDisabled,
                         }}
                         disabled={
-                          actionsBlocked
+                          declineCreditDisabled
                         }
                         onPress={() => {
                           void respondToCredit(
@@ -1779,7 +1896,7 @@ function CreatorReleaseDetailContent(
                           release.viewerContributorStatus ===
                             "declined" &&
                             styles.declineButtonSelected,
-                          actionsBlocked &&
+                          declineCreditDisabled &&
                             styles.disabledButton,
                         ]}
                       >
@@ -1853,10 +1970,23 @@ function CreatorReleaseDetailContent(
                             accessibilityHint="Opens this accepted contributor’s Canal profile"
                             accessibilityLabel={`${displayName}, ${handle}, accepted contributor`}
                             accessibilityRole="button"
+                            accessibilityState={{
+                              disabled:
+                                actionsBlocked,
+                            }}
+                            disabled={
+                              actionsBlocked
+                            }
                             key={
                               contributor.contributorId
                             }
                             onPress={() => {
+                              if (
+                                actionsBlocked
+                              ) {
+                                return;
+                              }
+
                               router.push({
                                 pathname:
                                   "/creator/[userId]",
@@ -1866,9 +1996,11 @@ function CreatorReleaseDetailContent(
                                 },
                               } as never);
                             }}
-                            style={
-                              styles.contributorCard
-                            }
+                            style={[
+                              styles.contributorCard,
+                              actionsBlocked &&
+                                styles.disabledButton,
+                            ]}
                           >
                             <View
                               style={
@@ -2002,9 +2134,16 @@ function CreatorReleaseDetailContent(
                         item,
                         index,
                       ) => {
-                        const selected =
-                          release.selectedVoteSceneId ===
-                          item.sceneId;
+                        const voteCopy =
+                          creatorReleaseVoteCopy(
+                            release.selectedVoteSceneId,
+                            item.sceneId,
+                          );
+
+                        const {
+                          selected,
+                        } =
+                          voteCopy;
 
                         const canVote =
                           release.status ===
@@ -2019,14 +2158,10 @@ function CreatorReleaseDetailContent(
                           <Pressable
                             accessibilityHint={
                               canVote
-                                ? selected
-                                  ? "This is your current favorite Scene"
-                                  : release.selectedVoteSceneId
-                                    ? "Changes your favorite to this Scene"
-                                    : "Selects this Scene as your favorite"
+                                ? voteCopy.hint
                                 : undefined
                             }
-                            accessibilityLabel={`${index + 1}. ${item.title}. Frozen revision ${item.sceneRevision}${selected ? ". Current favorite" : ""}`}
+                            accessibilityLabel={`${index + 1}. ${item.title}. Frozen revision ${item.sceneRevision}${canVote ? `. ${voteCopy.label}` : ""}`}
                             accessibilityRole={
                               canVote
                                 ? "radio"
@@ -2117,6 +2252,20 @@ function CreatorReleaseDetailContent(
                                   item.sceneRevision
                                 }
                               </Text>
+
+                              {canVote ? (
+                                <Text
+                                  style={[
+                                    styles.voteActionLabel,
+                                    selected &&
+                                      styles.voteActionLabelSelected,
+                                  ]}
+                                >
+                                  {
+                                    voteCopy.label
+                                  }
+                                </Text>
+                              ) : null}
                             </View>
 
                             {canVote ? (
@@ -2269,77 +2418,122 @@ function CreatorReleaseDetailContent(
                         styles.resultList
                       }
                     >
-                      {release.results.items.map(
+                      {rankedResults.map(
                         (
                           item,
                           index,
-                        ) => (
-                          <View
-                            accessibilityLabel={`${item.title}, ${item.voteCount} ${item.voteCount === 1 ? "vote" : "votes"}${item.isWinner ? ", winner" : ""}`}
-                            key={`${item.sceneId}:${item.position}:result`}
-                            style={[
-                              styles.resultRow,
-                              item.isWinner &&
-                                styles.winnerRow,
-                            ]}
-                          >
+                        ) => {
+                          const percent =
+                            creatorReleaseVotePercent(
+                              item.voteCount,
+                              release.results
+                                ?.totalVotes ??
+                                0,
+                            );
+
+                          return (
                             <View
-                              style={
-                                styles.resultPosition
-                              }
+                              accessibilityLabel={`${item.title}, ${item.voteCount} ${item.voteCount === 1 ? "vote" : "votes"}, ${percent} percent${item.isWinner ? ", winner" : ""}`}
+                              key={`${item.sceneId}:${item.position}:result`}
+                              style={[
+                                styles.resultRow,
+                                item.isWinner &&
+                                  styles.winnerRow,
+                              ]}
                             >
-                              <Text
+                              <View
                                 style={
-                                  styles.resultPositionText
+                                  styles.resultPosition
                                 }
                               >
-                                {
-                                  index +
-                                  1
-                                }
-                              </Text>
-                            </View>
-
-                            <View
-                              style={
-                                styles.resultCopy
-                              }
-                            >
-                              <Text
-                                numberOfLines={2}
-                                selectable
-                                style={
-                                  styles.resultName
-                                }
-                              >
-                                {
-                                  item.title
-                                }
-                              </Text>
-
-                              {item.isWinner ? (
                                 <Text
                                   style={
-                                    styles.winnerLabel
+                                    styles.resultPositionText
                                   }
                                 >
-                                  WINNER
+                                  {
+                                    index +
+                                    1
+                                  }
                                 </Text>
-                              ) : null}
-                            </View>
+                              </View>
 
-                            <Text
-                              selectable
-                              style={
-                                styles.resultCount
-                              }
-                            >
-                              {
-                                item.voteCount
-                              }
-                            </Text>
-                          </View>
-                        ),
+                              <View
+                                style={
+                                  styles.resultCopy
+                                }
+                              >
+                                <Text
+                                  numberOfLines={2}
+                                  selectable
+                                  style={
+                                    styles.resultName
+                                  }
+                                >
+                                  {
+                                    item.title
+                                  }
+                                </Text>
+
+                                <View
+                                  style={
+                                    styles.resultMetaRow
+                                  }
+                                >
+                                  {item.isWinner ? (
+                                    <Text
+                                      style={
+                                        styles.winnerLabel
+                                      }
+                                    >
+                                      WINNER
+                                    </Text>
+                                  ) : null}
+
+                                  <Text
+                                    style={
+                                      styles.resultPercent
+                                    }
+                                  >
+                                    {
+                                      percent
+                                    }
+                                    %
+                                  </Text>
+                                </View>
+
+                                <View
+                                  accessibilityElementsHidden
+                                  importantForAccessibility="no"
+                                  style={
+                                    styles.resultTrack
+                                  }
+                                >
+                                  <View
+                                    style={[
+                                      styles.resultFill,
+                                      {
+                                        width:
+                                          `${percent}%`,
+                                      },
+                                    ]}
+                                  />
+                                </View>
+                              </View>
+
+                              <Text
+                                selectable
+                                style={
+                                  styles.resultCount
+                                }
+                              >
+                                {
+                                  item.voteCount
+                                }
+                              </Text>
+                            </View>
+                          );
+                        },
                       )}
                     </View>
                   )}
@@ -2460,6 +2654,46 @@ const styles =
       lineHeight: 18,
     },
 
+    refreshNotice: {
+      minHeight: 44,
+      flexDirection: "row",
+      alignItems:
+        "center",
+      gap: 9,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 15,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFF3E9",
+    },
+
+    refreshText: {
+      flex: 1,
+      color: "#7C451F",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    offlineNotice: {
+      padding: 14,
+      borderWidth: 1,
+      borderColor:
+        "#D8C7A6",
+      borderRadius: 16,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFF7DF",
+    },
+
+    offlineText: {
+      color: "#6E5525",
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
     loading: {
       minHeight: 260,
       alignItems:
@@ -2511,6 +2745,7 @@ const styles =
 
     heroTopRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
       alignItems:
         "center",
       justifyContent:
@@ -2543,10 +2778,12 @@ const styles =
     },
 
     roleLabel: {
+      flexShrink: 1,
       color: "#CBB8AD",
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.6,
+      textAlign: "right",
     },
 
     title: {
@@ -2565,6 +2802,60 @@ const styles =
     dateText: {
       color: "#CBB8AD",
       fontSize: 10,
+    },
+
+    roleCard: {
+      minHeight: 76,
+      flexDirection: "row",
+      alignItems:
+        "center",
+      gap: 13,
+      padding: 16,
+      borderWidth: 1,
+      borderColor:
+        "#E8DED5",
+      borderRadius: 20,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFFFFF",
+    },
+
+    roleMarker: {
+      width: 42,
+      height: 42,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 14,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFF0E5",
+    },
+
+    roleMarkerText: {
+      color: "#B9500B",
+      fontSize: 16,
+      fontWeight: "900",
+    },
+
+    roleCopy: {
+      flex: 1,
+      gap: 4,
+    },
+
+    roleTitle: {
+      color: "#2B211B",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    roleDetail: {
+      color: "#71675F",
+      fontSize: 11,
+      lineHeight: 17,
     },
 
     successNotice: {
@@ -2689,7 +2980,34 @@ const styles =
     },
 
     creditStatus: {
+      color: "#7C3F1B",
+      fontSize: 10,
       fontWeight: "900",
+    },
+
+    consentStatusRow: {
+      minHeight: 34,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      gap: 8,
+    },
+
+    consentStatusLabel: {
+      color: "#6A5141",
+      fontSize: 11,
+      fontWeight: "700",
+    },
+
+    consentStatusBadge: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor:
+        "#FFFFFF",
     },
 
     creditActions: {
@@ -2922,6 +3240,19 @@ const styles =
       ],
     },
 
+    voteActionLabel: {
+      alignSelf:
+        "flex-start",
+      color: "#A84B0E",
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 0.2,
+    },
+
+    voteActionLabelSelected: {
+      color: "#D45D13",
+    },
+
     voteRadio: {
       width: 26,
       height: 26,
@@ -3090,7 +3421,7 @@ const styles =
 
     resultCopy: {
       flex: 1,
-      gap: 3,
+      gap: 5,
     },
 
     resultName: {
@@ -3104,6 +3435,40 @@ const styles =
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.7,
+    },
+
+    resultMetaRow: {
+      flexDirection: "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      gap: 8,
+    },
+
+    resultPercent: {
+      color: "#55705E",
+      fontSize: 9,
+      fontWeight: "800",
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+
+    resultTrack: {
+      height: 5,
+      overflow: "hidden",
+      borderRadius: 3,
+      backgroundColor:
+        "#E2EEE6",
+    },
+
+    resultFill: {
+      height: "100%",
+      minWidth: 0,
+      borderRadius: 3,
+      backgroundColor:
+        "#5A9B6D",
     },
 
     resultCount: {

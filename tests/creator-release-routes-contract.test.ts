@@ -524,7 +524,7 @@ describe(
         expect(
           detailRoute,
         ).toContain(
-          "Changes your favorite to this Scene",
+          "creatorReleaseVoteCopy",
         );
 
         expect(
@@ -723,6 +723,85 @@ describe(
     );
 
     it(
+      "polishes browse roles and preserves lifecycle recovery without stale mutations",
+      () => {
+        expect(
+          listRoute,
+        ).toContain(
+          "CREATOR_RELEASE_BROWSE_FILTERS",
+        );
+
+        expect(
+          listRoute,
+        ).toContain(
+          "filterCreatorReleases",
+        );
+
+        expect(
+          listRoute,
+        ).toContain(
+          "Nothing in this view",
+        );
+
+        expect(
+          detailRoute,
+        ).toContain(
+          "creatorReleaseViewerRole",
+        );
+
+        expect(
+          detailRoute,
+        ).toContain(
+          "contributorConsentLabel",
+        );
+
+        expect(
+          detailRoute,
+        ).toContain(
+          "rankCreatorReleaseResults",
+        );
+
+        for (
+          const route of [
+            listRoute,
+            newRoute,
+            detailRoute,
+          ]
+        ) {
+          expect(
+            route,
+          ).toContain(
+            "shouldDiscardCreatorReleaseSnapshot",
+          );
+
+          expect(
+            route,
+          ).toContain(
+            "Refreshing",
+          );
+        }
+
+        expect(
+          newRoute,
+        ).toContain(
+          "createCreatorReleaseMutationLeaseGate",
+        );
+
+        expect(
+          newRoute,
+        ).toContain(
+          "Draft created while you were away",
+        );
+
+        expect(
+          newRoute,
+        ).toContain(
+          "restoredDraftId",
+        );
+      },
+    );
+
+    it(
       "uses accessible responsive controls, live feedback, and tabular result counts",
       () => {
         for (
@@ -773,6 +852,24 @@ describe(
           detailRoute,
         ).toMatch(
           /accessibilityState=\{\{[\s\S]*busy:[\s\S]*disabled:/,
+        );
+
+        expect(
+          listRoute,
+        ).toContain(
+          'accessibilityRole="radiogroup"',
+        );
+
+        expect(
+          card,
+        ).toContain(
+          "accessibilityHint",
+        );
+
+        expect(
+          allRouteSources,
+        ).toContain(
+          "hitSlop",
         );
       },
     );

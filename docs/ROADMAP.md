@@ -94,6 +94,11 @@ channel access.
 - [x] Public Scene collections
 - [x] Release Ballots with frozen public-collection revisions, contributor consent,
   private listener votes, and owner-closed results
+- [x] Release Ballot interface polish for browsing, role and consent guidance,
+  private vote changes, aggregate results, recovery, accessibility, and
+  account-switch-safe lifecycle restoration
+- [ ] Release Ballot physical-device acceptance; Android validation is explicitly
+  deferred from the interface-polish sprint
 - Event, venue, and DJ controls
 - Licensing, moderation, reporting, and administrative tools required for broader
   distribution
