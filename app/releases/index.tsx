@@ -46,6 +46,7 @@ import type {
 
 import {
   CREATOR_RELEASE_BROWSE_FILTERS,
+  creatorReleaseRequestCanCommit,
   filterCreatorReleases,
   shouldDiscardCreatorReleaseSnapshot,
 } from "../../lib/creator-release-interface";
@@ -310,12 +311,17 @@ function CreatorReleasesContent(
             accountUserId:
               string,
           ): boolean =>
-            requestEpoch.current ===
-              epoch &&
-            activeUserIdRef.current ===
-              accountUserId &&
-            accountUserId ===
-              props.expectedUserId;
+            creatorReleaseRequestCanCommit({
+              expectedUserId:
+                props.expectedUserId,
+              activeUserId:
+                activeUserIdRef.current,
+              accountUserId,
+              requestEpoch:
+                epoch,
+              activeRequestEpoch:
+                requestEpoch.current,
+            });
 
         setIsLoading(
           true,

@@ -1,0 +1,113 @@
+[
+  {
+    "id": "browse",
+    "expectedText": [
+      "RELEASE BALLOT SMOKE",
+      "Your releases",
+      "OWNER",
+      "AVAILABLE TO YOU"
+    ]
+  },
+  {
+    "id": "detail-owner",
+    "expectedText": [
+      "OWNER",
+      "You control when voting closes",
+      "Results stay sealed"
+    ]
+  },
+  {
+    "id": "detail-contributor",
+    "expectedText": [
+      "ELIGIBLE CONTRIBUTOR",
+      "Response needed",
+      "Accept credit",
+      "Decline credit"
+    ]
+  },
+  {
+    "id": "detail-vote",
+    "expectedText": [
+      "LISTENER",
+      "Your vote is private",
+      "Choose"
+    ]
+  },
+  {
+    "id": "detail-change-vote",
+    "expectedText": [
+      "LISTENER",
+      "Your favorite",
+      "Change vote"
+    ]
+  },
+  {
+    "id": "detail-results",
+    "expectedText": [
+      "CLOSED",
+      "Aggregate results only",
+      "WINNER",
+      "8 total votes"
+    ]
+  },
+  {
+    "id": "loading",
+    "expectedText": [
+      "Loading release ballots",
+      "Actions stay paused"
+    ]
+  },
+  {
+    "id": "empty",
+    "expectedText": [
+      "No release ballots yet",
+      "Start from a public Scene collection"
+    ]
+  },
+  {
+    "id": "error",
+    "expectedText": [
+      "Release ballots unavailable",
+      "Retry"
+    ]
+  },
+  {
+    "id": "offline",
+    "expectedText": [
+      "Release ballots are offline",
+      "Try again",
+      "Mutations stay paused"
+    ]
+  },
+  {
+    "id": "reconnect",
+    "expectedText": [
+      "Back online",
+      "Refreshing a fresh snapshot"
+    ]
+  },
+  {
+    "id": "blocked",
+    "expectedText": [
+      "Release unavailable",
+      "Private release details stay hidden"
+    ]
+  },
+  {
+    "id": "lifecycle",
+    "relaunch": true,
+    "expectedText": [
+      "RESTORED SAFELY",
+      "Fresh snapshot required",
+      "No action was replayed"
+    ]
+  },
+  {
+    "id": "account-switch",
+    "expectedText": [
+      "ACCOUNT CHANGED",
+      "Previous ballot hidden",
+      "Loading this account"
+    ]
+  }
+]

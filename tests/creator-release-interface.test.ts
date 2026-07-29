@@ -7,6 +7,7 @@ import {
 import {
   contributorConsentLabel,
   createCreatorReleaseMutationLeaseGate,
+  creatorReleaseRequestCanCommit,
   creatorReleaseRoleCopy,
   creatorReleaseViewerRole,
   creatorReleaseVoteCopy,
@@ -117,6 +118,57 @@ function detail(
 describe(
   "Release Ballot interface lifecycle",
   () => {
+    it(
+      "rejects delayed snapshots after an account, route, or request switch",
+      () => {
+        const base = {
+          expectedUserId:
+            OWNER_ID,
+          activeUserId:
+            OWNER_ID,
+          accountUserId:
+            OWNER_ID,
+          requestEpoch: 4,
+          activeRequestEpoch:
+            4,
+          expectedReleaseId:
+            "release-a",
+          activeReleaseId:
+            "release-a",
+        };
+
+        expect(
+          creatorReleaseRequestCanCommit(
+            base,
+          ),
+        ).toBe(true);
+
+        expect(
+          creatorReleaseRequestCanCommit({
+            ...base,
+            activeUserId:
+              LISTENER_ID,
+          }),
+        ).toBe(false);
+
+        expect(
+          creatorReleaseRequestCanCommit({
+            ...base,
+            activeRequestEpoch:
+              5,
+          }),
+        ).toBe(false);
+
+        expect(
+          creatorReleaseRequestCanCommit({
+            ...base,
+            activeReleaseId:
+              "release-b",
+          }),
+        ).toBe(false);
+      },
+    );
+
     it(
       "filters browsing without changing release order or contracts",
       () => {

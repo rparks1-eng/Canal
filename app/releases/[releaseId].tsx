@@ -50,6 +50,7 @@ import {
 import {
   contributorConsentLabel,
   createCreatorReleaseMutationLeaseGate,
+  creatorReleaseRequestCanCommit,
   creatorReleaseRoleCopy,
   creatorReleaseViewerRole,
   creatorReleaseVoteCopy,
@@ -501,14 +502,21 @@ function CreatorReleaseDetailContent(
             accountUserId:
               string,
           ): boolean =>
-            requestEpoch.current ===
-              epoch &&
-            releaseIdRef.current ===
-              requestedReleaseId &&
-            activeUserIdRef.current ===
-              accountUserId &&
-            accountUserId ===
-              props.expectedUserId;
+            creatorReleaseRequestCanCommit({
+              expectedUserId:
+                props.expectedUserId,
+              activeUserId:
+                activeUserIdRef.current,
+              accountUserId,
+              requestEpoch:
+                epoch,
+              activeRequestEpoch:
+                requestEpoch.current,
+              expectedReleaseId:
+                requestedReleaseId,
+              activeReleaseId:
+                releaseIdRef.current,
+            });
 
         setIsLoading(
           true,
