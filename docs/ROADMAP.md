@@ -29,7 +29,7 @@ Phase 1 is complete when a new tester can install Canal, recover an account, con
 Spotify, build a Scene, export it, publish a Snapshot, and sign into a second account
 without seeing the first account's private data.
 
-## Current completion sprint
+## Current completion sprint — implementation complete, external verification deferred
 
 - [x] Normalize native authentication links and add an HTTPS password-reset fallback
       when `EXPO_PUBLIC_CANAL_WEB_URL` is configured.
@@ -74,8 +74,8 @@ production release readiness, or substitute for an exact-candidate smoke test.
 
 - Add Apple Music only after a MusicKit developer token can be generated on a secure
   backend. Never embed an Apple private key or long-lived developer token in the app.
-- Move provider-specific behavior behind a music-service adapter so Spotify and Apple
-  Music share one Scene workflow.
+- [x] Move provider-specific behavior behind a music-service adapter so Spotify and
+  Apple Music share one Scene workflow.
 - [x] Add invited Scene collaboration with clear ownership and conflict handling.
 - Promote Live Stages from local prototype storage to a synchronized backend after
   the single-user Scene loop is stable.
