@@ -102,6 +102,26 @@ export function connectivityStatusFromSample(
   return "unknown";
 }
 
+export function shouldShowConnectivityBanner(
+  status: ConnectivityStatus,
+  visibleReconnectEpoch: number,
+  reconnectEpoch: number,
+): boolean {
+  if (
+    status ===
+    "offline"
+  ) {
+    return true;
+  }
+
+  return (
+    visibleReconnectEpoch >
+      0 &&
+    visibleReconnectEpoch ===
+      reconnectEpoch
+  );
+}
+
 export function reduceConnectivityState(
   current: ConnectivityState,
   sample: ConnectivitySample,

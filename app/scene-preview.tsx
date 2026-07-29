@@ -44,15 +44,14 @@ import type {
 } from "../lib/scene-studio";
 
 import {
-  addSpotifyTrackToGeneratedScene,
+  addMusicTrackToGeneratedScene,
+  musicCatalogTrackSceneId,
   removeTrackFromGeneratedSceneEditor,
 } from "../lib/scene-preview-editor";
 
 import {
-  exportSceneToSpotify,
-  getSpotifyLibraryTrackSuggestions,
-  searchSpotifySceneTracks,
-} from "../lib/spotify-scene-tools";
+  exportSceneToMusicProvider,
+} from "../lib/scene-music-export";
 
 import {
   classifyAnalyticsFailure,
@@ -61,20 +60,21 @@ import {
 } from "../lib/analytics";
 
 import {
-  createPlayerSession,
-} from "../lib/canal-player";
+  getMusicLibraryTrackSuggestions,
+} from "../lib/music-library-suggestions";
 
 import type {
-  SpotifySceneSearchTrack,
-} from "../lib/spotify-scene-tools";
+  MusicCatalogTrack,
+  MusicLibrarySnapshot,
+} from "../lib/music-provider-model";
 
 import {
-  readSpotifyLibrarySnapshot,
-} from "../lib/spotify-library";
+  musicProviders,
+} from "../lib/music-services";
 
-import type {
-  SpotifyLibrarySnapshot,
-} from "../lib/spotify-library";
+import {
+  createPlayerSession,
+} from "../lib/canal-player";
 
 import {
   useConnectivity,
@@ -95,7 +95,7 @@ function safeBack(): void {
 }
 
 function artistNames(
-  track: SpotifySceneSearchTrack,
+  track: MusicCatalogTrack,
 ): string {
   return track.artists
     .map(
@@ -174,14 +174,14 @@ export default function ScenePreviewScreen() {
     setSearchResults,
   ] =
     useState<
-      SpotifySceneSearchTrack[]
+      MusicCatalogTrack[]
     >([]);
 
   const [
     librarySnapshot,
     setLibrarySnapshot,
   ] =
-    useState<SpotifyLibrarySnapshot | null>(
+    useState<MusicLibrarySnapshot | null>(
       null,
     );
 
@@ -248,7 +248,12 @@ export default function ScenePreviewScreen() {
           ] =
             await Promise.all([
               readGeneratedScenePreview(),
-              readSpotifyLibrarySnapshot(),
+              musicProviders
+                .require(
+                  "spotify",
+                  "library-sync",
+                )
+                .readLibrarySnapshot(),
             ]);
 
           if (!stored) {
@@ -303,7 +308,7 @@ export default function ScenePreviewScreen() {
   const localSuggestions =
     useMemo(
       () =>
-        getSpotifyLibraryTrackSuggestions(
+        getMusicLibraryTrackSuggestions(
           librarySnapshot,
           query,
         ),
@@ -365,9 +370,17 @@ export default function ScenePreviewScreen() {
           async (): Promise<void> => {
             try {
               const liveResults =
-                await searchSpotifySceneTracks(
-                  cleanedQuery,
-                );
+                await musicProviders
+                  .require(
+                    "spotify",
+                    "catalog-search",
+                  )
+                  .searchCatalog({
+                    query:
+                      cleanedQuery,
+                    limit:
+                      10,
+                  });
 
               if (
                 searchRequestId.current !==
@@ -379,7 +392,7 @@ export default function ScenePreviewScreen() {
               const merged =
                 new Map<
                   string,
-                  SpotifySceneSearchTrack
+                  MusicCatalogTrack
                 >();
 
               for (
@@ -390,11 +403,15 @@ export default function ScenePreviewScreen() {
               ) {
                 if (
                   !merged.has(
-                    track.id,
+                    musicCatalogTrackSceneId(
+                      track,
+                    ),
                   )
                 ) {
                   merged.set(
-                    track.id,
+                    musicCatalogTrackSceneId(
+                      track,
+                    ),
                     track,
                   );
                 }
@@ -458,7 +475,7 @@ export default function ScenePreviewScreen() {
 
   const addTrack =
     async (
-      track: SpotifySceneSearchTrack,
+      track: MusicCatalogTrack,
     ): Promise<void> => {
       if (!result) {
         return;
@@ -470,7 +487,7 @@ export default function ScenePreviewScreen() {
 
       try {
         const next =
-          addSpotifyTrackToGeneratedScene(
+          addMusicTrackToGeneratedScene(
             result,
             track,
           );
@@ -632,8 +649,12 @@ export default function ScenePreviewScreen() {
         );
 
         const exportResult =
-          await exportSceneToSpotify(
+          await exportSceneToMusicProvider(
             result.scene,
+            {
+              providerId:
+                "spotify",
+            },
           );
 
         void recordAnalyticsEvent({
@@ -644,13 +665,13 @@ export default function ScenePreviewScreen() {
 
         setPlaylistUrl(
           exportResult
-            .playlistUrl,
+            .collectionUrl,
         );
 
         setMessage(
-          `Exported ${exportResult.trackCount} track${exportResult.trackCount === 1 ? "" : "s"} to your Spotify. ${
-            exportResult.skippedCount > 0
-              ? `${exportResult.skippedCount} unmatched track${exportResult.skippedCount === 1 ? " was" : "s were"} skipped.`
+          `Exported ${exportResult.exportedTrackCount} track${exportResult.exportedTrackCount === 1 ? "" : "s"} to your Spotify. ${
+            exportResult.skippedTrackCount > 0
+              ? `${exportResult.skippedTrackCount} unmatched track${exportResult.skippedTrackCount === 1 ? " was" : "s were"} skipped.`
               : ""
           }`,
         );
@@ -993,13 +1014,17 @@ export default function ScenePreviewScreen() {
                     (track) => {
                       const included =
                         includedIds.has(
-                          track.id,
+                          musicCatalogTrackSceneId(
+                            track,
+                          ),
                         );
 
                       return (
                         <View
                           key={
-                            track.id
+                            musicCatalogTrackSceneId(
+                              track,
+                            )
                           }
                           style={
                             styles.searchResult
@@ -1049,7 +1074,7 @@ export default function ScenePreviewScreen() {
                               )}{" "}
                               ·{" "}
                               {durationText(
-                                track.duration_ms,
+                                track.durationMs,
                               )}
                             </Text>
                           </View>

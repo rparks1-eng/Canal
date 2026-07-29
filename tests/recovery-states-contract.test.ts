@@ -55,13 +55,13 @@ describe(
         expect(
           banner,
         ).toMatch(
-          /\bstatus\s*!==\s*"offline"/,
+          /\bshouldShowConnectivityBanner\s*\(/,
         );
 
         expect(
           banner,
         ).toMatch(
-          /\bvisibleReconnectEpoch\s*!==\s*reconnectEpoch/,
+          /\bvisibleReconnectEpoch,\s*reconnectEpoch/,
         );
 
         expect(

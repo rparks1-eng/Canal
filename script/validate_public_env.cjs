@@ -53,6 +53,62 @@ if (
   );
 }
 
+const shareBaseUrl =
+  readValue(
+    "EXPO_PUBLIC_CANAL_SHARE_BASE_URL",
+  );
+
+let validShareBaseUrl =
+  false;
+
+try {
+  const parsedShareBaseUrl =
+    new URL(
+      shareBaseUrl,
+    );
+
+  const normalizedPath =
+    parsedShareBaseUrl.pathname.replace(
+      /\/+$/,
+      "",
+    );
+
+  const canonicalShareBaseUrl =
+    `${parsedShareBaseUrl.protocol}//` +
+    parsedShareBaseUrl.host.toLowerCase() +
+    (
+      normalizedPath ===
+        "/"
+        ? ""
+        : normalizedPath
+    );
+
+  validShareBaseUrl =
+    parsedShareBaseUrl.protocol ===
+      "https:" &&
+    !parsedShareBaseUrl.username &&
+    !parsedShareBaseUrl.password &&
+    !parsedShareBaseUrl.search &&
+    !parsedShareBaseUrl.hash &&
+    !shareBaseUrl.includes(
+      "?",
+    ) &&
+    !shareBaseUrl.includes(
+      "#",
+    ) &&
+    shareBaseUrl ===
+      canonicalShareBaseUrl;
+} catch {
+  validShareBaseUrl =
+    false;
+}
+
+if (!validShareBaseUrl) {
+  errors.push(
+    "Set EXPO_PUBLIC_CANAL_SHARE_BASE_URL to Canal's canonical HTTPS share base without credentials, a query, a fragment, or a trailing slash.",
+  );
+}
+
 const supabaseKey =
   readValue(
     "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
@@ -60,6 +116,8 @@ const supabaseKey =
 
 let jwtRole =
   "";
+let validLegacyJwtShape =
+  false;
 
 if (
   supabaseKey.startsWith(
@@ -67,19 +125,43 @@ if (
   )
 ) {
   try {
+    const segments =
+      supabaseKey.split(
+        ".",
+      );
+
+    if (
+      segments.length !== 3 ||
+      segments.some(
+        (segment) =>
+          !segment ||
+          !/^[a-z0-9_-]+$/i.test(
+            segment,
+          ),
+      )
+    ) {
+      throw new Error(
+        "Invalid legacy JWT shape.",
+      );
+    }
+
     const payload =
       JSON.parse(
         Buffer.from(
-          supabaseKey.split(
-            ".",
-          )[1],
+          segments[1],
           "base64url",
         ).toString(
           "utf8",
         ),
       );
 
+    validLegacyJwtShape =
+      typeof payload ===
+        "object" &&
+      payload !== null;
+
     jwtRole =
+      validLegacyJwtShape &&
       typeof payload.role ===
         "string"
         ? payload.role
@@ -95,17 +177,18 @@ if (
     supabaseKey.startsWith(
       "sb_publishable_",
     ) ||
-    supabaseKey.startsWith(
-      "eyJ",
+    (
+      supabaseKey.startsWith(
+        "eyJ",
+      ) &&
+      validLegacyJwtShape &&
+      jwtRole ===
+        "anon"
     )
   ) ||
   supabaseKey.startsWith(
     "sb_secret_",
-  ) ||
-  jwtRole ===
-    "service_role" ||
-  jwtRole ===
-    "invalid"
+  )
 ) {
   errors.push(
     "Set EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY to a publishable or legacy anon key.",
@@ -181,6 +264,10 @@ console.log(
 
 console.log(
   "- Supabase publishable key: configured",
+);
+
+console.log(
+  "- Canal share base URL: configured",
 );
 
 console.log(

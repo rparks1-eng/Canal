@@ -29,6 +29,13 @@ Each run follows this order:
 8. Do not merge automatically. Begin the next item only after the active change
    is resolved.
 
+An explicit product/release-owner direction may allow work on later roadmap items
+while an external release gate is deferred. Record the decision, date, deferred
+checks, and accepted risk in the roadmap and active pull request. This exception
+changes backlog sequencing only: it does not turn an unexecuted or undocumented
+smoke test into a pass, satisfy the definition of done for a release, or authorize
+production distribution.
+
 User-reported completion criteria remain part of this loop until both source
 validation and the applicable external smoke tests pass. Current criteria include
 password-reset return and fallback behavior, direct post-creation playback, persistent

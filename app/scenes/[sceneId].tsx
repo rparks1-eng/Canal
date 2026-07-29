@@ -51,8 +51,8 @@ import {
 } from "../../lib/saved-scene-management";
 
 import {
-  exportSceneToSpotify,
-} from "../../lib/spotify-scene-tools";
+  exportSceneToMusicProvider,
+} from "../../lib/scene-music-export";
 
 import {
   deleteScene,
@@ -324,9 +324,14 @@ export default function SceneDetailScreen() {
           await captureScenePlaylistExportAccount();
 
         const exportResult =
-          await exportSceneToSpotify(
+          await exportSceneToMusicProvider(
             scene,
-            `A private Scene created in Canal for ${scene.activity.toLowerCase()}.`,
+            {
+              providerId:
+                "spotify",
+              description:
+                `A private Scene created in Canal for ${scene.activity.toLowerCase()}.`,
+            },
           );
 
         void recordAnalyticsEvent({
@@ -344,13 +349,13 @@ export default function SceneDetailScreen() {
             {
               playlistId:
                 exportResult
-                  .playlistId,
+                  .collectionId,
               playlistUrl:
                 exportResult
-                  .playlistUrl,
+                  .collectionUrl,
               trackCount:
                 exportResult
-                  .trackCount,
+                  .exportedTrackCount,
             },
             {
               sourceOwnerId:
@@ -384,7 +389,7 @@ export default function SceneDetailScreen() {
         }
 
         setMessage(
-          `Created a Spotify playlist with ${exportResult.trackCount} tracks.${historyMessage}`,
+          `Created a Spotify playlist with ${exportResult.exportedTrackCount} tracks.${historyMessage}`,
         );
 
         setExportErrorCause(
@@ -393,14 +398,14 @@ export default function SceneDetailScreen() {
 
         const url =
           exportResult
-            .playlistUrl;
+            .collectionUrl;
 
         if (url) {
           try {
             await openTrack(url);
           } catch {
             setMessage(
-              `Created a Spotify playlist with ${exportResult.trackCount} tracks. Open Spotify to find it.`,
+              `Created a Spotify playlist with ${exportResult.exportedTrackCount} tracks. Open Spotify to find it.`,
             );
           }
         }

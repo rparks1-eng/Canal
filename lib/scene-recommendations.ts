@@ -3,8 +3,8 @@ import type {
 } from "./scenes";
 
 import type {
-  SpotifyLibrarySnapshot,
-} from "./spotify-library";
+  MusicTasteProfile,
+} from "./music-provider-model";
 
 function normalizedTerms(
   value: string,
@@ -43,7 +43,7 @@ function overlapScore(
 export function rankSceneRecommendations(
   scenes: StoredScene[],
   snapshot:
-    | SpotifyLibrarySnapshot
+    | MusicTasteProfile
     | null,
 ): StoredScene[] {
   const tasteGenres =

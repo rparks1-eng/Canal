@@ -8,6 +8,7 @@ import {
 
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -70,8 +71,15 @@ import type {
 } from "../../lib/profile-social";
 
 import {
+  blockUser,
   followUser,
+  readBlockedUserReferences,
+  unblockUser,
   unfollowUser,
+} from "../../lib/relationships";
+
+import type {
+  BlockedUserReference,
 } from "../../lib/relationships";
 
 import {
@@ -248,9 +256,37 @@ function CreatorProfileScreenContent(
     );
 
   const [
-    followBusy,
-    setFollowBusy,
+    isBlocked,
+    setIsBlocked,
   ] = useState(false);
+
+  const [
+    blockStateResolved,
+    setBlockStateResolved,
+  ] = useState(false);
+
+  const [
+    blockedReference,
+    setBlockedReference,
+  ] =
+    useState<
+      BlockedUserReference | null
+    >(
+      null,
+    );
+
+  const [
+    relationshipOperation,
+    setRelationshipOperation,
+  ] =
+    useState<
+      | "follow"
+      | "block"
+      | "unblock"
+      | null
+    >(
+      null,
+    );
 
   const [
     snapshotsResolved,
@@ -288,6 +324,11 @@ function CreatorProfileScreenContent(
   ] = useState("");
 
   const [
+    relationshipErrorMessage,
+    setRelationshipErrorMessage,
+  ] = useState("");
+
+  const [
     profileError,
     setProfileError,
   ] =
@@ -306,6 +347,14 @@ function CreatorProfileScreenContent(
   const [
     collectionError,
     setCollectionError,
+  ] =
+    useState<unknown | null>(
+      null,
+    );
+
+  const [
+    blockStateError,
+    setBlockStateError,
   ] =
     useState<unknown | null>(
       null,
@@ -332,6 +381,11 @@ function CreatorProfileScreenContent(
       identityKey,
     );
 
+  const relationshipVersionRef =
+    useRef(
+      0,
+    );
+
   identityKeyRef.current =
     identityKey;
 
@@ -353,6 +407,8 @@ function CreatorProfileScreenContent(
       async (): Promise<void> => {
         const requestKey =
           identityKey;
+        const relationshipVersion =
+          relationshipVersionRef.current;
 
         if (!userId) {
           setRouteErrorMessage(
@@ -386,11 +442,14 @@ function CreatorProfileScreenContent(
             setLoading(
               true,
             );
-            setConnectionSummary(
+            setBlockStateResolved(
+              false,
+            );
+            setBlockStateError(
               null,
             );
-            setFollowBusy(
-              false,
+            setRelationshipErrorMessage(
+              "",
             );
             setCollections(
               [],
@@ -422,7 +481,11 @@ function CreatorProfileScreenContent(
                 )
                 .then(
                   (result) => {
-                    if (!isCurrent()) {
+                    if (
+                      !isCurrent() ||
+                      relationshipVersion !==
+                        relationshipVersionRef.current
+                    ) {
                       return;
                     }
 
@@ -445,7 +508,11 @@ function CreatorProfileScreenContent(
                 )
                 .catch(
                   (error: unknown) => {
-                    if (!isCurrent()) {
+                    if (
+                      !isCurrent() ||
+                      relationshipVersion !==
+                        relationshipVersionRef.current
+                    ) {
                       return;
                     }
 
@@ -467,7 +534,11 @@ function CreatorProfileScreenContent(
                 )
                 .then(
                   (result) => {
-                    if (!isCurrent()) {
+                    if (
+                      !isCurrent() ||
+                      relationshipVersion !==
+                        relationshipVersionRef.current
+                    ) {
                       return;
                     }
 
@@ -486,7 +557,11 @@ function CreatorProfileScreenContent(
                 )
                 .catch(
                   (error: unknown) => {
-                    if (!isCurrent()) {
+                    if (
+                      !isCurrent() ||
+                      relationshipVersion !==
+                        relationshipVersionRef.current
+                    ) {
                       return;
                     }
 
@@ -508,7 +583,11 @@ function CreatorProfileScreenContent(
               )
                 .then(
                   (result) => {
-                    if (!isCurrent()) {
+                    if (
+                      !isCurrent() ||
+                      relationshipVersion !==
+                        relationshipVersionRef.current
+                    ) {
                       return;
                     }
 
@@ -519,12 +598,77 @@ function CreatorProfileScreenContent(
                 )
                 .catch(
                   () => {
-                    if (!isCurrent()) {
+                    if (
+                      !isCurrent() ||
+                      relationshipVersion !==
+                        relationshipVersionRef.current
+                    ) {
                       return;
                     }
 
                     setConnectionSummary(
                       null,
+                    );
+                  },
+                );
+
+            const blockStateLoad =
+              (
+                sessionError
+                  ? Promise.reject(
+                      sessionError,
+                    )
+                  : readBlockedUserReferences()
+              )
+                .then(
+                  (references) => {
+                    if (
+                      !isCurrent() ||
+                      relationshipVersion !==
+                        relationshipVersionRef.current
+                    ) {
+                      return;
+                    }
+
+                    const matchingReference =
+                      references.find(
+                        (reference) =>
+                          reference
+                            .targetUserId ===
+                          userId,
+                      ) ??
+                      null;
+
+                    setBlockedReference(
+                      matchingReference,
+                    );
+                    setIsBlocked(
+                      matchingReference !==
+                        null,
+                    );
+                    setBlockStateResolved(
+                      true,
+                    );
+                    setBlockStateError(
+                      null,
+                    );
+                  },
+                )
+                .catch(
+                  (error: unknown) => {
+                    if (
+                      !isCurrent() ||
+                      relationshipVersion !==
+                        relationshipVersionRef.current
+                    ) {
+                      return;
+                    }
+
+                    setBlockStateResolved(
+                      false,
+                    );
+                    setBlockStateError(
+                      error,
                     );
                   },
                 );
@@ -543,7 +687,11 @@ function CreatorProfileScreenContent(
                   (
                     nextCollections,
                   ) => {
-                    if (!isCurrent()) {
+                    if (
+                      !isCurrent() ||
+                      relationshipVersion !==
+                        relationshipVersionRef.current
+                    ) {
                       return;
                     }
 
@@ -560,7 +708,11 @@ function CreatorProfileScreenContent(
                 )
                 .catch(
                   (error: unknown) => {
-                    if (!isCurrent()) {
+                    if (
+                      !isCurrent() ||
+                      relationshipVersion !==
+                        relationshipVersionRef.current
+                    ) {
                       return;
                     }
 
@@ -577,6 +729,7 @@ function CreatorProfileScreenContent(
               profileLoad,
               snapshotLoad,
               connectionLoad,
+              blockStateLoad,
               collectionLoad,
             ]);
 
@@ -690,6 +843,25 @@ function CreatorProfileScreenContent(
       ],
     );
 
+  const blockStateIssue =
+    useMemo(
+      () =>
+        blockStateError
+          ? classifyRecoveryIssue(
+              blockStateError,
+              {
+                service:
+                  "canal",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        blockStateError,
+        connectivityStatus,
+      ],
+    );
+
   const recoverRead =
     async (
       issue: RecoveryIssue,
@@ -782,22 +954,59 @@ function CreatorProfileScreenContent(
       }
     };
 
+  const relationshipBusy =
+    relationshipOperation !==
+    null;
+
+  const followBusy =
+    relationshipOperation ===
+    "follow";
+
+  const blockBusy =
+    relationshipOperation ===
+      "block" ||
+    relationshipOperation ===
+      "unblock";
+
+  const isCurrentIdentity =
+    (
+      requestKey: string,
+    ): boolean =>
+      mountedRef.current &&
+      requestKey ===
+        identityKeyRef.current;
+
   const toggleFollow =
     async (): Promise<void> => {
+      const requestKey =
+        identityKey;
+
       if (
+        !isCurrentIdentity(
+          requestKey,
+        ) ||
         !profile ||
         !connectionSummary ||
         connectionSummary
           .isOwnProfile ||
-        followBusy
+        !blockStateResolved ||
+        isBlocked ||
+        relationshipBusy
       ) {
         return;
       }
 
-      setFollowBusy(
-        true,
+      const wasFollowing =
+        connectionSummary
+          .viewerIsFollowing;
+
+      relationshipVersionRef.current +=
+        1;
+
+      setRelationshipOperation(
+        "follow",
       );
-      setSaveErrorMessage(
+      setRelationshipErrorMessage(
         "",
       );
       setMessage(
@@ -811,22 +1020,29 @@ function CreatorProfileScreenContent(
             "",
           );
 
+        const state =
+          wasFollowing
+            ? await unfollowUser(
+                normalizedHandle,
+                profile.displayName,
+                profile.id,
+              )
+            : await followUser(
+                normalizedHandle,
+                profile.displayName,
+                profile.id,
+              );
+
         if (
-          connectionSummary
-            .viewerIsFollowing
+          !isCurrentIdentity(
+            requestKey,
+          )
         ) {
-          await unfollowUser(
-            normalizedHandle,
-            profile.displayName,
-            profile.id,
-          );
-        } else {
-          await followUser(
-            normalizedHandle,
-            profile.displayName,
-            profile.id,
-          );
+          return;
         }
+
+        relationshipVersionRef.current +=
+          1;
 
         setConnectionSummary(
           (current) =>
@@ -834,16 +1050,14 @@ function CreatorProfileScreenContent(
               ? {
                   ...current,
                   viewerIsFollowing:
-                    !current
-                      .viewerIsFollowing,
+                    !wasFollowing,
                   followerCount:
                     Math.max(
                       0,
                       current
                         .followerCount +
                         (
-                          current
-                            .viewerIsFollowing
+                          wasFollowing
                             ? -1
                             : 1
                         ),
@@ -853,21 +1067,365 @@ function CreatorProfileScreenContent(
         );
 
         setMessage(
-          connectionSummary
-            .viewerIsFollowing
-            ? `Unfollowed ${profile.displayName}.`
-            : `Following ${profile.displayName}.`,
+          state.syncStatus ===
+            "pending"
+            ? connectivityStatus ===
+                "offline"
+              ? `Your ${wasFollowing ? "unfollow" : "follow"} is saved on this device while you are offline. Canal will sync it when the connection returns.`
+              : `Your ${wasFollowing ? "unfollow" : "follow"} is saved on this device and pending sync.`
+            : wasFollowing
+              ? `Unfollowed ${profile.displayName}.`
+              : `Following ${profile.displayName}.`,
         );
       } catch (error) {
-        setSaveErrorMessage(
+        if (
+          !isCurrentIdentity(
+            requestKey,
+          )
+        ) {
+          return;
+        }
+
+        relationshipVersionRef.current +=
+          1;
+
+        setRelationshipErrorMessage(
           error instanceof Error
             ? error.message
             : "Canal could not update this follow.",
         );
       } finally {
-        setFollowBusy(
-          false,
+        if (
+          isCurrentIdentity(
+            requestKey,
+          )
+        ) {
+          setRelationshipOperation(
+            null,
+          );
+        }
+      }
+    };
+
+  const confirmBlockChange =
+    (): void => {
+      if (
+        !profile ||
+        !connectionSummary ||
+        connectionSummary
+          .isOwnProfile ||
+        !blockStateResolved ||
+        relationshipBusy
+      ) {
+        return;
+      }
+
+      const nextBlocked =
+        !isBlocked;
+
+      Alert.alert(
+        nextBlocked
+          ? `Block ${profile.displayName}?`
+          : `Unblock ${profile.displayName}?`,
+        nextBlocked
+          ? `${profile.handle} will be removed from Following and hidden across Canal.`
+          : `${profile.handle} can appear in Discover, search, and Following again.`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text:
+              nextBlocked
+                ? "Block"
+                : "Unblock",
+            style:
+              nextBlocked
+                ? "destructive"
+                : "default",
+            onPress: () => {
+              void updateBlockedState(
+                nextBlocked,
+              );
+            },
+          },
+        ],
+      );
+    };
+
+  const confirmBlockedReferenceUnblock =
+    (
+      reference:
+        BlockedUserReference,
+    ): void => {
+      if (
+        !blockStateResolved ||
+        relationshipBusy ||
+        !reference.targetUserId ||
+        reference.targetUserId !==
+          userId
+      ) {
+        return;
+      }
+
+      Alert.alert(
+        `Unblock @${reference.username}?`,
+        `@${reference.username} can appear in Discover, search, and Following again.`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Unblock",
+            style: "default",
+            onPress: () => {
+              void updateBlockedState(
+                false,
+                reference,
+              );
+            },
+          },
+        ],
+      );
+    };
+
+  const updateBlockedState =
+    async (
+      nextBlocked: boolean,
+      referenceOnlyTarget?:
+        BlockedUserReference,
+    ): Promise<void> => {
+      const requestKey =
+        identityKey;
+
+      if (
+        !isCurrentIdentity(
+          requestKey,
+        ) ||
+        !blockStateResolved ||
+        relationshipBusy ||
+        nextBlocked ===
+          isBlocked
+      ) {
+        return;
+      }
+
+      const referenceTarget =
+        referenceOnlyTarget ??
+        blockedReference;
+
+      const stableTargetUserId =
+        profile?.id ??
+        referenceTarget
+          ?.targetUserId;
+
+      if (
+        !stableTargetUserId ||
+        stableTargetUserId !==
+          userId ||
+        (
+          nextBlocked &&
+          (
+            !profile ||
+            !connectionSummary ||
+            connectionSummary
+              .isOwnProfile
+          )
+        )
+      ) {
+        return;
+      }
+
+      if (
+        nextBlocked &&
+        !profile
+      ) {
+        return;
+      }
+
+      relationshipVersionRef.current +=
+        1;
+
+      setRelationshipOperation(
+        nextBlocked
+          ? "block"
+          : "unblock",
+      );
+      setRelationshipErrorMessage(
+        "",
+      );
+      setMessage(
+        "",
+      );
+
+      try {
+        const normalizedHandle =
+          profile
+            ? profile.handle.replace(
+                /^@+/,
+                "",
+              )
+            : referenceTarget
+                ?.username ??
+              "";
+
+        const targetDisplayName =
+          profile?.displayName ??
+          `@${normalizedHandle}`;
+
+        let state:
+          Awaited<
+            ReturnType<
+              typeof blockUser
+            >
+          >;
+
+        if (nextBlocked) {
+          if (!profile) {
+            return;
+          }
+
+          state =
+            await blockUser(
+              normalizedHandle,
+              targetDisplayName,
+              profile.id,
+            );
+        } else if (profile) {
+          state =
+            await unblockUser(
+              normalizedHandle,
+              targetDisplayName,
+              profile.id,
+            );
+        } else {
+          state =
+            await unblockUser(
+              normalizedHandle,
+              targetDisplayName,
+              stableTargetUserId,
+            );
+        }
+
+        if (
+          !isCurrentIdentity(
+            requestKey,
+          )
+        ) {
+          return;
+        }
+
+        relationshipVersionRef.current +=
+          1;
+
+        setIsBlocked(
+          nextBlocked,
         );
+        setBlockStateResolved(
+          true,
+        );
+        setBlockedReference(
+          nextBlocked
+            ? {
+                username:
+                  normalizedHandle,
+                targetUserId:
+                  stableTargetUserId,
+              }
+            : null,
+        );
+
+        if (nextBlocked) {
+          setConnectionSummary(
+            (current) =>
+              current
+                ? {
+                    ...current,
+                    followerCount:
+                      Math.max(
+                        0,
+                        current
+                          .followerCount -
+                          (
+                            current
+                              .viewerIsFollowing
+                              ? 1
+                              : 0
+                          ),
+                      ),
+                    viewerIsFollowing:
+                      false,
+                  }
+                : current,
+          );
+
+          setScenes(
+            [],
+          );
+          setSnapshots(
+            [],
+          );
+          setCollections(
+            [],
+          );
+          setSnapshotsResolved(
+            true,
+          );
+          setCollectionsResolved(
+            true,
+          );
+          setSnapshotError(
+            null,
+          );
+          setCollectionError(
+            null,
+          );
+        }
+
+        setMessage(
+          state.syncStatus ===
+            "pending"
+            ? connectivityStatus ===
+                "offline"
+              ? `${targetDisplayName} is ${nextBlocked ? "blocked" : "unblocked"} on this device while you are offline. Canal will sync the change when the connection returns.`
+              : `${targetDisplayName} is ${nextBlocked ? "blocked" : "unblocked"} on this device and the change is pending sync.`
+            : nextBlocked
+              ? `Blocked ${targetDisplayName}.`
+              : `Unblocked ${targetDisplayName}.`,
+        );
+      } catch (error) {
+        if (
+          !isCurrentIdentity(
+            requestKey,
+          )
+        ) {
+          return;
+        }
+
+        relationshipVersionRef.current +=
+          1;
+        setBlockStateResolved(
+          true,
+        );
+        setRelationshipErrorMessage(
+          error instanceof Error
+            ? error.message
+            : nextBlocked
+              ? "Canal could not block this creator."
+              : "Canal could not unblock this creator.",
+        );
+      } finally {
+        if (
+          isCurrentIdentity(
+            requestKey,
+          )
+        ) {
+          setRelationshipOperation(
+            null,
+          );
+        }
       }
     };
 
@@ -945,7 +1503,11 @@ function CreatorProfileScreenContent(
             false
           }
         >
-          {profileIssue ? (
+          {profileIssue &&
+          !(
+            blockStateResolved &&
+            blockedReference
+          ) ? (
             <RecoveryNotice
               busy={
                 loading
@@ -956,6 +1518,22 @@ function CreatorProfileScreenContent(
               onAction={() =>
                 recoverRead(
                   profileIssue,
+                )
+              }
+            />
+          ) : null}
+
+          {blockStateIssue ? (
+            <RecoveryNotice
+              busy={
+                loading
+              }
+              issue={
+                blockStateIssue
+              }
+              onAction={() =>
+                recoverRead(
+                  blockStateIssue,
                 )
               }
             />
@@ -1134,51 +1712,268 @@ function CreatorProfileScreenContent(
 
                   {!connectionSummary
                     .isOwnProfile ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={
-                        followBusy
-                      }
-                      onPress={() =>
-                        void toggleFollow()
-                      }
-                      style={[
-                        styles.followButton,
-                        connectionSummary
-                          .viewerIsFollowing &&
-                          styles.followButtonActive,
-                      ]}
-                    >
-                      {followBusy ? (
-                        <ActivityIndicator
-                          color="#FFFFFF"
-                        />
-                      ) : (
-                        <Text
+                    !blockStateResolved ? (
+                      blockStateIssue ? null : (
+                        <View
+                          accessibilityLiveRegion="polite"
                           style={
-                            styles.followButtonText
+                            styles.relationshipStatus
                           }
                         >
-                          {connectionSummary
-                            .viewerIsFollowing
-                            ? "Following"
-                            : "Follow Creator"}
-                        </Text>
-                      )}
-                    </Pressable>
+                          <ActivityIndicator
+                            size="small"
+                            color="#F47A24"
+                          />
+
+                          <Text
+                            style={
+                              styles.relationshipStatusText
+                            }
+                          >
+                            Loading relationship status…
+                          </Text>
+                        </View>
+                      )
+                    ) : isBlocked ? (
+                      <Pressable
+                        accessibilityLabel={`Unblock ${profile.displayName}`}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          busy:
+                            blockBusy,
+                          disabled:
+                            relationshipBusy,
+                        }}
+                        disabled={
+                          relationshipBusy
+                        }
+                        onPress={
+                          confirmBlockChange
+                        }
+                        style={[
+                          styles.unblockButton,
+                          relationshipBusy &&
+                            styles.relationshipButtonDisabled,
+                        ]}
+                      >
+                        {blockBusy ? (
+                          <ActivityIndicator
+                            color="#8E322B"
+                          />
+                        ) : (
+                          <Text
+                            style={
+                              styles.unblockButtonText
+                            }
+                          >
+                            Unblock Creator
+                          </Text>
+                        )}
+                      </Pressable>
+                    ) : (
+                      <View
+                        style={
+                          styles.relationshipActions
+                        }
+                      >
+                        <Pressable
+                          accessibilityLabel={
+                            connectionSummary
+                              .viewerIsFollowing
+                              ? `Unfollow ${profile.displayName}`
+                              : `Follow ${profile.displayName}`
+                          }
+                          accessibilityRole="button"
+                          accessibilityState={{
+                            busy:
+                              followBusy,
+                            disabled:
+                              relationshipBusy,
+                          }}
+                          disabled={
+                            relationshipBusy
+                          }
+                          onPress={() =>
+                            void toggleFollow()
+                          }
+                          style={[
+                            styles.followButton,
+                            connectionSummary
+                              .viewerIsFollowing &&
+                              styles.followButtonActive,
+                            relationshipBusy &&
+                              styles.relationshipButtonDisabled,
+                          ]}
+                        >
+                          {followBusy ? (
+                            <ActivityIndicator
+                              color="#FFFFFF"
+                            />
+                          ) : (
+                            <Text
+                              style={
+                                styles.followButtonText
+                              }
+                            >
+                              {connectionSummary
+                                .viewerIsFollowing
+                                ? "Following"
+                                : "Follow Creator"}
+                            </Text>
+                          )}
+                        </Pressable>
+
+                        <Pressable
+                          accessibilityLabel={`Block ${profile.displayName}`}
+                          accessibilityRole="button"
+                          accessibilityState={{
+                            busy:
+                              blockBusy,
+                            disabled:
+                              relationshipBusy,
+                          }}
+                          disabled={
+                            relationshipBusy
+                          }
+                          onPress={
+                            confirmBlockChange
+                          }
+                          style={[
+                            styles.blockButton,
+                            relationshipBusy &&
+                              styles.relationshipButtonDisabled,
+                          ]}
+                        >
+                          {blockBusy ? (
+                            <ActivityIndicator
+                              color="#A62E27"
+                            />
+                          ) : (
+                            <Text
+                              style={
+                                styles.blockButtonText
+                              }
+                            >
+                              Block Creator
+                            </Text>
+                          )}
+                        </Pressable>
+                      </View>
+                    )
                   ) : null}
                 </>
               ) : null}
             </View>
           ) : null}
 
+          {blockStateResolved &&
+          blockedReference &&
+          (
+            !profile ||
+            !connectionSummary
+          ) ? (
+            <View
+              style={
+                styles.blockedFallbackCard
+              }
+            >
+              <View
+                style={
+                  styles.avatar
+                }
+              >
+                <Text
+                  style={
+                    styles.avatarText
+                  }
+                >
+                  {blockedReference
+                    .username
+                    .slice(
+                      0,
+                      2,
+                    )
+                    .toUpperCase()}
+                </Text>
+              </View>
+
+              <Text
+                style={
+                  styles.name
+                }
+              >
+                Blocked creator
+              </Text>
+
+              <Text
+                selectable
+                style={
+                  styles.handle
+                }
+              >
+                @{blockedReference.username}
+              </Text>
+
+              <Text
+                style={
+                  styles.blockedFallbackText
+                }
+              >
+                This creator is hidden,
+                but you can still remove
+                the block by its stable
+                account ID.
+              </Text>
+
+              <Pressable
+                accessibilityLabel={`Unblock @${blockedReference.username}`}
+                accessibilityRole="button"
+                accessibilityState={{
+                  busy:
+                    blockBusy,
+                  disabled:
+                    relationshipBusy,
+                }}
+                disabled={
+                  relationshipBusy
+                }
+                onPress={() =>
+                  confirmBlockedReferenceUnblock(
+                    blockedReference,
+                  )
+                }
+                style={[
+                  styles.unblockButton,
+                  relationshipBusy &&
+                    styles.relationshipButtonDisabled,
+                ]}
+              >
+                {blockBusy ? (
+                  <ActivityIndicator
+                    color="#8E322B"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.unblockButtonText
+                    }
+                  >
+                    Unblock Creator
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
+
           {message ? (
             <View
+              accessibilityLiveRegion="polite"
               style={
                 styles.successBox
               }
             >
               <Text
+                selectable
                 style={
                   styles.successText
                 }
@@ -1226,6 +2021,30 @@ function CreatorProfileScreenContent(
             </View>
           ) : null}
 
+          {relationshipErrorMessage ? (
+            <View
+              accessibilityLiveRegion="assertive"
+              accessibilityRole="alert"
+              style={
+                styles.errorBox
+              }
+            >
+              <Text
+                selectable
+                style={
+                  styles.errorText
+                }
+              >
+                {
+                  relationshipErrorMessage
+                }
+              </Text>
+            </View>
+          ) : null}
+
+          {blockStateResolved &&
+          !isBlocked ? (
+            <>
           <View
             style={
               styles.sectionHeader
@@ -1627,6 +2446,8 @@ function CreatorProfileScreenContent(
               </Text>
             </View>
           ) : null}
+            </>
+          ) : null}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -1702,6 +2523,16 @@ const styles =
       padding: 22,
     },
 
+    blockedFallbackCard: {
+      alignItems:
+        "center",
+      backgroundColor:
+        "#FFFFFF",
+      borderRadius: 24,
+      padding: 22,
+      marginTop: 14,
+    },
+
     avatar: {
       width: 82,
       height: 82,
@@ -1750,6 +2581,14 @@ const styles =
     },
 
     bio: {
+      color: "#4F4944",
+      fontSize: 13,
+      lineHeight: 20,
+      textAlign: "center",
+      marginTop: 14,
+    },
+
+    blockedFallbackText: {
       color: "#4F4944",
       fontSize: 13,
       lineHeight: 20,
@@ -1816,6 +2655,30 @@ const styles =
       marginTop: 4,
     },
 
+    relationshipStatus: {
+      width: "100%",
+      minHeight: 48,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      gap: 9,
+      marginTop: 12,
+    },
+
+    relationshipStatusText: {
+      color: "#817972",
+      fontSize: 12,
+      fontWeight: "700",
+    },
+
+    relationshipActions: {
+      width: "100%",
+      gap: 10,
+    },
+
     followButton: {
       width: "100%",
       minHeight: 48,
@@ -1838,6 +2701,53 @@ const styles =
       color: "#FFFFFF",
       fontSize: 12,
       fontWeight: "900",
+    },
+
+    blockButton: {
+      width: "100%",
+      minHeight: 46,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderWidth: 1,
+      borderColor:
+        "#E6B8B4",
+      borderRadius: 15,
+      backgroundColor:
+        "#FFF0EF",
+    },
+
+    blockButtonText: {
+      color: "#A62E27",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    unblockButton: {
+      width: "100%",
+      minHeight: 48,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderWidth: 1,
+      borderColor:
+        "#E6B8B4",
+      borderRadius: 15,
+      backgroundColor:
+        "#FFF0EF",
+      marginTop: 12,
+    },
+
+    unblockButtonText: {
+      color: "#8E322B",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    relationshipButtonDisabled: {
+      opacity: 0.55,
     },
 
     sectionHeader: {

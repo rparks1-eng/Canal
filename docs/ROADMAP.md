@@ -51,6 +51,13 @@ without seeing the first account's private data.
       duration, artwork, direct-play, and persistent-navigation behavior on a rebuilt
       native app with real Supabase and Spotify accounts.
 
+Roadmap sequencing decision (July 28, 2026): the product/release owner authorized
+further development and accepted the risk that the remaining human-only native,
+provider, and device checks were not independently witnessed or captured in a
+release record. This decision closes the completion sprint for backlog sequencing
+only. It does not mark the two verification items above complete, establish
+production release readiness, or substitute for an exact-candidate smoke test.
+
 ## Phase 2: retention and social proof
 
 - [x] Replace remaining local-only relationship and activity data with Supabase tables

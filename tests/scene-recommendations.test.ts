@@ -7,8 +7,8 @@ import type {
 } from "../lib/scenes";
 
 import type {
-  SpotifyLibrarySnapshot,
-} from "../lib/spotify-library";
+  MusicTasteProfile,
+} from "../lib/music-provider-model";
 
 function scene(
   id: string,
@@ -52,20 +52,17 @@ const spotifySnapshot =
     ],
     topArtists: [
       {
-        id: "artist-1",
         name:
           "Miles Davis",
-        uri:
-          "spotify:artist:1",
       },
     ],
-  } as SpotifyLibrarySnapshot;
+  } satisfies MusicTasteProfile;
 
 describe(
   "Scene recommendations",
   () => {
     it(
-      "prioritizes Scenes matching the latest Spotify taste",
+      "prioritizes Scenes matching the latest music-service taste",
       () => {
         const ranked =
           rankSceneRecommendations(

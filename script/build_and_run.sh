@@ -106,6 +106,7 @@ case "$MODE" in
     exec "${EXPO_CMD[@]}" start --tunnel
     ;;
   --export-web|export-web)
+    validate_public_env
     exec "${EXPO_CMD[@]}" export --platform web
     ;;
   --doctor|doctor)

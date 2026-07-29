@@ -5,6 +5,8 @@ import {
 } from "expo-router";
 import {
   useCallback,
+  useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -19,48 +21,166 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  readBlockedUsers,
+  readBlockedUserReferences,
   unblockUser,
 } from "../lib/relationships";
+
+import type {
+  BlockedUserReference,
+} from "../lib/relationships";
+
 import {
-  DirectoryUser,
+  isSupabaseConfigured,
+} from "../lib/supabase";
+
+import {
   getDirectoryUser,
 } from "../lib/user-directory";
 
+import type {
+  DirectoryUser,
+} from "../lib/user-directory";
+
+import {
+  useAuth,
+} from "../providers/auth-provider";
+
+type BlockedUserListItem = {
+  identity: string;
+  reference:
+    BlockedUserReference;
+  user: DirectoryUser;
+};
+
 export default function BlockedUsersScreen() {
+  const {
+    user,
+  } = useAuth();
+
+  const identityKey =
+    user?.id ??
+    "signed-out";
+
+  return (
+    <BlockedUsersScreenContent
+      key={
+        identityKey
+      }
+      identityKey={
+        identityKey
+      }
+    />
+  );
+}
+
+function BlockedUsersScreenContent(
+  props: {
+    identityKey: string;
+  },
+) {
+  const {
+    identityKey,
+  } = props;
+
   const [
     blockedUsers,
     setBlockedUsers,
-  ] = useState<DirectoryUser[]>([]);
+  ] =
+    useState<
+      BlockedUserListItem[]
+    >([]);
 
   const [
-    operationUsername,
-    setOperationUsername,
+    operationKey,
+    setOperationKey,
   ] = useState("");
 
   const [isLoading, setIsLoading] =
     useState(true);
 
+  const mountedRef =
+    useRef(
+      true,
+    );
+
+  const identityKeyRef =
+    useRef(
+      identityKey,
+    );
+
+  const loadVersionRef =
+    useRef(
+      0,
+    );
+
+  identityKeyRef.current =
+    identityKey;
+
+  useEffect(
+    () => {
+      mountedRef.current =
+        true;
+
+      return () => {
+        mountedRef.current =
+          false;
+      };
+    },
+    [],
+  );
+
   const loadBlockedUsers =
     useCallback(async () => {
-      try {
-        setIsLoading(true);
+      const requestKey =
+        identityKey;
+      const loadVersion =
+        loadVersionRef.current +
+        1;
 
-        const usernames =
-          await readBlockedUsers();
+      loadVersionRef.current =
+        loadVersion;
+
+      const isCurrent =
+        (): boolean =>
+          mountedRef.current &&
+          identityKeyRef.current ===
+            requestKey &&
+          loadVersionRef.current ===
+            loadVersion;
+
+      try {
+        if (isCurrent()) {
+          setIsLoading(true);
+        }
+
+        const references =
+          await readBlockedUserReferences();
+
+        if (!isCurrent()) {
+          return;
+        }
+
+        const nextBlockedUsers =
+          references
+            .map(
+              createBlockedUserListItem,
+            )
+            .filter(
+              (
+                item,
+              ): item is BlockedUserListItem =>
+                item !==
+                null,
+            );
 
         setBlockedUsers(
-          usernames.map(
-            (username) =>
-              getDirectoryUser(
-                username,
-              ) ??
-              createFallbackUser(
-                username,
-              ),
-          ),
+          nextBlockedUsers,
         );
       } catch (error) {
+        if (!isCurrent()) {
+          return;
+        }
+
         console.error(
           "Unable to load blocked users:",
           error,
@@ -71,9 +191,13 @@ export default function BlockedUsersScreen() {
           "Canal could not load blocked users.",
         );
       } finally {
-        setIsLoading(false);
+        if (isCurrent()) {
+          setIsLoading(false);
+        }
       }
-    }, []);
+    }, [
+      identityKey,
+    ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -82,8 +206,12 @@ export default function BlockedUsersScreen() {
   );
 
   function confirmUnblock(
-    user: DirectoryUser,
+    item: BlockedUserListItem,
   ) {
+    const {
+      user,
+    } = item;
+
     Alert.alert(
       `Unblock ${user.displayName}?`,
       `@${user.username} can appear in Discover and search again.`,
@@ -96,7 +224,7 @@ export default function BlockedUsersScreen() {
           text: "Unblock",
           onPress: () => {
             void removeBlockedUser(
-              user,
+              item,
             );
           },
         },
@@ -105,25 +233,74 @@ export default function BlockedUsersScreen() {
   }
 
   async function removeBlockedUser(
-    user: DirectoryUser,
+    item: BlockedUserListItem,
   ) {
+    const requestKey =
+      identityKey;
+
+    if (
+      !mountedRef.current ||
+      identityKeyRef.current !==
+        requestKey ||
+      operationKey
+    ) {
+      return;
+    }
+
+    const {
+      reference,
+      user,
+    } = item;
+
+    const targetUserId =
+      reference.targetUserId;
+
+    if (
+      isSupabaseConfigured &&
+      !targetUserId
+    ) {
+      Alert.alert(
+        "Unable to unblock safely",
+        "This older block record does not have a stable account ID. Canal will not match it to a reused username.",
+      );
+
+      return;
+    }
+
     try {
-      setOperationUsername(
-        user.username,
+      loadVersionRef.current +=
+        1;
+
+      setOperationKey(
+        item.identity,
       );
 
       const state =
         await unblockUser(
           user.username,
           user.displayName,
+          targetUserId,
         );
 
+      if (
+        !mountedRef.current ||
+        identityKeyRef.current !==
+          requestKey
+      ) {
+        return;
+      }
+
+      loadVersionRef.current +=
+        1;
+
       setBlockedUsers(
-        blockedUsers.filter(
-          (item) =>
-            item.username !==
-          user.username,
-        ),
+        (current) =>
+          current.filter(
+            (candidate) =>
+              candidate
+                .identity !==
+              item.identity,
+          ),
       );
 
       if (
@@ -136,6 +313,14 @@ export default function BlockedUsersScreen() {
         );
       }
     } catch (error) {
+      if (
+        !mountedRef.current ||
+        identityKeyRef.current !==
+          requestKey
+      ) {
+        return;
+      }
+
       console.error(
         "Unable to unblock user:",
         error,
@@ -146,7 +331,19 @@ export default function BlockedUsersScreen() {
         "Canal could not unblock this person.",
       );
     } finally {
-      setOperationUsername("");
+      if (
+        mountedRef.current &&
+        identityKeyRef.current ===
+          requestKey
+      ) {
+        setOperationKey(
+          (current) =>
+            current ===
+              item.identity
+              ? ""
+              : current,
+        );
+      }
     }
   }
 
@@ -214,8 +411,7 @@ export default function BlockedUsersScreen() {
           >
             Blocked people are hidden
             from Discover, search, and
-            your Following list on this
-            device.
+            your Following list.
           </Text>
         </View>
 
@@ -261,14 +457,24 @@ export default function BlockedUsersScreen() {
             style={styles.userList}
           >
             {blockedUsers.map(
-              (user) => {
+              (item) => {
+                const {
+                  user,
+                } = item;
+
                 const isOperating =
-                  operationUsername ===
-                  user.username;
+                  operationKey ===
+                  item.identity;
+
+                const operationInProgress =
+                  operationKey !==
+                  "";
 
                 return (
                   <View
-                    key={user.username}
+                    key={
+                      item.identity
+                    }
                     style={
                       styles.userCard
                     }
@@ -312,13 +518,20 @@ export default function BlockedUsersScreen() {
                     </View>
 
                     <Pressable
+                      accessibilityLabel={`Unblock ${user.displayName}`}
                       accessibilityRole="button"
+                      accessibilityState={{
+                        busy:
+                          isOperating,
+                        disabled:
+                          operationInProgress,
+                      }}
                       disabled={
-                        isOperating
+                        operationInProgress
                       }
                       onPress={() =>
                         confirmUnblock(
-                          user,
+                          item,
                         )
                       }
                       style={({ pressed }) => [
@@ -353,6 +566,56 @@ export default function BlockedUsersScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function createBlockedUserListItem(
+  reference:
+    BlockedUserReference,
+): BlockedUserListItem | null {
+  const identity =
+    blockedUserIdentity(
+      reference,
+    );
+
+  if (!identity) {
+    return null;
+  }
+
+  const user =
+    getDirectoryUser(
+      reference.username,
+    ) ??
+    createFallbackUser(
+      reference.username,
+    );
+
+  return {
+    identity,
+    reference,
+    user,
+  };
+}
+
+function blockedUserIdentity(
+  reference:
+    BlockedUserReference,
+): string | null {
+  const targetUserId =
+    reference.targetUserId
+      ?.trim()
+      .toLowerCase();
+
+  if (targetUserId) {
+    return `uuid:${targetUserId}`;
+  }
+
+  if (
+    !isSupabaseConfigured
+  ) {
+    return `local-username:${reference.username}`;
+  }
+
+  return null;
 }
 
 function createFallbackUser(

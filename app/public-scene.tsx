@@ -60,12 +60,8 @@ import type {
 } from "../lib/social";
 
 import {
-  exportSceneToSpotify,
-} from "../lib/spotify-scene-tools";
-
-import {
-  requireSpotifyPlaylistExportSession,
-} from "../lib/spotify-auth";
+  exportSceneToMusicProvider,
+} from "../lib/scene-music-export";
 
 import {
   useConnectivity,
@@ -385,12 +381,15 @@ export default function PublicSceneScreen() {
         const exportAccount =
           await captureScenePlaylistExportAccount();
 
-        await requireSpotifyPlaylistExportSession();
-
         const result =
-          await exportSceneToSpotify(
+          await exportSceneToMusicProvider(
             item.scene,
-            `A public Canal Scene by ${item.creator.displayName} ${item.creator.handle}.`,
+            {
+              providerId:
+                "spotify",
+              description:
+                `A public Canal Scene by ${item.creator.displayName} ${item.creator.handle}.`,
+            },
           );
 
         void recordAnalyticsEvent({
@@ -399,7 +398,7 @@ export default function PublicSceneScreen() {
         });
 
         setPlaylistUrl(
-          result.playlistUrl,
+          result.collectionUrl,
         );
 
         let historyMessage =
@@ -408,7 +407,17 @@ export default function PublicSceneScreen() {
         try {
           await recordScenePlaylistExport(
             item.scene,
-            result,
+            {
+              playlistId:
+                result
+                  .collectionId,
+              playlistUrl:
+                result
+                  .collectionUrl,
+              trackCount:
+                result
+                  .exportedTrackCount,
+            },
             {
               sourceOwnerId:
                 item.ownerId,
@@ -431,9 +440,9 @@ export default function PublicSceneScreen() {
         }
 
         setMessage(
-          `Exported ${result.trackCount} track${result.trackCount === 1 ? "" : "s"} to your Spotify. ${
-            result.skippedCount > 0
-              ? `${result.skippedCount} unmatched track${result.skippedCount === 1 ? " was" : "s were"} skipped.`
+          `Exported ${result.exportedTrackCount} track${result.exportedTrackCount === 1 ? "" : "s"} to your Spotify. ${
+            result.skippedTrackCount > 0
+              ? `${result.skippedTrackCount} unmatched track${result.skippedTrackCount === 1 ? " was" : "s were"} skipped.`
               : ""
           }${historyMessage}`,
         );

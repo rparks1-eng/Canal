@@ -26,7 +26,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -50,6 +50,13 @@
     "experiments": {
       "typedRoutes": false,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "23aa29b3-66d7-4528-a73c-410561c0c2bb"
+      }
+    },
+    "owner": "canal.soundscapes"
   }
 }

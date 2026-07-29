@@ -10,11 +10,57 @@ import {
   createConnectivitySampleGate,
   INITIAL_CONNECTIVITY_STATE,
   reduceConnectivityState,
+  shouldShowConnectivityBanner,
 } from "../lib/connectivity";
 
 describe(
   "connectivity state",
   () => {
+    it(
+      "does not announce a reconnect during a normal online cold start",
+      () => {
+        expect(
+          shouldShowConnectivityBanner(
+            "online",
+            0,
+            0,
+          ),
+        ).toBe(
+          false,
+        );
+
+        expect(
+          shouldShowConnectivityBanner(
+            "offline",
+            0,
+            0,
+          ),
+        ).toBe(
+          true,
+        );
+
+        expect(
+          shouldShowConnectivityBanner(
+            "online",
+            1,
+            1,
+          ),
+        ).toBe(
+          true,
+        );
+
+        expect(
+          shouldShowConnectivityBanner(
+            "online",
+            0,
+            1,
+          ),
+        ).toBe(
+          false,
+        );
+      },
+    );
+
     it(
       "keeps unknown separate from confirmed offline",
       () => {

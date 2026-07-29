@@ -4,12 +4,12 @@ import type {
 } from "./scene-studio";
 
 import type {
-  SpotifySceneSearchTrack,
-} from "./spotify-scene-tools";
+  MusicCatalogTrack,
+} from "./music-provider-model";
 
-import {
-  spotifySearchTrackToSceneTrack,
-} from "./spotify-scene-tools";
+import type {
+  SceneTrack,
+} from "./scenes";
 
 function calculateDurationMinutes(
   signals: GeneratedTrackSignal[],
@@ -114,15 +114,149 @@ function calculateArtists(
     );
 }
 
-export function addSpotifyTrackToGeneratedScene(
+export function musicCatalogTrackSceneId(
+  track: MusicCatalogTrack,
+): string {
+  return track.reference
+    .providerId ===
+    "spotify"
+    ? track.reference
+        .itemId
+    : `${track.reference.providerId}:${track.reference.itemId}`;
+}
+
+function musicCatalogTrackToGeneratedTrack(
+  track: MusicCatalogTrack,
+): GeneratedTrackSignal["track"] {
+  const trackId =
+    musicCatalogTrackSceneId(
+      track,
+    );
+
+  return {
+    id:
+      trackId,
+    name:
+      track.name,
+    uri:
+      track.reference
+        .uri ??
+      "",
+    duration_ms:
+      track.durationMs,
+    explicit:
+      track.explicit,
+    artists:
+      track.artists.map(
+        (
+          artist,
+          index,
+        ) => ({
+          id:
+            artist.artistId ??
+            `${trackId}-artist-${index}`,
+          name:
+            artist.name,
+          uri:
+            "",
+        }),
+      ),
+    ...(track.album
+      ? {
+          album: {
+            id:
+              track.album
+                .albumId ??
+              `${trackId}-album`,
+            name:
+              track.album
+                .name ??
+              "",
+            uri:
+              "",
+          },
+        }
+      : {}),
+    ...(track.reference
+      .providerId ===
+      "spotify" &&
+    track.reference.webUrl
+      ? {
+          external_urls: {
+            spotify:
+              track.reference
+                .webUrl,
+          },
+        }
+      : {}),
+  };
+}
+
+function musicCatalogTrackToSceneTrack(
+  track: MusicCatalogTrack,
+): SceneTrack {
+  return {
+    id:
+      musicCatalogTrackSceneId(
+        track,
+      ),
+    title:
+      track.name,
+    artist:
+      track.artists
+        .map(
+          (artist) =>
+            artist.name,
+        )
+        .filter(
+          Boolean,
+        )
+        .join(
+          ", ",
+        ),
+    source:
+      `${track.reference.providerId}-search`,
+    durationMs:
+      track.durationMs,
+    ...(track.reference
+      .providerId ===
+      "spotify"
+      ? {
+          ...(track.reference
+            .uri
+            ? {
+                spotifyUri:
+                  track.reference
+                    .uri,
+              }
+            : {}),
+          ...(track.reference
+            .webUrl
+            ? {
+                spotifyUrl:
+                  track.reference
+                    .webUrl,
+              }
+            : {}),
+        }
+      : {}),
+  };
+}
+
+export function addMusicTrackToGeneratedScene(
   result: GeneratedSceneResult,
-  track: SpotifySceneSearchTrack,
+  track: MusicCatalogTrack,
 ): GeneratedSceneResult {
+  const trackId =
+    musicCatalogTrackSceneId(
+      track,
+    );
+
   if (
     result.trackSignals.some(
       (signal) =>
         signal.track.id ===
-        track.id,
+        trackId,
     )
   ) {
     return result;
@@ -130,7 +264,9 @@ export function addSpotifyTrackToGeneratedScene(
 
   const signal: GeneratedTrackSignal = {
     track:
-      track as unknown as GeneratedTrackSignal["track"],
+      musicCatalogTrackToGeneratedTrack(
+        track,
+      ),
 
     sources:
       [],
@@ -152,20 +288,20 @@ export function addSpotifyTrackToGeneratedScene(
 
   const nextTracks = [
     ...result.scene.tracks,
-    spotifySearchTrackToSceneTrack(
+    musicCatalogTrackToSceneTrack(
       track,
     ),
   ];
 
   const rationale =
     result.rationale.includes(
-      "Includes tracks you added directly from Spotify search.",
+      "Includes tracks you added directly from music search.",
     )
       ? result.rationale
       : [
           ...result.rationale,
 
-          "Includes tracks you added directly from Spotify search.",
+          "Includes tracks you added directly from music search.",
         ];
 
   const updatedAt =

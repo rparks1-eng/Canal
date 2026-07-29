@@ -1082,7 +1082,7 @@ async function writeFollowRelationship(
             "user_relationships",
           )
           .select(
-            "target_user_id",
+            "target_user_id, relationship_type",
           )
           .eq(
             "user_id",
@@ -1105,6 +1105,16 @@ async function writeFollowRelationship(
   }
 
   if (existingById.data) {
+    if (
+      existingById.data
+        .relationship_type ===
+      "blocked"
+    ) {
+      throw new Error(
+        "Unblock this profile before following it.",
+      );
+    }
+
     const {
       error,
     } =
@@ -1129,78 +1139,6 @@ async function writeFollowRelationship(
             .eq(
               "target_user_id",
               target.id,
-            ),
-      );
-
-    if (error) {
-      throw new Error(
-        `Canal could not follow this profile: ${error.message}`,
-      );
-    }
-
-    await assertProfileSocialAccount(
-      account,
-    );
-
-    return;
-  }
-
-  const existingByHandle =
-    await runProfileSocialQuery(
-      account,
-      () =>
-        supabase
-          .from(
-            "user_relationships",
-          )
-          .select(
-            "target_username",
-          )
-          .eq(
-            "user_id",
-            viewerId,
-          )
-          .eq(
-            "target_username",
-            target.normalizedHandle,
-          )
-          .limit(
-            1,
-          )
-          .maybeSingle(),
-    );
-
-  if (existingByHandle.error) {
-    throw new Error(
-      `Canal could not read your current follow state: ${existingByHandle.error.message}`,
-    );
-  }
-
-  if (existingByHandle.data) {
-    const {
-      error,
-    } =
-      await runProfileSocialQuery(
-        account,
-        () =>
-          supabase
-            .from(
-              "user_relationships",
-            )
-            .update({
-              target_user_id:
-                target.id,
-
-              relationship_type:
-                "following",
-            })
-            .eq(
-              "user_id",
-              viewerId,
-            )
-            .eq(
-              "target_username",
-              target.normalizedHandle,
             ),
       );
 
@@ -1262,41 +1200,6 @@ async function deleteFollowRelationship(
   } =
     account;
 
-  const existing =
-    await runProfileSocialQuery(
-      account,
-      () =>
-        supabase
-          .from(
-            "user_relationships",
-          )
-          .select(
-            "target_username",
-          )
-          .eq(
-            "user_id",
-            viewerId,
-          )
-          .eq(
-            "target_user_id",
-            targetProfileId,
-          )
-          .eq(
-            "relationship_type",
-            "following",
-          )
-          .limit(
-            1,
-          )
-          .maybeSingle(),
-    );
-
-  if (existing.error) {
-    throw new Error(
-      `Canal could not read the follow record being removed: ${existing.error.message}`,
-    );
-  }
-
   const stableDelete =
     await runProfileSocialQuery(
       account,
@@ -1323,57 +1226,6 @@ async function deleteFollowRelationship(
   if (stableDelete.error) {
     throw new Error(
       `Canal could not unfollow this profile: ${stableDelete.error.message}`,
-    );
-  }
-
-  const legacyHandle =
-    typeof existing.data
-      ?.target_username ===
-      "string"
-      ? normalizeProfileHandle(
-          existing.data
-            .target_username,
-        )
-      : "";
-
-  if (!legacyHandle) {
-    await assertProfileSocialAccount(
-      account,
-    );
-
-    return;
-  }
-
-  const legacyDelete =
-    await runProfileSocialQuery(
-      account,
-      () =>
-        supabase
-          .from(
-            "user_relationships",
-          )
-          .delete()
-          .eq(
-            "user_id",
-            viewerId,
-          )
-          .is(
-            "target_user_id",
-            null,
-          )
-          .eq(
-            "target_username",
-            legacyHandle,
-          )
-          .eq(
-            "relationship_type",
-            "following",
-          ),
-    );
-
-  if (legacyDelete.error) {
-    throw new Error(
-      `Canal could not remove the legacy follow record: ${legacyDelete.error.message}`,
     );
   }
 

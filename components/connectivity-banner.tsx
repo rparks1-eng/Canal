@@ -17,6 +17,10 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  shouldShowConnectivityBanner,
+} from "../lib/connectivity";
+
+import {
   useConnectivity,
 } from "../providers/connectivity-provider";
 
@@ -78,10 +82,11 @@ export function ConnectivityBanner() {
   ]);
 
   if (
-    status !==
-      "offline" &&
-    visibleReconnectEpoch !==
-      reconnectEpoch
+    !shouldShowConnectivityBanner(
+      status,
+      visibleReconnectEpoch,
+      reconnectEpoch,
+    )
   ) {
     return null;
   }

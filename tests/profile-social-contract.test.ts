@@ -637,14 +637,6 @@ describe(
               null,
           });
 
-        const existingByHandleQuery =
-          createQuery({
-            data:
-              null,
-            error:
-              null,
-          });
-
         const insertQuery =
           createQuery({
             error:
@@ -659,10 +651,6 @@ describe(
           .mockImplementationOnce(
             () =>
               existingByIdQuery as never,
-          )
-          .mockImplementationOnce(
-            () =>
-              existingByHandleQuery as never,
           )
           .mockImplementationOnce(
             () =>
@@ -701,25 +689,9 @@ describe(
     );
 
     it(
-      "deletes stable and legacy follow rows only for the authenticated viewer",
+      "deletes a follow only by the authenticated viewer and stable target ID",
       async () => {
-        const existingQuery =
-          createQuery({
-            data: {
-              target_username:
-                "Target_User",
-            },
-            error:
-              null,
-          });
-
         const stableDeleteQuery =
-          createQuery({
-            error:
-              null,
-          });
-
-        const legacyDeleteQuery =
           createQuery({
             error:
               null,
@@ -728,15 +700,7 @@ describe(
         mockFrom
           .mockImplementationOnce(
             () =>
-              existingQuery as never,
-          )
-          .mockImplementationOnce(
-            () =>
               stableDeleteQuery as never,
-          )
-          .mockImplementationOnce(
-            () =>
-              legacyDeleteQuery as never,
           );
 
         await expect(
@@ -774,29 +738,8 @@ describe(
         ]);
 
         expect(
-          legacyDeleteQuery.is,
-        ).toHaveBeenCalledWith(
-          "target_user_id",
-          null,
-        );
-
-        expect(
-          legacyDeleteQuery.eq
-            .mock.calls,
-        ).toEqual([
-          [
-            "user_id",
-            VIEWER_ID,
-          ],
-          [
-            "target_username",
-            "target_user",
-          ],
-          [
-            "relationship_type",
-            "following",
-          ],
-        ]);
+          stableDeleteQuery.is,
+        ).not.toHaveBeenCalled();
       },
     );
 

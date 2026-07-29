@@ -4,6 +4,10 @@ Run this checklist on a rebuilt app. Record the build identifier, device model,
 operating-system version, tester, date, and any failed step in the pull request
 or release record.
 
+This file is the reusable authoritative checklist. Record candidate-specific
+results in a release-evidence record; do not check these boxes globally or treat
+a product-owner sequencing exception as test evidence.
+
 ## Prerequisites
 
 - Every committed Supabase migration is applied in filename order.
@@ -93,5 +97,6 @@ or release record.
 - [ ] Repeat the complete checklist on iOS and the Android checklist before an
       Android release.
 
-Phase 1 passes only when every applicable box is checked and failures have a
-linked issue or pull request.
+Phase 1 release readiness passes only when every applicable step is recorded as
+passed for the exact candidate in its release-evidence record and every failure
+has a linked issue or pull request.

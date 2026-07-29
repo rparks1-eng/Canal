@@ -359,7 +359,7 @@ describe(
           "savePublicSceneToLibrary(",
         );
         expect(source).toContain(
-          "exportSceneToSpotify(",
+          "exportSceneToMusicProvider(",
         );
       },
     );

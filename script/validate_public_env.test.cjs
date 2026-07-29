@@ -33,6 +33,7 @@ for (const key of [
   "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
   "EXPO_PUBLIC_SPOTIFY_CLIENT_ID",
   "EXPO_PUBLIC_SPOTIFY_REDIRECT_URI",
+  "EXPO_PUBLIC_CANAL_SHARE_BASE_URL",
 ]) {
   delete baseEnvironment[key];
 }
@@ -86,6 +87,7 @@ const validConfiguration = [
   "EXPO_PUBLIC_SUPABASE_URL=https://canal.supabase.co",
   "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_test_public_value",
   "EXPO_PUBLIC_SPOTIFY_CLIENT_ID=1234567890abcdef1234567890abcdef",
+  "EXPO_PUBLIC_CANAL_SHARE_BASE_URL=https://canal.example.com",
   "",
 ].join(
   "\n",
@@ -106,6 +108,178 @@ assert.match(
   validResult.stdout,
   /Spotify client ID: configured/,
 );
+
+assert.match(
+  validResult.stdout,
+  /Canal share base URL: configured/,
+);
+
+const missingShareBaseUrl =
+  runValidator(
+    validConfiguration.replace(
+      /EXPO_PUBLIC_CANAL_SHARE_BASE_URL=.*\n/,
+      "",
+    ),
+  );
+
+assert.equal(
+  missingShareBaseUrl.status,
+  1,
+);
+
+assert.match(
+  missingShareBaseUrl.stderr,
+  /EXPO_PUBLIC_CANAL_SHARE_BASE_URL/,
+);
+
+for (const invalidShareBaseUrl of [
+  "http://canal.example.com",
+  "https://user:password@canal.example.com",
+  "https://canal.example.com?source=invite",
+  "\"https://canal.example.com#invite\"",
+  "https://canal.example.com/",
+]) {
+  const invalidShareBaseResult =
+    runValidator(
+      validConfiguration.replace(
+        "https://canal.example.com",
+        invalidShareBaseUrl,
+      ),
+    );
+
+  assert.equal(
+    invalidShareBaseResult.status,
+    1,
+    invalidShareBaseUrl,
+  );
+
+  assert.match(
+    invalidShareBaseResult.stderr,
+    /EXPO_PUBLIC_CANAL_SHARE_BASE_URL/,
+  );
+}
+
+function createLegacySupabaseKey(
+  role,
+) {
+  const payload =
+    role ===
+      undefined
+      ? {
+        iss: "supabase",
+      }
+      : {
+        iss: "supabase",
+        role,
+      };
+
+  return [
+    Buffer.from(
+      JSON.stringify({
+        alg: "HS256",
+        typ: "JWT",
+      }),
+    ).toString(
+      "base64url",
+    ),
+    Buffer.from(
+      JSON.stringify(
+        payload,
+      ),
+    ).toString(
+      "base64url",
+    ),
+    "test-signature",
+  ].join(
+    ".",
+  );
+}
+
+const validLegacyAnon =
+  runValidator(
+    validConfiguration.replace(
+      "sb_publishable_test_public_value",
+      createLegacySupabaseKey(
+        "anon",
+      ),
+    ),
+  );
+
+assert.equal(
+  validLegacyAnon.status,
+  0,
+  validLegacyAnon.stderr,
+);
+
+for (const invalidLegacyRole of [
+  "authenticated",
+  "service_role",
+  "ANON",
+  123,
+  undefined,
+]) {
+  const invalidLegacyKey =
+    runValidator(
+      validConfiguration.replace(
+        "sb_publishable_test_public_value",
+        createLegacySupabaseKey(
+          invalidLegacyRole,
+        ),
+      ),
+    );
+
+  assert.equal(
+    invalidLegacyKey.status,
+    1,
+    String(
+      invalidLegacyRole,
+    ),
+  );
+
+  assert.match(
+    invalidLegacyKey.stderr,
+    /EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY/,
+  );
+}
+
+const validLegacySegments =
+  createLegacySupabaseKey(
+    "anon",
+  ).split(
+    ".",
+  );
+
+for (const invalidLegacyKeyValue of [
+  validLegacySegments
+    .slice(
+      0,
+      2,
+    )
+    .join(
+      ".",
+    ),
+  `${validLegacySegments[0]}.${validLegacySegments[1]}.`,
+  `${validLegacySegments[0]}.not-json.${validLegacySegments[2]}`,
+  `${validLegacySegments.join(".")}.extra`,
+]) {
+  const invalidLegacyShape =
+    runValidator(
+      validConfiguration.replace(
+        "sb_publishable_test_public_value",
+        invalidLegacyKeyValue,
+      ),
+    );
+
+  assert.equal(
+    invalidLegacyShape.status,
+    1,
+    invalidLegacyKeyValue,
+  );
+  assert.match(
+    invalidLegacyShape.stderr,
+    /EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY/,
+  );
+}
 
 const missingSpotify =
   runValidator(

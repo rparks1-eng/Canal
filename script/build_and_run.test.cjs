@@ -34,6 +34,10 @@ printf 'npx %s\\n' "$*" >> "$CANAL_FAKE_COMMAND_LOG"
 if [[ -n "\${CANAL_FAIL_NATIVE_BUILD:-}" && "$*" == "expo run:ios --no-bundler" ]]; then
   exit 9
 fi
+
+if [[ -n "\${CANAL_FAIL_WEB_EXPORT:-}" && "$*" == "expo export --platform web" ]]; then
+  exit 8
+fi
 `,
 );
 
@@ -43,12 +47,15 @@ const baseEnvironment = {
   EXPO_PUBLIC_SUPABASE_URL: "https://canal.supabase.co",
   EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test_public_value",
   EXPO_PUBLIC_SPOTIFY_CLIENT_ID: "1234567890abcdef1234567890abcdef",
+  EXPO_PUBLIC_CANAL_SHARE_BASE_URL: "https://canal.example.com",
 };
+
+let launcherRun = 0;
 
 function runLauncher(mode, extraEnvironment = {}) {
   const commandLog = path.join(
     testRoot,
-    `${mode.replaceAll("-", "")}-${Date.now()}.log`,
+    `${mode.replaceAll("-", "")}-${launcherRun += 1}.log`,
   );
   const result = spawnSync(
     "/bin/bash",
@@ -105,6 +112,47 @@ assert.equal(failedBuild.result.status, 9);
 assert.equal(
   failedBuild.commands.trim(),
   "npx expo run:ios --no-bundler",
+);
+
+const webExport = runLauncher("--export-web");
+assert.equal(
+  webExport.result.status,
+  0,
+  `${webExport.result.stdout}\n${webExport.result.stderr}`,
+);
+assert.equal(
+  webExport.commands.trim(),
+  "npx expo export --platform web",
+);
+
+const webExportAlias = runLauncher("export-web");
+assert.equal(
+  webExportAlias.result.status,
+  0,
+  `${webExportAlias.result.stdout}\n${webExportAlias.result.stderr}`,
+);
+assert.equal(
+  webExportAlias.commands.trim(),
+  "npx expo export --platform web",
+);
+
+const failedWebExport = runLauncher("--export-web", {
+  CANAL_FAIL_WEB_EXPORT: "1",
+});
+assert.equal(failedWebExport.result.status, 8);
+assert.equal(
+  failedWebExport.commands.trim(),
+  "npx expo export --platform web",
+);
+
+const invalidWebExport = runLauncher("--export-web", {
+  EXPO_PUBLIC_CANAL_SHARE_BASE_URL: "",
+});
+assert.equal(invalidWebExport.result.status, 1);
+assert.equal(invalidWebExport.commands, "");
+assert.match(
+  invalidWebExport.result.stderr,
+  /EXPO_PUBLIC_CANAL_SHARE_BASE_URL/,
 );
 
 console.log("iOS launcher command tests passed.");
