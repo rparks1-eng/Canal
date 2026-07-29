@@ -50,6 +50,24 @@ type ErrorShape = {
   kind?: unknown;
 };
 
+export type CreatorReleaseRequestGuardInput =
+  Readonly<{
+    expectedUserId:
+      string;
+    activeUserId:
+      string | null;
+    accountUserId:
+      string;
+    requestEpoch:
+      number;
+    activeRequestEpoch:
+      number;
+    expectedReleaseId?:
+      string;
+    activeReleaseId?:
+      string;
+  }>;
+
 const PRIVACY_SENSITIVE_ERROR_KINDS =
   new Set([
     "account-changed",
@@ -57,6 +75,34 @@ const PRIVACY_SENSITIVE_ERROR_KINDS =
     "not-found",
     "permission-denied",
   ]);
+
+export function creatorReleaseRequestCanCommit(
+  input:
+    CreatorReleaseRequestGuardInput,
+): boolean {
+  if (
+    !input.expectedUserId ||
+    input.requestEpoch !==
+      input.activeRequestEpoch ||
+    input.activeUserId !==
+      input.accountUserId ||
+    input.accountUserId !==
+      input.expectedUserId
+  ) {
+    return false;
+  }
+
+  if (
+    input.expectedReleaseId !==
+      undefined &&
+    input.activeReleaseId !==
+      input.expectedReleaseId
+  ) {
+    return false;
+  }
+
+  return true;
+}
 
 export function filterCreatorReleases(
   releases:

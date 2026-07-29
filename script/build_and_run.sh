@@ -31,6 +31,8 @@ Modes:
   --tunnel, tunnel  Start Expo using tunnel transport
   --export-web, export-web
                     Export the web build locally
+  --release-ballot-smoke, release-ballot-smoke
+                    Run the isolated Release Ballot iOS Simulator smoke lane
   --check-config, check-config
                     Validate Canal's public local configuration
   --recover-spotify-config, recover-spotify-config
@@ -108,6 +110,10 @@ case "$MODE" in
   --export-web|export-web)
     validate_public_env
     exec "${EXPO_CMD[@]}" export --platform web
+    ;;
+  --release-ballot-smoke|release-ballot-smoke)
+    require_macos
+    exec node "$ROOT_DIR/script/release_ballot_smoke.cjs" "${@:2}"
     ;;
   --doctor|doctor)
     run_doctor
