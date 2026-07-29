@@ -11,6 +11,14 @@ import {
   canonicalSpotifyTrackUrl,
 } from "./spotify-track-links";
 
+import {
+  isSnapshotTemplateTheme,
+} from "./snapshot-templates";
+
+import type {
+  SnapshotTemplateTheme,
+} from "./snapshot-templates";
+
 export type PublicSnapshotCreator = {
   id: string;
   displayName: string;
@@ -42,6 +50,9 @@ export type PublicSnapshotRow = {
   visibility:
     | "public"
     | "private";
+  template_id: string | null;
+  template_brand_label: string | null;
+  template_theme: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -67,12 +78,21 @@ const SNAPSHOT_COLUMNS = [
   "note",
   "mood",
   "visibility",
+  "template_id",
+  "template_brand_label",
+  "template_theme",
   "created_at",
   "updated_at",
 ].join(", ");
 
 const PROFILE_COLUMNS =
   "id, display_name, handle, is_verified, is_canal";
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const CONTROL_CHARACTER_PATTERN =
+  /[\u0000-\u001f\u007f]/;
 
 export async function loadPublicSnapshotFeed(
   limit = 100,
@@ -403,7 +423,12 @@ function normalizePublicSnapshot(
     cleanRequiredString(
       row.created_at,
     ) ||
-    new Date(0).toISOString();
+      new Date(0).toISOString();
+
+  const templateProvenance =
+    templateProvenanceFromRow(
+      row,
+    );
 
   return {
     id,
@@ -456,6 +481,8 @@ function normalizePublicSnapshot(
 
     visibility:
       "public",
+
+    ...templateProvenance,
 
     createdAt,
 
@@ -514,6 +541,50 @@ function normalizeCreator(
     isCanal:
       row?.is_canal ===
         true,
+  };
+}
+
+function templateProvenanceFromRow(
+  row: PublicSnapshotRow,
+): {
+  templateId?: string;
+  templateBrandLabel?: string;
+  templateTheme?: SnapshotTemplateTheme;
+} {
+  const templateId =
+    cleanRequiredString(
+      row.template_id,
+    );
+
+  const templateBrandLabel =
+    cleanRequiredString(
+      row.template_brand_label,
+    );
+
+  if (
+    !UUID_PATTERN.test(
+      templateId,
+    ) ||
+    !templateBrandLabel ||
+    Array.from(
+      templateBrandLabel,
+    ).length >
+      32 ||
+    CONTROL_CHARACTER_PATTERN.test(
+      templateBrandLabel,
+    ) ||
+    !isSnapshotTemplateTheme(
+      row.template_theme,
+    )
+  ) {
+    return {};
+  }
+
+  return {
+    templateId,
+    templateBrandLabel,
+    templateTheme:
+      row.template_theme,
   };
 }
 

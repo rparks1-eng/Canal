@@ -57,6 +57,10 @@ import {
   canonicalSpotifyTrackUrl,
 } from "../../lib/spotify-track-links";
 
+import type {
+  SnapshotTemplateTheme,
+} from "../../lib/snapshot-templates";
+
 function closeSnapshot(): void {
   const action =
     snapshotReturnAction(
@@ -775,11 +779,17 @@ export default function SnapshotDetailScreen() {
     mood.trim() !==
       (snapshot.mood ?? "");
 
+  const templateStyle =
+    snapshotTemplateStyle(
+      snapshot.templateTheme,
+    );
+
   return (
     <SafeAreaView
       style={styles.screen}
     >
       <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={
           styles.page
         }
@@ -839,13 +849,42 @@ export default function SnapshotDetailScreen() {
 
         <View style={styles.hero}>
           <View
-            style={styles.snapshotArtwork}
+            style={[
+              styles.snapshotArtwork,
+              templateStyle && {
+                backgroundColor:
+                  templateStyle.backgroundColor,
+              },
+            ]}
           >
             <Ionicons
               name="camera"
               size={45}
-              color="#ff9a50"
+              color={
+                templateStyle
+                  ?.accentColor ??
+                "#ff9a50"
+              }
             />
+
+            {snapshot.templateBrandLabel ? (
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.artworkBrand,
+                  {
+                    color:
+                      templateStyle
+                        ?.textColor ??
+                      "#FFFFFF",
+                  },
+                ]}
+              >
+                {
+                  snapshot.templateBrandLabel
+                }
+              </Text>
+            ) : null}
           </View>
 
           <View
@@ -897,6 +936,52 @@ export default function SnapshotDetailScreen() {
             )}
           </Text>
         </View>
+
+        {snapshot.templateBrandLabel ? (
+          <View
+            accessibilityLabel={`Creator template ${snapshot.templateBrandLabel}`}
+            style={
+              styles.templateProvenance
+            }
+          >
+            <View
+              style={[
+                styles.templateProvenanceMark,
+                {
+                  backgroundColor:
+                    templateStyle
+                      ?.accentColor ??
+                    "#ff9a50",
+                },
+              ]}
+            />
+
+            <View
+              style={
+                styles.templateProvenanceCopy
+              }
+            >
+              <Text
+                style={
+                  styles.templateProvenanceLabel
+                }
+              >
+                CREATOR TEMPLATE
+              </Text>
+
+              <Text
+                selectable
+                style={
+                  styles.templateProvenanceName
+                }
+              >
+                {
+                  snapshot.templateBrandLabel
+                }
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {cloudWarning ? (
           <View
@@ -1315,6 +1400,51 @@ function formatSnapshotDate(
   );
 }
 
+function snapshotTemplateStyle(
+  theme:
+    SnapshotTemplateTheme
+    | undefined,
+): {
+  backgroundColor: string;
+  accentColor: string;
+  textColor: string;
+} | null {
+  switch (theme) {
+    case "sunset":
+      return {
+        backgroundColor:
+          "#3E1734",
+        accentColor:
+          "#FF9A50",
+        textColor:
+          "#FFF8F2",
+      };
+
+    case "midnight":
+      return {
+        backgroundColor:
+          "#101B34",
+        accentColor:
+          "#79A7FF",
+        textColor:
+          "#F6F8FF",
+      };
+
+    case "paper":
+      return {
+        backgroundColor:
+          "#FFF4E8",
+        accentColor:
+          "#C64B2D",
+        textColor:
+          "#2B2520",
+      };
+
+    default:
+      return null;
+  }
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -1403,6 +1533,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#2b1d14",
   },
 
+  artworkBrand: {
+    position: "absolute",
+    left: 13,
+    right: 13,
+    bottom: 13,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+
   visibilityBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1437,6 +1579,44 @@ const styles = StyleSheet.create({
     marginTop: 7,
     color: "#8f9891",
     fontSize: 11,
+  },
+
+  templateProvenance: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#343A36",
+    borderRadius: 18,
+    borderCurve:
+      "continuous",
+    backgroundColor: "#171B18",
+    padding: 13,
+  },
+
+  templateProvenanceMark: {
+    width: 8,
+    alignSelf: "stretch",
+    borderRadius: 4,
+  },
+
+  templateProvenanceCopy: {
+    flex: 1,
+    gap: 3,
+  },
+
+  templateProvenanceLabel: {
+    color: "#8F9891",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  templateProvenanceName: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
   },
 
   syncWarning: {

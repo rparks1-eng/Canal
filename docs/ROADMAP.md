@@ -83,7 +83,7 @@ channel access.
 
 ## Phase 4: creator and event products
 
-- [ ] Creator-branded Snapshot templates
+- [x] Creator-branded Snapshot templates
 - [x] Public Scene collections
 - Collaborative releases and audience participation
 - Event, venue, and DJ controls

@@ -21,6 +21,10 @@ import type {
   Snapshot,
 } from "../lib/snapshots";
 
+import type {
+  SnapshotTemplateTheme,
+} from "../lib/snapshot-templates";
+
 export type SnapshotCardItem =
   Snapshot & {
     creator?:
@@ -52,6 +56,11 @@ export function PublicSnapshotCard(
             " · ",
           )
       : "Scene moment";
+
+  const templateStyle =
+    snapshotTemplateStyle(
+      snapshot.templateTheme,
+    );
 
   return (
     <View
@@ -88,9 +97,13 @@ export function PublicSnapshotCard(
         ]}
       >
         <View
-          style={
-            styles.artwork
-          }
+          style={[
+            styles.artwork,
+            templateStyle && {
+              backgroundColor:
+                templateStyle.backgroundColor,
+            },
+          ]}
         >
           <Ionicons
             name="camera"
@@ -99,8 +112,31 @@ export function PublicSnapshotCard(
                 ? 26
                 : 32
             }
-            color="#F47A24"
+            color={
+              templateStyle
+                ?.accentColor ??
+              "#F47A24"
+            }
           />
+
+          {snapshot.templateBrandLabel ? (
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.templateBrand,
+                {
+                  color:
+                    templateStyle
+                      ?.textColor ??
+                    "#6D3315",
+                },
+              ]}
+            >
+              {
+                snapshot.templateBrandLabel
+              }
+            </Text>
+          ) : null}
 
           {snapshot.mood ? (
             <View
@@ -166,6 +202,20 @@ export function PublicSnapshotCard(
             No note added
           </Text>
         )}
+
+        {snapshot.templateBrandLabel ? (
+          <Text
+            numberOfLines={1}
+            style={
+              styles.templateProvenance
+            }
+          >
+            Template ·{" "}
+            {
+              snapshot.templateBrandLabel
+            }
+          </Text>
+        ) : null}
       </Pressable>
 
       {props.showCreator &&
@@ -273,6 +323,51 @@ export function PublicSnapshotCard(
   );
 }
 
+function snapshotTemplateStyle(
+  theme:
+    SnapshotTemplateTheme
+    | undefined,
+): {
+  backgroundColor: string;
+  accentColor: string;
+  textColor: string;
+} | null {
+  switch (theme) {
+    case "sunset":
+      return {
+        backgroundColor:
+          "#3E1734",
+        accentColor:
+          "#FF9A50",
+        textColor:
+          "#FFF8F2",
+      };
+
+    case "midnight":
+      return {
+        backgroundColor:
+          "#101B34",
+        accentColor:
+          "#79A7FF",
+        textColor:
+          "#F6F8FF",
+      };
+
+    case "paper":
+      return {
+        backgroundColor:
+          "#FFF4E8",
+        accentColor:
+          "#C64B2D",
+        textColor:
+          "#2B2520",
+      };
+
+    default:
+      return null;
+  }
+}
+
 export function PublicSnapshotGrid(
   props: {
     snapshots:
@@ -351,6 +446,19 @@ const styles =
         "hidden",
     },
 
+    templateBrand: {
+      position:
+        "absolute",
+      top: 10,
+      left: 10,
+      right: 10,
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+      textTransform:
+        "uppercase",
+    },
+
     moodBadge: {
       position:
         "absolute",
@@ -403,6 +511,16 @@ const styles =
       fontStyle:
         "italic",
       marginTop: 8,
+    },
+
+    templateProvenance: {
+      color: "#B9500B",
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 0.2,
+      marginTop: 9,
+      textTransform:
+        "uppercase",
     },
 
     creatorButton: {

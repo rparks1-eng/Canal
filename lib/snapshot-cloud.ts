@@ -12,6 +12,14 @@ import {
   canonicalSpotifyTrackUrl,
 } from "./spotify-track-links";
 
+import {
+  isSnapshotTemplateTheme,
+} from "./snapshot-templates";
+
+import type {
+  SnapshotTemplateTheme,
+} from "./snapshot-templates";
+
 type SnapshotRow = {
   id: string;
   user_id: string;
@@ -27,6 +35,9 @@ type SnapshotRow = {
   visibility:
     | "public"
     | "private";
+  template_id: string | null;
+  template_brand_label: string | null;
+  template_theme: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -44,6 +55,9 @@ const SNAPSHOT_COLUMNS = [
   "note",
   "mood",
   "visibility",
+  "template_id",
+  "template_brand_label",
+  "template_theme",
   "created_at",
   "updated_at",
 ].join(", ");
@@ -257,6 +271,10 @@ export async function upsertCloudSnapshot(
           visibility:
             snapshot.visibility,
 
+          template_id:
+            snapshot.templateId ??
+            null,
+
           created_at:
             snapshot.createdAt,
 
@@ -399,6 +417,11 @@ function snapshotFromRow(
     return null;
   }
 
+  const templateProvenance =
+    templateProvenanceFromRow(
+      row,
+    );
+
   return {
     id,
     sceneId,
@@ -453,6 +476,8 @@ function snapshotFromRow(
         ? "public"
         : "private",
 
+    ...templateProvenance,
+
     createdAt:
       cleanRequiredString(
         row.created_at,
@@ -500,3 +525,53 @@ function cleanOptionalString(
   return cleaned ||
     undefined;
 }
+
+function templateProvenanceFromRow(
+  row: SnapshotRow,
+): {
+  templateId?: string;
+  templateBrandLabel?: string;
+  templateTheme?: SnapshotTemplateTheme;
+} {
+  const templateId =
+    cleanRequiredString(
+      row.template_id,
+    );
+
+  const templateBrandLabel =
+    cleanRequiredString(
+      row.template_brand_label,
+    );
+
+  if (
+    !UUID_PATTERN.test(
+      templateId,
+    ) ||
+    !templateBrandLabel ||
+    Array.from(
+      templateBrandLabel,
+    ).length >
+      32 ||
+    CONTROL_CHARACTER_PATTERN.test(
+      templateBrandLabel,
+    ) ||
+    !isSnapshotTemplateTheme(
+      row.template_theme,
+    )
+  ) {
+    return {};
+  }
+
+  return {
+    templateId,
+    templateBrandLabel,
+    templateTheme:
+      row.template_theme,
+  };
+}
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const CONTROL_CHARACTER_PATTERN =
+  /[\u0000-\u001f\u007f]/;

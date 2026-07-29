@@ -64,6 +64,9 @@ function snapshotRow(
     note: "Deep work",
     mood: "calm",
     visibility: "public",
+    template_id: null,
+    template_brand_label: null,
+    template_theme: null,
     created_at:
       "2026-07-28T08:00:00.000Z",
     updated_at:
@@ -234,6 +237,55 @@ describe(
           snapshot
             .spotifyUrl,
         ).toBeUndefined();
+      },
+    );
+
+    it(
+      "preserves only complete fixed-theme server provenance",
+      () => {
+        const snapshots =
+          normalizePublicSnapshotRows(
+            [
+              snapshotRow({
+                id:
+                  "branded",
+                template_id:
+                  "00000000-0000-4000-8000-000000000001",
+                template_brand_label:
+                  "Ari FM",
+                template_theme:
+                  "sunset",
+              }),
+              snapshotRow({
+                id:
+                  "incomplete",
+                template_id:
+                  "00000000-0000-4000-8000-000000000002",
+                template_brand_label:
+                  null,
+                template_theme:
+                  "midnight",
+              }),
+            ],
+            "viewer",
+          );
+
+        expect(
+          snapshots[0],
+        ).toMatchObject({
+          templateId:
+            "00000000-0000-4000-8000-000000000001",
+          templateBrandLabel:
+            "Ari FM",
+          templateTheme:
+            "sunset",
+        });
+
+        expect(
+          snapshots[1],
+        ).not.toHaveProperty(
+          "templateId",
+        );
       },
     );
 

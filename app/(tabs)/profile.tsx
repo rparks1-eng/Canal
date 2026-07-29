@@ -84,6 +84,14 @@ import type {
 } from "../../lib/snapshots";
 
 import {
+  listOwnSnapshotTemplates,
+} from "../../lib/snapshot-templates";
+
+import type {
+  SnapshotTemplate,
+} from "../../lib/snapshot-templates";
+
+import {
   supabase,
 } from "../../lib/supabase";
 
@@ -275,6 +283,14 @@ function ProfileScreenContent() {
     >([]);
 
   const [
+    snapshotTemplates,
+    setSnapshotTemplates,
+  ] =
+    useState<
+      SnapshotTemplate[]
+    >([]);
+
+  const [
     collections,
     setCollections,
   ] =
@@ -290,6 +306,11 @@ function ProfileScreenContent() {
   const [
     snapshotDataResolved,
     setSnapshotDataResolved,
+  ] = useState(false);
+
+  const [
+    templateDataResolved,
+    setTemplateDataResolved,
   ] = useState(false);
 
   const [
@@ -346,6 +367,14 @@ function ProfileScreenContent() {
   const [
     snapshotError,
     setSnapshotError,
+  ] =
+    useState<unknown | null>(
+      null,
+    );
+
+  const [
+    templateError,
+    setTemplateError,
   ] =
     useState<unknown | null>(
       null,
@@ -428,6 +457,9 @@ function ProfileScreenContent() {
             setPlaylistExports(
               [],
             );
+            setSnapshotTemplates(
+              [],
+            );
             setCollections(
               [],
             );
@@ -435,6 +467,9 @@ function ProfileScreenContent() {
               false,
             );
             setCollectionDataResolved(
+              false,
+            );
+            setTemplateDataResolved(
               false,
             );
 
@@ -716,12 +751,57 @@ function ProfileScreenContent() {
                   },
                 );
 
+            const templateLoad =
+              (
+                user
+                  ? listOwnSnapshotTemplates()
+                  : Promise.reject(
+                      new Error(
+                        "Sign in to refresh your Snapshot templates.",
+                      ),
+                    )
+              )
+                .then(
+                  (
+                    nextTemplates,
+                  ) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setSnapshotTemplates(
+                      nextTemplates,
+                    );
+                    setTemplateDataResolved(
+                      true,
+                    );
+                    setTemplateError(
+                      null,
+                    );
+                  },
+                )
+                .catch(
+                  (error: unknown) => {
+                    if (!isCurrent()) {
+                      return;
+                    }
+
+                    setTemplateDataResolved(
+                      true,
+                    );
+                    setTemplateError(
+                      error,
+                    );
+                  },
+                );
+
             await Promise.all([
               profileLoad,
               sceneLoad,
               snapshotLoad,
               socialLoad,
               collectionLoad,
+              templateLoad,
             ]);
 
             if (isCurrent()) {
@@ -882,6 +962,25 @@ function ProfileScreenContent() {
       [
         collectionError,
         connectivityStatus,
+      ],
+    );
+
+  const templateIssue =
+    useMemo(
+      () =>
+        templateError
+          ? classifyRecoveryIssue(
+              templateError,
+              {
+                service:
+                  "canal",
+                connectivityStatus,
+              },
+            )
+          : null,
+      [
+        connectivityStatus,
+        templateError,
       ],
     );
 
@@ -1967,6 +2066,118 @@ function ProfileScreenContent() {
 
             <View
               style={
+                styles.templateSection
+              }
+            >
+              <View
+                style={
+                  styles.templateSectionCopy
+                }
+              >
+                <View
+                  style={
+                    styles.templateTitleRow
+                  }
+                >
+                  <Text
+                    style={
+                      styles.snapshotSectionTitle
+                    }
+                  >
+                    Snapshot Templates
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.snapshotCount
+                    }
+                  >
+                    {(
+                      !templateDataResolved ||
+                      templateIssue
+                    ) &&
+                    snapshotTemplates.length ===
+                      0
+                      ? "—"
+                      : snapshotTemplates.length}
+                  </Text>
+                </View>
+
+                <Text
+                  style={
+                    styles.snapshotSectionSubtitle
+                  }
+                >
+                  Reusable branded looks for your published moments.
+                </Text>
+
+                {snapshotTemplates.find(
+                  (template) =>
+                    template.isDefault,
+                ) ? (
+                  <Text
+                    numberOfLines={
+                      1
+                    }
+                    style={
+                      styles.defaultTemplateText
+                    }
+                  >
+                    Default ·{" "}
+                    {
+                      snapshotTemplates.find(
+                        (template) =>
+                          template.isDefault,
+                      )?.name
+                    }
+                  </Text>
+                ) : null}
+              </View>
+
+              <Pressable
+                accessibilityLabel="Manage Snapshot templates"
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push(
+                    "/snapshot-templates" as never,
+                  )
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.manageTemplateButton,
+                  pressed &&
+                    styles.pressed,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.manageTemplateText
+                  }
+                >
+                  Manage
+                </Text>
+              </Pressable>
+            </View>
+
+            {templateIssue ? (
+              <RecoveryNotice
+                busy={
+                  loading
+                }
+                issue={
+                  templateIssue
+                }
+                onAction={() =>
+                  recoverRead(
+                    templateIssue,
+                  )
+                }
+              />
+            ) : null}
+
+            <View
+              style={
                 styles.snapshotSectionHeader
               }
             >
@@ -2859,6 +3070,66 @@ const styles =
       marginTop: 4,
     },
 
+    templateSection: {
+      minHeight: 94,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      gap: 14,
+      borderWidth: 1,
+      borderColor:
+        "#EEE5DE",
+      borderRadius: 20,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFFFFF",
+      padding: 16,
+    },
+
+    templateSectionCopy: {
+      flex: 1,
+      gap: 3,
+    },
+
+    templateTitleRow: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 9,
+    },
+
+    defaultTemplateText: {
+      color: "#B9500B",
+      fontSize: 10,
+      fontWeight: "900",
+      marginTop: 5,
+    },
+
+    manageTemplateButton: {
+      minHeight: 46,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      borderRadius: 13,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFF0E5",
+      paddingHorizontal: 13,
+    },
+
+    manageTemplateText: {
+      color: "#B9500B",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
     snapshotSectionTitle: {
       color: "#1B1B1B",
       fontSize: 19,
@@ -3046,6 +3317,10 @@ const styles =
       color: "#FFFFFF",
       fontSize: 14,
       fontWeight: "900",
+    },
+
+    pressed: {
+      opacity: 0.7,
     },
 
     successBox: {

@@ -20,6 +20,14 @@ import {
   canonicalSpotifyTrackUrl,
 } from "./spotify-track-links";
 
+import {
+  isSnapshotTemplateTheme,
+} from "./snapshot-templates";
+
+import type {
+  SnapshotTemplateTheme,
+} from "./snapshot-templates";
+
 export type SnapshotVisibility =
   | "public"
   | "private";
@@ -38,6 +46,9 @@ export type Snapshot = {
   createdAt: string;
   updatedAt: string;
   visibility: SnapshotVisibility;
+  templateId?: string;
+  templateBrandLabel?: string;
+  templateTheme?: SnapshotTemplateTheme;
 
   /*
    * These fields keep the local cache account-safe
@@ -59,6 +70,7 @@ export type CreateSnapshotInput = {
   note?: string;
   mood?: string;
   visibility?: SnapshotVisibility;
+  templateId?: string;
 };
 
 export type UpdateSnapshotInput = {
@@ -92,6 +104,12 @@ const SNAPSHOT_ACCOUNT_CHANGED_ERROR_MESSAGE =
 
 const SNAPSHOT_ACCOUNT_CHANGED_WARNING =
   "Canal stopped loading Snapshots because the active account changed. Try again to load the current account.";
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const CONTROL_CHARACTER_PATTERN =
+  /[\u0000-\u001f\u007f]/;
 
 class SnapshotAccountChangedError extends Error {
   constructor() {
@@ -567,6 +585,11 @@ export async function createSnapshotWithStatus(
         ? "public"
         : "private",
 
+    templateId:
+      cleanTemplateId(
+        input.templateId,
+      ),
+
     ownerId:
       expectedUserId ??
       undefined,
@@ -756,6 +779,11 @@ export async function updateSnapshot(
 
 export async function syncSnapshotWithStatus(
   snapshotId: string,
+  options: {
+    templateId?:
+      | string
+      | null;
+  } = {},
 ): Promise<
   SnapshotResult<Snapshot | null>
 > {
@@ -794,12 +822,60 @@ export async function syncSnapshotWithStatus(
     };
   }
 
+  const hasTemplateOverride =
+    Object.prototype.hasOwnProperty.call(
+      options,
+      "templateId",
+    );
+
+  if (
+    hasTemplateOverride &&
+    snapshot.templateBrandLabel
+  ) {
+    throw new Error(
+      "Published Snapshot template provenance cannot be changed.",
+    );
+  }
+
+  const retrySnapshot =
+    hasTemplateOverride
+      ? {
+          ...snapshot,
+          templateId:
+            options.templateId
+              ? cleanTemplateId(
+                  options.templateId,
+                )
+              : undefined,
+          templateBrandLabel:
+            undefined,
+          templateTheme:
+            undefined,
+          pendingCloudSync:
+            true,
+        }
+      : {
+          ...snapshot,
+          pendingCloudSync:
+            true,
+        };
+
+  if (
+    hasTemplateOverride
+  ) {
+    await replaceLocalSnapshot(
+      storageKey,
+      retrySnapshot,
+      expectedUserId,
+    );
+
+    await assertExpectedSnapshotUser(
+      expectedUserId,
+    );
+  }
+
   return syncCreatedOrUpdatedSnapshot(
-    {
-      ...snapshot,
-      pendingCloudSync:
-        true,
-    },
+    retrySnapshot,
     storageKey,
     expectedUserId,
   );
@@ -1341,6 +1417,11 @@ function normalizeSnapshot(
       record.ownerId,
     );
 
+  const templateProvenance =
+    normalizeTemplateProvenance(
+      record,
+    );
+
   return {
     id,
     sceneId,
@@ -1410,6 +1491,8 @@ function normalizeSnapshot(
       "public"
         ? "public"
         : "private",
+
+    ...templateProvenance,
 
     ownerId,
 
@@ -1508,6 +1591,84 @@ function cleanOptionalString(
 
   return cleanedValue ||
     undefined;
+}
+
+function cleanTemplateId(
+  value:
+    | string
+    | undefined,
+): string | undefined {
+  const cleaned =
+    cleanOptionalString(
+      value,
+    );
+
+  return cleaned &&
+    UUID_PATTERN.test(
+      cleaned,
+    )
+    ? cleaned
+    : undefined;
+}
+
+function normalizeTemplateProvenance(
+  record: Record<
+    string,
+    unknown
+  >,
+): {
+  templateId?: string;
+  templateBrandLabel?: string;
+  templateTheme?: SnapshotTemplateTheme;
+} {
+  const templateId =
+    typeof record.templateId ===
+      "string" &&
+    UUID_PATTERN.test(
+      record.templateId.trim(),
+    )
+      ? record.templateId.trim()
+      : "";
+
+  const templateBrandLabel =
+    readString(
+      record.templateBrandLabel,
+    );
+
+  if (
+    templateId &&
+    !templateBrandLabel &&
+    record.pendingCloudSync ===
+      true
+  ) {
+    return {
+      templateId,
+    };
+  }
+
+  if (
+    !templateId ||
+    !templateBrandLabel ||
+    Array.from(
+      templateBrandLabel,
+    ).length >
+      32 ||
+    CONTROL_CHARACTER_PATTERN.test(
+      templateBrandLabel,
+    ) ||
+    !isSnapshotTemplateTheme(
+      record.templateTheme,
+    )
+  ) {
+    return {};
+  }
+
+  return {
+    templateId,
+    templateBrandLabel,
+    templateTheme:
+      record.templateTheme,
+  };
 }
 
 async function assertExpectedSnapshotUser(

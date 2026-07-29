@@ -366,6 +366,10 @@ function CanalNavigator() {
       <Stack.Screen
         name="scene-snapshot"
       />
+
+      <Stack.Screen
+        name="snapshot-templates"
+      />
     </Stack>
   );
 }
