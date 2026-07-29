@@ -151,6 +151,19 @@ function missingExpectedText(
   );
 }
 
+function expectedScenarioText(
+  scenario,
+) {
+  return [
+    ...new Set([
+      "RELEASE BALLOT SMOKE",
+      scenario.id,
+      "ISOLATED FIXTURE",
+      ...scenario.expectedText,
+    ]),
+  ];
+}
+
 function parseArguments(
   values,
 ) {
@@ -1029,9 +1042,11 @@ async function waitForFirstScenario(
     if (
       missingExpectedText(
         probe.text,
-        scenario.expectedText.slice(
+        expectedScenarioText(
+          scenario,
+        ).slice(
           0,
-          2,
+          3,
         ),
       ).length === 0
     ) {
@@ -1226,15 +1241,20 @@ async function main() {
               screenshotPath,
             ) ?? "";
 
+          const expectedText =
+            expectedScenarioText(
+              scenario,
+            );
+
           return {
             id:
               scenario.id,
             expectedText:
-              scenario.expectedText,
+              expectedText,
             missingText:
               missingExpectedText(
                 text,
-                scenario.expectedText,
+                expectedText,
               ),
             recognizedText:
               text,
@@ -1255,6 +1275,19 @@ async function main() {
             .missingText
             .length > 0,
       );
+
+    const screenshotHashes =
+      results.map(
+        (result) =>
+          result
+            .screenshotSha256,
+      );
+
+    const screenshotHashesUnique =
+      new Set(
+        screenshotHashes,
+      ).size ===
+      screenshotHashes.length;
 
     const evidence = {
       createdAt:
@@ -1277,10 +1310,14 @@ async function main() {
         false,
       metroLog:
         logPath,
+      verifiedScreenshotCount:
+        results.length,
+      screenshotHashesUnique,
       results,
       passed:
         failed.length ===
-        0,
+          0 &&
+        screenshotHashesUnique,
     };
 
     const evidencePath =
@@ -1290,7 +1327,8 @@ async function main() {
       );
 
     if (
-      failed.length > 0
+      failed.length > 0 ||
+      !screenshotHashesUnique
     ) {
       const summary =
         failed
@@ -1301,7 +1339,7 @@ async function main() {
           .join("\n");
 
       throw new Error(
-        `Release Ballot smoke failed.\n${summary}\nEvidence: ${evidencePath}`,
+        `Release Ballot smoke failed.\n${summary}${screenshotHashesUnique ? "" : "\nScreenshot hashes were not unique."}\nEvidence: ${evidencePath}`,
       );
     }
 
@@ -1320,6 +1358,7 @@ async function main() {
 
 module.exports = {
   createMetroEnvironment,
+  expectedScenarioText,
   missingExpectedText,
   normalizeRecognizedText,
   parseArguments,

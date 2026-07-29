@@ -7,6 +7,7 @@ const path = require("node:path");
 
 const {
   createMetroEnvironment,
+  expectedScenarioText,
   missingExpectedText,
   normalizeRecognizedText,
   parseArguments,
@@ -62,6 +63,25 @@ assert.equal(
   ).relaunch,
   true,
 );
+
+for (
+  const scenario of
+    cases
+) {
+  assert.deepEqual(
+    expectedScenarioText(
+      scenario,
+    ).slice(
+      0,
+      3,
+    ),
+    [
+      "RELEASE BALLOT SMOKE",
+      scenario.id,
+      "ISOLATED FIXTURE",
+    ],
+  );
+}
 
 assert.equal(
   normalizeRecognizedText(

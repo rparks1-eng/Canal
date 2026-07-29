@@ -26,10 +26,6 @@ import {
 } from "../../components/CreatorReleaseCard";
 
 import {
-  RecoveryNotice,
-} from "../../components/recovery-notice";
-
-import {
   contributorConsentLabel,
   creatorReleaseRoleCopy,
   creatorReleaseVoteCopy,
@@ -56,11 +52,37 @@ type SmokeCase = Readonly<{
 }>;
 
 type ActionButtonProps = Readonly<{
+  disabled?: boolean;
   label: string;
   hint: string;
+  role?:
+    | "button"
+    | "radio";
   selected?: boolean;
   secondary?: boolean;
 }>;
+
+export const RELEASE_BALLOT_SMOKE_MIN_ACTION_SIZE =
+  48;
+
+export function releaseBallotSmokeActionAccessibility(
+  role:
+    | "button"
+    | "radio",
+  selected = false,
+  disabled = false,
+) {
+  return {
+    role,
+    state: {
+      checked:
+        role === "radio"
+          ? selected
+          : undefined,
+      disabled,
+    },
+  } as const;
+}
 
 const RELEASE_BALLOT_SMOKE_ENABLED =
   __DEV__ &&
@@ -186,6 +208,18 @@ const BLOCKED_ISSUE: RecoveryIssue = {
 function ActionButton(
   props: ActionButtonProps,
 ) {
+  const accessibility =
+    releaseBallotSmokeActionAccessibility(
+      props.role ??
+        "button",
+      Boolean(
+        props.selected,
+      ),
+      Boolean(
+        props.disabled,
+      ),
+    );
+
   return (
     <Pressable
       accessibilityHint={
@@ -195,16 +229,25 @@ function ActionButton(
         props.label
       }
       accessibilityRole={
-        props.selected
-          ? "radio"
-          : "button"
+        accessibility.role
       }
-      accessibilityState={{
-        checked:
-          props.selected,
-        disabled: false,
+      accessibilityState={
+        accessibility.state
+      }
+      disabled={
+        accessibility
+          .state
+          .disabled
+      }
+      onPress={() => {
+        if (
+          accessibility
+            .state
+            .disabled
+        ) {
+          return;
+        }
       }}
-      onPress={() => undefined}
       style={({
         pressed,
       }) => [
@@ -213,6 +256,8 @@ function ActionButton(
           styles.secondaryButton,
         props.selected &&
           styles.selectedButton,
+        props.disabled &&
+          styles.disabledButton,
         pressed &&
           styles.pressed,
       ]}
@@ -229,6 +274,48 @@ function ActionButton(
         {props.label}
       </Text>
     </Pressable>
+  );
+}
+
+function SmokeRecoveryNotice(
+  props: Readonly<{
+    issue: RecoveryIssue;
+  }>,
+) {
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      accessibilityRole="alert"
+      style={
+        styles.recoveryCard
+      }
+    >
+      <Text
+        selectable
+        style={
+          styles.recoveryTitle
+        }
+      >
+        {props.issue.title}
+      </Text>
+
+      <Text
+        selectable
+        style={
+          styles.recoveryMessage
+        }
+      >
+        {props.issue.message}
+      </Text>
+
+      <ActionButton
+        hint="Runs this isolated recovery action"
+        label={
+          props.issue
+            .actionLabel
+        }
+      />
+    </View>
   );
 }
 
@@ -347,8 +434,12 @@ function SceneChoice(
       </View>
 
       <ActionButton
+        disabled={
+          copy.selected
+        }
         hint={copy.hint}
         label={copy.label}
+        role="radio"
         selected={
           copy.selected
         }
@@ -395,6 +486,8 @@ function BrowseScenario() {
                 checked:
                   index ===
                   0,
+                disabled:
+                  false,
               }}
               key={
                 label
@@ -614,21 +707,29 @@ function VoteScenario(
         </Text>
       </View>
 
-      <SceneChoice
-        sceneId="scene-midnight"
-        selectedSceneId={
-          props.selectedSceneId
+      <View
+        accessibilityLabel="Favorite Scene choices"
+        accessibilityRole="radiogroup"
+        style={
+          styles.section
         }
-        title="Midnight Canal"
-      />
+      >
+        <SceneChoice
+          sceneId="scene-midnight"
+          selectedSceneId={
+            props.selectedSceneId
+          }
+          title="Midnight Canal"
+        />
 
-      <SceneChoice
-        sceneId="scene-neon"
-        selectedSceneId={
-          props.selectedSceneId
-        }
-        title="Neon Water"
-      />
+        <SceneChoice
+          sceneId="scene-neon"
+          selectedSceneId={
+            props.selectedSceneId
+          }
+          title="Neon Water"
+        />
+      </View>
     </View>
   );
 }
@@ -989,12 +1090,9 @@ function ScenarioContent(
 
     case "error":
       return (
-        <RecoveryNotice
+        <SmokeRecoveryNotice
           issue={
             SERVICE_ISSUE
-          }
-          onAction={
-            () => undefined
           }
         />
       );
@@ -1006,12 +1104,9 @@ function ScenarioContent(
             styles.section
           }
         >
-          <RecoveryNotice
+          <SmokeRecoveryNotice
             issue={
               OFFLINE_ISSUE
-            }
-            onAction={
-              () => undefined
             }
           />
 
@@ -1032,12 +1127,9 @@ function ScenarioContent(
 
     case "blocked":
       return (
-        <RecoveryNotice
+        <SmokeRecoveryNotice
           issue={
             BLOCKED_ISSUE
-          }
-          onAction={
-            () => undefined
           }
         />
       );
@@ -1259,6 +1351,32 @@ const styles =
       textAlign: "center",
     },
 
+    recoveryCard: {
+      gap: 12,
+      padding: 18,
+      borderWidth: 1,
+      borderColor:
+        "#F3C7A7",
+      borderRadius: 20,
+      borderCurve:
+        "continuous",
+      backgroundColor:
+        "#FFF3E9",
+    },
+
+    recoveryTitle: {
+      color: "#8A3F12",
+      fontSize: 18,
+      fontWeight: "900",
+      lineHeight: 23,
+    },
+
+    recoveryMessage: {
+      color: "#704C37",
+      fontSize: 14,
+      lineHeight: 21,
+    },
+
     section: {
       gap: 12,
     },
@@ -1282,7 +1400,8 @@ const styles =
     },
 
     filter: {
-      minHeight: 48,
+      minHeight:
+        RELEASE_BALLOT_SMOKE_MIN_ACTION_SIZE,
       flex: 1,
       alignItems:
         "center",
@@ -1379,7 +1498,8 @@ const styles =
 
     actionButton: {
       minWidth: 104,
-      minHeight: 48,
+      minHeight:
+        RELEASE_BALLOT_SMOKE_MIN_ACTION_SIZE,
       alignItems:
         "center",
       justifyContent:
@@ -1417,6 +1537,10 @@ const styles =
 
     selectedButtonText: {
       color: "#326646",
+    },
+
+    disabledButton: {
+      opacity: 0.72,
     },
 
     pressed: {

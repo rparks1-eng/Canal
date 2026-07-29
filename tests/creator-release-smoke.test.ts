@@ -9,6 +9,11 @@ import path from "node:path";
 
 import smokeCases from "../fixtures/release-ballot-smoke-cases.json";
 
+import {
+  RELEASE_BALLOT_SMOKE_MIN_ACTION_SIZE,
+  releaseBallotSmokeActionAccessibility,
+} from "../app/auth/release-ballot-smoke";
+
 function source(
   relativePath: string,
 ): string {
@@ -32,6 +37,11 @@ describe(
     const runner =
       source(
         "script/release_ballot_smoke.cjs",
+      );
+
+    const releaseCard =
+      source(
+        "components/CreatorReleaseCard.tsx",
       );
 
     it(
@@ -125,12 +135,74 @@ describe(
     );
 
     it(
-      "uses accessible 48-point controls and semantic states",
+      "uses accessible 48-point controls and exact vote radio states",
       () => {
         expect(
+          RELEASE_BALLOT_SMOKE_MIN_ACTION_SIZE,
+        ).toBe(48);
+
+        expect(
+          releaseBallotSmokeActionAccessibility(
+            "button",
+          ),
+        ).toEqual({
+          role: "button",
+          state: {
+            checked:
+              undefined,
+            disabled:
+              false,
+          },
+        });
+
+        expect(
+          releaseBallotSmokeActionAccessibility(
+            "radio",
+            false,
+            false,
+          ),
+        ).toEqual({
+          role: "radio",
+          state: {
+            checked:
+              false,
+            disabled:
+              false,
+          },
+        });
+
+        expect(
+          releaseBallotSmokeActionAccessibility(
+            "radio",
+            true,
+            true,
+          ),
+        ).toEqual({
+          role: "radio",
+          state: {
+            checked:
+              true,
+            disabled:
+              true,
+          },
+        });
+
+        expect(
           route,
-        ).toContain(
-          "minHeight: 48",
+        ).toMatch(
+          /actionButton:[\s\S]*minHeight:\s*RELEASE_BALLOT_SMOKE_MIN_ACTION_SIZE/u,
+        );
+
+        expect(
+          route,
+        ).toMatch(
+          /filter:[\s\S]*minHeight:\s*RELEASE_BALLOT_SMOKE_MIN_ACTION_SIZE/u,
+        );
+
+        expect(
+          releaseCard,
+        ).toMatch(
+          /card:[\s\S]*minHeight:\s*156/u,
         );
 
         expect(
@@ -147,6 +219,18 @@ describe(
 
         expect(
           route,
+        ).toMatch(
+          /function SceneChoice[\s\S]*disabled=\{[\s\S]*copy[.]selected[\s\S]*role="radio"[\s\S]*selected=\{[\s\S]*copy[.]selected/u,
+        );
+
+        expect(
+          route,
+        ).toMatch(
+          /function VoteScenario[\s\S]*accessibilityLabel="Favorite Scene choices"[\s\S]*accessibilityRole="radiogroup"[\s\S]*<SceneChoice[\s\S]*<SceneChoice/u,
+        );
+
+        expect(
+          route,
         ).toContain(
           "accessibilityState",
         );
@@ -155,6 +239,24 @@ describe(
           route,
         ).toContain(
           'accessibilityLiveRegion="assertive"',
+        );
+
+        expect(
+          route,
+        ).not.toContain(
+          'from "../../components/recovery-notice"',
+        );
+
+        expect(
+          route,
+        ).not.toContain(
+          "<RecoveryNotice",
+        );
+
+        expect(
+          route,
+        ).toMatch(
+          /function SmokeRecoveryNotice[\s\S]*<ActionButton/u,
         );
 
         expect(
@@ -183,6 +285,12 @@ describe(
         expect(
           runner,
         ).toMatch(
+          /expectedScenarioText[\s\S]*"RELEASE BALLOT SMOKE"[\s\S]*scenario[.]id[\s\S]*"ISOLATED FIXTURE"/u,
+        );
+
+        expect(
+          runner,
+        ).toMatch(
           /scenario[.]relaunch[\s\S]*terminateApp/u,
         );
 
@@ -190,6 +298,12 @@ describe(
           runner,
         ).toContain(
           "screenshotSha256",
+        );
+
+        expect(
+          runner,
+        ).toContain(
+          "screenshotHashesUnique",
         );
       },
     );
