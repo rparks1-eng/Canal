@@ -110,14 +110,6 @@ export function RecoveryNotice(
       : props.issue
           .actionLabel;
 
-  const accessibilityLabel =
-    props.busy
-      ? `${props.issue.actionLabel}, in progress`
-      : retryIsWaiting
-        ? `${props.issue.actionLabel} available later`
-        : props.issue
-            .actionLabel;
-
   return (
     <View
       accessibilityLiveRegion="polite"
@@ -146,7 +138,8 @@ export function RecoveryNotice(
 
       <Pressable
         accessibilityLabel={
-          accessibilityLabel
+          props.issue
+            .actionLabel
         }
         accessibilityRole="button"
         accessibilityState={{
@@ -156,6 +149,14 @@ export function RecoveryNotice(
             ),
           disabled:
             isDisabled,
+        }}
+        accessibilityValue={{
+          text:
+            props.busy
+              ? "In progress"
+              : retryIsWaiting
+                ? "Available later"
+                : "Ready",
         }}
         disabled={
           isDisabled
@@ -228,7 +229,7 @@ const styles =
     },
 
     button: {
-      minHeight: 44,
+      minHeight: 48,
       alignSelf:
         "flex-start",
       alignItems:

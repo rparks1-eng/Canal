@@ -38,6 +38,8 @@ const ACCOUNT_GUARD:
       "spotify-account-a",
     connectionGeneration:
       4,
+    connectionAuthority:
+      7,
     canalOwnerId:
       "canal-user-a",
     canalAccountGeneration:

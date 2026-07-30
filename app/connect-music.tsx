@@ -1,6 +1,7 @@
 
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -9,6 +10,7 @@ import {
   useLocalSearchParams,
 } from "expo-router";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Image,
   Pressable,
@@ -22,6 +24,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   useSpotifyConnection,
 } from "../hooks/useSpotifyConnection";
+
+import {
+  announceSpotifyAuthStatusEvent,
+} from "../lib/spotify-auth-return";
 
 import {
   isOnboardingRequired,
@@ -39,9 +45,23 @@ export default function ConnectMusicScreen() {
     }>();
 
   const {
+    accountEpoch,
     user,
   } =
     useAuth();
+
+  const accountIdentity =
+    `${user?.id ?? "signed-out"}:${accountEpoch}`;
+
+  const announcedAccountIdentity =
+    useRef(
+      accountIdentity,
+    );
+
+  const announcedStatusEventId =
+    useRef<string | null>(
+      null,
+    );
 
   const [
     onboardingFlow,
@@ -57,15 +77,45 @@ export default function ConnectMusicScreen() {
     isConnecting,
     isDisconnecting,
     message,
+    cleanupRecoveryRequired,
     requestReady,
+    statusEvent,
     connect,
     changeAccount,
+    retryCleanup,
   } = useSpotifyConnection(
     "/connect-music",
   );
 
   const spotifyImage =
     profile?.images?.[0]?.url;
+
+  useEffect(() => {
+    if (
+      announcedAccountIdentity.current !==
+      accountIdentity
+    ) {
+      announcedAccountIdentity.current =
+        accountIdentity;
+      announcedStatusEventId.current =
+        null;
+    }
+
+    announcedStatusEventId.current =
+      announceSpotifyAuthStatusEvent(
+        statusEvent,
+        accountIdentity,
+        announcedStatusEventId.current,
+        (statusMessage) => {
+          AccessibilityInfo.announceForAccessibility(
+            statusMessage,
+          );
+        },
+      );
+  }, [
+    accountIdentity,
+    statusEvent,
+  ]);
 
   useEffect(() => {
     if (
@@ -309,7 +359,16 @@ export default function ConnectMusicScreen() {
               </View>
 
               <Pressable
+                accessibilityLabel="Change Spotify Account"
                 accessibilityRole="button"
+                accessibilityState={{
+                  busy:
+                    isConnecting ||
+                    isDisconnecting,
+                  disabled:
+                    isConnecting ||
+                    isDisconnecting,
+                }}
                 disabled={
                   isConnecting ||
                   isDisconnecting
@@ -377,8 +436,56 @@ export default function ConnectMusicScreen() {
                 Spotify account.
               </Text>
 
+              {cleanupRecoveryRequired ? (
+                <Pressable
+                  accessibilityLabel="Retry Spotify cleanup"
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    busy:
+                      isConnecting,
+                    disabled:
+                      isConnecting,
+                  }}
+                  disabled={
+                    isConnecting
+                  }
+                  onPress={() => {
+                    void retryCleanup();
+                  }}
+                  style={({ pressed }) => [
+                    styles.spotifyButton,
+                    isConnecting &&
+                      styles.disabled,
+                    pressed &&
+                      styles.pressed,
+                  ]}
+                >
+                  {isConnecting ? (
+                    <ActivityIndicator
+                      color="#07130b"
+                    />
+                  ) : (
+                    <Text
+                      style={
+                        styles.spotifyButtonText
+                      }
+                    >
+                      Retry Spotify cleanup
+                    </Text>
+                  )}
+                </Pressable>
+              ) : (
               <Pressable
+                accessibilityLabel="Connect Spotify"
                 accessibilityRole="button"
+                accessibilityState={{
+                  busy:
+                    isConnecting ||
+                    !requestReady,
+                  disabled:
+                    isConnecting ||
+                    !requestReady,
+                }}
                 disabled={
                   isConnecting ||
                   !requestReady
@@ -404,11 +511,12 @@ export default function ConnectMusicScreen() {
                     style={
                       styles.spotifyButtonText
                     }
-                  >
+                    >
                     Connect Spotify
                   </Text>
                 )}
               </Pressable>
+              )}
             </View>
           )}
 

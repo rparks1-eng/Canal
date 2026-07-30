@@ -27,6 +27,11 @@ import {
 } from "../lib/canal-profile";
 
 import {
+  readCanalAccountSessionGeneration,
+  recordCanalAccountSession,
+} from "../lib/canal-auth";
+
+import {
   prepareSceneLibraryForUser,
   syncScenesWithCloud,
 } from "../lib/scene-sync";
@@ -43,6 +48,7 @@ import {
 type AuthContextValue = {
   session: Session | null;
   user: User | null;
+  accountEpoch: number;
   profile: LocalProfile | null;
   loading: boolean;
   configured: boolean;
@@ -75,6 +81,11 @@ export function AuthProvider(
     useState<LocalProfile | null>(
       null,
     );
+
+  const [
+    accountEpoch,
+    setAccountEpoch,
+  ] = useState(0);
 
   const [
     loading,
@@ -281,6 +292,16 @@ export function AuthProvider(
         }
 
         if (mounted) {
+          setAccountEpoch(
+            recordCanalAccountSession(
+              data.session?.user.id ??
+                null,
+              readCanalAccountSessionGeneration(
+                data.session,
+              ),
+            ),
+          );
+
           await hydrateSession(
             data.session,
           );
@@ -302,6 +323,16 @@ export function AuthProvider(
           if (!mounted) {
             return;
           }
+
+          setAccountEpoch(
+            recordCanalAccountSession(
+              nextSession?.user.id ??
+                null,
+              readCanalAccountSessionGeneration(
+                nextSession,
+              ),
+            ),
+          );
 
           /*
            * TOKEN_REFRESHED does not represent an
@@ -353,6 +384,7 @@ export function AuthProvider(
           session?.user ??
           null,
 
+        accountEpoch,
         profile,
         loading,
 
@@ -366,6 +398,7 @@ export function AuthProvider(
       }),
       [
         session,
+        accountEpoch,
         profile,
         loading,
         syncingScenes,

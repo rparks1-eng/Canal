@@ -1,9 +1,11 @@
 import {
   useCallback,
+  useRef,
   useState,
 } from "react";
 
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Alert,
   Pressable,
@@ -23,7 +25,10 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  isCanalAccountChangedError,
+  isCanalLogoutIncompleteError,
   logoutAllMusicPlatforms,
+  retryIncompleteAccountCleanup,
 } from "../lib/app-session";
 
 import {
@@ -34,6 +39,10 @@ import {
   readSpotifyLibrarySnapshot,
   syncSpotifyLibrary,
 } from "../lib/spotify-library";
+
+import {
+  useAuth,
+} from "../providers/auth-provider";
 
 function safeBack(): void {
   if (router.canGoBack()) {
@@ -48,6 +57,26 @@ function safeBack(): void {
 }
 
 export default function SettingsScreen() {
+  const {
+    accountEpoch,
+    user,
+  } =
+    useAuth();
+
+  const accountIdentity =
+    `${user?.id ?? "signed-out"}:${accountEpoch}`;
+
+  const accountIdentityRef =
+    useRef(
+      accountIdentity,
+    );
+
+  accountIdentityRef.current =
+    accountIdentity;
+
+  const loadEpoch =
+    useRef(0);
+
   const [
     spotifyConnected,
     setSpotifyConnected,
@@ -69,18 +98,81 @@ export default function SettingsScreen() {
   ] = useState(false);
 
   const [
+    loggingOut,
+    setLoggingOut,
+  ] = useState(false);
+
+  const [
     message,
     setMessage,
   ] = useState("");
 
   const load =
     useCallback(() => {
+      const expectedIdentity =
+        accountIdentity;
+
+      const expectedEpoch =
+        loadEpoch.current +
+        1;
+
+      loadEpoch.current =
+        expectedEpoch;
+
+      const canCommit =
+        (): boolean =>
+          accountIdentityRef.current ===
+            expectedIdentity &&
+          loadEpoch.current ===
+            expectedEpoch;
+
       const run =
         async (): Promise<void> => {
           setChecking(true);
+          setSpotifyConnected(
+            false,
+          );
+          setLibraryReady(false);
+          setMessage("");
+
+          const cleanup =
+            await retryIncompleteAccountCleanup({
+              allowSignOut:
+                false,
+            });
+
+          if (!canCommit()) {
+            return;
+          }
+
+          if (
+            cleanup
+              ?.cleanupIncomplete
+          ) {
+            const recoveryMessage =
+              cleanup.recovery ===
+              "signout"
+                ? "Spotify cleanup finished. Retry Log Out to finish the local Canal sign-out."
+                : "Spotify is disconnected, but account-scoped device cleanup still needs attention.";
+
+            setMessage(
+              recoveryMessage,
+            );
+            AccessibilityInfo
+              .announceForAccessibility(
+                recoveryMessage,
+              );
+            setChecking(false);
+
+            return;
+          }
 
           const session =
             await getValidSpotifySession();
+
+          if (!canCommit()) {
+            return;
+          }
 
           setSpotifyConnected(
             Boolean(session),
@@ -90,12 +182,20 @@ export default function SettingsScreen() {
             const snapshot =
               await readSpotifyLibrarySnapshot();
 
+            if (!canCommit()) {
+              return;
+            }
+
             if (!snapshot) {
               setSyncing(true);
 
               try {
                 const syncedSnapshot =
                   await syncSpotifyLibrary();
+
+                if (!canCommit()) {
+                  return;
+                }
 
                 setLibraryReady(
                   Boolean(
@@ -107,11 +207,22 @@ export default function SettingsScreen() {
                   "Spotify was already connected, so Canal automatically imported the missing library snapshot.",
                 );
               } catch (error) {
-                setMessage(
+                if (!canCommit()) {
+                  return;
+                }
+
+                const syncErrorMessage =
                   error instanceof Error
                     ? error.message
-                    : "Spotify library sync failed.",
+                    : "Spotify library sync failed.";
+
+                setMessage(
+                  syncErrorMessage,
                 );
+                AccessibilityInfo
+                  .announceForAccessibility(
+                    syncErrorMessage,
+                  );
               } finally {
                 setSyncing(false);
               }
@@ -129,34 +240,100 @@ export default function SettingsScreen() {
           setChecking(false);
         };
 
-      void run();
-    }, []);
+      void run().catch(
+        (error: unknown) => {
+          if (!canCommit()) {
+            return;
+          }
+
+          const loadErrorMessage =
+            isCanalAccountChangedError(
+              error,
+            )
+              ? "The Canal account changed. Settings are loading only for the current account."
+              : error instanceof Error
+                ? error.message
+                : "Canal could not load account settings.";
+
+          setChecking(false);
+          setMessage(
+            loadErrorMessage,
+          );
+          AccessibilityInfo
+            .announceForAccessibility(
+              loadErrorMessage,
+            );
+        },
+      );
+
+      return () => {
+        loadEpoch.current +=
+          1;
+      };
+    }, [
+      accountIdentity,
+    ]);
 
   useFocusEffect(load);
 
   const sync =
     async (): Promise<void> => {
+      const expectedIdentity =
+        accountIdentity;
+
       setSyncing(true);
 
       setMessage("");
+      AccessibilityInfo
+        .announceForAccessibility(
+          "Syncing Spotify Library.",
+        );
 
       try {
         const snapshot =
           await syncSpotifyLibrary();
 
+        if (
+          accountIdentityRef.current !==
+          expectedIdentity
+        ) {
+          return;
+        }
+
         setLibraryReady(
           Boolean(snapshot),
         );
 
+        const successMessage =
+          "Spotify Library synced successfully.";
+
         setMessage(
-          "Spotify Library synced successfully.",
+          successMessage,
         );
+        AccessibilityInfo
+          .announceForAccessibility(
+            successMessage,
+          );
       } catch (error) {
-        setMessage(
+        if (
+          accountIdentityRef.current !==
+          expectedIdentity
+        ) {
+          return;
+        }
+
+        const errorMessage =
           error instanceof Error
             ? error.message
-            : "Spotify library sync failed.",
+            : "Spotify library sync failed.";
+
+        setMessage(
+          errorMessage,
         );
+        AccessibilityInfo
+          .announceForAccessibility(
+            errorMessage,
+          );
       } finally {
         setSyncing(false);
       }
@@ -164,9 +341,13 @@ export default function SettingsScreen() {
 
   const confirmLogout =
     (): void => {
+      if (loggingOut) {
+        return;
+      }
+
       Alert.alert(
         "Log Out of Canal?",
-        "This disconnects every connected music platform on this device and returns to the Login screen. Saved Scenes remain on the device.",
+        "This ends only this device's current Canal session and disconnects Spotify for this account. Your Canal account, cloud data, and saved Scenes are not deleted.",
         [
           {
             text: "Cancel",
@@ -181,11 +362,91 @@ export default function SettingsScreen() {
             onPress: () => {
               const run =
                 async (): Promise<void> => {
-                  await logoutAllMusicPlatforms();
-
-                  router.replace(
-                    "/login",
+                  setLoggingOut(
+                    true,
                   );
+
+                  setMessage("");
+                  AccessibilityInfo
+                    .announceForAccessibility(
+                      "Logging out of Canal on this device.",
+                    );
+
+                  try {
+                    const pending =
+                      await retryIncompleteAccountCleanup({
+                        allowSignOut:
+                          true,
+                      });
+
+                    let result =
+                      pending ??
+                      (await logoutAllMusicPlatforms());
+
+                    if (
+                      pending &&
+                      !result.signedOut &&
+                      !result.cleanupIncomplete &&
+                      result.recovery ===
+                        "none"
+                    ) {
+                      result =
+                        await logoutAllMusicPlatforms();
+                    }
+
+                    if (
+                      result.signedOut
+                    ) {
+                      AccessibilityInfo
+                        .announceForAccessibility(
+                          "Logged out of Canal on this device.",
+                        );
+                      router.replace(
+                        "/login",
+                      );
+
+                      return;
+                    }
+
+                    const resultMessage =
+                      result.recovery ===
+                      "signout"
+                        ? "Spotify cleanup finished. Retry only the local Canal sign-out."
+                        : "Spotify is disconnected, but account-scoped device cleanup still needs attention.";
+
+                    setMessage(
+                      resultMessage,
+                    );
+                    AccessibilityInfo
+                      .announceForAccessibility(
+                        resultMessage,
+                      );
+                  } catch (error) {
+                    const errorMessage =
+                      isCanalLogoutIncompleteError(
+                        error,
+                      )
+                        ? error.message
+                        : isCanalAccountChangedError(
+                              error,
+                            )
+                          ? "The Canal account changed. The replacement account was not logged out."
+                          : error instanceof Error
+                            ? error.message
+                            : "Canal could not log out safely. Try again.";
+
+                    setMessage(
+                      errorMessage,
+                    );
+                    AccessibilityInfo
+                      .announceForAccessibility(
+                        errorMessage,
+                      );
+                  } finally {
+                    setLoggingOut(
+                      false,
+                    );
+                  }
                 };
 
               void run();
@@ -207,6 +468,13 @@ export default function SettingsScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back"
+          accessibilityState={{
+            disabled:
+              loggingOut,
+          }}
+          disabled={
+            loggingOut
+          }
           onPress={safeBack}
           style={({ pressed }) => [
             styles.backButton,
@@ -261,6 +529,7 @@ export default function SettingsScreen() {
           </Text>
 
           <Pressable
+            accessibilityLabel="Open Spotify settings"
             accessibilityRole="button"
             onPress={() =>
               router.push(
@@ -333,7 +602,14 @@ export default function SettingsScreen() {
 
           {spotifyConnected ? (
             <Pressable
+              accessibilityLabel="Sync Spotify Library"
               accessibilityRole="button"
+              accessibilityState={{
+                busy:
+                  syncing,
+                disabled:
+                  syncing,
+              }}
               disabled={syncing}
               onPress={() =>
                 void sync()
@@ -366,7 +642,10 @@ export default function SettingsScreen() {
         </View>
 
         {message ? (
-          <View style={styles.messageBox}>
+          <View
+            accessibilityLiveRegion="polite"
+            style={styles.messageBox}
+          >
             <Text
               style={
                 styles.messageText
@@ -485,30 +764,50 @@ export default function SettingsScreen() {
               styles.logoutDescription
             }
           >
-            Disconnect all music platforms,
-            clear the local sign-in session,
-            and return to Login.
+            End this device&apos;s current
+            session and disconnect Spotify
+            for this account. Account and
+            cloud data stay intact.
           </Text>
 
           <Pressable
+            accessibilityLabel="Log Out of Canal"
             accessibilityRole="button"
+            accessibilityState={{
+              busy:
+                loggingOut,
+              disabled:
+                loggingOut,
+            }}
+            disabled={
+              loggingOut
+            }
             onPress={
               confirmLogout
             }
             style={({ pressed }) => [
               styles.logoutButton,
 
+              loggingOut &&
+                styles.disabled,
+
               pressed &&
                 styles.pressed,
             ]}
           >
-            <Text
-              style={
-                styles.logoutButtonText
-              }
-            >
-              Log Out of Canal
-            </Text>
+            {loggingOut ? (
+              <ActivityIndicator
+                color="#FFFFFF"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.logoutButtonText
+                }
+              >
+                Log Out of Canal
+              </Text>
+            )}
           </Pressable>
         </View>
       </ScrollView>
@@ -534,9 +833,9 @@ const styles =
     },
 
     backButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
       alignItems:
         "center",
       justifyContent:

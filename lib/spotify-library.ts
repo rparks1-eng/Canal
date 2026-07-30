@@ -38,8 +38,12 @@ import {
   classifyRecoveryIssue,
 } from "./recovery-issue";
 
+import {
+  STORAGE_KEYS,
+} from "./storage-keys";
+
 export const SPOTIFY_LIBRARY_STORAGE_KEY =
-  "@canal/spotify-library-snapshot";
+  STORAGE_KEYS.spotifyLibrarySnapshot;
 
 const SPOTIFY_LIBRARY_ENVELOPE_VERSION =
   2;
@@ -85,6 +89,11 @@ export type LatestSpotifyLibraryResult = {
   refreshed: boolean;
   warning?: string;
   issue?: RecoveryIssue;
+};
+
+type SpotifyLibraryOperationOptions = {
+  operationCommitGuard?:
+    () => boolean;
 };
 
 const DEFAULT_LIBRARY_MAX_AGE_MS =
@@ -444,10 +453,30 @@ async function writeSpotifyLibrarySnapshot(
     expectedConnectionGeneration?: number;
     connectionGuard?:
       SpotifyConnectionGuard;
+    operationCommitGuard?:
+      () => boolean;
   } = {},
 ): Promise<void> {
+  if (
+    options.operationCommitGuard &&
+    !options.operationCommitGuard()
+  ) {
+    throw new Error(
+      "Spotify connection changed while Canal was syncing. Sync the current account again.",
+    );
+  }
+
   const guardedSession =
     await readGuardedSpotifySession();
+
+  if (
+    options.operationCommitGuard &&
+    !options.operationCommitGuard()
+  ) {
+    throw new Error(
+      "Spotify connection changed while Canal was syncing. Sync the current account again.",
+    );
+  }
 
   const connectionGuard =
     options.connectionGuard ??
@@ -493,19 +522,68 @@ async function writeSpotifyLibrarySnapshot(
       storedValue,
     );
 
+  const previousValue =
+    await AsyncStorage.getItem(
+      SPOTIFY_LIBRARY_STORAGE_KEY,
+    );
+
+  if (
+    options.operationCommitGuard &&
+    !options.operationCommitGuard()
+  ) {
+    throw new Error(
+      "Spotify connection changed while Canal was syncing. Sync the current account again.",
+    );
+  }
+
   await AsyncStorage.setItem(
     SPOTIFY_LIBRARY_STORAGE_KEY,
     serialized,
   );
 
   try {
+    if (
+      options.operationCommitGuard &&
+      !options.operationCommitGuard()
+    ) {
+      throw new Error(
+        "Spotify connection changed while Canal was syncing. Sync the current account again.",
+      );
+    }
+
     await assertSpotifyConnectionGuardCurrent(
       connectionGuard,
     );
+
+    if (
+      options.operationCommitGuard &&
+      !options.operationCommitGuard()
+    ) {
+      throw new Error(
+        "Spotify connection changed while Canal was syncing. Sync the current account again.",
+      );
+    }
   } catch (error) {
-    await AsyncStorage.removeItem(
-      SPOTIFY_LIBRARY_STORAGE_KEY,
-    );
+    const currentValue =
+      await AsyncStorage.getItem(
+        SPOTIFY_LIBRARY_STORAGE_KEY,
+      );
+
+    if (
+      currentValue ===
+        serialized
+    ) {
+      if (previousValue === null) {
+        await AsyncStorage.removeItem(
+          SPOTIFY_LIBRARY_STORAGE_KEY,
+        );
+      } else {
+        await AsyncStorage.setItem(
+          SPOTIFY_LIBRARY_STORAGE_KEY,
+          previousValue,
+        );
+      }
+    }
 
     throw error;
   }
@@ -517,6 +595,8 @@ export async function saveSpotifyLibrarySnapshot(
     expectedConnectionGeneration?: number;
     connectionGuard?:
       SpotifyConnectionGuard;
+    operationCommitGuard?:
+      () => boolean;
   } = {},
 ): Promise<void> {
   return runLibraryCacheOperation(
@@ -1023,9 +1103,21 @@ export async function getLatestSpotifyLibrarySnapshot(
   }
 }
 
-export async function syncSpotifyLibrary(): Promise<
+export async function syncSpotifyLibrary(
+  options:
+    SpotifyLibraryOperationOptions = {},
+): Promise<
   SpotifyLibrarySnapshot
 > {
+  if (
+    options.operationCommitGuard &&
+    !options.operationCommitGuard()
+  ) {
+    throw new Error(
+      "Spotify connection changed while Canal was syncing. Sync the current account again.",
+    );
+  }
+
   const connectionGeneration =
     getSpotifyConnectionGeneration();
 
@@ -1039,6 +1131,7 @@ export async function syncSpotifyLibrary(): Promise<
   }
 
   if (
+    !options.operationCommitGuard &&
     libraryRefreshPromise &&
     libraryRefreshGeneration ===
       connectionGeneration
@@ -1049,9 +1142,17 @@ export async function syncSpotifyLibrary(): Promise<
   const nextPromise =
     performSpotifyLibrarySync(
       connectionGeneration,
+      options,
     )
       .catch(
         (error: unknown) => {
+          if (
+            options.operationCommitGuard &&
+            !options.operationCommitGuard()
+          ) {
+            throw error;
+          }
+
           const issue =
             classifyRecoveryIssue(
               error,
@@ -1089,20 +1190,35 @@ export async function syncSpotifyLibrary(): Promise<
         }
       });
 
-  libraryRefreshPromise =
-    nextPromise;
+  if (
+    !options.operationCommitGuard
+  ) {
+    libraryRefreshPromise =
+      nextPromise;
 
-  libraryRefreshGeneration =
-    connectionGeneration;
+    libraryRefreshGeneration =
+      connectionGeneration;
+  }
 
   return nextPromise;
 }
 
 async function performSpotifyLibrarySync(
   expectedConnectionGeneration: number,
+  options:
+    SpotifyLibraryOperationOptions = {},
 ): Promise<
   SpotifyLibrarySnapshot
 > {
+  if (
+    options.operationCommitGuard &&
+    !options.operationCommitGuard()
+  ) {
+    throw new Error(
+      "Spotify connection changed while Canal was syncing. Sync the current account again.",
+    );
+  }
+
   const {
     session:
       syncSession,
@@ -1123,6 +1239,15 @@ async function performSpotifyLibrarySync(
     connectionGuard,
   );
 
+  if (
+    options.operationCommitGuard &&
+    !options.operationCommitGuard()
+  ) {
+    throw new Error(
+      "Spotify connection changed while Canal was syncing. Sync the current account again.",
+    );
+  }
+
   const [
     topArtistsResult,
     topTracksResult,
@@ -1134,30 +1259,40 @@ async function performSpotifyLibrarySync(
       20,
       {
         connectionGuard,
+        operationCommitGuard:
+          options.operationCommitGuard,
       },
     ),
     getSpotifyTopTracks(
       20,
       {
         connectionGuard,
+        operationCommitGuard:
+          options.operationCommitGuard,
       },
     ),
     getSpotifyRecentlyPlayed(
       20,
       {
         connectionGuard,
+        operationCommitGuard:
+          options.operationCommitGuard,
       },
     ),
     getSpotifySavedTracks(
       50,
       {
         connectionGuard,
+        operationCommitGuard:
+          options.operationCommitGuard,
       },
     ),
     getSpotifyPlaylists(
       20,
       {
         connectionGuard,
+        operationCommitGuard:
+          options.operationCommitGuard,
       },
     ),
   ]);
@@ -1165,6 +1300,15 @@ async function performSpotifyLibrarySync(
   await assertSpotifyConnectionGuardCurrent(
     connectionGuard,
   );
+
+  if (
+    options.operationCommitGuard &&
+    !options.operationCommitGuard()
+  ) {
+    throw new Error(
+      "Spotify connection changed while Canal was syncing. Sync the current account again.",
+    );
+  }
 
   for (
     const result of [
@@ -1404,8 +1548,19 @@ async function performSpotifyLibrarySync(
       expectedConnectionGeneration:
         expectedConnectionGeneration,
       connectionGuard,
+      operationCommitGuard:
+        options.operationCommitGuard,
     },
   );
+
+  if (
+    options.operationCommitGuard &&
+    !options.operationCommitGuard()
+  ) {
+    throw new Error(
+      "Spotify connection changed while Canal was syncing. Sync the current account again.",
+    );
+  }
 
   clearLibraryRefreshIssue();
 
