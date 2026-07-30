@@ -194,6 +194,20 @@ function EventRunSheetHubContent(
       null,
     );
 
+  const isRouteActiveRef =
+    useRef(
+      true,
+    );
+
+  useEffect(
+    () =>
+      () => {
+        isRouteActiveRef.current =
+          false;
+      },
+    [],
+  );
+
   useEffect(
     () => {
       if (
@@ -421,6 +435,11 @@ function EventRunSheetHubContent(
         EventRunSheet,
     ): void => {
       if (
+        !isRouteActiveRef.current ||
+        user?.id !==
+          props.expectedUserId ||
+        accountEpoch !==
+          props.expectedAccountEpoch ||
         isLoading ||
         !hasFreshSnapshot
       ) {
