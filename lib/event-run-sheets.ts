@@ -1,11 +1,21 @@
 import {
-  requireSupabaseConfiguration,
   supabase,
 } from "./supabase";
 
+import {
+  CanalAccountSessionChangedError,
+  assertCanalAccountSessionGuardCurrent,
+  captureCanalAccountSessionGuard,
+} from "./canal-auth";
+
+export const EVENT_RUN_SHEET_STATUSES = [
+  "planned",
+  "running",
+  "completed",
+] as const;
+
 export type EventRunSheetStatus =
-  | "planned"
-  | "completed";
+  (typeof EVENT_RUN_SHEET_STATUSES)[number];
 
 export type EventRunSheet = {
   id: string;
@@ -17,9 +27,30 @@ export type EventRunSheet = {
   timeZone: string;
   activePosition: number;
   status: EventRunSheetStatus;
+  version: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  sourceCollectionTitle: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+export type EventRunSheetItem = {
+  runSheetId: string;
+  sceneId: string;
+  sceneRevision: number;
+  position: number;
+  title: string;
+  activityLabel: string;
+  durationLabel: string;
+  trackCount: number;
+  createdAt: string;
+};
+
+export type EventRunSheetDetail =
+  EventRunSheet & {
+    items: EventRunSheetItem[];
+  };
 
 export type EventRunSheetSaveInput = {
   id?: string;
@@ -28,11 +59,25 @@ export type EventRunSheetSaveInput = {
   venueLabel: string;
   startsAt: string;
   timeZone: string;
+  expectedVersion?: number;
 };
 
 export type EventRunSheetAccount =
   Readonly<{
     userId: string;
+    accountEpoch: number;
+    sessionGeneration: string;
+  }>;
+
+export type EventRunSheetAccountExpectation =
+  Readonly<{
+    userId?: string;
+    accountEpoch?: number;
+  }>;
+
+export type EventRunSheetOptions =
+  Readonly<{
+    account?: EventRunSheetAccount;
   }>;
 
 export type EventRunSheetErrorKind =
@@ -41,6 +86,7 @@ export type EventRunSheetErrorKind =
   | "invalid-input"
   | "invalid-response"
   | "not-found"
+  | "offline"
   | "permission-denied"
   | "request-failed";
 
@@ -52,6 +98,9 @@ export class EventRunSheetError extends Error {
     | string
     | null;
 
+  readonly retryable:
+    boolean;
+
   constructor(
     kind:
       EventRunSheetErrorKind,
@@ -59,6 +108,7 @@ export class EventRunSheetError extends Error {
     databaseCode:
       | string
       | null = null,
+    retryable = false,
   ) {
     super(
       message,
@@ -70,12 +120,23 @@ export class EventRunSheetError extends Error {
       kind;
     this.databaseCode =
       databaseCode;
+    this.retryable =
+      retryable;
 
     Object.setPrototypeOf(
       this,
       EventRunSheetError.prototype,
     );
   }
+}
+
+export function isEventRunSheetError(
+  error: unknown,
+): error is EventRunSheetError {
+  return (
+    error instanceof
+    EventRunSheetError
+  );
 }
 
 type EventRunSheetRow = {
@@ -88,13 +149,32 @@ type EventRunSheetRow = {
   time_zone: unknown;
   active_position: unknown;
   status: unknown;
+  version: unknown;
+  started_at: unknown;
+  completed_at: unknown;
+  source_collection_title: unknown;
   created_at: unknown;
   updated_at: unknown;
+};
+
+type EventRunSheetItemRow = {
+  run_sheet_id: unknown;
+  owner_id: unknown;
+  scene_id: unknown;
+  scene_revision: unknown;
+  position: unknown;
+  scene_title: unknown;
+  activity_label: unknown;
+  duration_label: unknown;
+  track_count: unknown;
+  created_at: unknown;
 };
 
 type SupabaseError = {
   code?: string | null;
   message: string;
+  details?: string | null;
+  hint?: string | null;
 };
 
 const RUN_SHEET_COLUMNS = [
@@ -107,9 +187,30 @@ const RUN_SHEET_COLUMNS = [
   "time_zone",
   "active_position",
   "status",
+  "version",
+  "started_at",
+  "completed_at",
+  "source_collection_title",
   "created_at",
   "updated_at",
-].join(", ");
+].join(
+  ", ",
+);
+
+const RUN_SHEET_ITEM_COLUMNS = [
+  "run_sheet_id",
+  "owner_id",
+  "scene_id",
+  "scene_revision",
+  "position",
+  "scene_title",
+  "activity_label",
+  "duration_label",
+  "track_count",
+  "created_at",
+].join(
+  ", ",
+);
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -120,6 +221,9 @@ const CONTROL_CHARACTER_PATTERN =
 const TIME_ZONE_PATTERN =
   /^(?:UTC|[A-Za-z][A-Za-z0-9._+-]*(?:\/[A-Za-z0-9._+-]+)+)$/;
 
+const CONNECTIVITY_MESSAGE_PATTERN =
+  /\b(?:abort(?:ed)?|connection|fetch|network|offline|socket|timeout|timed out)\b/i;
+
 const MAX_TITLE_LENGTH =
   80;
 
@@ -129,36 +233,92 @@ const MAX_VENUE_LENGTH =
 const MAX_TIME_ZONE_LENGTH =
   64;
 
+const MAX_SCENE_ID_LENGTH =
+  512;
+
+const MAX_SCENE_TITLE_LENGTH =
+  120;
+
+const MAX_ACTIVITY_LENGTH =
+  120;
+
+const MAX_DURATION_LENGTH =
+  80;
+
 const MAX_RUN_SHEET_RESULTS =
   100;
 
+const MAX_RUN_SHEET_ITEMS =
+  50;
+
 export async function captureEventRunSheetAccount(
-  expectedUserId?: string,
+  expected?:
+    | string
+    | EventRunSheetAccountExpectation,
 ): Promise<EventRunSheetAccount> {
-  const userId =
-    await currentUserId();
+  const expectedUserId =
+    typeof expected ===
+      "string"
+      ? requireUuid(
+          expected,
+          "expected Event Run Sheet account",
+        )
+      : expected?.userId ===
+          undefined
+        ? null
+        : requireUuid(
+            expected.userId,
+            "expected Event Run Sheet account",
+          );
+
+  const expectedAccountEpoch =
+    typeof expected ===
+      "object" &&
+    expected !==
+      null &&
+    expected.accountEpoch !==
+      undefined
+      ? requireAccountEpoch(
+          expected.accountEpoch,
+          "expected Event Run Sheet account epoch",
+        )
+      : null;
+
+  const account =
+    await captureCanalAccountSessionGuard();
 
   if (
     expectedUserId !==
-      undefined &&
-    userId !==
-      requireUuid(
-        expectedUserId,
-        "expected Event Run Sheet account",
-      )
+      null &&
+    account.userId !==
+      expectedUserId
+  ) {
+    throw accountChangedError();
+  }
+
+  if (
+    expectedAccountEpoch !==
+      null &&
+    account.epoch !==
+      expectedAccountEpoch
   ) {
     throw accountChangedError();
   }
 
   return {
-    userId,
+    userId:
+      account.userId,
+    accountEpoch:
+      account.epoch,
+    sessionGeneration:
+      account.sessionGeneration,
   };
 }
 
 export async function listOwnEventRunSheets(
-  options: {
-    account?: EventRunSheetAccount;
-  } = {},
+  options:
+    EventRunSheetOptions =
+      {},
 ): Promise<EventRunSheet[]> {
   const account =
     await resolveAccount(
@@ -168,6 +328,7 @@ export async function listOwnEventRunSheets(
   const result =
     await runAccountOperation(
       account,
+      "load Event Run Sheets",
       () =>
         supabase
           .from(
@@ -209,29 +370,42 @@ export async function listOwnEventRunSheets(
   if (
     !Array.isArray(
       result.data,
-    )
+    ) ||
+    result.data.length >
+      MAX_RUN_SHEET_RESULTS
   ) {
     throw invalidResponse(
       "Canal returned invalid Event Run Sheet data.",
     );
   }
 
-  return result.data.map(
-    (row) =>
-      normalizeRunSheetRow(
-        row as unknown as
-          EventRunSheetRow,
-        account.userId,
-      ),
+  const runSheets =
+    result.data.map(
+      (row) =>
+        normalizeRunSheetRow(
+          row as unknown as
+            EventRunSheetRow,
+          account.userId,
+        ),
+    );
+
+  rejectDuplicateValues(
+    runSheets.map(
+      (runSheet) =>
+        runSheet.id,
+    ),
+    "Event Run Sheet list",
   );
+
+  return runSheets;
 }
 
 export async function loadEventRunSheet(
   runSheetId: string,
-  options: {
-    account?: EventRunSheetAccount;
-  } = {},
-): Promise<EventRunSheet | null> {
+  options:
+    EventRunSheetOptions =
+      {},
+): Promise<EventRunSheetDetail | null> {
   const normalizedId =
     requireUuid(
       runSheetId,
@@ -243,9 +417,10 @@ export async function loadEventRunSheet(
       options.account,
     );
 
-  const result =
+  const runSheetResult =
     await runAccountOperation(
       account,
+      "load this Event Run Sheet",
       () =>
         supabase
           .from(
@@ -265,27 +440,105 @@ export async function loadEventRunSheet(
           .maybeSingle(),
     );
 
-  if (result.error) {
+  if (
+    runSheetResult.error
+  ) {
     throw mapDatabaseError(
       "load this Event Run Sheet",
-      result.error,
+      runSheetResult.error,
     );
   }
 
-  return result.data
-    ? normalizeRunSheetRow(
-        result.data as unknown as
-          EventRunSheetRow,
-        account.userId,
-      )
-    : null;
+  if (
+    !runSheetResult.data
+  ) {
+    return null;
+  }
+
+  const runSheet =
+    normalizeRunSheetRow(
+      runSheetResult.data as unknown as
+        EventRunSheetRow,
+      account.userId,
+    );
+
+  const itemResult =
+    await runAccountOperation(
+      account,
+      "load this Event Run Sheet's frozen Scenes",
+      () =>
+        supabase
+          .from(
+            "creator_event_run_sheet_items",
+          )
+          .select(
+            RUN_SHEET_ITEM_COLUMNS,
+          )
+          .eq(
+            "run_sheet_id",
+            runSheet.id,
+          )
+          .eq(
+            "owner_id",
+            account.userId,
+          )
+          .order(
+            "position",
+            {
+              ascending:
+                true,
+            },
+          )
+          .limit(
+            MAX_RUN_SHEET_ITEMS,
+          ),
+    );
+
+  if (itemResult.error) {
+    throw mapDatabaseError(
+      "load this Event Run Sheet's frozen Scenes",
+      itemResult.error,
+    );
+  }
+
+  if (
+    !Array.isArray(
+      itemResult.data,
+    ) ||
+    itemResult.data.length >
+      MAX_RUN_SHEET_ITEMS
+  ) {
+    throw invalidResponse(
+      "Canal returned invalid frozen Event Run Sheet items.",
+    );
+  }
+
+  const items =
+    itemResult.data.map(
+      (row) =>
+        normalizeRunSheetItemRow(
+          row as unknown as
+            EventRunSheetItemRow,
+          runSheet,
+        ),
+    );
+
+  validateRunSheetItems(
+    runSheet,
+    items,
+  );
+
+  return {
+    ...runSheet,
+    items,
+  };
 }
 
 export async function saveEventRunSheet(
   input: EventRunSheetSaveInput,
-  options: {
-    account?: EventRunSheetAccount;
-  } = {},
+  options:
+    EventRunSheetOptions =
+      {},
 ): Promise<EventRunSheet> {
   const normalizedInput =
     normalizeSaveInput(
@@ -300,6 +553,7 @@ export async function saveEventRunSheet(
   const result =
     await runAccountOperation(
       account,
+      "save this Event Run Sheet",
       () =>
         supabase.rpc(
           "save_creator_event_run_sheet",
@@ -316,6 +570,10 @@ export async function saveEventRunSheet(
               normalizedInput.startsAt,
             time_zone_value:
               normalizedInput.timeZone,
+            expected_version_value:
+              normalizedInput.expectedVersion,
+            expected_actor_id_value:
+              account.userId,
           },
         ),
     );
@@ -327,81 +585,95 @@ export async function saveEventRunSheet(
     );
   }
 
-  return normalizeRunSheetRow(
-    singleRpcRow(
-      result.data,
-      "saved Event Run Sheet",
-    ),
-    account.userId,
+  const runSheet =
+    normalizeRunSheetRow(
+      singleRpcRow(
+        result.data,
+        "saved Event Run Sheet",
+      ),
+      account.userId,
+    );
+
+  if (
+    runSheet.status !==
+      "planned" ||
+    (
+      normalizedInput.id !==
+        null &&
+      runSheet.id !==
+        normalizedInput.id
+    )
+  ) {
+    throw invalidResponse(
+      "Canal returned an invalid saved Event Run Sheet.",
+    );
+  }
+
+  return runSheet;
+}
+
+export async function startEventRunSheet(
+  runSheetId: string,
+  expectedVersion: number,
+  options:
+    EventRunSheetOptions =
+      {},
+): Promise<EventRunSheet> {
+  return lifecycleMutation(
+    "start_creator_event_run_sheet",
+    "start this Event Run Sheet",
+    runSheetId,
+    expectedVersion,
+    undefined,
+    "running",
+    options,
   );
 }
 
 export async function advanceEventRunSheet(
   runSheetId: string,
   expectedPosition: number,
-  options: {
-    account?: EventRunSheetAccount;
-  } = {},
+  expectedVersion: number,
+  options:
+    EventRunSheetOptions =
+      {},
 ): Promise<EventRunSheet> {
-  const normalizedId =
-    requireUuid(
-      runSheetId,
-      "Event Run Sheet",
-    );
+  return lifecycleMutation(
+    "advance_creator_event_run_sheet",
+    "advance this Event Run Sheet",
+    runSheetId,
+    expectedVersion,
+    expectedPosition,
+    "running",
+    options,
+  );
+}
 
-  if (
-    !Number.isSafeInteger(
-      expectedPosition,
-    ) ||
-    expectedPosition < 0
-  ) {
-    throw new EventRunSheetError(
-      "invalid-input",
-      "The expected Event Run Sheet position is invalid.",
-    );
-  }
-
-  const account =
-    await resolveAccount(
-      options.account,
-    );
-
-  const result =
-    await runAccountOperation(
-      account,
-      () =>
-        supabase.rpc(
-          "advance_creator_event_run_sheet",
-          {
-            run_sheet_id_value:
-              normalizedId,
-            expected_position_value:
-              expectedPosition,
-          },
-        ),
-    );
-
-  if (result.error) {
-    throw mapDatabaseError(
-      "advance this Event Run Sheet",
-      result.error,
-    );
-  }
-
-  return normalizeRunSheetRow(
-    singleRpcRow(
-      result.data,
-      "advanced Event Run Sheet",
-    ),
-    account.userId,
+export async function completeEventRunSheet(
+  runSheetId: string,
+  expectedPosition: number,
+  expectedVersion: number,
+  options:
+    EventRunSheetOptions =
+      {},
+): Promise<EventRunSheet> {
+  return lifecycleMutation(
+    "complete_creator_event_run_sheet",
+    "complete this Event Run Sheet",
+    runSheetId,
+    expectedVersion,
+    expectedPosition,
+    "completed",
+    options,
   );
 }
 
 export async function deleteEventRunSheet(
   runSheetId: string,
-  options: {
-    account?: EventRunSheetAccount;
-  } = {},
+  expectedVersion: number,
+  options:
+    EventRunSheetOptions =
+      {},
 ): Promise<void> {
   const normalizedId =
     requireUuid(
@@ -409,6 +681,12 @@ export async function deleteEventRunSheet(
       "Event Run Sheet",
     );
 
+  const normalizedVersion =
+    requirePositiveInteger(
+      expectedVersion,
+      "expected Event Run Sheet version",
+    );
+
   const account =
     await resolveAccount(
       options.account,
@@ -417,12 +695,17 @@ export async function deleteEventRunSheet(
   const result =
     await runAccountOperation(
       account,
+      "delete this Event Run Sheet",
       () =>
         supabase.rpc(
           "delete_creator_event_run_sheet",
           {
             run_sheet_id_value:
               normalizedId,
+            expected_version_value:
+              normalizedVersion,
+            expected_actor_id_value:
+              account.userId,
           },
         ),
     );
@@ -434,11 +717,121 @@ export async function deleteEventRunSheet(
     );
   }
 
-  if (result.data !== true) {
+  if (
+    result.data !==
+      true
+  ) {
     throw invalidResponse(
       "Canal could not confirm the Event Run Sheet deletion.",
     );
   }
+}
+
+async function lifecycleMutation(
+  functionName:
+    | "start_creator_event_run_sheet"
+    | "advance_creator_event_run_sheet"
+    | "complete_creator_event_run_sheet",
+  action: string,
+  runSheetId: string,
+  expectedVersion: number,
+  expectedPosition:
+    | number
+    | undefined,
+  expectedStatus:
+    | "running"
+    | "completed",
+  options:
+    EventRunSheetOptions,
+): Promise<EventRunSheet> {
+  const normalizedId =
+    requireUuid(
+      runSheetId,
+      "Event Run Sheet",
+    );
+
+  const normalizedVersion =
+    requirePositiveInteger(
+      expectedVersion,
+      "expected Event Run Sheet version",
+    );
+
+  const normalizedPosition =
+    expectedPosition ===
+      undefined
+      ? undefined
+      : requirePosition(
+          expectedPosition,
+        );
+
+  const account =
+    await resolveAccount(
+      options.account,
+    );
+
+  const parameters:
+    Record<
+      string,
+      unknown
+    > = {
+      run_sheet_id_value:
+        normalizedId,
+      expected_version_value:
+        normalizedVersion,
+      expected_actor_id_value:
+        account.userId,
+    };
+
+  if (
+    normalizedPosition !==
+      undefined
+  ) {
+    parameters.expected_position_value =
+      normalizedPosition;
+  }
+
+  const result =
+    await runAccountOperation(
+      account,
+      action,
+      () =>
+        supabase.rpc(
+          functionName,
+          parameters,
+        ),
+    );
+
+  if (result.error) {
+    throw mapDatabaseError(
+      action,
+      result.error,
+    );
+  }
+
+  const runSheet =
+    normalizeRunSheetRow(
+      singleRpcRow(
+        result.data,
+        `${expectedStatus} Event Run Sheet`,
+      ),
+      account.userId,
+    );
+
+  if (
+    runSheet.id !==
+      normalizedId ||
+    runSheet.status !==
+      expectedStatus ||
+    runSheet.version !==
+      normalizedVersion +
+        1
+  ) {
+    throw invalidResponse(
+      `Canal returned an invalid ${expectedStatus} Event Run Sheet.`,
+    );
+  }
+
+  return runSheet;
 }
 
 function normalizeSaveInput(
@@ -450,22 +843,50 @@ function normalizeSaveInput(
   venueLabel: string;
   startsAt: string;
   timeZone: string;
+  expectedVersion:
+    | number
+    | null;
 } {
-  const startsAt =
-    normalizeTimestamp(
-      input.startsAt,
-      "Event Run Sheet start time",
+  const id =
+    input.id ===
+      undefined
+      ? null
+      : requireUuid(
+          input.id,
+          "Event Run Sheet",
+        );
+
+  const expectedVersion =
+    input.expectedVersion ===
+      undefined
+      ? null
+      : requirePositiveInteger(
+          input.expectedVersion,
+          "expected Event Run Sheet version",
+        );
+
+  if (
+    (
+      id ===
+        null &&
+      expectedVersion !==
+        null
+    ) ||
+    (
+      id !==
+        null &&
+      expectedVersion ===
+        null
+    )
+  ) {
+    throw new EventRunSheetError(
+      "invalid-input",
+      "Existing Event Run Sheets require an exact expected version.",
     );
+  }
 
   return {
-    id:
-      input.id ===
-        undefined
-        ? null
-        : requireUuid(
-            input.id,
-            "Event Run Sheet",
-          ),
+    id,
     collectionId:
       requireUuid(
         input.collectionId,
@@ -483,11 +904,16 @@ function normalizeSaveInput(
         "venue label",
         MAX_VENUE_LENGTH,
       ),
-    startsAt,
+    startsAt:
+      normalizeTimestamp(
+        input.startsAt,
+        "Event Run Sheet start time",
+      ),
     timeZone:
       normalizeTimeZone(
         input.timeZone,
       ),
+    expectedVersion,
   };
 }
 
@@ -532,6 +958,39 @@ function normalizeRunSheetRow(
       row.time_zone,
     );
 
+  const status =
+    isEventRunSheetStatus(
+      row.status,
+    )
+      ? row.status
+      : null;
+
+  const version =
+    positiveInteger(
+      row.version,
+    );
+
+  const activePosition =
+    boundedPosition(
+      row.active_position,
+    );
+
+  const startedAt =
+    nullableTimestamp(
+      row.started_at,
+    );
+
+  const completedAt =
+    nullableTimestamp(
+      row.completed_at,
+    );
+
+  const sourceCollectionTitle =
+    nullableBoundedText(
+      row.source_collection_title,
+      MAX_TITLE_LENGTH,
+    );
+
   const createdAt =
     validTimestamp(
       row.created_at,
@@ -552,21 +1011,26 @@ function normalizeRunSheetRow(
     !venueLabel ||
     !startsAt ||
     !timeZone ||
-    !Number.isSafeInteger(
-      row.active_position,
-    ) ||
-    (
-      row.active_position as
-        number
-    ) < 0 ||
-    (
-      row.status !==
-        "planned" &&
-      row.status !==
-        "completed"
-    ) ||
+    !status ||
+    version ===
+      null ||
+    activePosition ===
+      null ||
+    startedAt ===
+      undefined ||
+    completedAt ===
+      undefined ||
+    sourceCollectionTitle ===
+      undefined ||
     !createdAt ||
-    !updatedAt
+    !updatedAt ||
+    !validLifecycleState({
+      status,
+      activePosition,
+      startedAt,
+      completedAt,
+      sourceCollectionTitle,
+    })
   ) {
     throw invalidResponse(
       "Canal returned an invalid or cross-account Event Run Sheet.",
@@ -581,20 +1045,242 @@ function normalizeRunSheetRow(
     venueLabel,
     startsAt,
     timeZone,
-    activePosition:
-      row.active_position as
-        number,
-    status:
-      row.status,
+    activePosition,
+    status,
+    version,
+    startedAt,
+    completedAt,
+    sourceCollectionTitle,
     createdAt,
     updatedAt,
   };
+}
+
+function normalizeRunSheetItemRow(
+  row: EventRunSheetItemRow,
+  runSheet: EventRunSheet,
+): EventRunSheetItem {
+  const runSheetId =
+    requiredUuid(
+      row.run_sheet_id,
+    );
+
+  const ownerId =
+    requiredUuid(
+      row.owner_id,
+    );
+
+  const sceneId =
+    cleanBoundedText(
+      row.scene_id,
+      MAX_SCENE_ID_LENGTH,
+    );
+
+  const sceneRevision =
+    positiveInteger(
+      row.scene_revision,
+    );
+
+  const position =
+    boundedPosition(
+      row.position,
+    );
+
+  const title =
+    cleanBoundedText(
+      row.scene_title,
+      MAX_SCENE_TITLE_LENGTH,
+    );
+
+  const activityLabel =
+    cleanBoundedText(
+      row.activity_label,
+      MAX_ACTIVITY_LENGTH,
+    );
+
+  const durationLabel =
+    cleanBoundedText(
+      row.duration_label,
+      MAX_DURATION_LENGTH,
+    );
+
+  const trackCount =
+    boundedInteger(
+      row.track_count,
+      0,
+      500,
+    );
+
+  const createdAt =
+    validTimestamp(
+      row.created_at,
+    );
+
+  if (
+    runSheetId !==
+      runSheet.id ||
+    ownerId !==
+      runSheet.ownerId ||
+    !sceneId ||
+    sceneRevision ===
+      null ||
+    position ===
+      null ||
+    !title ||
+    !activityLabel ||
+    !durationLabel ||
+    trackCount ===
+      null ||
+    !createdAt
+  ) {
+    throw invalidResponse(
+      "Canal returned an invalid frozen Event Run Sheet item.",
+    );
+  }
+
+  return {
+    runSheetId,
+    sceneId,
+    sceneRevision,
+    position,
+    title,
+    activityLabel,
+    durationLabel,
+    trackCount,
+    createdAt,
+  };
+}
+
+function validateRunSheetItems(
+  runSheet: EventRunSheet,
+  items: EventRunSheetItem[],
+): void {
+  rejectDuplicateValues(
+    items.map(
+      (item) =>
+        item.sceneId,
+    ),
+    "frozen Event Run Sheet Scene IDs",
+  );
+
+  rejectDuplicateValues(
+    items.map(
+      (item) =>
+        item.position.toString(),
+    ),
+    "frozen Event Run Sheet positions",
+  );
+
+  const positionsAreContiguous =
+    items.every(
+      (
+        item,
+        index,
+      ) =>
+        item.position ===
+        index,
+    );
+
+  if (
+    runSheet.status ===
+      "planned"
+  ) {
+    if (
+      items.length !==
+      0
+    ) {
+      throw invalidResponse(
+        "A planned Event Run Sheet cannot have frozen items.",
+      );
+    }
+
+    return;
+  }
+
+  if (
+    items.length <
+      1 ||
+    items.length >
+      MAX_RUN_SHEET_ITEMS ||
+    !positionsAreContiguous ||
+    runSheet.activePosition >=
+      items.length
+  ) {
+    throw invalidResponse(
+      "The frozen Event Run Sheet order is invalid.",
+    );
+  }
+}
+
+function validLifecycleState(
+  input: {
+    status: EventRunSheetStatus;
+    activePosition: number;
+    startedAt: string | null;
+    completedAt: string | null;
+    sourceCollectionTitle: string | null;
+  },
+): boolean {
+  if (
+    input.status ===
+      "planned"
+  ) {
+    return (
+      input.activePosition ===
+        0 &&
+      input.startedAt ===
+        null &&
+      input.completedAt ===
+        null &&
+      input.sourceCollectionTitle ===
+        null
+    );
+  }
+
+  if (
+    !input.startedAt ||
+    !input.sourceCollectionTitle
+  ) {
+    return false;
+  }
+
+  if (
+    input.status ===
+      "running"
+  ) {
+    return (
+      input.completedAt ===
+      null
+    );
+  }
+
+  return Boolean(
+    input.completedAt &&
+      Date.parse(
+        input.completedAt,
+      ) >=
+        Date.parse(
+          input.startedAt,
+        ),
+  );
 }
 
 function singleRpcRow(
   value: unknown,
   label: string,
 ): EventRunSheetRow {
+  if (
+    Array.isArray(
+      value,
+    ) &&
+    value.length !==
+      1
+  ) {
+    throw invalidResponse(
+      `Canal returned an invalid ${label}.`,
+    );
+  }
+
   const row =
     Array.isArray(
       value,
@@ -605,7 +1291,11 @@ function singleRpcRow(
   if (
     typeof row !==
       "object" ||
-    row === null
+    row ===
+      null ||
+    Array.isArray(
+      row,
+    )
   ) {
     throw invalidResponse(
       `Canal returned an invalid ${label}.`,
@@ -625,35 +1315,58 @@ async function resolveAccount(
     return captureEventRunSheetAccount();
   }
 
-  const expectedUserId =
-    requireUuid(
-      account.userId,
-      "Event Run Sheet account",
-    );
-
-  await assertAccount({
+  const resolved = {
     userId:
-      expectedUserId,
-  });
-
-  return {
-    userId:
-      expectedUserId,
+      requireUuid(
+        account.userId,
+        "Event Run Sheet account",
+      ),
+    accountEpoch:
+      requireAccountEpoch(
+        account.accountEpoch,
+        "Event Run Sheet account epoch",
+      ),
+    sessionGeneration:
+      requireSessionGeneration(
+        account.sessionGeneration,
+        "Event Run Sheet account session generation",
+      ),
   };
+
+  await assertAccount(
+    resolved,
+  );
+
+  return resolved;
 }
 
 async function runAccountOperation<
   Result,
 >(
   account: EventRunSheetAccount,
+  action: string,
   operation: () => PromiseLike<Result>,
 ): Promise<Result> {
   await assertAccount(
     account,
   );
 
-  const result =
-    await operation();
+  let result:
+    Result;
+
+  try {
+    result =
+      await operation();
+  } catch (error) {
+    await assertAccount(
+      account,
+    );
+
+    throw mapDatabaseError(
+      action,
+      error,
+    );
+  }
 
   await assertAccount(
     account,
@@ -662,50 +1375,71 @@ async function runAccountOperation<
   return result;
 }
 
-async function currentUserId(): Promise<string> {
-  requireSupabaseConfiguration();
+async function assertAccount(
+  account: EventRunSheetAccount,
+): Promise<void> {
+  try {
+    await assertCanalAccountSessionGuardCurrent({
+      userId:
+        account.userId,
+      epoch:
+        account.accountEpoch,
+      sessionGeneration:
+        account.sessionGeneration,
+    });
+  } catch (error) {
+    if (
+      error instanceof
+      CanalAccountSessionChangedError
+    ) {
+      throw accountChangedError();
+    }
 
-  const {
-    data: {
-      user,
-    },
-    error,
-  } =
-    await supabase.auth.getUser();
-
-  if (error) {
     throw mapDatabaseError(
       "verify the current Event Run Sheet account",
       error,
     );
   }
+}
 
-  if (!user) {
+function requireAccountEpoch(
+  value: unknown,
+  label: string,
+): number {
+  if (
+    !Number.isSafeInteger(
+      value,
+    ) ||
+    (value as number) <
+      1
+  ) {
     throw new EventRunSheetError(
-      "permission-denied",
-      "You must be signed into Canal to manage Event Run Sheets.",
-      "42501",
+      "invalid-input",
+      `${label} is invalid.`,
     );
   }
 
-  return requireUuid(
-    user.id,
-    "signed-in user",
-  );
+  return value as number;
 }
 
-async function assertAccount(
-  account: EventRunSheetAccount,
-): Promise<void> {
-  const actualUserId =
-    await currentUserId();
-
+function requireSessionGeneration(
+  value: unknown,
+  label: string,
+): string {
   if (
-    actualUserId !==
-    account.userId
+    typeof value !==
+      "string" ||
+    !value.trim() ||
+    value.length >
+      512
   ) {
-    throw accountChangedError();
+    throw new EventRunSheetError(
+      "invalid-input",
+      `${label} is invalid.`,
+    );
   }
+
+  return value;
 }
 
 function normalizeBoundedText(
@@ -766,6 +1500,27 @@ function cleanBoundedText(
   )
     ? normalized
     : "";
+}
+
+function nullableBoundedText(
+  value: unknown,
+  maximumLength: number,
+): string | null | undefined {
+  if (
+    value ===
+      null
+  ) {
+    return null;
+  }
+
+  const normalized =
+    cleanBoundedText(
+      value,
+      maximumLength,
+    );
+
+  return normalized ||
+    undefined;
 }
 
 function normalizeTimeZone(
@@ -835,7 +1590,9 @@ function normalizeTimestamp(
     );
   }
 
-  return normalized;
+  return new Date(
+    normalized,
+  ).toISOString();
 }
 
 function validTimestamp(
@@ -852,6 +1609,25 @@ function validTimestamp(
   )
     ? value
     : "";
+}
+
+function nullableTimestamp(
+  value: unknown,
+): string | null | undefined {
+  if (
+    value ===
+      null
+  ) {
+    return null;
+  }
+
+  const normalized =
+    validTimestamp(
+      value,
+    );
+
+  return normalized ||
+    undefined;
 }
 
 function requireUuid(
@@ -889,22 +1665,168 @@ function requiredUuid(
     : "";
 }
 
+function requirePositiveInteger(
+  value: number,
+  label: string,
+): number {
+  if (
+    !Number.isSafeInteger(
+      value,
+    ) ||
+    value <
+      1
+  ) {
+    throw new EventRunSheetError(
+      "invalid-input",
+      `The ${label} is invalid.`,
+    );
+  }
+
+  return value;
+}
+
+function requirePosition(
+  value: number,
+): number {
+  const normalized =
+    boundedInteger(
+      value,
+      0,
+      49,
+    );
+
+  if (
+    normalized ===
+      null
+  ) {
+    throw new EventRunSheetError(
+      "invalid-input",
+      "The expected Event Run Sheet position is invalid.",
+    );
+  }
+
+  return normalized;
+}
+
+function positiveInteger(
+  value: unknown,
+): number | null {
+  return boundedInteger(
+    value,
+    1,
+    Number.MAX_SAFE_INTEGER,
+  );
+}
+
+function boundedPosition(
+  value: unknown,
+): number | null {
+  return boundedInteger(
+    value,
+    0,
+    49,
+  );
+}
+
+function boundedInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): number | null {
+  return (
+    typeof value ===
+      "number" &&
+    Number.isSafeInteger(
+      value,
+    ) &&
+    value >=
+      minimum &&
+    value <=
+      maximum
+  )
+    ? value
+    : null;
+}
+
+function isEventRunSheetStatus(
+  value: unknown,
+): value is EventRunSheetStatus {
+  return (
+    value ===
+      "planned" ||
+    value ===
+      "running" ||
+    value ===
+      "completed"
+  );
+}
+
+function rejectDuplicateValues(
+  values:
+    readonly string[],
+  label: string,
+): void {
+  if (
+    new Set(
+      values,
+    ).size !==
+    values.length
+  ) {
+    throw invalidResponse(
+      `Canal returned duplicate ${label}.`,
+    );
+  }
+}
+
 function mapDatabaseError(
   action: string,
-  error: SupabaseError,
+  error: unknown,
 ): EventRunSheetError {
+  if (
+    error instanceof
+    EventRunSheetError
+  ) {
+    return error;
+  }
+
+  const shape =
+    error &&
+    typeof error ===
+      "object"
+      ? error as
+          SupabaseError
+      : {
+          message:
+            String(
+              error,
+            ),
+        };
+
   const code =
-    error.code ??
-    null;
+    typeof shape.code ===
+      "string"
+      ? shape.code
+      : null;
+
+  const message =
+    typeof shape.message ===
+      "string"
+      ? shape.message
+      : "Unknown database error";
 
   if (
     code ===
-      "40001"
+      "40001" ||
+    code ===
+      "23505" ||
+    code ===
+      "40P01"
   ) {
     return new EventRunSheetError(
       "conflict",
-      error.message,
+      message,
       code,
+      true,
     );
   }
 
@@ -936,14 +1858,36 @@ function mapDatabaseError(
   ) {
     return new EventRunSheetError(
       "invalid-input",
-      error.message,
+      message,
       code,
+    );
+  }
+
+  if (
+    CONNECTIVITY_MESSAGE_PATTERN.test(
+      [
+        message,
+        shape.details ??
+          "",
+        shape.hint ??
+          "",
+      ].join(
+        " ",
+      ),
+    )
+  ) {
+    return new EventRunSheetError(
+      "offline",
+      `Canal could not ${action} because the network request failed. Reconnect and try again.`,
+      code ??
+        "FETCH_ERROR",
+      true,
     );
   }
 
   return new EventRunSheetError(
     "request-failed",
-    `Canal could not ${action}: ${error.message}`,
+    `Canal could not ${action}: ${message}`,
     code,
   );
 }
@@ -960,6 +1904,6 @@ function invalidResponse(
 function accountChangedError(): EventRunSheetError {
   return new EventRunSheetError(
     "account-changed",
-    "The signed-in Canal account changed while Event Run Sheets were loading or saving. Please try again.",
+    "The signed-in Canal account changed while the Event Run Sheet request was in progress. Reload and try again.",
   );
 }

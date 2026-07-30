@@ -20,16 +20,36 @@ function source(
 }
 
 describe(
-  "private Event Run Sheet route contract",
+  "private frozen Event Run Sheet route contract",
   () => {
     const layout =
       source(
         "app/_layout.tsx",
       );
 
-    const route =
+    const legacyRoute =
       source(
         "app/event-run-sheet.tsx",
+      );
+
+    const hub =
+      source(
+        "app/event-run-sheets/index.tsx",
+      );
+
+    const builder =
+      source(
+        "app/event-run-sheets/new.tsx",
+      );
+
+    const run =
+      source(
+        "app/event-run-sheets/[runSheetId].tsx",
+      );
+
+    const createTab =
+      source(
+        "app/(tabs)/create.tsx",
       );
 
     const collectionDetail =
@@ -38,84 +58,275 @@ describe(
       );
 
     it(
-      "registers an account-remounted private creator route from an owned collection",
+      "registers a hub, builder, and run route while preserving old deep links",
       () => {
         expect(
           layout,
         ).toContain(
-          'name="event-run-sheet"',
+          'name="event-run-sheets/index"',
+        );
+        expect(
+          layout,
+        ).toContain(
+          'name="event-run-sheets/new"',
+        );
+        expect(
+          layout,
+        ).toContain(
+          'name="event-run-sheets/[runSheetId]"',
+        );
+        expect(
+          legacyRoute,
+        ).toContain(
+          "Redirect",
+        );
+        expect(
+          legacyRoute,
+        ).toContain(
+          '"/event-run-sheets/[runSheetId]"',
+        );
+        expect(
+          legacyRoute,
+        ).toContain(
+          '"/event-run-sheets/new"',
+        );
+      },
+    );
+
+    it(
+      "offers owner entry points from Create and collection detail",
+      () => {
+        expect(
+          createTab,
+        ).toContain(
+          "Plan an Event Run Sheet",
+        );
+        expect(
+          createTab,
+        ).toContain(
+          'router.push(\n            "/event-run-sheets/new"',
+        );
+        expect(
+          createTab,
+        ).toContain(
+          "Browse Event Run Sheets",
         );
         expect(
           collectionDetail,
         ).toMatch(
-          /isOwner[\s\S]*pathname:[\s\S]*"[/]event-run-sheet"[\s\S]*collectionId:/,
-        );
-        expect(
-          route,
-        ).toMatch(
-          /<EventRunSheetContent[\s\S]*key=\{[\s\S]*user[?][.]id[\s\S]*"signed-out"/,
-        );
-        expect(
-          route,
-        ).toContain(
-          "PRIVATE CREATOR TOOL",
+          /isOwner[\s\S]*pathname:[\s\S]*"[/]event-run-sheets[/]new"[\s\S]*collectionId:/,
         );
       },
     );
 
     it(
-      "uses the SDK-compatible native date picker with an accessible web fallback",
+      "remounts per account epoch and prevents stale hub navigation during reload or offline recovery",
       () => {
         expect(
-          route,
-        ).toContain(
-          '@react-native-community/datetimepicker',
+          hub,
+        ).toMatch(
+          /<EventRunSheetHubContent[\s\S]*key=\{[\s\S]*user[?][.]id[\s\S]*accountEpoch[\s\S]*expectedUserId=[\s\S]*expectedAccountEpoch=/,
         );
         expect(
-          route,
+          hub,
         ).toContain(
-          'Platform.OS ===',
+          "eventRunSheetRequestCanCommit",
         );
         expect(
-          route,
+          hub,
+        ).toMatch(
+          /captureEventRunSheetAccount[\s\S]*userId:[\s\S]*expectedUserId[\s\S]*accountEpoch:[\s\S]*expectedAccountEpoch/,
+        );
+        expect(
+          hub,
+        ).toContain(
+          "useReconnectReload",
+        );
+        expect(
+          hub,
+        ).toMatch(
+          /isLoading \|\|[\s\S]*!hasFreshSnapshot/,
+        );
+        expect(
+          hub,
+        ).toContain(
+          'accessibilityRole="radiogroup"',
+        );
+        expect(
+          hub,
+        ).toContain(
+          'accessibilityRole="radio"',
+        );
+        expect(
+          hub,
+        ).toMatch(
+          /filter:[\s\S]*minHeight:[\s\S]*48/,
+        );
+      },
+    );
+
+    it(
+      "builds planned sheets with stored-zone DST policy and fresh online mutation guards",
+      () => {
+        expect(
+          builder,
+        ).toMatch(
+          /<EventRunSheetBuilderContent[\s\S]*key=\{[\s\S]*user[?][.]id[\s\S]*accountEpoch[\s\S]*expectedUserId=[\s\S]*expectedAccountEpoch=/,
+        );
+        expect(
+          builder,
+        ).toContain(
+          "captureEventRunSheetAccount",
+        );
+        expect(
+          builder,
+        ).toContain(
+          "eventRunSheetMutationIsBlocked",
+        );
+        expect(
+          builder,
+        ).toContain(
+          "resolveEventRunSheetLocalDateTime",
+        );
+        expect(
+          builder,
+        ).toContain(
+          "Daylight-saving gaps are rejected",
+        );
+        expect(
+          builder,
+        ).toContain(
+          "@react-native-community/datetimepicker",
+        );
+        expect(
+          builder,
         ).toContain(
           'accessibilityLabel="Choose event date"',
         );
         expect(
-          route,
+          builder,
         ).toContain(
           'accessibilityLabel="Choose event time"',
         );
         expect(
-          route,
+          builder,
         ).toContain(
-          'contentInsetAdjustmentBehavior="automatic"',
+          'accessibilityRole="radiogroup"',
+        );
+        expect(
+          builder,
+        ).toContain(
+          'accessibilityRole="radio"',
+        );
+        expect(
+          builder,
+        ).toMatch(
+          /collectionOption:[\s\S]*minHeight:[\s\S]*64/,
+        );
+        expect(
+          builder,
+        ).toMatch(
+          /saveEventRunSheet[(][\s\S]*startEventRunSheet[(]/,
         );
       },
     );
 
     it(
-      "saves owner-only venue metadata and advances collection Scenes with CAS",
+      "runs only from frozen item data with version and position compare-and-swap",
       () => {
         expect(
-          route,
+          run,
         ).toMatch(
-          /saveEventRunSheet[(]\{[\s\S]*collectionId:[\s\S]*title,[\s\S]*venueLabel,[\s\S]*startsAt:[\s\S]*toISOString[(][)][\s\S]*timeZone/,
+          /<EventRunSheetDetailContent[\s\S]*key=\{[\s\S]*user[?][.]id[\s\S]*accountEpoch[\s\S]*runSheetId[\s\S]*expectedUserId=[\s\S]*expectedAccountEpoch=/,
         );
         expect(
-          route,
+          run,
         ).toMatch(
-          /advanceEventRunSheet[(][\s\S]*runSheet[.]id,[\s\S]*runSheet[.]activePosition/,
+          /eventRunSheetRequestCanCommit[\s\S]*expectedAccountEpoch[\s\S]*activeAccountEpoch[\s\S]*accountEpoch/,
         );
         expect(
-          route,
+          run,
         ).toContain(
-          "deleteEventRunSheet",
+          "eventRunSheetMutationIsBlocked",
         );
         expect(
-          route,
+          run,
+        ).toMatch(
+          /advanceEventRunSheet[(][\s\S]*detail[.]id,[\s\S]*detail[.]activePosition,[\s\S]*detail[.]version/,
+        );
+        expect(
+          run,
+        ).toMatch(
+          /completeEventRunSheet[(][\s\S]*detail[.]id,[\s\S]*detail[.]activePosition,[\s\S]*detail[.]version/,
+        );
+        expect(
+          run,
+        ).toContain(
+          "Frozen Scene order",
+        );
+        expect(
+          run,
+        ).toContain(
+          "retained summary",
+        );
+        expect(
+          run,
         ).not.toMatch(
-          /createStage|joinStage|live-stages|Realtime|attendee|ticket/i,
+          /loadSceneCollection|public-scene|scenes[/]\[sceneId\]|LiveStage|Release Ballot/,
+        );
+      },
+    );
+
+    it(
+      "exposes loading, empty, offline, stale, retry, completed, and accessible busy states",
+      () => {
+        const allRoutes = [
+          hub,
+          builder,
+          run,
+        ].join(
+          "\n",
+        );
+
+        expect(
+          allRoutes,
+        ).toContain(
+          "RecoveryNotice",
+        );
+        expect(
+          allRoutes,
+        ).toContain(
+          "useReconnectReload",
+        );
+        expect(
+          allRoutes,
+        ).toContain(
+          '"offline"',
+        );
+        expect(
+          allRoutes,
+        ).toContain(
+          "hasFreshSnapshot",
+        );
+        expect(
+          allRoutes,
+        ).toContain(
+          'accessibilityRole="progressbar"',
+        );
+        expect(
+          allRoutes,
+        ).toContain(
+          "accessibilityState",
+        );
+        expect(
+          hub,
+        ).toContain(
+          "No Event Run Sheets yet",
+        );
+        expect(
+          run,
+        ).toContain(
+          "Run completed",
         );
       },
     );

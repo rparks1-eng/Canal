@@ -147,8 +147,9 @@ export default function CreateTabScreen() {
         >
           Build a Scene, start a
           synchronized Stage, or
-          turn a public collection
-          into a listener ballot.
+          turn a collection into a
+          private run or listener
+          ballot.
         </Text>
       </View>
 
@@ -200,6 +201,50 @@ export default function CreateTabScreen() {
           );
         }}
       />
+
+      <CreateAction
+        eyebrow="PRIVATE EVENT"
+        title="Plan an Event Run Sheet"
+        description="Choose an owned Scene collection, schedule a private run, and freeze its ordered revisions when you start."
+        symbol="≡"
+        onPress={() => {
+          router.push(
+            "/event-run-sheets/new",
+          );
+        }}
+      />
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Browse private Event Run Sheets"
+        onPress={() => {
+          router.push(
+            "/event-run-sheets",
+          );
+        }}
+        style={({ pressed }) => [
+          styles.liveLink,
+          pressed &&
+            styles.pressed,
+        ]}
+      >
+        <Text
+          style={
+            styles.liveLinkText
+          }
+        >
+          Browse Event Run Sheets
+        </Text>
+
+        <Text
+          accessibilityElementsHidden
+          style={
+            styles.liveLinkArrow
+          }
+        >
+          →
+        </Text>
+      </Pressable>
 
       <Pressable
         accessibilityRole="button"

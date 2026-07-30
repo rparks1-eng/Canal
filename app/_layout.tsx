@@ -574,6 +574,18 @@ function CanalNavigator() {
       />
 
       <Stack.Screen
+        name="event-run-sheets/index"
+      />
+
+      <Stack.Screen
+        name="event-run-sheets/new"
+      />
+
+      <Stack.Screen
+        name="event-run-sheets/[runSheetId]"
+      />
+
+      <Stack.Screen
         name="scene-preview"
       />
 

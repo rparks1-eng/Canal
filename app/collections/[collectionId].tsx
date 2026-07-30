@@ -399,7 +399,7 @@ export default function SceneCollectionScreen() {
                     onPress={() =>
                       router.push({
                         pathname:
-                          "/event-run-sheet",
+                          "/event-run-sheets/new",
                         params: {
                           collectionId:
                             collection.id,
