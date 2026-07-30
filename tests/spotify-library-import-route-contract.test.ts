@@ -45,9 +45,6 @@ describe(
         expect(screen).toContain(
           'accessibilityLabel="Pause Spotify import"',
         );
-        expect(screen).toContain(
-          'accessibilityLiveRegion="polite"',
-        );
         expect(screen).toMatch(
           /importResumeButton:\s*\{[\s\S]*?minHeight:\s*48,/u,
         );
@@ -57,6 +54,71 @@ describe(
         expect(screen).toMatch(
           /backButton:\s*\{[\s\S]*?width:\s*48,[\s\S]*?height:\s*48,/u,
         );
+      },
+    );
+
+    it(
+      "announces one current-account import outcome and moves focus to its visible status",
+      () => {
+        expect(screen).toContain(
+          "type SpotifyLibraryStatusEvent",
+        );
+        expect(screen).toContain(
+          "statusEventAccountIdentity ===",
+        );
+        expect(screen).toContain(
+          "eventAccountIdentity",
+        );
+        expect(screen).toContain(
+          "announcedStatusEventId.current ===",
+        );
+        expect(screen).toContain(
+          'process.env.EXPO_OS ===\n        "ios"',
+        );
+        expect(screen).toContain(
+          "AccessibilityInfo\n          .announceForAccessibility",
+        );
+        expect(screen).toContain(
+          "AccessibilityInfo\n          .setAccessibilityFocus",
+        );
+        expect(screen).toContain(
+          'accessibilityLiveRegion="polite"',
+        );
+        expect(screen).toContain(
+          "Spotify import is paused for Spotify's retry window.",
+        );
+      },
+    );
+
+    it(
+      "keeps busy controls named and imported metadata reflowable at large text sizes",
+      () => {
+        expect(screen).toContain(
+          'accessibilityLabel="Export playlist"',
+        );
+        expect(screen).toContain(
+          "accessibilityState={{",
+        );
+        expect(screen).not.toContain(
+          "numberOfLines={1}",
+        );
+
+        for (
+          const styleName of [
+            "rowSubtitle",
+            "successText",
+            "warningText",
+            "importText",
+            "importWarning",
+          ]
+        ) {
+          expect(screen).not.toMatch(
+            new RegExp(
+              `${styleName}:\\s*\\{[^}]*lineHeight:`,
+              "u",
+            ),
+          );
+        }
       },
     );
 
