@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -7,6 +8,7 @@ import {
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  findNodeHandle,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -220,6 +222,78 @@ function EventRunSheetDetailContent(
     useRef(
       createEventRunSheetMutationLeaseGate(),
     );
+
+  const screenHeadingRef =
+    useRef<Text>(
+      null,
+    );
+
+  const recoveryHeadingRef =
+    useRef<Text>(
+      null,
+    );
+
+  const focusedStateRef =
+    useRef<string | null>(
+      null,
+    );
+
+  useEffect(
+    () => {
+      if (
+        isLoading ||
+        user?.id !==
+          props.expectedUserId ||
+        accountEpoch !==
+          props.expectedAccountEpoch
+      ) {
+        return;
+      }
+
+      const focusState =
+        issue
+          ? `recovery:${issue.title}:${issue.message}`
+          : "heading";
+
+      if (
+        focusedStateRef.current ===
+        focusState
+      ) {
+        return;
+      }
+
+      focusedStateRef.current =
+        focusState;
+
+      const target =
+        issue
+          ? recoveryHeadingRef.current
+          : screenHeadingRef.current;
+
+      const targetNode =
+        findNodeHandle(
+          target,
+        );
+
+      if (
+        targetNode !==
+        null
+      ) {
+        AccessibilityInfo
+          .setAccessibilityFocus(
+            targetNode,
+          );
+      }
+    },
+    [
+      accountEpoch,
+      isLoading,
+      issue,
+      props.expectedAccountEpoch,
+      props.expectedUserId,
+      user?.id,
+    ],
+  );
 
   const load =
     useCallback(
@@ -631,6 +705,8 @@ function EventRunSheetDetailContent(
         </Pressable>
 
         <Text
+          accessibilityRole="header"
+          ref={screenHeadingRef}
           style={
             styles.headerTitle
           }
@@ -655,20 +731,32 @@ function EventRunSheetDetailContent(
         contentInsetAdjustmentBehavior="automatic"
       >
         {issue ? (
-          <RecoveryNotice
-            busy={
-              isLoading ||
-              Boolean(
-                busyAction,
-              )
-            }
-            issue={
-              issue
-            }
-            onAction={
-              retry
-            }
-          />
+          <>
+            <Text
+              accessibilityRole="header"
+              ref={recoveryHeadingRef}
+              style={
+                styles.screenReaderOnly
+              }
+            >
+              {issue.title}
+            </Text>
+
+            <RecoveryNotice
+              busy={
+                isLoading ||
+                Boolean(
+                  busyAction,
+                )
+              }
+              issue={
+                issue
+              }
+              onAction={
+                retry
+              }
+            />
+          </>
         ) : null}
 
         {isLoading &&
@@ -860,6 +948,7 @@ function EventRunSheetDetailContent(
                 }
               >
                 <Text
+                  accessibilityRole="header"
                   style={
                     styles.summaryTitle
                   }
@@ -902,6 +991,7 @@ function EventRunSheetDetailContent(
               }
             >
               <Text
+                accessibilityRole="header"
                 style={
                   styles.sectionTitle
                 }
@@ -1122,6 +1212,22 @@ const styles =
         17,
       fontWeight:
         "900",
+    },
+    screenReaderOnly: {
+      height:
+        1,
+      left:
+        -1,
+      opacity:
+        0.01,
+      overflow:
+        "hidden",
+      position:
+        "absolute",
+      top:
+        -1,
+      width:
+        1,
     },
     content: {
       padding:

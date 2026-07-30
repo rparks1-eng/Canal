@@ -1,12 +1,15 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 
 import {
+  AccessibilityInfo,
   ActivityIndicator,
+  findNodeHandle,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -175,6 +178,78 @@ function EventRunSheetHubContent(
     useRef(
       0,
     );
+
+  const screenHeadingRef =
+    useRef<Text>(
+      null,
+    );
+
+  const recoveryHeadingRef =
+    useRef<Text>(
+      null,
+    );
+
+  const focusedStateRef =
+    useRef<string | null>(
+      null,
+    );
+
+  useEffect(
+    () => {
+      if (
+        isLoading ||
+        user?.id !==
+          props.expectedUserId ||
+        accountEpoch !==
+          props.expectedAccountEpoch
+      ) {
+        return;
+      }
+
+      const focusState =
+        issue
+          ? `recovery:${issue.title}:${issue.message}`
+          : "heading";
+
+      if (
+        focusedStateRef.current ===
+        focusState
+      ) {
+        return;
+      }
+
+      focusedStateRef.current =
+        focusState;
+
+      const target =
+        issue
+          ? recoveryHeadingRef.current
+          : screenHeadingRef.current;
+
+      const targetNode =
+        findNodeHandle(
+          target,
+        );
+
+      if (
+        targetNode !==
+        null
+      ) {
+        AccessibilityInfo
+          .setAccessibilityFocus(
+            targetNode,
+          );
+      }
+    },
+    [
+      accountEpoch,
+      isLoading,
+      issue,
+      props.expectedAccountEpoch,
+      props.expectedUserId,
+      user?.id,
+    ],
+  );
 
   const load =
     useCallback(
@@ -414,6 +489,8 @@ function EventRunSheetHubContent(
         </Pressable>
 
         <Text
+          accessibilityRole="header"
+          ref={screenHeadingRef}
           style={
             styles.headerTitle
           }
@@ -537,17 +614,29 @@ function EventRunSheetHubContent(
         </View>
 
         {issue ? (
-          <RecoveryNotice
-            busy={
-              isLoading
-            }
-            issue={
-              issue
-            }
-            onAction={
-              retry
-            }
-          />
+          <>
+            <Text
+              accessibilityRole="header"
+              ref={recoveryHeadingRef}
+              style={
+                styles.screenReaderOnly
+              }
+            >
+              {issue.title}
+            </Text>
+
+            <RecoveryNotice
+              busy={
+                isLoading
+              }
+              issue={
+                issue
+              }
+              onAction={
+                retry
+              }
+            />
+          </>
         ) : null}
 
         {isLoading &&
@@ -835,6 +924,22 @@ const styles =
         "900",
       letterSpacing:
         -0.7,
+    },
+    screenReaderOnly: {
+      height:
+        1,
+      left:
+        -1,
+      opacity:
+        0.01,
+      overflow:
+        "hidden",
+      position:
+        "absolute",
+      top:
+        -1,
+      width:
+        1,
     },
     intro: {
       color:
