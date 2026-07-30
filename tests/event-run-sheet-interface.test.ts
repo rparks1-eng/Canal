@@ -78,10 +78,16 @@ describe(
         const current = {
           expectedUserId:
             OWNER_ID,
+          expectedAccountEpoch:
+            7,
           activeUserId:
             OWNER_ID,
+          activeAccountEpoch:
+            7,
           accountUserId:
             OWNER_ID,
+          accountEpoch:
+            7,
           requestEpoch:
             4,
           activeRequestEpoch:
@@ -105,6 +111,26 @@ describe(
             ...current,
             activeUserId:
               NEXT_USER_ID,
+          }),
+        ).toBe(
+          false,
+        );
+
+        expect(
+          eventRunSheetRequestCanCommit({
+            ...current,
+            activeAccountEpoch:
+              8,
+          }),
+        ).toBe(
+          false,
+        );
+
+        expect(
+          eventRunSheetRequestCanCommit({
+            ...current,
+            accountEpoch:
+              8,
           }),
         ).toBe(
           false,

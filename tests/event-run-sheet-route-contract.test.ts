@@ -120,17 +120,22 @@ describe(
     );
 
     it(
-      "remounts per account and prevents stale hub navigation during reload or offline recovery",
+      "remounts per account epoch and prevents stale hub navigation during reload or offline recovery",
       () => {
         expect(
           hub,
         ).toMatch(
-          /<EventRunSheetHubContent[\s\S]*key=\{[\s\S]*user[?][.]id[\s\S]*expectedUserId=/,
+          /<EventRunSheetHubContent[\s\S]*key=\{[\s\S]*user[?][.]id[\s\S]*accountEpoch[\s\S]*expectedUserId=[\s\S]*expectedAccountEpoch=/,
         );
         expect(
           hub,
         ).toContain(
           "eventRunSheetRequestCanCommit",
+        );
+        expect(
+          hub,
+        ).toMatch(
+          /captureEventRunSheetAccount[\s\S]*userId:[\s\S]*expectedUserId[\s\S]*accountEpoch:[\s\S]*expectedAccountEpoch/,
         );
         expect(
           hub,
@@ -166,7 +171,7 @@ describe(
         expect(
           builder,
         ).toMatch(
-          /<EventRunSheetBuilderContent[\s\S]*key=\{[\s\S]*user[?][.]id[\s\S]*expectedUserId=/,
+          /<EventRunSheetBuilderContent[\s\S]*key=\{[\s\S]*user[?][.]id[\s\S]*accountEpoch[\s\S]*expectedUserId=[\s\S]*expectedAccountEpoch=/,
         );
         expect(
           builder,
@@ -232,7 +237,12 @@ describe(
         expect(
           run,
         ).toMatch(
-          /<EventRunSheetDetailContent[\s\S]*key=\{[\s\S]*user[?][.]id[\s\S]*expectedUserId=/,
+          /<EventRunSheetDetailContent[\s\S]*key=\{[\s\S]*user[?][.]id[\s\S]*accountEpoch[\s\S]*runSheetId[\s\S]*expectedUserId=[\s\S]*expectedAccountEpoch=/,
+        );
+        expect(
+          run,
+        ).toMatch(
+          /eventRunSheetRequestCanCommit[\s\S]*expectedAccountEpoch[\s\S]*activeAccountEpoch[\s\S]*accountEpoch/,
         );
         expect(
           run,

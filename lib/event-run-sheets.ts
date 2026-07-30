@@ -1,7 +1,12 @@
 import {
-  requireSupabaseConfiguration,
   supabase,
 } from "./supabase";
+
+import {
+  CanalAccountSessionChangedError,
+  assertCanalAccountSessionGuardCurrent,
+  captureCanalAccountSessionGuard,
+} from "./canal-auth";
 
 export const EVENT_RUN_SHEET_STATUSES = [
   "planned",
@@ -60,6 +65,14 @@ export type EventRunSheetSaveInput = {
 export type EventRunSheetAccount =
   Readonly<{
     userId: string;
+    accountEpoch: number;
+    sessionGeneration: string;
+  }>;
+
+export type EventRunSheetAccountExpectation =
+  Readonly<{
+    userId?: string;
+    accountEpoch?: number;
   }>;
 
 export type EventRunSheetOptions =
@@ -239,31 +252,66 @@ const MAX_RUN_SHEET_ITEMS =
   50;
 
 export async function captureEventRunSheetAccount(
-  expectedUserId?: string,
+  expected?:
+    | string
+    | EventRunSheetAccountExpectation,
 ): Promise<EventRunSheetAccount> {
-  const expected =
-    expectedUserId ===
-      undefined
-      ? null
-      : requireUuid(
-          expectedUserId,
+  const expectedUserId =
+    typeof expected ===
+      "string"
+      ? requireUuid(
+          expected,
           "expected Event Run Sheet account",
-        );
+        )
+      : expected?.userId ===
+          undefined
+        ? null
+        : requireUuid(
+            expected.userId,
+            "expected Event Run Sheet account",
+          );
 
-  const userId =
-    await currentUserId();
-
-  if (
+  const expectedAccountEpoch =
+    typeof expected ===
+      "object" &&
     expected !==
       null &&
-    userId !==
-      expected
+    expected.accountEpoch !==
+      undefined
+      ? requireAccountEpoch(
+          expected.accountEpoch,
+          "expected Event Run Sheet account epoch",
+        )
+      : null;
+
+  const account =
+    await captureCanalAccountSessionGuard();
+
+  if (
+    expectedUserId !==
+      null &&
+    account.userId !==
+      expectedUserId
+  ) {
+    throw accountChangedError();
+  }
+
+  if (
+    expectedAccountEpoch !==
+      null &&
+    account.epoch !==
+      expectedAccountEpoch
   ) {
     throw accountChangedError();
   }
 
   return {
-    userId,
+    userId:
+      account.userId,
+    accountEpoch:
+      account.epoch,
+    sessionGeneration:
+      account.sessionGeneration,
   };
 }
 
@@ -1273,6 +1321,16 @@ async function resolveAccount(
         account.userId,
         "Event Run Sheet account",
       ),
+    accountEpoch:
+      requireAccountEpoch(
+        account.accountEpoch,
+        "Event Run Sheet account epoch",
+      ),
+    sessionGeneration:
+      requireSessionGeneration(
+        account.sessionGeneration,
+        "Event Run Sheet account session generation",
+      ),
   };
 
   await assertAccount(
@@ -1317,58 +1375,71 @@ async function runAccountOperation<
   return result;
 }
 
-async function currentUserId(): Promise<string> {
-  let response:
-    Awaited<
-      ReturnType<
-        typeof supabase.auth.getUser
-      >
-    >;
-
+async function assertAccount(
+  account: EventRunSheetAccount,
+): Promise<void> {
   try {
-    requireSupabaseConfiguration();
-    response =
-      await supabase.auth.getUser();
+    await assertCanalAccountSessionGuardCurrent({
+      userId:
+        account.userId,
+      epoch:
+        account.accountEpoch,
+      sessionGeneration:
+        account.sessionGeneration,
+    });
   } catch (error) {
+    if (
+      error instanceof
+      CanalAccountSessionChangedError
+    ) {
+      throw accountChangedError();
+    }
+
     throw mapDatabaseError(
       "verify the current Event Run Sheet account",
       error,
     );
   }
-
-  if (response.error) {
-    throw mapDatabaseError(
-      "verify the current Event Run Sheet account",
-      response.error,
-    );
-  }
-
-  if (!response.data.user) {
-    throw new EventRunSheetError(
-      "permission-denied",
-      "You must be signed into Canal to manage Event Run Sheets.",
-      "42501",
-    );
-  }
-
-  return requireUuid(
-    response.data.user.id,
-    "signed-in user",
-  );
 }
 
-async function assertAccount(
-  account: EventRunSheetAccount,
-): Promise<void> {
-  const actualUserId =
-    await currentUserId();
-
+function requireAccountEpoch(
+  value: unknown,
+  label: string,
+): number {
   if (
-    actualUserId !==
-      account.userId
+    !Number.isSafeInteger(
+      value,
+    ) ||
+    (value as number) <
+      1
   ) {
-    throw accountChangedError();
+    throw new EventRunSheetError(
+      "invalid-input",
+      `${label} is invalid.`,
+    );
   }
+
+  return value as number;
+}
+
+function requireSessionGeneration(
+  value: unknown,
+  label: string,
+): string {
+  if (
+    typeof value !==
+      "string" ||
+    !value.trim() ||
+    value.length >
+      512
+  ) {
+    throw new EventRunSheetError(
+      "invalid-input",
+      `${label} is invalid.`,
+    );
+  }
+
+  return value;
 }
 
 function normalizeBoundedText(

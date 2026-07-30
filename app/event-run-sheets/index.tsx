@@ -89,18 +89,21 @@ function goBack(): void {
 export default function EventRunSheetHubScreen() {
   const {
     user,
+    accountEpoch,
   } =
     useAuth();
 
   return (
     <EventRunSheetHubContent
       key={
-        user?.id ??
-        "signed-out"
+        `${user?.id ?? "signed-out"}:${accountEpoch}`
       }
       expectedUserId={
         user?.id ??
         ""
+      }
+      expectedAccountEpoch={
+        accountEpoch
       }
     />
   );
@@ -109,10 +112,12 @@ export default function EventRunSheetHubScreen() {
 function EventRunSheetHubContent(
   props: {
     expectedUserId: string;
+    expectedAccountEpoch: number;
   },
 ) {
   const {
     user,
+    accountEpoch,
   } =
     useAuth();
 
@@ -209,7 +214,12 @@ function EventRunSheetHubContent(
 
           const account =
             await captureEventRunSheetAccount(
-              props.expectedUserId,
+              {
+                userId:
+                  props.expectedUserId,
+                accountEpoch:
+                  props.expectedAccountEpoch,
+              },
             );
 
           const next =
@@ -221,11 +231,17 @@ function EventRunSheetHubContent(
             !eventRunSheetRequestCanCommit({
               expectedUserId:
                 props.expectedUserId,
+              expectedAccountEpoch:
+                props.expectedAccountEpoch,
               activeUserId:
                 user?.id ??
                 null,
+              activeAccountEpoch:
+                accountEpoch,
               accountUserId:
                 account.userId,
+              accountEpoch:
+                account.accountEpoch,
               requestEpoch,
               activeRequestEpoch:
                 requestEpochRef.current,
@@ -278,6 +294,8 @@ function EventRunSheetHubContent(
       },
       [
         connectivityStatus,
+        accountEpoch,
+        props.expectedAccountEpoch,
         props.expectedUserId,
         user?.id,
       ],

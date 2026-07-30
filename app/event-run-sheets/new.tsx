@@ -228,18 +228,21 @@ function pickerDate(
 export default function EventRunSheetBuilderScreen() {
   const {
     user,
+    accountEpoch,
   } =
     useAuth();
 
   return (
     <EventRunSheetBuilderContent
       key={
-        user?.id ??
-        "signed-out"
+        `${user?.id ?? "signed-out"}:${accountEpoch}`
       }
       expectedUserId={
         user?.id ??
         ""
+      }
+      expectedAccountEpoch={
+        accountEpoch
       }
     />
   );
@@ -248,10 +251,12 @@ export default function EventRunSheetBuilderScreen() {
 function EventRunSheetBuilderContent(
   props: {
     expectedUserId: string;
+    expectedAccountEpoch: number;
   },
 ) {
   const {
     user,
+    accountEpoch,
   } =
     useAuth();
 
@@ -510,7 +515,12 @@ function EventRunSheetBuilderContent(
 
           const account =
             await captureEventRunSheetAccount(
-              props.expectedUserId,
+              {
+                userId:
+                  props.expectedUserId,
+                accountEpoch:
+                  props.expectedAccountEpoch,
+              },
             );
 
           const [
@@ -537,11 +547,17 @@ function EventRunSheetBuilderContent(
             !eventRunSheetRequestCanCommit({
               expectedUserId:
                 props.expectedUserId,
+              expectedAccountEpoch:
+                props.expectedAccountEpoch,
               activeUserId:
                 user?.id ??
                 null,
+              activeAccountEpoch:
+                accountEpoch,
               accountUserId:
                 account.userId,
+              accountEpoch:
+                account.accountEpoch,
               requestEpoch,
               activeRequestEpoch:
                 requestEpochRef.current,
@@ -642,7 +658,9 @@ function EventRunSheetBuilderContent(
       },
       [
         applyRunSheet,
+        accountEpoch,
         connectivityStatus,
+        props.expectedAccountEpoch,
         props.expectedUserId,
         requestedRunSheetId,
         user?.id,
@@ -779,7 +797,12 @@ function EventRunSheetBuilderContent(
 
         const account =
           await captureEventRunSheetAccount(
-            props.expectedUserId,
+            {
+              userId:
+                props.expectedUserId,
+              accountEpoch:
+                props.expectedAccountEpoch,
+            },
           );
 
         const resolvedSchedule =
@@ -817,7 +840,11 @@ function EventRunSheetBuilderContent(
           user?.id !==
             account.userId ||
           props.expectedUserId !==
-            account.userId
+            account.userId ||
+          accountEpoch !==
+            account.accountEpoch ||
+          props.expectedAccountEpoch !==
+            account.accountEpoch
         ) {
           return;
         }
@@ -875,7 +902,11 @@ function EventRunSheetBuilderContent(
           user?.id !==
             account.userId ||
           props.expectedUserId !==
-            account.userId
+            account.userId ||
+          accountEpoch !==
+            account.accountEpoch ||
+          props.expectedAccountEpoch !==
+            account.accountEpoch
         ) {
           return;
         }
@@ -961,7 +992,12 @@ function EventRunSheetBuilderContent(
 
         const account =
           await captureEventRunSheetAccount(
-            props.expectedUserId,
+            {
+              userId:
+                props.expectedUserId,
+              accountEpoch:
+                props.expectedAccountEpoch,
+            },
           );
 
         await deleteEventRunSheet(
@@ -980,7 +1016,11 @@ function EventRunSheetBuilderContent(
           user?.id ===
             account.userId &&
           props.expectedUserId ===
-            account.userId
+            account.userId &&
+          accountEpoch ===
+            account.accountEpoch &&
+          props.expectedAccountEpoch ===
+            account.accountEpoch
         ) {
           router.replace(
             "/event-run-sheets" as never,

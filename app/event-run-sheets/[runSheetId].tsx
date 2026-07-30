@@ -103,18 +103,33 @@ function goBack(): void {
 export default function EventRunSheetDetailScreen() {
   const {
     user,
+    accountEpoch,
   } =
     useAuth();
+
+  const params =
+    useLocalSearchParams<{
+      runSheetId?:
+        | string
+        | string[];
+    }>();
+
+  const runSheetId =
+    firstParam(
+      params.runSheetId,
+    );
 
   return (
     <EventRunSheetDetailContent
       key={
-        user?.id ??
-        "signed-out"
+        `${user?.id ?? "signed-out"}:${accountEpoch}:${runSheetId}`
       }
       expectedUserId={
         user?.id ??
         ""
+      }
+      expectedAccountEpoch={
+        accountEpoch
       }
     />
   );
@@ -123,10 +138,12 @@ export default function EventRunSheetDetailScreen() {
 function EventRunSheetDetailContent(
   props: {
     expectedUserId: string;
+    expectedAccountEpoch: number;
   },
 ) {
   const {
     user,
+    accountEpoch,
   } =
     useAuth();
 
@@ -256,7 +273,12 @@ function EventRunSheetDetailContent(
 
           const account =
             await captureEventRunSheetAccount(
-              props.expectedUserId,
+              {
+                userId:
+                  props.expectedUserId,
+                accountEpoch:
+                  props.expectedAccountEpoch,
+              },
             );
 
           const next =
@@ -271,11 +293,17 @@ function EventRunSheetDetailContent(
             !eventRunSheetRequestCanCommit({
               expectedUserId:
                 props.expectedUserId,
+              expectedAccountEpoch:
+                props.expectedAccountEpoch,
               activeUserId:
                 user?.id ??
                 null,
+              activeAccountEpoch:
+                accountEpoch,
               accountUserId:
                 account.userId,
+              accountEpoch:
+                account.accountEpoch,
               requestEpoch,
               activeRequestEpoch:
                 requestEpochRef.current,
@@ -359,7 +387,9 @@ function EventRunSheetDetailContent(
         }
       },
       [
+        accountEpoch,
         connectivityStatus,
+        props.expectedAccountEpoch,
         props.expectedUserId,
         runSheetId,
         user?.id,
@@ -464,7 +494,12 @@ function EventRunSheetDetailContent(
 
         const account =
           await captureEventRunSheetAccount(
-            props.expectedUserId,
+            {
+              userId:
+                props.expectedUserId,
+              accountEpoch:
+                props.expectedAccountEpoch,
+            },
           );
 
         const next =
@@ -494,7 +529,11 @@ function EventRunSheetDetailContent(
           user?.id !==
             account.userId ||
           props.expectedUserId !==
-            account.userId
+            account.userId ||
+          accountEpoch !==
+            account.accountEpoch ||
+          props.expectedAccountEpoch !==
+            account.accountEpoch
         ) {
           return;
         }

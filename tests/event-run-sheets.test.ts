@@ -20,6 +20,12 @@ import {
   supabase,
 } from "../lib/supabase";
 
+import {
+  CanalAccountSessionChangedError,
+  assertCanalAccountSessionGuardCurrent,
+  captureCanalAccountSessionGuard,
+} from "../lib/canal-auth";
+
 jest.mock(
   "../lib/supabase",
   () => ({
@@ -35,6 +41,18 @@ jest.mock(
       rpc:
         jest.fn(),
     },
+  }),
+);
+
+jest.mock(
+  "../lib/canal-auth",
+  () => ({
+    CanalAccountSessionChangedError:
+      class CanalAccountSessionChangedError extends Error {},
+    assertCanalAccountSessionGuardCurrent:
+      jest.fn(),
+    captureCanalAccountSessionGuard:
+      jest.fn(),
   }),
 );
 
@@ -72,6 +90,16 @@ const STARTS_AT =
 const mockGetUser =
   jest.mocked(
     supabase.auth.getUser,
+  );
+
+const mockAssertCanalAccountSessionGuardCurrent =
+  jest.mocked(
+    assertCanalAccountSessionGuardCurrent,
+  );
+
+const mockCaptureCanalAccountSessionGuard =
+  jest.mocked(
+    captureCanalAccountSessionGuard,
   );
 
 const mockFrom =
@@ -197,6 +225,7 @@ function createQuery(
 
 function authenticateAs(
   userId: string,
+  accountEpoch = 1,
 ): void {
   mockGetUser.mockResolvedValue(
     {
@@ -210,6 +239,18 @@ function authenticateAs(
         null,
     } as never,
   );
+
+  mockCaptureCanalAccountSessionGuard
+    .mockResolvedValue({
+      userId,
+      epoch:
+        accountEpoch,
+      sessionGeneration:
+        `session:${userId}:${accountEpoch}`,
+    });
+
+  mockAssertCanalAccountSessionGuardCurrent
+    .mockResolvedValue(undefined);
 }
 
 describe(
@@ -803,42 +844,12 @@ describe(
     it(
       "rejects a mutation response after an A-to-B account switch",
       async () => {
-        mockGetUser
+        mockAssertCanalAccountSessionGuardCurrent
           .mockResolvedValueOnce(
-            {
-              data: {
-                user: {
-                  id:
-                    OWNER_ID,
-                },
-              },
-              error:
-                null,
-            } as never,
+            undefined,
           )
-          .mockResolvedValueOnce(
-            {
-              data: {
-                user: {
-                  id:
-                    OWNER_ID,
-                },
-              },
-              error:
-                null,
-            } as never,
-          )
-          .mockResolvedValueOnce(
-            {
-              data: {
-                user: {
-                  id:
-                    NEXT_USER_ID,
-                },
-              },
-              error:
-                null,
-            } as never,
+          .mockRejectedValueOnce(
+            new CanalAccountSessionChangedError(),
           );
 
         mockRpc.mockResolvedValueOnce(
@@ -867,6 +878,58 @@ describe(
         ).rejects.toMatchObject({
           kind:
             "account-changed",
+        });
+      },
+    );
+
+    it(
+      "rejects a same-user response after the account epoch changes",
+      async () => {
+        mockAssertCanalAccountSessionGuardCurrent
+          .mockResolvedValueOnce(
+            undefined,
+          )
+          .mockRejectedValueOnce(
+            new CanalAccountSessionChangedError(),
+          );
+
+        mockRpc.mockResolvedValueOnce(
+          {
+            data:
+              runSheetRow({
+                status:
+                  "running",
+                version:
+                  3,
+                started_at:
+                  "2026-08-01T23:05:00.000Z",
+                source_collection_title:
+                  "Dinner flow",
+              }),
+            error:
+              null,
+          } as never,
+        );
+
+        await expect(
+          startEventRunSheet(
+            RUN_SHEET_ID,
+            2,
+          ),
+        ).rejects.toMatchObject({
+          kind:
+            "account-changed",
+        });
+
+        expect(
+          mockAssertCanalAccountSessionGuardCurrent,
+        ).toHaveBeenLastCalledWith({
+          userId:
+            OWNER_ID,
+          epoch:
+            1,
+          sessionGeneration:
+            `session:${OWNER_ID}:1`,
         });
       },
     );

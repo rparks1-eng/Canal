@@ -42,10 +42,13 @@ export type EventRunSheetMutationLeaseGate =
 export type EventRunSheetRequestGuardInput =
   Readonly<{
     expectedUserId: string;
+    expectedAccountEpoch: number;
     activeUserId:
       | string
       | null;
+    activeAccountEpoch: number;
     accountUserId: string;
+    accountEpoch: number;
     requestEpoch: number;
     activeRequestEpoch: number;
     expectedRunSheetId?:
@@ -71,12 +74,21 @@ export function eventRunSheetRequestCanCommit(
 ): boolean {
   if (
     !input.expectedUserId ||
+    !Number.isSafeInteger(
+      input.expectedAccountEpoch,
+    ) ||
+    input.expectedAccountEpoch <
+      1 ||
     input.requestEpoch !==
       input.activeRequestEpoch ||
     input.activeUserId !==
       input.accountUserId ||
     input.accountUserId !==
-      input.expectedUserId
+      input.expectedUserId ||
+    input.activeAccountEpoch !==
+      input.accountEpoch ||
+    input.accountEpoch !==
+      input.expectedAccountEpoch
   ) {
     return false;
   }
