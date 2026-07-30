@@ -62,6 +62,12 @@ const SPOTIFY_LIBRARY_IMPORT_CHECKPOINT_VERSION =
 const PLAYLIST_IMPORT_CONCURRENCY =
   2;
 
+const MAX_STORED_SPOTIFY_TEXT_LENGTH =
+  500;
+
+const MAX_STORED_SPOTIFY_GENRE_COUNT =
+  24;
+
 type PersistedSpotifyLibraryEnvelope = {
   version: number;
   ownerId: string;
@@ -156,6 +162,7 @@ type SpotifyLibraryImportCheckpoint = {
     number
   >;
   completedPlaylistIds: string[];
+  retryAfterUntil?: number;
   status: SpotifyLibraryImportStatus;
 };
 
@@ -504,8 +511,226 @@ function buildTopGenres(
     .slice(0, 12);
 }
 
+function asRecord(
+  value: unknown,
+): Record<string, unknown> | null {
+  return value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function readStoredText(
+  value: unknown,
+  maximumLength = MAX_STORED_SPOTIFY_TEXT_LENGTH,
+): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized =
+    value.trim();
+
+  return normalized
+    ? normalized.slice(
+        0,
+        maximumLength,
+      )
+    : null;
+}
+
+function readSpotifyIdentifier(
+  value: unknown,
+): string | null {
+  const identifier =
+    readStoredText(
+      value,
+      128,
+    );
+
+  return identifier &&
+    /^[A-Za-z0-9_-]+$/u.test(
+      identifier,
+    )
+    ? identifier
+    : null;
+}
+
+function canonicalSpotifyUri(
+  kind:
+    | "album"
+    | "artist"
+    | "playlist"
+    | "track",
+  identifier: string,
+): string {
+  return `spotify:${kind}:${identifier}`;
+}
+
+function projectSpotifyArtist(
+  value: unknown,
+): SpotifyArtist | null {
+  const candidate =
+    asRecord(value);
+  const id =
+    readSpotifyIdentifier(
+      candidate?.id,
+    );
+  const name =
+    readStoredText(
+      candidate?.name,
+    );
+
+  if (!id || !name) {
+    return null;
+  }
+
+  const genres = Array.isArray(
+    candidate?.genres,
+  )
+    ? Array.from(
+        new Set(
+          candidate.genres
+            .map((genre) =>
+              readStoredText(
+                genre,
+                100,
+              ),
+            )
+            .filter(
+              (genre): genre is string =>
+                Boolean(genre),
+            ),
+        ),
+      ).slice(
+        0,
+        MAX_STORED_SPOTIFY_GENRE_COUNT,
+      )
+    : [];
+
+  return {
+    id,
+    name,
+    uri:
+      canonicalSpotifyUri(
+        "artist",
+        id,
+      ),
+    ...(genres.length > 0
+      ? { genres }
+      : {}),
+  };
+}
+
+function projectSpotifyArtists(
+  values: readonly unknown[],
+): SpotifyArtist[] {
+  const artistsById =
+    new Map<
+      string,
+      SpotifyArtist
+    >();
+
+  for (const value of values) {
+    const artist =
+      projectSpotifyArtist(value);
+
+    if (
+      artist &&
+      !artistsById.has(artist.id)
+    ) {
+      artistsById.set(
+        artist.id,
+        artist,
+      );
+    }
+  }
+
+  return Array.from(
+    artistsById.values(),
+  );
+}
+
+function projectSpotifyTrack(
+  value: unknown,
+): SpotifyTrack | null {
+  const candidate =
+    asRecord(value);
+  const id =
+    readSpotifyIdentifier(
+      candidate?.id,
+    );
+  const name =
+    readStoredText(
+      candidate?.name,
+    );
+  const artists =
+    projectSpotifyArtists(
+      Array.isArray(candidate?.artists)
+        ? candidate.artists
+        : [],
+    );
+
+  if (
+    !id ||
+    !name
+  ) {
+    return null;
+  }
+
+  const albumCandidate =
+    asRecord(candidate?.album);
+  const albumId =
+    readSpotifyIdentifier(
+      albumCandidate?.id,
+    );
+  const albumName =
+    readStoredText(
+      albumCandidate?.name,
+    );
+  const duration =
+    candidate?.duration_ms;
+
+  return {
+    id,
+    name,
+    uri:
+      canonicalSpotifyUri(
+        "track",
+        id,
+      ),
+    ...(typeof duration === "number" &&
+    Number.isSafeInteger(duration) &&
+    duration > 0
+      ? {
+          duration_ms: duration,
+        }
+      : {}),
+    ...(typeof candidate?.explicit === "boolean"
+      ? {
+          explicit: candidate.explicit,
+        }
+      : {}),
+    artists,
+    ...(albumId && albumName
+      ? {
+          album: {
+            id: albumId,
+            name: albumName,
+            uri:
+              canonicalSpotifyUri(
+                "album",
+                albumId,
+              ),
+          },
+        }
+      : {}),
+  };
+}
+
 function deduplicateTracks(
-  tracks: SpotifyTrack[],
+  tracks: readonly unknown[],
 ): SpotifyTrack[] {
   const tracksById =
     new Map<
@@ -513,23 +738,17 @@ function deduplicateTracks(
       SpotifyTrack
     >();
 
-  for (
-    const track of tracks
-  ) {
-    if (!track?.id) {
-      continue;
-    }
+  for (const value of tracks) {
+    const track =
+      projectSpotifyTrack(value);
 
     if (
-      !tracksById.has(
-        track.id,
-      )
+      track &&
+      !tracksById.has(track.id)
     ) {
       tracksById.set(
         track.id,
-        stripTrackImages(
-          track,
-        ),
+        track,
       );
     }
   }
@@ -537,6 +756,153 @@ function deduplicateTracks(
   return Array.from(
     tracksById.values(),
   );
+}
+
+function projectSpotifyPlaylist(
+  value: unknown,
+): SpotifyPlaylist | null {
+  const candidate =
+    asRecord(value);
+  const id =
+    readSpotifyIdentifier(
+      candidate?.id,
+    );
+  const name =
+    readStoredText(
+      candidate?.name,
+    );
+
+  if (!id || !name) {
+    return null;
+  }
+
+  const ownerCandidate =
+    asRecord(candidate?.owner);
+  const ownerId =
+    readSpotifyIdentifier(
+      ownerCandidate?.id,
+    );
+  const ownerName =
+    readStoredText(
+      ownerCandidate?.display_name,
+    );
+  const itemsCandidate =
+    asRecord(candidate?.items);
+  const tracksCandidate =
+    asRecord(candidate?.tracks);
+  const itemCount =
+    itemsCandidate?.total;
+  const trackCount =
+    tracksCandidate?.total;
+
+  return {
+    id,
+    name,
+    uri:
+      canonicalSpotifyUri(
+        "playlist",
+        id,
+      ),
+    ...(typeof candidate?.public === "boolean"
+      ? {
+          public: candidate.public,
+        }
+      : {}),
+    ...(typeof candidate?.collaborative === "boolean"
+      ? {
+          collaborative:
+            candidate.collaborative,
+        }
+      : {}),
+    ...(ownerId
+      ? {
+          owner: {
+            id: ownerId,
+            ...(ownerName
+              ? {
+                  display_name:
+                    ownerName,
+                }
+              : {}),
+            uri:
+              canonicalSpotifyUri(
+                "artist",
+                ownerId,
+              ),
+          },
+        }
+      : {}),
+    ...(typeof itemCount === "number" &&
+    Number.isSafeInteger(itemCount) &&
+    itemCount >= 0
+      ? {
+          items: {
+            total: itemCount,
+          },
+        }
+      : {}),
+    ...(typeof trackCount === "number" &&
+    Number.isSafeInteger(trackCount) &&
+    trackCount >= 0
+      ? {
+          tracks: {
+            total: trackCount,
+          },
+        }
+      : {}),
+  };
+}
+
+function deduplicatePlaylists(
+  playlists: readonly unknown[],
+): SpotifyPlaylist[] {
+  const playlistsById =
+    new Map<
+      string,
+      SpotifyPlaylist
+    >();
+
+  for (const value of playlists) {
+    const playlist =
+      projectSpotifyPlaylist(value);
+
+    if (
+      playlist &&
+      !playlistsById.has(playlist.id)
+    ) {
+      playlistsById.set(
+        playlist.id,
+        playlist,
+      );
+    }
+  }
+
+  return Array.from(
+    playlistsById.values(),
+  );
+}
+
+function projectSpotifyProfile(
+  value: unknown,
+): SpotifyProfile | null {
+  const candidate =
+    asRecord(value);
+  const id =
+    readSpotifyIdentifier(
+      candidate?.id,
+    );
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    display_name:
+      readStoredText(
+        candidate?.display_name,
+      ),
+  };
 }
 
 function createImportSourceStatus(): SpotifyLibraryImportSourceStatus {
@@ -578,6 +944,12 @@ function normalizeImportSourceStatus(
     candidate.state;
   const importedCount =
     candidate.importedCount;
+  const message =
+    candidate.message === undefined
+      ? undefined
+      : readStoredText(
+          candidate.message,
+        );
 
   if (
     ![
@@ -601,7 +973,7 @@ function normalizeImportSourceStatus(
     ) ||
     (
       candidate.message !== undefined &&
-      typeof candidate.message !== "string"
+      !message
     )
   ) {
     return null;
@@ -616,10 +988,9 @@ function normalizeImportSourceStatus(
             candidate.totalCount,
         }
       : {}),
-    ...(candidate.message
+    ...(message
       ? {
-          message:
-            candidate.message,
+          message,
         }
       : {}),
   };
@@ -664,28 +1035,41 @@ function normalizeImportStatus(
   }
 
   const skippedPlaylists =
-    candidate.skippedPlaylists.filter(
-      (item): item is SpotifySkippedPlaylist =>
-        Boolean(
-          item &&
-            typeof item === "object" &&
-            typeof (item as SpotifySkippedPlaylist)
-              .playlistId === "string" &&
-            typeof (item as SpotifySkippedPlaylist)
-              .name === "string" &&
-            [
-              "followed-playlist",
-              "inaccessible",
-            ].includes(
-              (item as SpotifySkippedPlaylist)
-                .reason,
-            ),
-        ),
+    candidate.skippedPlaylists.map(
+      (item): SpotifySkippedPlaylist | null => {
+        const skipped =
+          asRecord(item);
+        const playlistId =
+          readSpotifyIdentifier(
+            skipped?.playlistId,
+          );
+        const name =
+          readStoredText(
+            skipped?.name,
+          );
+        const reason =
+          skipped?.reason;
+
+        return playlistId &&
+          name &&
+          (
+            reason === "followed-playlist" ||
+            reason === "inaccessible"
+          )
+          ? {
+              playlistId,
+              name,
+              reason,
+            }
+          : null;
+      },
     );
 
   if (
-    skippedPlaylists.length !==
-    candidate.skippedPlaylists.length
+    skippedPlaylists.some(
+      (playlist) =>
+        playlist === null,
+    )
   ) {
     return null;
   }
@@ -696,7 +1080,8 @@ function normalizeImportStatus(
     savedTracks,
     playlists,
     playlistTracks,
-    skippedPlaylists,
+    skippedPlaylists:
+      skippedPlaylists as SpotifySkippedPlaylist[],
   };
 }
 
@@ -718,6 +1103,73 @@ function safeImportMessage(
   }
 
   return "Canal could not finish this source. Your completed progress is ready to resume.";
+}
+
+function retryAfterUntilForError(
+  error: unknown,
+): number | undefined {
+  if (
+    !(
+      error instanceof SpotifyApiError &&
+      error.status === 429 &&
+      typeof error.retryAfterSeconds === "number" &&
+      Number.isFinite(
+        error.retryAfterSeconds,
+      ) &&
+      error.retryAfterSeconds > 0
+    )
+  ) {
+    return undefined;
+  }
+
+  const retryAfterUntil =
+    Date.now() +
+    Math.ceil(
+      error.retryAfterSeconds * 1000,
+    );
+
+  return Number.isSafeInteger(
+    retryAfterUntil,
+  )
+    ? retryAfterUntil
+    : undefined;
+}
+
+function throwIfImportRetryWindowActive(
+  checkpoint: SpotifyLibraryImportCheckpoint,
+): void {
+  if (
+    checkpoint.retryAfterUntil === undefined
+  ) {
+    return;
+  }
+
+  const retryAfterSeconds =
+    Math.max(
+      0,
+      Math.ceil(
+        (
+          checkpoint.retryAfterUntil -
+          Date.now()
+        ) /
+          1000,
+      ),
+    );
+
+  if (retryAfterSeconds === 0) {
+    delete checkpoint.retryAfterUntil;
+
+    return;
+  }
+
+  throw new SpotifyLibraryImportIncompleteError(
+    checkpoint.status,
+    new SpotifyApiError(
+      "Spotify asked Canal to pause this import.",
+      429,
+      retryAfterSeconds,
+    ),
+  );
 }
 
 function isPlaylistItemAccessAllowed(
@@ -841,6 +1293,13 @@ function normalizeImportCheckpoint(
     !candidate.playlistTrackOffsets ||
     typeof candidate.playlistTrackOffsets !== "object" ||
     typeof candidate.createdAt !== "string" ||
+    (
+      candidate.retryAfterUntil !== undefined &&
+      (!Number.isSafeInteger(
+        candidate.retryAfterUntil,
+      ) ||
+        candidate.retryAfterUntil < 0)
+    ) ||
     !status
   ) {
     return null;
@@ -891,7 +1350,9 @@ function normalizeImportCheckpoint(
         candidate.savedTracks,
       ),
     playlists:
-      candidate.playlists,
+      deduplicatePlaylists(
+        candidate.playlists,
+      ),
     playlistTracks:
       deduplicateTracks(
         candidate.playlistTracks,
@@ -901,34 +1362,24 @@ function normalizeImportCheckpoint(
       Array.from(
         new Set(
           candidate.completedPlaylistIds.filter(
-            (playlistId): playlistId is string =>
-              typeof playlistId === "string" &&
-              Boolean(playlistId),
+            (
+              playlistId,
+            ): playlistId is string =>
+              Boolean(
+                readSpotifyIdentifier(
+                  playlistId,
+                ),
+              ),
           ),
         ),
       ),
+    ...(candidate.retryAfterUntil !== undefined
+      ? {
+          retryAfterUntil:
+            candidate.retryAfterUntil,
+        }
+      : {}),
     status,
-  };
-}
-
-function stripTrackImages(
-  track: SpotifyTrack,
-): SpotifyTrack {
-  if (!track.album) {
-    return track;
-  }
-
-  const {
-    images:
-      _images,
-    ...albumWithoutImages
-  } =
-    track.album;
-
-  return {
-    ...track,
-    album:
-      albumWithoutImages,
   };
 }
 
@@ -1177,6 +1628,10 @@ async function writeSpotifyLibrarySnapshot(
 
   const guardedSession =
     await readGuardedSpotifySession();
+  const persistedSnapshot =
+    normalizeSpotifyLibrarySnapshot(
+      snapshot,
+    );
 
   if (
     options.operationCommitGuard &&
@@ -1193,9 +1648,10 @@ async function writeSpotifyLibrarySnapshot(
 
   const ownershipChanged =
     !guardedSession ||
+    !persistedSnapshot ||
     !connectionGuard ||
     guardedSession.session.profile.id !==
-      snapshot.profile.id ||
+      persistedSnapshot.profile.id ||
     (
       options.expectedConnectionGeneration !==
         undefined &&
@@ -1222,9 +1678,10 @@ async function writeSpotifyLibrarySnapshot(
             connectionGuard.canalOwnerId,
           accountGeneration:
             connectionGuard.canalAccountGeneration,
-          snapshot,
+          snapshot:
+            persistedSnapshot,
         } satisfies PersistedSpotifyLibraryEnvelope
-      : snapshot;
+      : persistedSnapshot;
 
   const serialized =
     JSON.stringify(
@@ -1317,121 +1774,179 @@ export async function saveSpotifyLibrarySnapshot(
   );
 }
 
+function projectTopGenres(
+  value: unknown,
+): SpotifyGenreSignal[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((genre): SpotifyGenreSignal | null => {
+      const candidate =
+        asRecord(genre);
+      const name =
+        readStoredText(
+          candidate?.name,
+          100,
+        );
+      const count =
+        candidate?.count;
+
+      return name &&
+        typeof count === "number" &&
+        Number.isSafeInteger(count) &&
+        count >= 0
+        ? {
+            name,
+            count,
+          }
+        : null;
+    })
+    .filter(
+      (genre): genre is SpotifyGenreSignal =>
+        genre !== null,
+    )
+    .slice(0, 12);
+}
+
+function projectTrackGenres(
+  value: unknown,
+): Record<string, string[]> {
+  const candidate =
+    asRecord(value);
+
+  if (!candidate) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(candidate)
+      .flatMap(
+        ([trackId, genres]) => {
+          const id =
+            readSpotifyIdentifier(trackId);
+
+          if (!id || !Array.isArray(genres)) {
+            return [];
+          }
+
+          const safeGenres =
+            Array.from(
+              new Set(
+                genres
+                  .map((genre) =>
+                    readStoredText(
+                      genre,
+                      100,
+                    ),
+                  )
+                  .filter(
+                    (genre): genre is string =>
+                      Boolean(genre),
+                  ),
+              ),
+            ).slice(
+              0,
+              MAX_STORED_SPOTIFY_GENRE_COUNT,
+            );
+
+          return safeGenres.length > 0
+            ? [[id, safeGenres] as const]
+            : [];
+        },
+      ),
+  );
+}
+
 function normalizeSpotifyLibrarySnapshot(
   value: unknown,
 ): SpotifyLibrarySnapshot | null {
-  if (
-    !value ||
-    typeof value !==
-      "object"
-  ) {
-    return null;
-  }
-
   const parsed =
-    value as
-      Partial<SpotifyLibrarySnapshot>;
+    asRecord(value);
+  const profile =
+    projectSpotifyProfile(
+      parsed?.profile,
+    );
+  const syncedAt =
+    readStoredText(
+      parsed?.syncedAt,
+      64,
+    );
 
-  if (
-    !parsed.profile ||
-    typeof parsed.profile.id !==
-      "string" ||
-    typeof parsed.syncedAt !==
-      "string"
-  ) {
+  if (!profile || !syncedAt) {
     return null;
   }
 
   return {
-    syncedAt:
-      parsed.syncedAt,
-
-    profile:
-      parsed.profile,
-
+    syncedAt,
+    profile,
     topArtists:
-      Array.isArray(
-        parsed.topArtists,
-      )
-        ? parsed.topArtists
-        : [],
-
+      projectSpotifyArtists(
+        Array.isArray(parsed?.topArtists)
+          ? parsed.topArtists
+          : [],
+      ),
     topTracks:
-      Array.isArray(
-        parsed.topTracks,
-      )
-        ? deduplicateTracks(
-            parsed.topTracks,
-          )
-        : [],
-
+      deduplicateTracks(
+        Array.isArray(parsed?.topTracks)
+          ? parsed.topTracks
+          : [],
+      ),
     recentTracks:
-      Array.isArray(
-        parsed.recentTracks,
-      )
-        ? deduplicateTracks(
-            parsed.recentTracks,
-          )
-        : [],
-
+      deduplicateTracks(
+        Array.isArray(parsed?.recentTracks)
+          ? parsed.recentTracks
+          : [],
+      ),
     savedTracks:
-      Array.isArray(
-        parsed.savedTracks,
-      )
-        ? deduplicateTracks(
-            parsed.savedTracks,
-          )
-        : [],
-
+      deduplicateTracks(
+        Array.isArray(parsed?.savedTracks)
+          ? parsed.savedTracks
+          : [],
+      ),
     playlistTracks:
-      Array.isArray(
-        parsed.playlistTracks,
-      )
-        ? deduplicateTracks(
-            parsed.playlistTracks,
-          )
-        : [],
-
+      deduplicateTracks(
+        Array.isArray(parsed?.playlistTracks)
+          ? parsed.playlistTracks
+          : [],
+      ),
     discoveryTracks:
-      Array.isArray(
-        parsed.discoveryTracks,
-      )
-        ? deduplicateTracks(
-            parsed.discoveryTracks,
-          )
-        : [],
-
+      deduplicateTracks(
+        Array.isArray(parsed?.discoveryTracks)
+          ? parsed.discoveryTracks
+          : [],
+      ),
     playlists:
-      Array.isArray(
-        parsed.playlists,
-      )
-        ? parsed.playlists
-        : [],
-
+      deduplicatePlaylists(
+        Array.isArray(parsed?.playlists)
+          ? parsed.playlists
+          : [],
+      ),
     topGenres:
-      Array.isArray(
-        parsed.topGenres,
-      )
-        ? parsed.topGenres
-        : [],
-
+      projectTopGenres(
+        parsed?.topGenres,
+      ),
     trackGenres:
-      parsed.trackGenres &&
-      typeof parsed.trackGenres ===
-        "object"
-        ? parsed.trackGenres
-        : {},
-
+      projectTrackGenres(
+        parsed?.trackGenres,
+      ),
     warnings:
-      Array.isArray(
-        parsed.warnings,
-      )
+      Array.isArray(parsed?.warnings)
         ? parsed.warnings
+            .map((warning) =>
+              readStoredText(
+                warning,
+              ),
+            )
+            .filter(
+              (warning): warning is string =>
+                Boolean(warning),
+            )
         : [],
-
     importStatus:
       normalizeImportStatus(
-        parsed.importStatus,
+        parsed?.importStatus,
       ) ??
       // Older snapshots were produced by the bounded taste sync. They remain
       // readable offline, but must never be presented as a completed
@@ -1960,6 +2475,16 @@ async function markImportSourceFailed(
   cacheScope: SpotifyCacheScope,
   options: SpotifyLibraryOperationOptions,
 ): Promise<never> {
+  const retryAfterUntil =
+    retryAfterUntilForError(error);
+
+  if (retryAfterUntil !== undefined) {
+    checkpoint.retryAfterUntil =
+      retryAfterUntil;
+  } else {
+    delete checkpoint.retryAfterUntil;
+  }
+
   checkpoint.status[source] = {
     ...checkpoint.status[source],
     state:
@@ -2094,6 +2619,10 @@ async function performSpotifyLibraryFullSync(
     checkpoint.savedTrackOffset > 0 ||
     checkpoint.playlistOffset > 0 ||
     checkpoint.completedPlaylistIds.length > 0;
+
+  throwIfImportRetryWindowActive(
+    checkpoint,
+  );
 
   const metadataResults =
     Promise.allSettled([
@@ -2255,10 +2784,15 @@ async function performSpotifyLibraryFullSync(
           for (
             const playlist of page.items
           ) {
-            if (playlist?.id) {
-              playlistsById.set(
-                playlist.id,
+            const persistedPlaylist =
+              projectSpotifyPlaylist(
                 playlist,
+              );
+
+            if (persistedPlaylist) {
+              playlistsById.set(
+                persistedPlaylist.id,
+                persistedPlaylist,
               );
             }
           }
@@ -2371,7 +2905,11 @@ async function performSpotifyLibraryFullSync(
             );
             checkpoint.status.skippedPlaylists.push({
               playlistId: playlist.id,
-              name: playlist.name,
+              name:
+                readStoredText(
+                  playlist.name,
+                ) ??
+                "Spotify playlist",
               reason: "followed-playlist",
             });
             checkpoint.status.playlistTracks = {
@@ -2473,7 +3011,11 @@ async function performSpotifyLibraryFullSync(
               );
               checkpoint.status.skippedPlaylists.push({
                 playlistId: playlist.id,
-                name: playlist.name,
+                name:
+                  readStoredText(
+                    playlist.name,
+                  ) ??
+                  "Spotify playlist",
                 reason: "inaccessible",
               });
               await checkpointImportProgress(
@@ -2552,18 +3094,34 @@ async function performSpotifyLibraryFullSync(
   const warnings: string[] = [];
   const topArtists =
     topArtistsResult.status === "fulfilled"
-      ? topArtistsResult.value.items
+      ? projectSpotifyArtists(
+          topArtistsResult.value.items,
+        )
       : [];
   const topTracks =
     topTracksResult.status === "fulfilled"
-      ? topTracksResult.value.items
+      ? deduplicateTracks(
+          topTracksResult.value.items,
+        )
       : [];
   const recentTracks =
     recentResult.status === "fulfilled"
-      ? recentResult.value.items.map(
-          (item) => item.track,
+      ? deduplicateTracks(
+          recentResult.value.items.map(
+            (item) => item.track,
+          ),
         )
       : [];
+  const profile =
+    projectSpotifyProfile(
+      syncSession.profile,
+    );
+
+  if (!profile) {
+    throw new Error(
+      "Spotify returned an invalid profile for this import.",
+    );
+  }
 
   if (topArtistsResult.status === "rejected") {
     warnings.push(
@@ -2633,7 +3191,7 @@ async function performSpotifyLibraryFullSync(
   const snapshot: SpotifyLibrarySnapshot = {
     syncedAt:
       new Date().toISOString(),
-    profile: syncSession.profile,
+    profile,
     topArtists,
     topTracks:
       deduplicateTracks(topTracks),

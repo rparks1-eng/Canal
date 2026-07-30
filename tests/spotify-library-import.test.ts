@@ -1,8 +1,10 @@
 import {
+  mockAsyncStorage,
   mockStorage,
 } from "./helpers/async-storage-mock";
 
 import {
+  mockSecureStore,
   mockSecureValues,
 } from "./helpers/secure-store-mock";
 
@@ -128,6 +130,158 @@ function track(index: number) {
       },
     ],
   };
+}
+
+function adversarialTrack(index: number) {
+  return {
+    ...track(index),
+    href:
+      `https://api.spotify.com/v1/tracks/${index}`,
+    preview_url:
+      `https://audio.example/preview-${index}.mp3`,
+    external_urls: {
+      spotify:
+        `https://open.spotify.com/track/${index}`,
+    },
+    authorization:
+      `Bearer forbidden-${index}`,
+    headers: {
+      authorization:
+        `Bearer forbidden-${index}`,
+    },
+    nestedUnknownProviderPayload: {
+      token:
+        `forbidden-token-${index}`,
+    },
+    album: {
+      id: `album-${index}`,
+      name: `Album ${index}`,
+      uri:
+        `spotify:album:${index}`,
+      images: [
+        {
+          url:
+            `https://images.example/album-${index}.jpg`,
+        },
+      ],
+      external_urls: {
+        spotify:
+          `https://open.spotify.com/album/${index}`,
+      },
+    },
+    artists: [
+      {
+        id: "artist-1",
+        name: "Artist",
+        uri: "spotify:artist:1",
+        href:
+          "https://api.spotify.com/v1/artists/artist-1",
+        external_urls: {
+          spotify:
+            "https://open.spotify.com/artist/artist-1",
+        },
+      },
+    ],
+  };
+}
+
+function collectObjectKeys(
+  value: unknown,
+  keys: string[] = [],
+): string[] {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectObjectKeys(
+        item,
+        keys,
+      );
+    }
+
+    return keys;
+  }
+
+  if (
+    value &&
+    typeof value === "object"
+  ) {
+    for (
+      const [key, nestedValue] of Object.entries(
+        value,
+      )
+    ) {
+      keys.push(key);
+      collectObjectKeys(
+        nestedValue,
+        keys,
+      );
+    }
+  }
+
+  return keys;
+}
+
+function collectStringValues(
+  value: unknown,
+  values: string[] = [],
+): string[] {
+  if (typeof value === "string") {
+    values.push(value);
+
+    return values;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectStringValues(
+        item,
+        values,
+      );
+    }
+
+    return values;
+  }
+
+  if (
+    value &&
+    typeof value === "object"
+  ) {
+    for (const nestedValue of Object.values(value)) {
+      collectStringValues(
+        nestedValue,
+        values,
+      );
+    }
+  }
+
+  return values;
+}
+
+function expectPersistedLibraryDataToBeSafe(
+  value: unknown,
+): void {
+  expect(
+    collectObjectKeys(value),
+  ).not.toEqual(
+    expect.arrayContaining([
+      "accessToken",
+      "authorization",
+      "external_urls",
+      "headers",
+      "href",
+      "images",
+      "nestedUnknownProviderPayload",
+      "preview_url",
+      "refreshToken",
+      "token",
+      "url",
+    ]),
+  );
+
+  expect(
+    collectStringValues(value).join("\n"),
+  ).not.toMatch(
+    /audio\.example|forbidden-|images\.example|open\.spotify\.com|api\.spotify\.com/u,
+  );
 }
 
 function snapshot(
@@ -555,6 +709,222 @@ describe(
     );
 
     it(
+      "persists only allowlisted Spotify metadata in snapshots and resumable checkpoints",
+      async () => {
+        let now = Date.now();
+        jest
+          .spyOn(Date, "now")
+          .mockImplementation(() => now);
+
+        await saveSpotifySession(
+          session("spotify-a"),
+          { syncLibrary: false },
+        );
+
+        const rawPlaylist = {
+          id: "playlist-1",
+          name: "Private playlist",
+          uri: "spotify:playlist:playlist-1",
+          description: "not needed for import storage",
+          external_urls: {
+            spotify:
+              "https://open.spotify.com/playlist/playlist-1",
+          },
+          href:
+            "https://api.spotify.com/v1/playlists/playlist-1",
+          images: [
+            {
+              url:
+                "https://images.example/playlist-1.jpg",
+            },
+          ],
+          owner: {
+            id: "spotify-a",
+            display_name: "Owner",
+            href:
+              "https://api.spotify.com/v1/users/spotify-a",
+          },
+          items: {
+            total: 1,
+          },
+          arbitraryProviderField: {
+            accessToken: "forbidden-playlist-token",
+          },
+        };
+        const rawArtist = {
+          id: "artist-1",
+          name: "Artist",
+          uri: "spotify:artist:artist-1",
+          genres: ["electronic"],
+          images: [
+            {
+              url:
+                "https://images.example/artist-1.jpg",
+            },
+          ],
+          external_urls: {
+            spotify:
+              "https://open.spotify.com/artist/artist-1",
+          },
+          unknownProviderField: "forbidden-artist",
+        };
+        const progress: unknown[] = [];
+        const checkpointProgress: unknown[] = [];
+        let writeCheckpoint = false;
+
+        jest.spyOn(global, "fetch").mockImplementation(
+          async (input) => {
+            const url = String(input);
+
+            if (url.includes("/me/top/artists")) {
+              return response(200, {
+                items: [rawArtist],
+              });
+            }
+
+            if (url.includes("/me/top/tracks")) {
+              return response(200, {
+                items: [adversarialTrack(1)],
+              });
+            }
+
+            if (url.includes("/recently-played")) {
+              return response(200, {
+                items: [
+                  {
+                    track: adversarialTrack(2),
+                  },
+                ],
+              });
+            }
+
+            if (url.includes("/me/tracks")) {
+              const offset =
+                urlOffset(url);
+
+              if (
+                writeCheckpoint &&
+                offset === 1
+              ) {
+                return response(
+                  429,
+                  {
+                    error: {
+                      status: 429,
+                    },
+                  },
+                  { "retry-after": "60" },
+                );
+              }
+
+              return response(200, {
+                items: [
+                  {
+                    track:
+                      adversarialTrack(
+                        writeCheckpoint
+                          ? 4
+                          : 3,
+                      ),
+                  },
+                ],
+                offset,
+                total:
+                  writeCheckpoint
+                    ? 2
+                    : 1,
+                next:
+                  writeCheckpoint &&
+                  offset === 0
+                    ? "https://api.spotify.com/v1/me/tracks?limit=50&offset=1"
+                    : null,
+              });
+            }
+
+            if (url.includes("/me/playlists")) {
+              return response(200, {
+                items: [rawPlaylist],
+                offset: 0,
+                total: 1,
+                next: null,
+              });
+            }
+
+            if (
+              url.includes(
+                "/playlists/playlist-1/items",
+              )
+            ) {
+              return response(200, {
+                items: [
+                  {
+                    track: adversarialTrack(5),
+                  },
+                ],
+                offset: 0,
+                total: 1,
+                next: null,
+              });
+            }
+
+            throw new Error(
+              `Unexpected URL: ${url}`,
+            );
+          },
+        );
+
+        const imported =
+          await syncSpotifyLibrary({
+            onProgress: (value) => {
+              progress.push(value);
+            },
+          });
+        const persisted =
+          await readSpotifyLibrarySnapshot();
+
+        expectPersistedLibraryDataToBeSafe({
+          imported,
+          persisted,
+          progress,
+        });
+
+        now += 61_000;
+        writeCheckpoint = true;
+
+        await expect(
+          syncSpotifyLibrary({
+            onProgress: (value) => {
+              checkpointProgress.push(value);
+            },
+          }),
+        ).rejects.toBeInstanceOf(
+          SpotifyLibraryImportIncompleteError,
+        );
+
+        const persistedLibraryRecords =
+          Array.from(
+            mockStorage.entries(),
+          )
+            .filter(([key]) =>
+              key.includes("spotify-library"),
+            )
+            .map(([, value]) =>
+              JSON.parse(value) as unknown,
+            );
+
+        expect(
+          persistedLibraryRecords.length,
+        ).toBeGreaterThan(1);
+        expectPersistedLibraryDataToBeSafe(
+          {
+            checkpointProgress,
+            persistedLibraryRecords,
+          },
+        );
+      },
+    );
+
+    it(
       "keeps a legacy partial snapshot available offline without calling it complete",
       async () => {
         await saveSpotifySession(
@@ -916,6 +1286,163 @@ describe(
         expect(savedOffsets).toEqual([
           0,
           50,
+        ]);
+      },
+    );
+
+    it(
+      "honors a persisted Retry-After checkpoint after a cold module reload",
+      async () => {
+        let now = Date.now();
+        let rateLimited = true;
+        const savedOffsets: number[] = [];
+        let fetchCount = 0;
+
+        jest
+          .spyOn(Date, "now")
+          .mockImplementation(() => now);
+
+        await saveSpotifySession(
+          session("spotify-a"),
+          { syncLibrary: false },
+        );
+
+        jest
+          .spyOn(global, "fetch")
+          .mockImplementation(
+              async (input) => {
+                fetchCount += 1;
+                const url = String(input);
+
+                if (
+                  url.includes("/me/top/") ||
+                  url.includes("/recently-played")
+                ) {
+                  return response(200, {
+                    items: [],
+                  });
+                }
+
+                if (url.includes("/me/tracks")) {
+                  const offset =
+                    urlOffset(url);
+                  savedOffsets.push(offset);
+
+                  if (rateLimited) {
+                    return response(
+                      429,
+                      {
+                        error: {
+                          status: 429,
+                        },
+                      },
+                      { "retry-after": "60" },
+                    );
+                  }
+
+                  return response(200, {
+                    items: [
+                      {
+                        track: track(1),
+                      },
+                    ],
+                    offset,
+                    total: 1,
+                    next: null,
+                  });
+                }
+
+                if (url.includes("/me/playlists")) {
+                  return response(200, {
+                    items: [],
+                    offset: 0,
+                    total: 0,
+                    next: null,
+                  });
+                }
+
+                throw new Error(
+                  `Unexpected URL: ${url}`,
+                );
+              },
+            );
+
+        await expect(
+          syncSpotifyLibrary(),
+        ).rejects.toMatchObject({
+          status: 429,
+          retryAfterSeconds: 60,
+        });
+
+        const requestCountBeforeReload =
+          fetchCount;
+
+        jest.resetModules();
+        jest.doMock(
+          "@react-native-async-storage/async-storage",
+          () => ({
+            __esModule: true,
+            default: mockAsyncStorage,
+          }),
+        );
+        jest.doMock(
+          "expo-secure-store",
+          () => ({
+            __esModule: true,
+            ...mockSecureStore,
+          }),
+        );
+        jest.doMock(
+          "../lib/supabase",
+          () => ({
+            get isSupabaseConfigured() {
+              return true;
+            },
+            supabase: {
+              auth: {
+                getSession: jest.fn(
+                  async () =>
+                    mockCanalSession(),
+                ),
+              },
+            },
+          }),
+        );
+
+        const {
+          syncSpotifyLibrary: coldSyncSpotifyLibrary,
+        } = require(
+          "../lib/spotify-library",
+        ) as typeof import("../lib/spotify-library");
+
+        await expect(
+          coldSyncSpotifyLibrary(),
+        ).rejects.toMatchObject({
+          status: 429,
+          retryAfterSeconds: 60,
+        });
+        expect(
+          fetchCount,
+        ).toBe(requestCountBeforeReload);
+
+        now += 60_001;
+        rateLimited = false;
+
+        await expect(
+          coldSyncSpotifyLibrary(),
+        ).resolves.toMatchObject({
+          savedTracks: [
+            {
+              id: "track-1",
+            },
+          ],
+          importStatus: {
+            state: "complete",
+          },
+        });
+        expect(savedOffsets).toEqual([
+          0,
+          0,
         ]);
       },
     );
