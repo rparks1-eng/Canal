@@ -3,11 +3,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   addSpotifyItemsToPlaylist,
   createSpotifyPlaylist,
-  getSpotifyPlaylists,
+  getAllSpotifyPlaylistTracks,
+  getAllSpotifyPlaylists,
+  getAllSpotifySavedTracks,
   getSpotifyRecentlyPlayed,
-  getSpotifySavedTracks,
   getSpotifyTopArtists,
   getSpotifyTopTracks,
+  SpotifyApiError,
 } from "./spotify-api";
 
 import type {
@@ -17,12 +19,15 @@ import type {
 } from "./spotify-api";
 
 import type {
+  SpotifyCacheScope,
   SpotifyConnectionGuard,
   SpotifyProfile,
 } from "./spotify-auth";
 
 import {
+  assertSpotifyCacheScopeCurrent,
   assertSpotifyConnectionGuardCurrent,
+  captureSpotifyCacheScope,
   getSpotifyConnectionGeneration,
   isSpotifyConnectionGuardCurrent,
   readGuardedSpotifySession,
@@ -45,7 +50,16 @@ import {
 export const SPOTIFY_LIBRARY_STORAGE_KEY =
   STORAGE_KEYS.spotifyLibrarySnapshot;
 
+export const SPOTIFY_LIBRARY_IMPORT_CHECKPOINT_STORAGE_KEY =
+  STORAGE_KEYS.spotifyLibraryImportCheckpoint;
+
 const SPOTIFY_LIBRARY_ENVELOPE_VERSION =
+  2;
+
+const SPOTIFY_LIBRARY_IMPORT_CHECKPOINT_VERSION =
+  1;
+
+const PLAYLIST_IMPORT_CONCURRENCY =
   2;
 
 type PersistedSpotifyLibraryEnvelope = {
@@ -59,6 +73,50 @@ type PersistedSpotifyLibraryEnvelope = {
 export type SpotifyGenreSignal = {
   name: string;
   count: number;
+};
+
+export type SpotifyLibraryImportSourceStatus = {
+  state:
+    | "pending"
+    | "importing"
+    | "complete"
+    | "partial"
+    | "failed";
+  importedCount: number;
+  totalCount?: number;
+  message?: string;
+};
+
+export type SpotifySkippedPlaylist = {
+  playlistId: string;
+  name: string;
+  reason:
+    | "followed-playlist"
+    | "inaccessible";
+};
+
+export type SpotifyLibraryImportStatus = {
+  state:
+    | "complete"
+    | "incomplete";
+  resumed: boolean;
+  savedTracks:
+    SpotifyLibraryImportSourceStatus;
+  playlists:
+    SpotifyLibraryImportSourceStatus;
+  playlistTracks:
+    SpotifyLibraryImportSourceStatus;
+  skippedPlaylists:
+    SpotifySkippedPlaylist[];
+};
+
+export type SpotifyLibraryImportProgress = {
+  phase:
+    | "saved-tracks"
+    | "playlists"
+    | "playlist-items"
+    | "complete";
+  status: SpotifyLibraryImportStatus;
 };
 
 export type SpotifyLibrarySnapshot = {
@@ -77,6 +135,28 @@ export type SpotifyLibrarySnapshot = {
     string[]
   >;
   warnings: string[];
+  importStatus?:
+    SpotifyLibraryImportStatus;
+};
+
+type SpotifyLibraryImportCheckpoint = {
+  version: number;
+  ownerId: string;
+  sessionGeneration: string;
+  spotifyAccountGeneration: number;
+  profileId: string;
+  createdAt: string;
+  savedTrackOffset: number;
+  playlistOffset: number;
+  savedTracks: SpotifyTrack[];
+  playlists: SpotifyPlaylist[];
+  playlistTracks: SpotifyTrack[];
+  playlistTrackOffsets: Record<
+    string,
+    number
+  >;
+  completedPlaylistIds: string[];
+  status: SpotifyLibraryImportStatus;
 };
 
 export type SpotifyPlaylistExportResult = {
@@ -91,9 +171,12 @@ export type LatestSpotifyLibraryResult = {
   issue?: RecoveryIssue;
 };
 
-type SpotifyLibraryOperationOptions = {
+export type SpotifyLibraryOperationOptions = {
   operationCommitGuard?:
     () => boolean;
+  onProgress?: (
+    progress: SpotifyLibraryImportProgress,
+  ) => void;
 };
 
 const DEFAULT_LIBRARY_MAX_AGE_MS =
@@ -189,6 +272,36 @@ class SpotifyLibraryCooldownError extends Error {
         "Spotify quota reached"
         ? "QUOTA_EXCEEDED"
         : undefined;
+  }
+}
+
+export class SpotifyLibraryImportIncompleteError extends Error {
+  status?: number;
+  retryAfterSeconds?: number;
+  reason?: string;
+  importStatus: SpotifyLibraryImportStatus;
+
+  constructor(
+    importStatus: SpotifyLibraryImportStatus,
+    cause: unknown,
+  ) {
+    super(
+      "Spotify import is incomplete. Resume it when the current connection is ready.",
+    );
+
+    this.name =
+      "SpotifyLibraryImportIncompleteError";
+    this.importStatus =
+      importStatus;
+
+    if (
+      cause instanceof SpotifyApiError
+    ) {
+      this.status = cause.status;
+      this.retryAfterSeconds =
+        cause.retryAfterSeconds;
+      this.reason = cause.reason;
+    }
   }
 }
 
@@ -426,6 +539,378 @@ function deduplicateTracks(
   );
 }
 
+function createImportSourceStatus(): SpotifyLibraryImportSourceStatus {
+  return {
+    state: "pending",
+    importedCount: 0,
+  };
+}
+
+function createImportStatus(
+  resumed = false,
+): SpotifyLibraryImportStatus {
+  return {
+    state: "incomplete",
+    resumed,
+    savedTracks:
+      createImportSourceStatus(),
+    playlists:
+      createImportSourceStatus(),
+    playlistTracks:
+      createImportSourceStatus(),
+    skippedPlaylists: [],
+  };
+}
+
+function normalizeImportSourceStatus(
+  value: unknown,
+): SpotifyLibraryImportSourceStatus | null {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return null;
+  }
+
+  const candidate =
+    value as Partial<SpotifyLibraryImportSourceStatus>;
+  const state =
+    candidate.state;
+  const importedCount =
+    candidate.importedCount;
+
+  if (
+    ![
+      "pending",
+      "importing",
+      "complete",
+      "partial",
+      "failed",
+    ].includes(
+      state ?? "",
+    ) ||
+    !Number.isSafeInteger(
+      importedCount,
+    ) ||
+    importedCount === undefined ||
+    importedCount < 0 ||
+    (
+      candidate.totalCount !== undefined &&
+      (!Number.isSafeInteger(candidate.totalCount) ||
+        candidate.totalCount < 0)
+    ) ||
+    (
+      candidate.message !== undefined &&
+      typeof candidate.message !== "string"
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    state: state as SpotifyLibraryImportSourceStatus["state"],
+    importedCount,
+    ...(candidate.totalCount !== undefined
+      ? {
+          totalCount:
+            candidate.totalCount,
+        }
+      : {}),
+    ...(candidate.message
+      ? {
+          message:
+            candidate.message,
+        }
+      : {}),
+  };
+}
+
+function normalizeImportStatus(
+  value: unknown,
+): SpotifyLibraryImportStatus | null {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return null;
+  }
+
+  const candidate =
+    value as Partial<SpotifyLibraryImportStatus>;
+
+  const savedTracks =
+    normalizeImportSourceStatus(
+      candidate.savedTracks,
+    );
+  const playlists =
+    normalizeImportSourceStatus(
+      candidate.playlists,
+    );
+  const playlistTracks =
+    normalizeImportSourceStatus(
+      candidate.playlistTracks,
+    );
+
+  if (
+    (candidate.state !== "complete" &&
+      candidate.state !== "incomplete") ||
+    typeof candidate.resumed !== "boolean" ||
+    !savedTracks ||
+    !playlists ||
+    !playlistTracks ||
+    !Array.isArray(candidate.skippedPlaylists)
+  ) {
+    return null;
+  }
+
+  const skippedPlaylists =
+    candidate.skippedPlaylists.filter(
+      (item): item is SpotifySkippedPlaylist =>
+        Boolean(
+          item &&
+            typeof item === "object" &&
+            typeof (item as SpotifySkippedPlaylist)
+              .playlistId === "string" &&
+            typeof (item as SpotifySkippedPlaylist)
+              .name === "string" &&
+            [
+              "followed-playlist",
+              "inaccessible",
+            ].includes(
+              (item as SpotifySkippedPlaylist)
+                .reason,
+            ),
+        ),
+    );
+
+  if (
+    skippedPlaylists.length !==
+    candidate.skippedPlaylists.length
+  ) {
+    return null;
+  }
+
+  return {
+    state: candidate.state,
+    resumed: candidate.resumed,
+    savedTracks,
+    playlists,
+    playlistTracks,
+    skippedPlaylists,
+  };
+}
+
+function safeImportMessage(
+  error: unknown,
+): string {
+  if (
+    error instanceof SpotifyApiError &&
+    error.status === 429
+  ) {
+    return "Spotify asked Canal to pause this import. Resume after the retry window.";
+  }
+
+  if (
+    error instanceof SpotifyApiError &&
+    error.status === 403
+  ) {
+    return "Spotify did not allow Canal to read this playlist.";
+  }
+
+  return "Canal could not finish this source. Your completed progress is ready to resume.";
+}
+
+function isPlaylistItemAccessAllowed(
+  playlist: SpotifyPlaylist,
+  profileId: string,
+): boolean {
+  return (
+    playlist.owner?.id === profileId ||
+    playlist.collaborative === true
+  );
+}
+
+function importStatusIsComplete(
+  status: SpotifyLibraryImportStatus,
+): boolean {
+  return (
+    status.savedTracks.state === "complete" &&
+    status.playlists.state === "complete" &&
+    status.playlistTracks.state === "complete"
+  );
+}
+
+function checkpointStorageKey(
+  cacheScope: SpotifyCacheScope,
+): string {
+  return [
+    SPOTIFY_LIBRARY_IMPORT_CHECKPOINT_STORAGE_KEY,
+    encodeURIComponent(
+      cacheScope.ownerId,
+    ),
+    encodeURIComponent(
+      cacheScope.sessionGeneration,
+    ),
+    encodeURIComponent(
+      cacheScope.spotifyProfileId,
+    ),
+    cacheScope.spotifyAccountGeneration,
+  ].join(":");
+}
+
+function createImportCheckpoint(
+  cacheScope: SpotifyCacheScope,
+): SpotifyLibraryImportCheckpoint {
+  return {
+    version:
+      SPOTIFY_LIBRARY_IMPORT_CHECKPOINT_VERSION,
+    ownerId: cacheScope.ownerId,
+    sessionGeneration:
+      cacheScope.sessionGeneration,
+    spotifyAccountGeneration:
+      cacheScope.spotifyAccountGeneration,
+    profileId:
+      cacheScope.spotifyProfileId,
+    createdAt:
+      new Date().toISOString(),
+    savedTrackOffset: 0,
+    playlistOffset: 0,
+    savedTracks: [],
+    playlists: [],
+    playlistTracks: [],
+    playlistTrackOffsets: {},
+    completedPlaylistIds: [],
+    status:
+      createImportStatus(),
+  };
+}
+
+function checkpointMatchesScope(
+  checkpoint: SpotifyLibraryImportCheckpoint,
+  cacheScope: SpotifyCacheScope,
+): boolean {
+  return (
+    checkpoint.ownerId ===
+      cacheScope.ownerId &&
+    checkpoint.sessionGeneration ===
+      cacheScope.sessionGeneration &&
+    checkpoint.spotifyAccountGeneration ===
+      cacheScope.spotifyAccountGeneration &&
+    checkpoint.profileId ===
+      cacheScope.spotifyProfileId
+  );
+}
+
+function normalizeImportCheckpoint(
+  value: unknown,
+): SpotifyLibraryImportCheckpoint | null {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return null;
+  }
+
+  const candidate =
+    value as Partial<SpotifyLibraryImportCheckpoint>;
+  const status =
+    normalizeImportStatus(
+      candidate.status,
+    );
+
+  if (
+    candidate.version !==
+      SPOTIFY_LIBRARY_IMPORT_CHECKPOINT_VERSION ||
+    typeof candidate.ownerId !== "string" ||
+    !candidate.ownerId ||
+    typeof candidate.sessionGeneration !== "string" ||
+    !candidate.sessionGeneration ||
+    typeof candidate.profileId !== "string" ||
+    !candidate.profileId ||
+    !Number.isSafeInteger(candidate.spotifyAccountGeneration) ||
+    !Number.isSafeInteger(candidate.savedTrackOffset) ||
+    !Number.isSafeInteger(candidate.playlistOffset) ||
+    candidate.savedTrackOffset === undefined ||
+    candidate.playlistOffset === undefined ||
+    candidate.savedTrackOffset < 0 ||
+    candidate.playlistOffset < 0 ||
+    !Array.isArray(candidate.savedTracks) ||
+    !Array.isArray(candidate.playlists) ||
+    !Array.isArray(candidate.playlistTracks) ||
+    !Array.isArray(candidate.completedPlaylistIds) ||
+    !candidate.playlistTrackOffsets ||
+    typeof candidate.playlistTrackOffsets !== "object" ||
+    typeof candidate.createdAt !== "string" ||
+    !status
+  ) {
+    return null;
+  }
+
+  const playlistTrackOffsets =
+    Object.entries(
+      candidate.playlistTrackOffsets,
+    ).reduce<
+      Record<string, number>
+    >(
+      (result, [playlistId, offset]) => {
+        if (
+          Number.isSafeInteger(offset) &&
+          offset >= 0
+        ) {
+          result[playlistId] = offset;
+        }
+
+        return result;
+      },
+      {},
+    );
+
+  if (
+    Object.keys(playlistTrackOffsets).length !==
+    Object.keys(candidate.playlistTrackOffsets).length
+  ) {
+    return null;
+  }
+
+  return {
+    version:
+      SPOTIFY_LIBRARY_IMPORT_CHECKPOINT_VERSION,
+    ownerId: candidate.ownerId,
+    sessionGeneration:
+      candidate.sessionGeneration,
+    spotifyAccountGeneration:
+      candidate.spotifyAccountGeneration!,
+    profileId: candidate.profileId,
+    createdAt: candidate.createdAt,
+    savedTrackOffset:
+      candidate.savedTrackOffset,
+    playlistOffset:
+      candidate.playlistOffset,
+    savedTracks:
+      deduplicateTracks(
+        candidate.savedTracks,
+      ),
+    playlists:
+      candidate.playlists,
+    playlistTracks:
+      deduplicateTracks(
+        candidate.playlistTracks,
+      ),
+    playlistTrackOffsets,
+    completedPlaylistIds:
+      Array.from(
+        new Set(
+          candidate.completedPlaylistIds.filter(
+            (playlistId): playlistId is string =>
+              typeof playlistId === "string" &&
+              Boolean(playlistId),
+          ),
+        ),
+      ),
+    status,
+  };
+}
+
 function stripTrackImages(
   track: SpotifyTrack,
 ): SpotifyTrack {
@@ -445,6 +930,230 @@ function stripTrackImages(
     album:
       albumWithoutImages,
   };
+}
+
+async function assertLibraryImportCurrent(
+  connectionGuard: SpotifyConnectionGuard,
+  cacheScope: SpotifyCacheScope,
+  options: SpotifyLibraryOperationOptions,
+): Promise<void> {
+  if (
+    options.operationCommitGuard &&
+    !options.operationCommitGuard()
+  ) {
+    throw new Error(
+      "Spotify connection changed while Canal was importing your library. Resume with the current account.",
+    );
+  }
+
+  await assertSpotifyConnectionGuardCurrent(
+    connectionGuard,
+  );
+
+  await assertSpotifyCacheScopeCurrent(
+    cacheScope,
+  );
+
+  if (
+    options.operationCommitGuard &&
+    !options.operationCommitGuard()
+  ) {
+    throw new Error(
+      "Spotify connection changed while Canal was importing your library. Resume with the current account.",
+    );
+  }
+}
+
+function publishLibraryImportProgress(
+  checkpoint: SpotifyLibraryImportCheckpoint,
+  phase: SpotifyLibraryImportProgress["phase"],
+  options: SpotifyLibraryOperationOptions,
+): void {
+  options.onProgress?.({
+    phase,
+    // Callers must receive a new value for each checkpoint so React
+    // can render every meaningful page/source transition rather than bailing
+    // out on a reused status reference.
+    status: {
+      ...checkpoint.status,
+      savedTracks: {
+        ...checkpoint.status.savedTracks,
+      },
+      playlists: {
+        ...checkpoint.status.playlists,
+      },
+      playlistTracks: {
+        ...checkpoint.status.playlistTracks,
+      },
+      skippedPlaylists: [
+        ...checkpoint.status.skippedPlaylists,
+      ],
+    },
+  });
+}
+
+async function writeSpotifyLibraryImportCheckpoint(
+  checkpoint: SpotifyLibraryImportCheckpoint,
+  connectionGuard: SpotifyConnectionGuard,
+  cacheScope: SpotifyCacheScope,
+  options: SpotifyLibraryOperationOptions,
+): Promise<void> {
+  await runLibraryCacheOperation(
+    async () => {
+      await assertLibraryImportCurrent(
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+
+      const key =
+        checkpointStorageKey(
+          cacheScope,
+        );
+      const serialized =
+        JSON.stringify(
+          checkpoint,
+        );
+      const previousValue =
+        await AsyncStorage.getItem(key);
+
+      await assertLibraryImportCurrent(
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+
+      await AsyncStorage.setItem(
+        key,
+        serialized,
+      );
+
+      try {
+        await assertLibraryImportCurrent(
+          connectionGuard,
+          cacheScope,
+          options,
+        );
+      } catch (error) {
+        const currentValue =
+          await AsyncStorage.getItem(key);
+
+        if (
+          currentValue === serialized
+        ) {
+          if (previousValue === null) {
+            await AsyncStorage.removeItem(key);
+          } else {
+            await AsyncStorage.setItem(
+              key,
+              previousValue,
+            );
+          }
+        }
+
+        throw error;
+      }
+    },
+  );
+}
+
+async function loadSpotifyLibraryImportCheckpoint(
+  connectionGuard: SpotifyConnectionGuard,
+  cacheScope: SpotifyCacheScope,
+  options: SpotifyLibraryOperationOptions,
+): Promise<SpotifyLibraryImportCheckpoint | null> {
+  return runLibraryCacheOperation(
+    async () => {
+      await assertLibraryImportCurrent(
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+
+      const serialized =
+        await AsyncStorage.getItem(
+          checkpointStorageKey(
+            cacheScope,
+          ),
+        );
+
+      await assertLibraryImportCurrent(
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+
+      if (!serialized) {
+        return null;
+      }
+
+      try {
+        const checkpoint =
+          normalizeImportCheckpoint(
+            JSON.parse(serialized),
+          );
+
+        return checkpoint &&
+          checkpointMatchesScope(
+            checkpoint,
+            cacheScope,
+          )
+          ? checkpoint
+          : null;
+      } catch {
+        return null;
+      }
+    },
+  );
+}
+
+async function removeSpotifyLibraryImportCheckpoint(
+  connectionGuard: SpotifyConnectionGuard,
+  cacheScope: SpotifyCacheScope,
+  options: SpotifyLibraryOperationOptions,
+): Promise<void> {
+  await runLibraryCacheOperation(
+    async () => {
+      await assertLibraryImportCurrent(
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+
+      await AsyncStorage.removeItem(
+        checkpointStorageKey(
+          cacheScope,
+        ),
+      );
+
+      await assertLibraryImportCurrent(
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+    },
+  );
+}
+
+export async function readSpotifyLibraryImportStatus(): Promise<
+  SpotifyLibraryImportStatus | null
+> {
+  const {
+    connectionGuard,
+  } =
+    await requireGuardedSpotifyLibrarySession();
+  const cacheScope =
+    await captureSpotifyCacheScope();
+
+  const checkpoint =
+    await loadSpotifyLibraryImportCheckpoint(
+      connectionGuard,
+      cacheScope,
+      {},
+    );
+
+  return checkpoint?.status ??
+    null;
 }
 
 async function writeSpotifyLibrarySnapshot(
@@ -719,6 +1428,15 @@ function normalizeSpotifyLibrarySnapshot(
       )
         ? parsed.warnings
         : [],
+
+    importStatus:
+      normalizeImportStatus(
+        parsed.importStatus,
+      ) ??
+      // Older snapshots were produced by the bounded taste sync. They remain
+      // readable offline, but must never be presented as a completed
+      // full-library import or suppress the next guarded import.
+      createImportStatus(),
   };
 }
 
@@ -985,6 +1703,10 @@ export async function getLatestSpotifyLibrarySnapshot(
   if (
     cached &&
     isFresh &&
+    cached.importStatus &&
+    importStatusIsComplete(
+      cached.importStatus,
+    ) &&
     await isSpotifyConnectionStillCurrent(
       connectionGuard,
     )
@@ -1140,7 +1862,7 @@ export async function syncSpotifyLibrary(
   }
 
   const nextPromise =
-    performSpotifyLibrarySync(
+    performSpotifyLibraryFullSync(
       connectionGeneration,
       options,
     )
@@ -1203,58 +1925,178 @@ export async function syncSpotifyLibrary(
   return nextPromise;
 }
 
-async function performSpotifyLibrarySync(
+async function checkpointImportProgress(
+  checkpoint: SpotifyLibraryImportCheckpoint,
+  phase: SpotifyLibraryImportProgress["phase"],
+  connectionGuard: SpotifyConnectionGuard,
+  cacheScope: SpotifyCacheScope,
+  options: SpotifyLibraryOperationOptions,
+): Promise<void> {
+  checkpoint.status.state = "incomplete";
+
+  await writeSpotifyLibraryImportCheckpoint(
+    checkpoint,
+    connectionGuard,
+    cacheScope,
+    options,
+  );
+
+  publishLibraryImportProgress(
+    checkpoint,
+    phase,
+    options,
+  );
+}
+
+async function markImportSourceFailed(
+  checkpoint: SpotifyLibraryImportCheckpoint,
+  source:
+    | "savedTracks"
+    | "playlists"
+    | "playlistTracks",
+  phase: SpotifyLibraryImportProgress["phase"],
+  error: unknown,
+  connectionGuard: SpotifyConnectionGuard,
+  cacheScope: SpotifyCacheScope,
+  options: SpotifyLibraryOperationOptions,
+): Promise<never> {
+  checkpoint.status[source] = {
+    ...checkpoint.status[source],
+    state:
+      error instanceof SpotifyApiError &&
+      error.status === 429
+        ? "partial"
+        : "failed",
+    message:
+      safeImportMessage(error),
+  };
+
+  await checkpointImportProgress(
+    checkpoint,
+    phase,
+    connectionGuard,
+    cacheScope,
+    options,
+  );
+
+  throw new SpotifyLibraryImportIncompleteError(
+    checkpoint.status,
+    error,
+  );
+}
+
+async function runWithBoundedConcurrency<Item>(
+  items: Item[],
+  concurrency: number,
+  worker: (
+    item: Item,
+  ) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  let firstFailure: unknown =
+    null;
+
+  const takeNext =
+    async (): Promise<void> => {
+      while (
+        firstFailure === null &&
+        nextIndex < items.length
+      ) {
+        const index = nextIndex;
+        nextIndex += 1;
+
+        try {
+          await worker(items[index]);
+        } catch (error) {
+          firstFailure = error;
+          throw error;
+        }
+      }
+    };
+
+  await Promise.allSettled(
+    Array.from(
+      {
+        length: Math.min(
+          concurrency,
+          items.length,
+        ),
+      },
+      takeNext,
+    ),
+  );
+
+  if (firstFailure !== null) {
+    throw firstFailure;
+  }
+}
+
+async function performSpotifyLibraryFullSync(
   expectedConnectionGeneration: number,
-  options:
-    SpotifyLibraryOperationOptions = {},
-): Promise<
-  SpotifyLibrarySnapshot
-> {
+  options: SpotifyLibraryOperationOptions = {},
+): Promise<SpotifyLibrarySnapshot> {
   if (
     options.operationCommitGuard &&
     !options.operationCommitGuard()
   ) {
     throw new Error(
-      "Spotify connection changed while Canal was syncing. Sync the current account again.",
+      "Spotify connection changed while Canal was importing your library. Resume with the current account.",
     );
   }
 
   const {
-    session:
-      syncSession,
+    session: syncSession,
     connectionGuard,
   } =
     await requireGuardedSpotifyLibrarySession();
+  const cacheScope =
+    await captureSpotifyCacheScope();
+
+  if (
+    cacheScope.spotifyProfileId !==
+      connectionGuard.profileId ||
+    cacheScope.spotifyAccountGeneration !==
+      connectionGuard.canalAccountGeneration
+  ) {
+    throw new Error(
+      "Spotify account changed while Canal was importing your library. Resume with the current account.",
+    );
+  }
 
   if (
     expectedConnectionGeneration !==
     connectionGuard.connectionGeneration
   ) {
     throw new Error(
-      "Spotify account changed while Canal was syncing. Sync the current account again.",
+      "Spotify account changed while Canal was importing your library. Resume with the current account.",
     );
   }
 
-  await assertSpotifyConnectionGuardCurrent(
+  await assertLibraryImportCurrent(
     connectionGuard,
+    cacheScope,
+    options,
   );
 
-  if (
-    options.operationCommitGuard &&
-    !options.operationCommitGuard()
-  ) {
-    throw new Error(
-      "Spotify connection changed while Canal was syncing. Sync the current account again.",
+  const checkpoint =
+    (
+      await loadSpotifyLibraryImportCheckpoint(
+        connectionGuard,
+        cacheScope,
+        options,
+      )
+    ) ??
+    createImportCheckpoint(
+      cacheScope,
     );
-  }
 
-  const [
-    topArtistsResult,
-    topTracksResult,
-    recentResult,
-    savedResult,
-    playlistsResult,
-  ] = await Promise.allSettled([
+  checkpoint.status.resumed =
+    checkpoint.savedTrackOffset > 0 ||
+    checkpoint.playlistOffset > 0 ||
+    checkpoint.completedPlaylistIds.length > 0;
+
+  const metadataResults =
+    Promise.allSettled([
     getSpotifyTopArtists(
       20,
       {
@@ -1279,191 +2121,487 @@ async function performSpotifyLibrarySync(
           options.operationCommitGuard,
       },
     ),
-    getSpotifySavedTracks(
-      50,
-      {
-        connectionGuard,
-        operationCommitGuard:
-          options.operationCommitGuard,
-      },
-    ),
-    getSpotifyPlaylists(
-      20,
-      {
-        connectionGuard,
-        operationCommitGuard:
-          options.operationCommitGuard,
-      },
-    ),
-  ]);
+    ]);
 
-  await assertSpotifyConnectionGuardCurrent(
+  await assertLibraryImportCurrent(
     connectionGuard,
+    cacheScope,
+    options,
   );
 
   if (
-    options.operationCommitGuard &&
-    !options.operationCommitGuard()
+    checkpoint.status.savedTracks.state !==
+    "complete"
   ) {
-    throw new Error(
-      "Spotify connection changed while Canal was syncing. Sync the current account again.",
-    );
-  }
+    checkpoint.status.savedTracks = {
+      ...checkpoint.status.savedTracks,
+      state: "importing",
+    };
 
-  for (
-    const result of [
-      topArtistsResult,
-      topTracksResult,
-      recentResult,
-      savedResult,
-      playlistsResult,
-    ]
-  ) {
-    if (
-      result.status ===
-      "rejected"
-    ) {
-      rethrowSpotifyAccessFailure(
-        result.reason,
+    await checkpointImportProgress(
+      checkpoint,
+      "saved-tracks",
+      connectionGuard,
+      cacheScope,
+      options,
+    );
+
+    try {
+      await getAllSpotifySavedTracks({
+        offset:
+          checkpoint.savedTrackOffset,
+        collectItems: false,
+        connectionGuard,
+        operationCommitGuard:
+          options.operationCommitGuard,
+        onPage: async (page) => {
+          checkpoint.savedTracks =
+            deduplicateTracks([
+              ...checkpoint.savedTracks,
+              ...page.items.map(
+                (item) =>
+                  item.track,
+              ),
+            ]);
+          checkpoint.savedTrackOffset =
+            page.offset +
+            page.items.length;
+          checkpoint.status.savedTracks = {
+            state:
+              page.next
+                ? "importing"
+                : "complete",
+            importedCount:
+              checkpoint.savedTracks.length,
+            ...(page.total !== undefined
+              ? {
+                  totalCount:
+                    page.total,
+                }
+              : {}),
+          };
+
+          await checkpointImportProgress(
+            checkpoint,
+            "saved-tracks",
+            connectionGuard,
+            cacheScope,
+            options,
+          );
+        },
+      });
+
+      checkpoint.status.savedTracks = {
+        ...checkpoint.status.savedTracks,
+        state: "complete",
+        importedCount:
+          checkpoint.savedTracks.length,
+      };
+      await checkpointImportProgress(
+        checkpoint,
+        "saved-tracks",
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+    } catch (error) {
+      await markImportSourceFailed(
+        checkpoint,
+        "savedTracks",
+        "saved-tracks",
+        error,
+        connectionGuard,
+        cacheScope,
+        options,
       );
     }
   }
 
-  const libraryResults =
-    [
-      topArtistsResult,
-      topTracksResult,
-      recentResult,
-      savedResult,
-      playlistsResult,
-    ];
+  if (
+    checkpoint.status.playlists.state !==
+    "complete"
+  ) {
+    checkpoint.status.playlists = {
+      ...checkpoint.status.playlists,
+      state: "importing",
+    };
+    await checkpointImportProgress(
+      checkpoint,
+      "playlists",
+      connectionGuard,
+      cacheScope,
+      options,
+    );
+
+    try {
+      await getAllSpotifyPlaylists({
+        offset:
+          checkpoint.playlistOffset,
+        collectItems: false,
+        connectionGuard,
+        operationCommitGuard:
+          options.operationCommitGuard,
+        onPage: async (page) => {
+          const playlistsById =
+            new Map(
+              checkpoint.playlists.map(
+                (playlist) => [
+                  playlist.id,
+                  playlist,
+                ] as const,
+              ),
+            );
+
+          for (
+            const playlist of page.items
+          ) {
+            if (playlist?.id) {
+              playlistsById.set(
+                playlist.id,
+                playlist,
+              );
+            }
+          }
+
+          checkpoint.playlists =
+            Array.from(
+              playlistsById.values(),
+            );
+          checkpoint.playlistOffset =
+            page.offset +
+            page.items.length;
+          checkpoint.status.playlists = {
+            state:
+              page.next
+                ? "importing"
+                : "complete",
+            importedCount:
+              checkpoint.playlists.length,
+            ...(page.total !== undefined
+              ? {
+                  totalCount:
+                    page.total,
+                }
+              : {}),
+          };
+
+          await checkpointImportProgress(
+            checkpoint,
+            "playlists",
+            connectionGuard,
+            cacheScope,
+            options,
+          );
+        },
+      });
+
+      checkpoint.status.playlists = {
+        ...checkpoint.status.playlists,
+        state: "complete",
+        importedCount:
+          checkpoint.playlists.length,
+      };
+      await checkpointImportProgress(
+        checkpoint,
+        "playlists",
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+    } catch (error) {
+      await markImportSourceFailed(
+        checkpoint,
+        "playlists",
+        "playlists",
+        error,
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+    }
+  }
 
   if (
-    libraryResults.every(
-      (result) =>
-        result.status ===
-        "rejected",
+    checkpoint.status.playlistTracks.state !==
+    "complete"
+  ) {
+    checkpoint.status.playlistTracks = {
+      ...checkpoint.status.playlistTracks,
+      state: "importing",
+      totalCount:
+        checkpoint.playlists.reduce(
+          (total, playlist) =>
+            total +
+            (playlist.items?.total ??
+              playlist.tracks?.total ??
+              0),
+          0,
+        ),
+    };
+    await checkpointImportProgress(
+      checkpoint,
+      "playlist-items",
+      connectionGuard,
+      cacheScope,
+      options,
+    );
+
+    try {
+      const remainingPlaylists =
+        checkpoint.playlists.filter(
+          (playlist) =>
+            Boolean(playlist.id) &&
+            !checkpoint.completedPlaylistIds.includes(
+              playlist.id,
+            ),
+        );
+
+      await runWithBoundedConcurrency(
+        remainingPlaylists,
+        PLAYLIST_IMPORT_CONCURRENCY,
+        async (playlist) => {
+          if (
+            !isPlaylistItemAccessAllowed(
+              playlist,
+              connectionGuard.profileId,
+            )
+          ) {
+            checkpoint.completedPlaylistIds.push(
+              playlist.id,
+            );
+            checkpoint.status.skippedPlaylists.push({
+              playlistId: playlist.id,
+              name: playlist.name,
+              reason: "followed-playlist",
+            });
+            checkpoint.status.playlistTracks = {
+              ...checkpoint.status.playlistTracks,
+              importedCount:
+                checkpoint.playlistTracks.length,
+            };
+            await checkpointImportProgress(
+              checkpoint,
+              "playlist-items",
+              connectionGuard,
+              cacheScope,
+              options,
+            );
+
+            return;
+          }
+
+          try {
+            await getAllSpotifyPlaylistTracks(
+              playlist.id,
+              {
+                offset:
+                  checkpoint.playlistTrackOffsets[
+                    playlist.id
+                  ] ?? 0,
+                collectItems: false,
+                connectionGuard,
+                operationCommitGuard:
+                  options.operationCommitGuard,
+                onPage: async (page) => {
+                  checkpoint.playlistTracks =
+                    deduplicateTracks([
+                      ...checkpoint.playlistTracks,
+                      ...page.items
+                        .map(
+                          (item) =>
+                            item.track ??
+                            item.item ??
+                            null,
+                        )
+                        .filter(
+                          (
+                            track,
+                          ): track is SpotifyTrack =>
+                            Boolean(
+                              track?.id &&
+                                track.uri &&
+                                !track.is_local,
+                            ),
+                        ),
+                    ]);
+                  checkpoint.playlistTrackOffsets[
+                    playlist.id
+                  ] =
+                    page.offset +
+                    page.items.length;
+                  checkpoint.status.playlistTracks = {
+                    ...checkpoint.status.playlistTracks,
+                    state: "importing",
+                    importedCount:
+                      checkpoint.playlistTracks.length,
+                  };
+                  await checkpointImportProgress(
+                    checkpoint,
+                    "playlist-items",
+                    connectionGuard,
+                    cacheScope,
+                    options,
+                  );
+                },
+              },
+            );
+            checkpoint.completedPlaylistIds.push(
+              playlist.id,
+            );
+            checkpoint.status.playlistTracks = {
+              ...checkpoint.status.playlistTracks,
+              importedCount:
+                checkpoint.playlistTracks.length,
+            };
+            await checkpointImportProgress(
+              checkpoint,
+              "playlist-items",
+              connectionGuard,
+              cacheScope,
+              options,
+            );
+          } catch (error) {
+            if (
+              error instanceof SpotifyApiError &&
+              (
+                error.status === 403 ||
+                error.status === 404
+              )
+            ) {
+              checkpoint.completedPlaylistIds.push(
+                playlist.id,
+              );
+              checkpoint.status.skippedPlaylists.push({
+                playlistId: playlist.id,
+                name: playlist.name,
+                reason: "inaccessible",
+              });
+              await checkpointImportProgress(
+                checkpoint,
+                "playlist-items",
+                connectionGuard,
+                cacheScope,
+                options,
+              );
+
+              return;
+            }
+
+            throw error;
+          }
+        },
+      );
+
+      checkpoint.completedPlaylistIds =
+        Array.from(
+          new Set(
+            checkpoint.completedPlaylistIds,
+          ),
+        );
+      checkpoint.status.playlistTracks = {
+        ...checkpoint.status.playlistTracks,
+        state: "complete",
+        importedCount:
+          checkpoint.playlistTracks.length,
+      };
+      await checkpointImportProgress(
+        checkpoint,
+        "playlist-items",
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+    } catch (error) {
+      await markImportSourceFailed(
+        checkpoint,
+        "playlistTracks",
+        "playlist-items",
+        error,
+        connectionGuard,
+        cacheScope,
+        options,
+      );
+    }
+  }
+
+  if (
+    !importStatusIsComplete(
+      checkpoint.status,
     )
   ) {
-    const firstFailure =
-      libraryResults.find(
-        (result) =>
-          result.status ===
-          "rejected",
-      );
-
-    if (
-      firstFailure?.status ===
-      "rejected"
-    ) {
-      throw firstFailure.reason;
-    }
+    throw new SpotifyLibraryImportIncompleteError(
+      checkpoint.status,
+      new Error(
+        "Spotify import is incomplete.",
+      ),
+    );
   }
 
-  const warnings: string[] =
-    [];
+  await assertLibraryImportCurrent(
+    connectionGuard,
+    cacheScope,
+    options,
+  );
 
+  const [
+    topArtistsResult,
+    topTracksResult,
+    recentResult,
+  ] = await metadataResults;
+
+  const warnings: string[] = [];
   const topArtists =
-    topArtistsResult.status ===
-    "fulfilled"
-      ? topArtistsResult.value
-          .items
+    topArtistsResult.status === "fulfilled"
+      ? topArtistsResult.value.items
       : [];
-
-  if (
-    topArtistsResult.status ===
-    "rejected"
-  ) {
-    warnings.push(
-      `Top artists: ${readErrorMessage(
-        topArtistsResult.reason,
-      )}`,
-    );
-  }
-
   const topTracks =
-    topTracksResult.status ===
-    "fulfilled"
-      ? topTracksResult.value
-          .items
+    topTracksResult.status === "fulfilled"
+      ? topTracksResult.value.items
       : [];
-
-  if (
-    topTracksResult.status ===
-    "rejected"
-  ) {
-    warnings.push(
-      `Top tracks: ${readErrorMessage(
-        topTracksResult.reason,
-      )}`,
-    );
-  }
-
   const recentTracks =
-    recentResult.status ===
-    "fulfilled"
+    recentResult.status === "fulfilled"
       ? recentResult.value.items.map(
           (item) => item.track,
         )
       : [];
 
-  if (
-    recentResult.status ===
-    "rejected"
-  ) {
+  if (topArtistsResult.status === "rejected") {
     warnings.push(
-      `Recently played: ${readErrorMessage(
-        recentResult.reason,
-      )}`,
+      "Top artists could not be refreshed.",
     );
   }
 
-  const savedTracks =
-    savedResult.status ===
-    "fulfilled"
-      ? savedResult.value
-          .items.map(
-            (item) =>
-              item.track,
-          )
-      : [];
-
-  if (
-    savedResult.status ===
-    "rejected"
-  ) {
+  if (topTracksResult.status === "rejected") {
     warnings.push(
-      `Saved tracks: ${readErrorMessage(
-        savedResult.reason,
-      )}`,
+      "Top tracks could not be refreshed.",
     );
   }
 
-  const playlists =
-    playlistsResult.status ===
-    "fulfilled"
-      ? playlistsResult.value
-          .items
-      : [];
+  if (recentResult.status === "rejected") {
+    warnings.push(
+      "Recently played tracks could not be refreshed.",
+    );
+  }
 
   if (
-    playlistsResult.status ===
-    "rejected"
+    checkpoint.status.skippedPlaylists.length > 0
   ) {
     warnings.push(
-      `Playlists: ${readErrorMessage(
-        playlistsResult.reason,
-      )}`,
+      `${checkpoint.status.skippedPlaylists.length} playlist${
+        checkpoint.status.skippedPlaylists.length === 1
+          ? " was"
+          : "s were"
+      } skipped because Spotify does not allow Canal to read its items.`,
     );
   }
 
   const userLibraryTracks =
     deduplicateTracks([
       ...topTracks,
-      ...savedTracks,
+      ...checkpoint.savedTracks,
       ...recentTracks,
+      ...checkpoint.playlistTracks,
     ]);
-
   const artistsById =
     new Map(
       topArtists.map(
@@ -1473,16 +2611,10 @@ async function performSpotifyLibrarySync(
         ] as const,
       ),
     );
-
-  const trackGenres:
-    Record<
-      string,
-      string[]
-    > = {};
+  const trackGenres: Record<string, string[]> = {};
 
   for (
-    const track of
-      userLibraryTracks
+    const track of userLibraryTracks
   ) {
     trackGenres[track.id] =
       Array.from(
@@ -1491,78 +2623,58 @@ async function performSpotifyLibrarySync(
             (artist) =>
               artistsById.get(
                 artist.id,
-              )?.genres ??
-              [],
+              )?.genres ?? [],
           ),
         ),
       );
   }
 
-  const topGenres =
-    buildTopGenres(
-      topArtists,
-    );
-
+  checkpoint.status.state = "complete";
   const snapshot: SpotifyLibrarySnapshot = {
     syncedAt:
       new Date().toISOString(),
-
-    profile:
-      syncSession.profile,
-
+    profile: syncSession.profile,
     topArtists,
-
     topTracks:
-      deduplicateTracks(
-        topTracks,
-      ),
-
+      deduplicateTracks(topTracks),
     recentTracks:
-      deduplicateTracks(
-        recentTracks,
-      ),
-
+      deduplicateTracks(recentTracks),
     savedTracks:
-      deduplicateTracks(
-        savedTracks,
-      ),
-
+      checkpoint.savedTracks,
     playlistTracks:
-      [],
-
-    discoveryTracks:
-      [],
-
-    playlists,
-
-    topGenres,
-
+      checkpoint.playlistTracks,
+    discoveryTracks: [],
+    playlists:
+      checkpoint.playlists,
+    topGenres:
+      buildTopGenres(topArtists),
     trackGenres,
-
     warnings,
+    importStatus:
+      checkpoint.status,
   };
 
   await saveSpotifyLibrarySnapshot(
     snapshot,
     {
-      expectedConnectionGeneration:
-        expectedConnectionGeneration,
+      expectedConnectionGeneration,
       connectionGuard,
       operationCommitGuard:
         options.operationCommitGuard,
     },
   );
 
-  if (
-    options.operationCommitGuard &&
-    !options.operationCommitGuard()
-  ) {
-    throw new Error(
-      "Spotify connection changed while Canal was syncing. Sync the current account again.",
-    );
-  }
-
+  await removeSpotifyLibraryImportCheckpoint(
+    connectionGuard,
+    cacheScope,
+    options,
+  );
   clearLibraryRefreshIssue();
+  publishLibraryImportProgress(
+    checkpoint,
+    "complete",
+    options,
+  );
 
   return snapshot;
 }

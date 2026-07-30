@@ -1157,14 +1157,14 @@ describe(
 
                     if (
                       responseResolvers.length ===
-                        5
+                        4
                     ) {
                       signalInitialReads();
                     }
 
                     if (
                       responseResolvers.length ===
-                        6
+                        5
                     ) {
                       signalSuccessorRead();
                     }
@@ -1227,7 +1227,7 @@ describe(
 
         await successorReadStarted;
 
-        responseResolvers[5](
+        responseResolvers[4](
           mockResponse(
             200,
             {
@@ -1262,7 +1262,7 @@ describe(
           const resolve of
           responseResolvers.slice(
             0,
-            5,
+            4,
           )
         ) {
           resolve(
@@ -1304,7 +1304,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledTimes(
-          6,
+          5,
         );
         expect(
           (
@@ -1659,7 +1659,7 @@ describe(
     );
 
     it(
-      "bounds a library sync to five guarded Spotify reads",
+      "starts complete collection sources with guarded first pages",
       async () => {
         await saveSpotifySession(
           createSession(
@@ -1745,7 +1745,7 @@ describe(
               "/me/tracks?limit=50&offset=0",
             ),
             expect.stringContaining(
-              "/me/playlists?limit=20&offset=0",
+              "/me/playlists?limit=50&offset=0",
             ),
           ]),
         );
@@ -1816,7 +1816,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledTimes(
-          5,
+          4,
         );
 
         const result =
@@ -1846,7 +1846,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledTimes(
-          5,
+          4,
         );
 
         await saveSpotifySession(
@@ -1879,7 +1879,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledTimes(
-          10,
+          9,
         );
       },
     );

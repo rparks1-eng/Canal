@@ -49,6 +49,9 @@ export const STORAGE_KEYS = {
   spotifyLibrarySnapshot:
     "@canal/spotify-library-snapshot",
 
+  spotifyLibraryImportCheckpoint:
+    "@canal/spotify-library-import-checkpoint",
+
   snapshots:
     "@canal/snapshots",
 
