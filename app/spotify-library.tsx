@@ -1,13 +1,16 @@
 import {
+  type RefObject,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 
 import {
+  AccessibilityInfo,
   ActivityIndicator,
-  Image,
+  findNodeHandle,
   Linking,
   Pressable,
   RefreshControl,
@@ -35,28 +38,36 @@ import {
 } from "../components/recovery-notice";
 
 import {
-  useReconnectReload,
-} from "../hooks/use-reconnect-reload";
-
-import {
   classifyRecoveryIssue,
 } from "../lib/recovery-issue";
 
 import {
+  getSpotifyLibraryImportRetryAfterSeconds,
   exportSpotifyTastePlaylist,
+  readSpotifyLibraryImportStatus,
   readSpotifyLibrarySnapshot,
   syncSpotifyLibrary,
 } from "../lib/spotify-library";
 
 import type {
+  SpotifyLibraryImportProgress,
+  SpotifyLibraryImportStatus,
   SpotifyLibrarySnapshot,
 } from "../lib/spotify-library";
+
+import {
+  getSpotifyContentUrl,
+} from "../lib/spotify-api";
 
 import type {
   SpotifyArtist,
   SpotifyPlaylist,
   SpotifyTrack,
 } from "../lib/spotify-api";
+
+import {
+  useAuth,
+} from "../providers/auth-provider";
 
 import {
   useConnectivity,
@@ -82,6 +93,270 @@ type SpotifyLibraryRecoveryFailure = {
   message: string;
 };
 
+type SpotifyLibraryStatusEvent = {
+  id: string;
+  accountIdentity: string;
+  message: string;
+  target:
+    | "progress"
+    | "recovery"
+    | "success";
+};
+
+function sourceProgressCopy(
+  label: string,
+  source: SpotifyLibraryImportStatus["savedTracks"],
+): string {
+  const total =
+    source.totalCount === undefined
+      ? `${source.importedCount}`
+      : `${source.importedCount} of ${source.totalCount}`;
+
+  if (source.state === "complete") {
+    return `${label}: ${total} imported.`;
+  }
+
+  if (source.state === "failed") {
+    return `${label}: ${total} imported. Resume required.`;
+  }
+
+  if (source.state === "partial") {
+    return `${label}: ${total} imported. Paused for Spotify's retry window.`;
+  }
+
+  if (source.state === "importing") {
+    return `${label}: ${total} imported.`;
+  }
+
+  return `${label}: waiting to import.`;
+}
+
+function importStatusAnnouncement(
+  status: SpotifyLibraryImportStatus,
+): string {
+  const sources = [
+    status.savedTracks,
+    status.playlists,
+    status.playlistTracks,
+  ];
+
+  if (
+    sources.some(
+      (source) =>
+        source.state === "partial",
+    )
+  ) {
+    const retryAfterSeconds =
+      getSpotifyLibraryImportRetryAfterSeconds(
+        status,
+      );
+
+    return retryAfterSeconds
+      ? `Spotify import is paused. Resume will be available in about ${formatRetryAfter(retryAfterSeconds)}.`
+      : "Spotify import is paused. Resume is available.";
+  }
+
+  if (
+    sources.some(
+      (source) =>
+        source.state === "failed",
+    )
+  ) {
+    return "Spotify import needs attention. Resume when you are ready.";
+  }
+
+  return "Spotify import is paused. Resume when you are ready.";
+}
+
+function formatRetryAfter(
+  retryAfterSeconds: number,
+): string {
+  if (retryAfterSeconds < 60) {
+    return `${retryAfterSeconds} second${
+      retryAfterSeconds === 1 ? "" : "s"
+    }`;
+  }
+
+  const minutes = Math.ceil(
+    retryAfterSeconds / 60,
+  );
+
+  return `${minutes} minute${
+    minutes === 1 ? "" : "s"
+  }`;
+}
+
+function ImportProgressCard(props: {
+  status: SpotifyLibraryImportStatus;
+  syncing: boolean;
+  onResume: () => void;
+  onCancel: () => void;
+  offline: boolean;
+  statusAnnouncement?: string;
+  statusAnnouncementRef?: RefObject<View | null>;
+}) {
+  const incomplete =
+    props.status.state === "incomplete";
+  const [retryClock, setRetryClock] =
+    useState(() => Date.now());
+  const retryAfterUntil =
+    props.status.retryAfterUntil;
+  const retryAfterSeconds =
+    getSpotifyLibraryImportRetryAfterSeconds(
+      props.status,
+      retryClock,
+    );
+  const retryWindowActive =
+    retryAfterSeconds !== null;
+  const resumeDisabled =
+    props.syncing ||
+    props.offline ||
+    retryWindowActive;
+
+  useEffect(
+    () => {
+      setRetryClock(Date.now());
+
+      if (
+        retryAfterUntil === undefined ||
+        retryAfterUntil <= Date.now()
+      ) {
+        return;
+      }
+
+      const timeout = setTimeout(
+        () => {
+          setRetryClock(Date.now());
+        },
+        retryAfterUntil - Date.now(),
+      );
+
+      return () => {
+        clearTimeout(timeout);
+      };
+    }, [retryAfterUntil]);
+  const followedPlaylistCount =
+    props.status.skippedPlaylists.filter(
+      (playlist) =>
+        playlist.reason ===
+        "followed-playlist",
+    ).length;
+  const inaccessiblePlaylistCount =
+    props.status.skippedPlaylists.filter(
+      (playlist) =>
+        playlist.reason === "inaccessible",
+    ).length;
+
+  return (
+    <View style={styles.importCard}>
+      <Text
+        accessibilityRole="header"
+        style={styles.importTitle}
+      >
+        {incomplete
+          ? "Spotify import progress"
+          : "Spotify import sources"}
+      </Text>
+
+      {props.statusAnnouncement ? (
+        <View
+          ref={props.statusAnnouncementRef}
+          accessible
+          accessibilityLiveRegion="polite"
+          accessibilityRole="alert"
+          style={styles.importStatusSummary}
+        >
+          <Text
+            style={styles.importStatusSummaryText}
+          >
+            {props.statusAnnouncement}
+          </Text>
+        </View>
+      ) : null}
+
+      <Text style={styles.importText}>
+        {sourceProgressCopy(
+          "Saved tracks",
+          props.status.savedTracks,
+        )}
+      </Text>
+
+      <Text style={styles.importText}>
+        {sourceProgressCopy(
+          "Playlists",
+          props.status.playlists,
+        )}
+      </Text>
+
+      <Text style={styles.importText}>
+        {sourceProgressCopy(
+          "Playlist items",
+          props.status.playlistTracks,
+        )}
+      </Text>
+
+      {followedPlaylistCount > 0 ? (
+        <Text style={styles.importWarning}>
+          {followedPlaylistCount} followed playlist{followedPlaylistCount === 1 ? " was" : "s were"} skipped because Canal imports items only from playlists you own or collaborate on.
+        </Text>
+      ) : null}
+
+      {inaccessiblePlaylistCount > 0 ? (
+        <Text style={styles.importWarning}>
+          {inaccessiblePlaylistCount} playlist{inaccessiblePlaylistCount === 1 ? " was" : "s were"} inaccessible when Canal tried to import its items.
+        </Text>
+      ) : null}
+
+      {retryAfterSeconds ? (
+        <Text style={styles.importWarning}>
+          Spotify asked Canal to wait. Resume will be available in about {formatRetryAfter(retryAfterSeconds)}.
+        </Text>
+      ) : null}
+
+      {incomplete ? (
+        <View style={styles.importActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Resume Spotify import"
+            accessibilityState={{
+              busy: props.syncing,
+              disabled: resumeDisabled,
+            }}
+            disabled={resumeDisabled}
+            onPress={props.onResume}
+            style={({ pressed }) => [
+              styles.importResumeButton,
+              resumeDisabled &&
+                styles.disabledButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={styles.importResumeText}>
+              Resume import
+            </Text>
+          </Pressable>
+
+          {props.syncing ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Pause Spotify import"
+              onPress={props.onCancel}
+              style={({ pressed }) => [
+                styles.importPauseButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.importPauseText}>
+                Pause import
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function formatSyncTime(
   syncedAt: string,
 ): string {
@@ -100,7 +375,7 @@ function formatSyncTime(
 }
 
 async function openExternalUrl(
-  url?: string,
+  url?: string | null,
 ): Promise<void> {
   if (!url) {
     return;
@@ -145,22 +420,31 @@ function ArtistRow(props: {
   artist: SpotifyArtist;
   rank: number;
 }) {
-  const imageUrl =
-    props.artist.images?.[0]
-      ?.url ?? null;
+  const spotifyUrl =
+    getSpotifyContentUrl(
+      "artist",
+      props.artist,
+    );
 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`Open ${props.artist.name} in Spotify`}
+      accessibilityHint="Opens this artist in Spotify."
+      accessibilityState={{
+        disabled: !spotifyUrl,
+      }}
+      disabled={!spotifyUrl}
       onPress={() => {
         void openExternalUrl(
-          props.artist
-            .external_urls
-            ?.spotify,
+          spotifyUrl,
         );
       }}
       style={({ pressed }) => [
         styles.listRow,
+
+        !spotifyUrl &&
+          styles.disabledRow,
 
         pressed &&
           styles.pressed,
@@ -170,46 +454,30 @@ function ArtistRow(props: {
         {props.rank}
       </Text>
 
-      {imageUrl ? (
-        <Image
-          source={{
-            uri: imageUrl,
-          }}
-          style={{
-            width: 46,
-            height: 46,
-            borderRadius: 23,
-            marginRight: 12,
-          }}
-        />
-      ) : (
-        <View
+      <View
+        style={
+          styles.artistFallback
+        }
+      >
+        <Text
           style={
-            styles.artistFallback
+            styles.fallbackText
           }
         >
-          <Text
-            style={
-              styles.fallbackText
-            }
-          >
-            {props.artist.name
-              .charAt(0)
-              .toUpperCase()}
-          </Text>
-        </View>
-      )}
+          {props.artist.name
+            .charAt(0)
+            .toUpperCase()}
+        </Text>
+      </View>
 
       <View style={styles.rowText}>
         <Text
-          numberOfLines={1}
           style={styles.rowTitle}
         >
           {props.artist.name}
         </Text>
 
         <Text
-          numberOfLines={1}
           style={
             styles.rowSubtitle
           }
@@ -222,8 +490,8 @@ function ArtistRow(props: {
         </Text>
       </View>
 
-      <Text style={styles.arrow}>
-        ›
+      <Text style={styles.spotifyLinkText}>
+        Open in Spotify
       </Text>
     </Pressable>
   );
@@ -233,18 +501,31 @@ function TrackRow(props: {
   track: SpotifyTrack;
   rank?: number;
 }) {
+  const spotifyUrl =
+    getSpotifyContentUrl(
+      "track",
+      props.track,
+    );
+
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`Open ${props.track.name} in Spotify`}
+      accessibilityHint="Opens this track in Spotify."
+      accessibilityState={{
+        disabled: !spotifyUrl,
+      }}
+      disabled={!spotifyUrl}
       onPress={() => {
         void openExternalUrl(
-          props.track
-            .external_urls
-            ?.spotify,
+          spotifyUrl,
         );
       }}
       style={({ pressed }) => [
         styles.listRow,
+
+        !spotifyUrl &&
+          styles.disabledRow,
 
         pressed &&
           styles.pressed,
@@ -272,14 +553,12 @@ function TrackRow(props: {
 
       <View style={styles.rowText}>
         <Text
-          numberOfLines={1}
           style={styles.rowTitle}
         >
           {props.track.name}
         </Text>
 
         <Text
-          numberOfLines={1}
           style={
             styles.rowSubtitle
           }
@@ -290,8 +569,8 @@ function TrackRow(props: {
         </Text>
       </View>
 
-      <Text style={styles.arrow}>
-        ›
+      <Text style={styles.spotifyLinkText}>
+        Open in Spotify
       </Text>
     </Pressable>
   );
@@ -300,9 +579,11 @@ function TrackRow(props: {
 function PlaylistRow(props: {
   playlist: SpotifyPlaylist;
 }) {
-  const imageUrl =
-    props.playlist.images?.[0]
-      ?.url ?? null;
+  const spotifyUrl =
+    getSpotifyContentUrl(
+      "playlist",
+      props.playlist,
+    );
 
   const itemCount =
     props.playlist.items
@@ -314,58 +595,49 @@ function PlaylistRow(props: {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`Open ${props.playlist.name} in Spotify`}
+      accessibilityHint="Opens this playlist in Spotify."
+      accessibilityState={{
+        disabled: !spotifyUrl,
+      }}
+      disabled={!spotifyUrl}
       onPress={() => {
         void openExternalUrl(
-          props.playlist
-            .external_urls
-            ?.spotify,
+          spotifyUrl,
         );
       }}
       style={({ pressed }) => [
         styles.listRow,
 
+        !spotifyUrl &&
+          styles.disabledRow,
+
         pressed &&
           styles.pressed,
       ]}
     >
-      {imageUrl ? (
-        <Image
-          source={{
-            uri: imageUrl,
-          }}
-          style={{
-            width: 50,
-            height: 50,
-            borderRadius: 8,
-            marginRight: 12,
-          }}
-        />
-      ) : (
-        <View
+      <View
+        style={
+          styles.playlistFallback
+        }
+      >
+        <Text
           style={
-            styles.playlistFallback
+            styles.fallbackText
           }
         >
-          <Text
-            style={
-              styles.fallbackText
-            }
-          >
-            ≡
-          </Text>
-        </View>
-      )}
+          ≡
+        </Text>
+      </View>
 
       <View style={styles.rowText}>
         <Text
-          numberOfLines={1}
           style={styles.rowTitle}
         >
           {props.playlist.name}
         </Text>
 
         <Text
-          numberOfLines={1}
           style={
             styles.rowSubtitle
           }
@@ -378,14 +650,19 @@ function PlaylistRow(props: {
         </Text>
       </View>
 
-      <Text style={styles.arrow}>
-        ›
+      <Text style={styles.spotifyLinkText}>
+        Open in Spotify
       </Text>
     </Pressable>
   );
 }
 
 export default function SpotifyLibraryScreen() {
+  const {
+    user,
+    accountEpoch,
+  } = useAuth();
+
   const {
     refresh:
       refreshConnectivity,
@@ -394,67 +671,249 @@ export default function SpotifyLibraryScreen() {
   } =
     useConnectivity();
 
+  const accountIdentity =
+    `${user?.id ?? "signed-out"}:${accountEpoch}`;
+  const accountIdentityRef =
+    useRef(accountIdentity);
+  const importOperationRef =
+    useRef(0);
+
+  accountIdentityRef.current =
+    accountIdentity;
+
   const [
-    snapshot,
-    setSnapshot,
+    storedSnapshot,
+    setStoredSnapshot,
   ] =
     useState<SpotifyLibrarySnapshot | null>(
       null,
     );
 
   const [
-    loading,
-    setLoading,
+    snapshotAccountIdentity,
+    setSnapshotAccountIdentity,
+  ] = useState<string | null>(null);
+
+  const [
+    storedLoading,
+    setStoredLoading,
   ] = useState(true);
 
   const [
-    syncing,
-    setSyncing,
+    loadingAccountIdentity,
+    setLoadingAccountIdentity,
+  ] = useState<string | null>(
+    accountIdentity,
+  );
+
+  const [
+    storedSyncing,
+    setStoredSyncing,
   ] = useState(false);
 
   const [
-    exporting,
-    setExporting,
+    syncingAccountIdentity,
+    setSyncingAccountIdentity,
+  ] = useState<string | null>(
+    accountIdentity,
+  );
+
+  const [
+    storedImportProgress,
+    setStoredImportProgress,
+  ] = useState<
+    SpotifyLibraryImportStatus | null
+  >(null);
+
+  const [
+    importProgressAccountIdentity,
+    setImportProgressAccountIdentity,
+  ] = useState<string | null>(null);
+
+  // Never render a previous account's snapshot or resume checkpoint while the
+  // identity-scoped effect below is waiting to clear the old React state.
+  const snapshot =
+    snapshotAccountIdentity === accountIdentity
+      ? storedSnapshot
+      : null;
+  const importProgress =
+    importProgressAccountIdentity ===
+    accountIdentity
+      ? storedImportProgress
+      : null;
+
+  const [
+    storedExporting,
+    setStoredExporting,
   ] = useState(false);
 
   const [
-    recoveryFailure,
-    setRecoveryFailure,
+    exportingAccountIdentity,
+    setExportingAccountIdentity,
+  ] = useState<string | null>(
+    accountIdentity,
+  );
+
+  const [
+    storedRecoveryFailure,
+    setStoredRecoveryFailure,
   ] =
     useState<SpotifyLibraryRecoveryFailure | null>(
       null,
     );
 
   const [
-    successMessage,
-    setSuccessMessage,
+    recoveryFailureAccountIdentity,
+    setRecoveryFailureAccountIdentity,
+  ] = useState<string | null>(null);
+
+  const [
+    storedSuccessMessage,
+    setStoredSuccessMessage,
   ] =
     useState<string | null>(
       null,
     );
 
+  const [
+    successMessageAccountIdentity,
+    setSuccessMessageAccountIdentity,
+  ] = useState<string | null>(null);
+
+  const [
+    storedStatusEvent,
+    setStoredStatusEvent,
+  ] = useState<SpotifyLibraryStatusEvent | null>(
+    null,
+  );
+
+  const [
+    statusEventAccountIdentity,
+    setStatusEventAccountIdentity,
+  ] = useState<string | null>(null);
+
+  const statusEventSequenceRef =
+    useRef(0);
+  const announcedStatusEventId =
+    useRef<string | null>(null);
+  const importStatusRef =
+    useRef<View>(null);
+  const recoveryStatusRef =
+    useRef<View>(null);
+  const successStatusRef =
+    useRef<View>(null);
+
+  const recoveryFailure =
+    recoveryFailureAccountIdentity ===
+    accountIdentity
+      ? storedRecoveryFailure
+      : null;
+  const successMessage =
+    successMessageAccountIdentity ===
+    accountIdentity
+      ? storedSuccessMessage
+      : null;
+  const statusEvent =
+    statusEventAccountIdentity ===
+    accountIdentity
+      ? storedStatusEvent
+      : null;
+  const loading =
+    loadingAccountIdentity === accountIdentity
+      ? storedLoading
+      : true;
+  const syncing =
+    syncingAccountIdentity === accountIdentity
+      ? storedSyncing
+      : false;
+  const exporting =
+    exportingAccountIdentity === accountIdentity
+      ? storedExporting
+      : false;
+
+  useEffect(
+    () => {
+      importOperationRef.current += 1;
+      setStoredSnapshot(null);
+      setSnapshotAccountIdentity(null);
+      setStoredImportProgress(null);
+      setImportProgressAccountIdentity(null);
+      setStoredRecoveryFailure(null);
+      setRecoveryFailureAccountIdentity(null);
+      setStoredSuccessMessage(null);
+      setSuccessMessageAccountIdentity(null);
+      setStoredStatusEvent(null);
+      setStatusEventAccountIdentity(null);
+      announcedStatusEventId.current =
+        null;
+      setStoredSyncing(false);
+      setSyncingAccountIdentity(null);
+      setStoredExporting(false);
+      setExportingAccountIdentity(null);
+    }, [
+      accountIdentity,
+    ]);
+
   const loadCachedSnapshot =
     useCallback(
       async (): Promise<void> => {
-        setLoading(true);
+        const loadAccountIdentity =
+          accountIdentity;
+        setStoredLoading(true);
+        setLoadingAccountIdentity(
+          loadAccountIdentity,
+        );
 
         try {
-          const cached =
-            await readSpotifyLibrarySnapshot();
+          const [
+            cached,
+            checkpoint,
+          ] = await Promise.all([
+            readSpotifyLibrarySnapshot(),
+            readSpotifyLibraryImportStatus(),
+          ]);
 
-          setSnapshot(
+          if (
+            accountIdentityRef.current !==
+            loadAccountIdentity
+          ) {
+            return;
+          }
+
+          setStoredSnapshot(
             cached,
           );
+          setSnapshotAccountIdentity(
+            loadAccountIdentity,
+          );
+          setStoredImportProgress(
+            checkpoint ??
+              cached?.importStatus ??
+              null,
+          );
+          setImportProgressAccountIdentity(
+            loadAccountIdentity,
+          );
 
-          setRecoveryFailure(
+          setStoredRecoveryFailure(
             (current) =>
               current?.operation ===
               "load"
                 ? null
                 : current,
           );
+          setRecoveryFailureAccountIdentity(
+            loadAccountIdentity,
+          );
         } catch (error) {
-          setRecoveryFailure(
+          if (
+            accountIdentityRef.current !==
+            loadAccountIdentity
+          ) {
+            return;
+          }
+
+          setStoredRecoveryFailure(
             (current) =>
               current?.operation ===
               "export"
@@ -471,12 +930,105 @@ export default function SpotifyLibraryScreen() {
                         : "Canal could not load your Spotify library.",
                   },
           );
+          setRecoveryFailureAccountIdentity(
+            loadAccountIdentity,
+          );
         } finally {
-          setLoading(false);
+          if (
+            accountIdentityRef.current ===
+            loadAccountIdentity
+          ) {
+            setStoredLoading(false);
+            setLoadingAccountIdentity(
+              loadAccountIdentity,
+            );
+          }
         }
+      },
+    [
+      accountIdentity,
+    ],
+  );
+
+  const publishStatusEvent =
+    useCallback(
+      (
+        eventAccountIdentity: string,
+        event: Omit<
+          SpotifyLibraryStatusEvent,
+          "id" | "accountIdentity"
+        >,
+      ): void => {
+        if (
+          accountIdentityRef.current !==
+          eventAccountIdentity
+        ) {
+          return;
+        }
+
+        statusEventSequenceRef.current +=
+          1;
+        setStoredStatusEvent({
+          ...event,
+          accountIdentity:
+            eventAccountIdentity,
+          id: `${eventAccountIdentity}:${statusEventSequenceRef.current}`,
+        });
+        setStatusEventAccountIdentity(
+          eventAccountIdentity,
+        );
       },
       [],
     );
+
+  useEffect(
+    () => {
+      if (
+        !statusEvent ||
+        statusEvent.accountIdentity !==
+          accountIdentity ||
+        announcedStatusEventId.current ===
+          statusEvent.id
+      ) {
+        return;
+      }
+
+      announcedStatusEventId.current =
+        statusEvent.id;
+
+      if (
+        process.env.EXPO_OS ===
+        "ios"
+      ) {
+        AccessibilityInfo
+          .announceForAccessibility(
+            statusEvent.message,
+          );
+      }
+
+      const targetRef =
+        statusEvent.target ===
+        "progress"
+          ? importStatusRef
+          : statusEvent.target ===
+              "recovery"
+            ? recoveryStatusRef
+            : successStatusRef;
+      const focusTarget =
+        findNodeHandle(
+          targetRef.current,
+        );
+
+      if (focusTarget !== null) {
+        AccessibilityInfo
+          .setAccessibilityFocus(
+            focusTarget,
+          );
+      }
+    }, [
+      accountIdentity,
+      statusEvent,
+    ]);
 
   useFocusEffect(
     useCallback(
@@ -491,28 +1043,145 @@ export default function SpotifyLibraryScreen() {
 
   const handleSync =
     async (): Promise<void> => {
-      setSyncing(true);
-      setSuccessMessage(null);
+      const syncAccountIdentity =
+        accountIdentity;
+      const operationId =
+        importOperationRef.current + 1;
+
+      importOperationRef.current =
+        operationId;
+      setStoredSyncing(true);
+      setSyncingAccountIdentity(
+        syncAccountIdentity,
+      );
+      setStoredSuccessMessage(null);
+      setSuccessMessageAccountIdentity(
+        syncAccountIdentity,
+      );
+      setStoredStatusEvent(null);
+      setStatusEventAccountIdentity(
+        syncAccountIdentity,
+      );
 
       try {
         const updated =
-          await syncSpotifyLibrary();
+          await syncSpotifyLibrary({
+            operationCommitGuard: () =>
+              accountIdentityRef.current ===
+                syncAccountIdentity &&
+              importOperationRef.current ===
+                operationId,
+            onProgress: (
+              progress: SpotifyLibraryImportProgress,
+            ) => {
+              if (
+                accountIdentityRef.current ===
+                  syncAccountIdentity &&
+                importOperationRef.current ===
+                  operationId
+              ) {
+                setStoredImportProgress(
+                  progress.status,
+                );
+                setImportProgressAccountIdentity(
+                  syncAccountIdentity,
+                );
+              }
+            },
+          });
 
-        setSnapshot(updated);
+        if (
+          accountIdentityRef.current !==
+            syncAccountIdentity ||
+          importOperationRef.current !==
+            operationId
+        ) {
+          return;
+        }
 
-        setSuccessMessage(
-          "Your Spotify taste snapshot is up to date.",
+        setStoredSnapshot(updated);
+        setSnapshotAccountIdentity(
+          syncAccountIdentity,
+        );
+        setStoredImportProgress(
+          updated.importStatus ??
+            null,
+        );
+        setImportProgressAccountIdentity(
+          syncAccountIdentity,
         );
 
-        setRecoveryFailure(
+        setStoredSuccessMessage(
+          "Your Spotify library import is complete.",
+        );
+        setSuccessMessageAccountIdentity(
+          syncAccountIdentity,
+        );
+        publishStatusEvent(
+          syncAccountIdentity,
+          {
+            message:
+              "Your Spotify library import is complete.",
+            target: "success",
+          },
+        );
+
+        setStoredRecoveryFailure(
           (current) =>
             current?.operation ===
             "export"
               ? current
               : null,
         );
+        setRecoveryFailureAccountIdentity(
+          syncAccountIdentity,
+        );
       } catch (error) {
-        setRecoveryFailure(
+        if (
+          accountIdentityRef.current !==
+            syncAccountIdentity ||
+          importOperationRef.current !==
+            operationId
+        ) {
+          return;
+        }
+
+        let checkpoint: SpotifyLibraryImportStatus | null =
+          null;
+
+        try {
+          checkpoint =
+            await readSpotifyLibraryImportStatus();
+
+          if (
+            accountIdentityRef.current !==
+              syncAccountIdentity ||
+            importOperationRef.current !==
+              operationId
+          ) {
+            return;
+          }
+
+          setStoredImportProgress(
+            checkpoint,
+          );
+          setImportProgressAccountIdentity(
+            syncAccountIdentity,
+          );
+        } catch {
+          // The recovery card below is still actionable if a checkpoint cannot be read.
+        }
+
+        if (
+          accountIdentityRef.current !==
+            syncAccountIdentity ||
+          importOperationRef.current !==
+            operationId
+        ) {
+          return;
+        }
+
+        setStoredRecoveryFailure(
           (current) =>
             current?.operation ===
             "export"
@@ -529,14 +1198,59 @@ export default function SpotifyLibraryScreen() {
                       : "Canal could not sync Spotify.",
                 },
         );
+        setRecoveryFailureAccountIdentity(
+          syncAccountIdentity,
+        );
+        publishStatusEvent(
+          syncAccountIdentity,
+          {
+            message: checkpoint
+              ? importStatusAnnouncement(
+                  checkpoint,
+                )
+              : "Spotify import needs attention. Use the recovery action to continue.",
+            target: checkpoint
+              ? "progress"
+              : "recovery",
+          },
+        );
       } finally {
-        setSyncing(false);
+        if (
+          accountIdentityRef.current ===
+            syncAccountIdentity &&
+          importOperationRef.current ===
+            operationId
+        ) {
+          setStoredSyncing(false);
+          setSyncingAccountIdentity(
+            syncAccountIdentity,
+          );
+        }
       }
     };
 
-  useReconnectReload(
-    handleSync,
-  );
+  const pauseSync =
+    (): void => {
+      importOperationRef.current += 1;
+      setStoredSyncing(false);
+      setSyncingAccountIdentity(
+        accountIdentity,
+      );
+      setStoredSuccessMessage(
+        "Spotify import paused. Resume when you are ready.",
+      );
+      setSuccessMessageAccountIdentity(
+        accountIdentity,
+      );
+      publishStatusEvent(
+        accountIdentity,
+        {
+          message:
+            "Spotify import paused. Resume when you are ready.",
+          target: "progress",
+        },
+      );
+    };
 
   const exportInFlight =
     useRef(false);
@@ -545,8 +1259,13 @@ export default function SpotifyLibraryScreen() {
     async (
       refreshBeforeExport = false,
     ): Promise<void> => {
+      const exportAccountIdentity =
+        accountIdentity;
+      const exportSnapshot =
+        snapshot;
+
       if (
-        !snapshot ||
+        !exportSnapshot ||
         exportInFlight.current
       ) {
         return;
@@ -554,7 +1273,10 @@ export default function SpotifyLibraryScreen() {
 
       exportInFlight.current =
         true;
-      setExporting(true);
+      setStoredExporting(true);
+      setExportingAccountIdentity(
+        exportAccountIdentity,
+      );
 
       try {
         if (
@@ -571,24 +1293,48 @@ export default function SpotifyLibraryScreen() {
           }
         }
 
-        setRecoveryFailure(
+        if (
+          accountIdentityRef.current !==
+          exportAccountIdentity
+        ) {
+          return;
+        }
+
+        setStoredRecoveryFailure(
           null,
         );
-        setSuccessMessage(null);
+        setRecoveryFailureAccountIdentity(
+          exportAccountIdentity,
+        );
+        setStoredSuccessMessage(null);
+        setSuccessMessageAccountIdentity(
+          exportAccountIdentity,
+        );
 
         const result =
           await exportSpotifyTastePlaylist(
-            snapshot,
+            exportSnapshot,
           );
 
-        setSuccessMessage(
+        if (
+          accountIdentityRef.current !==
+          exportAccountIdentity
+        ) {
+          return;
+        }
+
+        setStoredSuccessMessage(
           `Created a private Spotify playlist with ${result.trackCount} tracks.`,
+        );
+        setSuccessMessageAccountIdentity(
+          exportAccountIdentity,
         );
 
         const url =
-          result.playlist
-            .external_urls
-            ?.spotify;
+          getSpotifyContentUrl(
+            "playlist",
+            result.playlist,
+          );
 
         if (url) {
           try {
@@ -603,7 +1349,14 @@ export default function SpotifyLibraryScreen() {
           }
         }
       } catch (error) {
-        setRecoveryFailure({
+        if (
+          accountIdentityRef.current !==
+          exportAccountIdentity
+        ) {
+          return;
+        }
+
+        setStoredRecoveryFailure({
           operation:
             "export",
           cause:
@@ -613,11 +1366,22 @@ export default function SpotifyLibraryScreen() {
               ? error.message
               : "Canal could not create the Spotify playlist.",
         });
+        setRecoveryFailureAccountIdentity(
+          exportAccountIdentity,
+        );
       } finally {
         exportInFlight.current =
           false;
 
-        setExporting(false);
+        if (
+          accountIdentityRef.current ===
+          exportAccountIdentity
+        ) {
+          setStoredExporting(false);
+          setExportingAccountIdentity(
+            exportAccountIdentity,
+          );
+        }
       }
     };
 
@@ -648,11 +1412,6 @@ export default function SpotifyLibraryScreen() {
       .display_name ||
     snapshot?.profile.id ||
     "Your";
-
-  const profileImageUrl =
-    snapshot?.profile
-      .images?.[0]?.url ??
-    null;
 
   const recoveryIssue =
     useMemo(
@@ -800,6 +1559,49 @@ export default function SpotifyLibraryScreen() {
             />
           }
         >
+          {importProgress ? (
+            <ImportProgressCard
+              offline={
+                connectivityStatus ===
+                "offline"
+              }
+              onCancel={pauseSync}
+              onResume={() => {
+                void handleSync();
+              }}
+              status={importProgress}
+              statusAnnouncement={
+                statusEvent?.target ===
+                "progress"
+                  ? statusEvent.message
+                  : undefined
+              }
+              statusAnnouncementRef={
+                importStatusRef
+              }
+              syncing={syncing}
+            />
+          ) : null}
+
+          {statusEvent?.target ===
+          "recovery" ? (
+            <View
+              ref={recoveryStatusRef}
+              accessible
+              accessibilityLiveRegion="polite"
+              accessibilityRole="alert"
+              style={styles.recoveryStatusSummary}
+            >
+              <Text
+                style={
+                  styles.recoveryStatusSummaryText
+                }
+              >
+                {statusEvent.message}
+              </Text>
+            </View>
+          ) : null}
+
           {recoveryIssue ? (
             <RecoveryNotice
               busy={
@@ -839,6 +1641,7 @@ export default function SpotifyLibraryScreen() {
 
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Sync Spotify library"
                 accessibilityState={{
                   busy:
                     syncing,
@@ -906,35 +1709,21 @@ export default function SpotifyLibraryScreen() {
           ) : snapshot ? (
             <>
               <View style={styles.profileCard}>
-                {profileImageUrl ? (
-                  <Image
-                    source={{
-                      uri: profileImageUrl,
-                    }}
-                    style={{
-                      width: 66,
-                      height: 66,
-                      borderRadius: 33,
-                      marginRight: 15,
-                    }}
-                  />
-                ) : (
-                  <View
+                <View
+                  style={
+                    styles.profileFallback
+                  }
+                >
+                  <Text
                     style={
-                      styles.profileFallback
+                      styles.profileFallbackText
                     }
                   >
-                    <Text
-                      style={
-                        styles.profileFallbackText
-                      }
-                    >
-                      {displayName
-                        .charAt(0)
-                        .toUpperCase()}
-                    </Text>
-                  </View>
-                )}
+                    {displayName
+                      .charAt(0)
+                      .toUpperCase()}
+                  </Text>
+                </View>
 
                 <View
                   style={
@@ -1034,6 +1823,7 @@ export default function SpotifyLibraryScreen() {
               <View style={styles.actionRow}>
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel="Sync Spotify library again"
                   accessibilityState={{
                     busy:
                       syncing,
@@ -1077,6 +1867,7 @@ export default function SpotifyLibraryScreen() {
 
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel="Export playlist"
                   accessibilityState={{
                     busy:
                       exporting,
@@ -1120,7 +1911,31 @@ export default function SpotifyLibraryScreen() {
               </View>
 
               {successMessage ? (
-                <View style={styles.successBox}>
+                <View
+                  ref={
+                    statusEvent?.target ===
+                    "success"
+                      ? successStatusRef
+                      : undefined
+                  }
+                  accessible={
+                    statusEvent?.target ===
+                    "success"
+                  }
+                  accessibilityLiveRegion={
+                    statusEvent?.target ===
+                    "success"
+                      ? "polite"
+                      : undefined
+                  }
+                  accessibilityRole={
+                    statusEvent?.target ===
+                    "success"
+                      ? "alert"
+                      : undefined
+                  }
+                  style={styles.successBox}
+                >
                   <Text
                     style={
                       styles.successText
@@ -1402,9 +2217,9 @@ const styles = StyleSheet.create({
   },
 
   backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
@@ -1432,7 +2247,6 @@ const styles = StyleSheet.create({
   subtitle: {
     color: "#6C655F",
     fontSize: 15,
-    lineHeight: 21,
     marginTop: 4,
   },
 
@@ -1471,7 +2285,6 @@ const styles = StyleSheet.create({
   emptyText: {
     color: "#655F5A",
     fontSize: 15,
-    lineHeight: 22,
     marginTop: 8,
     marginBottom: 18,
   },
@@ -1522,7 +2335,6 @@ const styles = StyleSheet.create({
   syncTime: {
     color: "#746D67",
     fontSize: 12,
-    lineHeight: 17,
     marginTop: 4,
   },
 
@@ -1563,7 +2375,6 @@ const styles = StyleSheet.create({
   sceneButtonDescription: {
     color: "#DBC5BA",
     fontSize: 12,
-    lineHeight: 18,
     marginTop: 3,
   },
 
@@ -1692,7 +2503,6 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     color: "#746D67",
     fontSize: 13,
-    lineHeight: 18,
     marginTop: 3,
   },
 
@@ -1731,6 +2541,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#F0ECE8",
     paddingVertical: 10,
+  },
+
+  disabledRow: {
+    opacity: 0.5,
   },
 
   rankText: {
@@ -1792,7 +2606,6 @@ const styles = StyleSheet.create({
   rowSubtitle: {
     color: "#77706A",
     fontSize: 12,
-    lineHeight: 17,
     marginTop: 2,
     textTransform: "capitalize",
   },
@@ -1801,6 +2614,15 @@ const styles = StyleSheet.create({
     color: "#A29A93",
     fontSize: 25,
     marginLeft: 8,
+  },
+
+  spotifyLinkText: {
+    color: "#9A3F00",
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    marginLeft: 8,
+    textAlign: "right",
   },
 
   successBox: {
@@ -1812,7 +2634,6 @@ const styles = StyleSheet.create({
   successText: {
     color: "#1D7138",
     fontSize: 14,
-    lineHeight: 20,
     fontWeight: "700",
   },
 
@@ -1831,7 +2652,6 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#7E3833",
     fontSize: 13,
-    lineHeight: 19,
     marginTop: 4,
   },
 
@@ -1851,8 +2671,96 @@ const styles = StyleSheet.create({
   warningText: {
     color: "#714B2B",
     fontSize: 12,
-    lineHeight: 18,
     marginTop: 2,
+  },
+
+  importCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E2DAD4",
+    gap: 8,
+    padding: 16,
+  },
+
+  importTitle: {
+    color: "#1B1B1B",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+
+  importStatusSummary: {
+    backgroundColor: "#FFF4E9",
+    borderRadius: 12,
+    padding: 12,
+  },
+
+  importStatusSummaryText: {
+    color: "#714B2B",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  importText: {
+    color: "#4E4945",
+    fontSize: 13,
+  },
+
+  importWarning: {
+    color: "#8C4A12",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  importActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 4,
+  },
+
+  importResumeButton: {
+    minHeight: 48,
+    flexGrow: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: "#F47A24",
+    paddingHorizontal: 16,
+  },
+
+  importResumeText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  importPauseButton: {
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#D8D2CD",
+    paddingHorizontal: 16,
+  },
+
+  importPauseText: {
+    color: "#4E4945",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  recoveryStatusSummary: {
+    backgroundColor: "#FFF0EF",
+    borderRadius: 16,
+    padding: 15,
+  },
+
+  recoveryStatusSummaryText: {
+    color: "#7E3833",
+    fontSize: 14,
+    fontWeight: "700",
   },
 
   disabledButton: {
