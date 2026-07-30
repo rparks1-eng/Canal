@@ -85,7 +85,49 @@ describe(
           'accessibilityLiveRegion="polite"',
         );
         expect(screen).toContain(
-          "Spotify import is paused for Spotify's retry window.",
+          "Spotify import is paused. Resume will be available in about",
+        );
+      },
+    );
+
+    it(
+      "waits out a persisted Spotify retry window with a disabled, truthfully timed resume action",
+      () => {
+        expect(screen).toContain(
+          "getSpotifyLibraryImportRetryAfterSeconds",
+        );
+        expect(screen).toContain(
+          "retryWindowActive",
+        );
+        expect(screen).toContain(
+          "disabled: resumeDisabled",
+        );
+        expect(screen).toContain(
+          "Resume will be available in about",
+        );
+        expect(screen).toContain(
+          "Canal imports items only from playlists you own or collaborate on.",
+        );
+        expect(screen).not.toContain(
+          "Spotify does not allow Canal to read their items.",
+        );
+      },
+    );
+
+    it(
+      "derives visible Spotify links from canonical IDs without retaining provider URLs or artwork",
+      () => {
+        expect(screen).toContain(
+          "getSpotifyContentUrl",
+        );
+        expect(screen).toContain(
+          "Open in Spotify",
+        );
+        expect(screen).not.toContain(
+          "external_urls",
+        );
+        expect(screen).not.toContain(
+          "<Image",
         );
       },
     );

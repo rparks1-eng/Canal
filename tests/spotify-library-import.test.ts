@@ -26,6 +26,11 @@ import type {
 } from "../lib/spotify-auth";
 
 import {
+  getSpotifyContentUrl,
+} from "../lib/spotify-api";
+
+import {
+  getSpotifyLibraryImportRetryAfterSeconds,
   getLatestSpotifyLibrarySnapshot,
   readSpotifyLibraryImportStatus,
   readSpotifyLibrarySnapshot,
@@ -121,7 +126,8 @@ function track(index: number) {
   return {
     id: `track-${index}`,
     name: `Track ${index}`,
-    uri: `spotify:track:${index}`,
+    uri: `spotify:track:track-${index}`,
+    type: "track" as const,
     artists: [
       {
         id: "artist-1",
@@ -129,6 +135,19 @@ function track(index: number) {
         uri: "spotify:artist:1",
       },
     ],
+  };
+}
+
+function episode(index: number) {
+  return {
+    id: `episode-${index}`,
+    name: `Episode ${index}`,
+    uri: `spotify:episode:episode-${index}`,
+    type: "episode",
+    audio_preview_url:
+      `https://audio.example/episode-${index}.mp3`,
+    description:
+      "A provider-only episode description.",
   };
 }
 
@@ -681,15 +700,22 @@ describe(
             },
           ],
         });
-        await expect(
-          readSpotifyLibraryImportStatus(),
-        ).resolves.toMatchObject({
+        const partialStatus =
+          await readSpotifyLibraryImportStatus();
+        expect(partialStatus).toMatchObject({
           state: "incomplete",
+          retryAfterUntil: now + 2_000,
           savedTracks: {
             state: "partial",
             importedCount: 50,
           },
         });
+        expect(
+          getSpotifyLibraryImportRetryAfterSeconds(
+            partialStatus!,
+            now,
+          ),
+        ).toBe(2);
 
         retryWindow = false;
         now += 3_000;
@@ -705,6 +731,145 @@ describe(
         await expect(
           readSpotifyLibraryImportStatus(),
         ).resolves.toBeNull();
+      },
+    );
+
+    it(
+      "imports only explicit canonical tracks from legacy and current playlist-item payloads",
+      async () => {
+        await saveSpotifySession(
+          session("spotify-a"),
+          { syncLibrary: false },
+        );
+
+        jest.spyOn(global, "fetch").mockImplementation(
+          async (input) => {
+            const url = String(input);
+
+            if (
+              url.includes("/me/top/") ||
+              url.includes("/recently-played") ||
+              url.includes("/me/tracks")
+            ) {
+              return response(200, {
+                items: [],
+                offset: 0,
+                total: 0,
+                next: null,
+              });
+            }
+
+            if (url.includes("/me/playlists")) {
+              return response(200, {
+                items: [
+                  {
+                    id: "playlist-1",
+                    name: "Playlist 1",
+                    uri: "spotify:playlist:playlist-1",
+                    owner: { id: "spotify-a" },
+                    items: { total: 6 },
+                  },
+                ],
+                offset: 0,
+                total: 1,
+                next: null,
+              });
+            }
+
+            if (
+              url.includes(
+                "/playlists/playlist-1/items",
+              )
+            ) {
+              return response(200, {
+                items: [
+                  { track: track(1) },
+                  { item: track(2) },
+                  { item: episode(3) },
+                  { item: null },
+                  {
+                    track: {
+                      ...track(4),
+                      uri: "spotify:episode:4",
+                    },
+                  },
+                  {
+                    item: {
+                      ...track(5),
+                      is_local: true,
+                    },
+                  },
+                ],
+                offset: 0,
+                total: 6,
+                next: null,
+              });
+            }
+
+            throw new Error(`Unexpected URL: ${url}`);
+          },
+        );
+
+        const imported =
+          await syncSpotifyLibrary();
+
+        expect(
+          imported.playlistTracks.map(
+            (item) => item.id,
+          ),
+        ).toEqual([
+          "track-1",
+          "track-2",
+        ]);
+        expect(
+          JSON.stringify(imported),
+        ).not.toContain("episode-3");
+        expect(
+          JSON.stringify(imported),
+        ).not.toContain("audio.example/episode-3");
+      },
+    );
+
+    it(
+      "builds Spotify links only from a canonical allowlisted identifier",
+      () => {
+        expect(
+          getSpotifyContentUrl(
+            "track",
+            track(1),
+          ),
+        ).toBe(
+          "https://open.spotify.com/track/track-1",
+        );
+        expect(
+          getSpotifyContentUrl(
+            "artist",
+            {
+              id: "artist-1",
+              uri: "spotify:artist:artist-1",
+            },
+          ),
+        ).toBe(
+          "https://open.spotify.com/artist/artist-1",
+        );
+        expect(
+          getSpotifyContentUrl(
+            "playlist",
+            {
+              id: "playlist-1",
+              uri: "spotify:track:playlist-1",
+            },
+          ),
+        ).toBeNull();
+        expect(
+          getSpotifyContentUrl(
+            "track",
+            {
+              id: "track-1?redirect=example",
+              uri: "spotify:track:track-1?redirect=example",
+            },
+          ),
+        ).toBeNull();
       },
     );
 

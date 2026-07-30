@@ -6,6 +6,7 @@ import {
   getAllSpotifyPlaylistTracks,
   getAllSpotifyPlaylists,
   getAllSpotifySavedTracks,
+  getSpotifyTrackFromPlaylistItem,
   getSpotifyRecentlyPlayed,
   getSpotifyTopArtists,
   getSpotifyTopTracks,
@@ -106,6 +107,8 @@ export type SpotifyLibraryImportStatus = {
     | "complete"
     | "incomplete";
   resumed: boolean;
+  /** Epoch timestamp from an imported 429 checkpoint, never provider data. */
+  retryAfterUntil?: number;
   savedTracks:
     SpotifyLibraryImportSourceStatus;
   playlists:
@@ -1163,7 +1166,9 @@ function throwIfImportRetryWindowActive(
   }
 
   throw new SpotifyLibraryImportIncompleteError(
-    checkpoint.status,
+    importStatusForDisplay(
+      checkpoint,
+    ),
     new SpotifyApiError(
       "Spotify asked Canal to pause this import.",
       429,
@@ -1250,6 +1255,36 @@ function checkpointMatchesScope(
       cacheScope.spotifyAccountGeneration &&
     checkpoint.profileId ===
       cacheScope.spotifyProfileId
+  );
+}
+
+function importStatusForDisplay(
+  checkpoint: SpotifyLibraryImportCheckpoint,
+): SpotifyLibraryImportStatus {
+  return {
+    ...checkpoint.status,
+    ...(checkpoint.retryAfterUntil !== undefined
+      ? {
+          retryAfterUntil:
+            checkpoint.retryAfterUntil,
+        }
+      : {}),
+  };
+}
+
+export function getSpotifyLibraryImportRetryAfterSeconds(
+  status: SpotifyLibraryImportStatus,
+  now = Date.now(),
+): number | null {
+  if (
+    status.retryAfterUntil === undefined ||
+    status.retryAfterUntil <= now
+  ) {
+    return null;
+  }
+
+  return Math.ceil(
+    (status.retryAfterUntil - now) / 1000,
   );
 }
 
@@ -1426,7 +1461,9 @@ function publishLibraryImportProgress(
     // can render every meaningful page/source transition rather than bailing
     // out on a reused status reference.
     status: {
-      ...checkpoint.status,
+      ...importStatusForDisplay(
+        checkpoint,
+      ),
       savedTracks: {
         ...checkpoint.status.savedTracks,
       },
@@ -1603,8 +1640,11 @@ export async function readSpotifyLibraryImportStatus(): Promise<
       {},
     );
 
-  return checkpoint?.status ??
-    null;
+  return checkpoint
+    ? importStatusForDisplay(
+        checkpoint,
+      )
+    : null;
 }
 
 async function writeSpotifyLibrarySnapshot(
@@ -2505,7 +2545,9 @@ async function markImportSourceFailed(
   );
 
   throw new SpotifyLibraryImportIncompleteError(
-    checkpoint.status,
+    importStatusForDisplay(
+      checkpoint,
+    ),
     error,
   );
 }
@@ -2946,20 +2988,13 @@ async function performSpotifyLibraryFullSync(
                       ...checkpoint.playlistTracks,
                       ...page.items
                         .map(
-                          (item) =>
-                            item.track ??
-                            item.item ??
-                            null,
+                          getSpotifyTrackFromPlaylistItem,
                         )
                         .filter(
                           (
                             track,
                           ): track is SpotifyTrack =>
-                            Boolean(
-                              track?.id &&
-                                track.uri &&
-                                !track.is_local,
-                            ),
+                            track !== null,
                         ),
                     ]);
                   checkpoint.playlistTrackOffsets[
@@ -3072,7 +3107,9 @@ async function performSpotifyLibraryFullSync(
     )
   ) {
     throw new SpotifyLibraryImportIncompleteError(
-      checkpoint.status,
+      importStatusForDisplay(
+        checkpoint,
+      ),
       new Error(
         "Spotify import is incomplete.",
       ),
@@ -3149,7 +3186,7 @@ async function performSpotifyLibraryFullSync(
         checkpoint.status.skippedPlaylists.length === 1
           ? " was"
           : "s were"
-      } skipped because Spotify does not allow Canal to read its items.`,
+      } skipped because Canal imports items only from playlists you own or collaborate on.`,
     );
   }
 

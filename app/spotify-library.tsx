@@ -11,7 +11,6 @@ import {
   AccessibilityInfo,
   ActivityIndicator,
   findNodeHandle,
-  Image,
   Linking,
   Pressable,
   RefreshControl,
@@ -43,6 +42,7 @@ import {
 } from "../lib/recovery-issue";
 
 import {
+  getSpotifyLibraryImportRetryAfterSeconds,
   exportSpotifyTastePlaylist,
   readSpotifyLibraryImportStatus,
   readSpotifyLibrarySnapshot,
@@ -54,6 +54,10 @@ import type {
   SpotifyLibraryImportStatus,
   SpotifyLibrarySnapshot,
 } from "../lib/spotify-library";
+
+import {
+  getSpotifyContentUrl,
+} from "../lib/spotify-api";
 
 import type {
   SpotifyArtist,
@@ -142,7 +146,14 @@ function importStatusAnnouncement(
         source.state === "partial",
     )
   ) {
-    return "Spotify import is paused for Spotify's retry window. Resume when you are ready.";
+    const retryAfterSeconds =
+      getSpotifyLibraryImportRetryAfterSeconds(
+        status,
+      );
+
+    return retryAfterSeconds
+      ? `Spotify import is paused. Resume will be available in about ${formatRetryAfter(retryAfterSeconds)}.`
+      : "Spotify import is paused. Resume is available.";
   }
 
   if (
@@ -157,6 +168,24 @@ function importStatusAnnouncement(
   return "Spotify import is paused. Resume when you are ready.";
 }
 
+function formatRetryAfter(
+  retryAfterSeconds: number,
+): string {
+  if (retryAfterSeconds < 60) {
+    return `${retryAfterSeconds} second${
+      retryAfterSeconds === 1 ? "" : "s"
+    }`;
+  }
+
+  const minutes = Math.ceil(
+    retryAfterSeconds / 60,
+  );
+
+  return `${minutes} minute${
+    minutes === 1 ? "" : "s"
+  }`;
+}
+
 function ImportProgressCard(props: {
   status: SpotifyLibraryImportStatus;
   syncing: boolean;
@@ -168,6 +197,44 @@ function ImportProgressCard(props: {
 }) {
   const incomplete =
     props.status.state === "incomplete";
+  const [retryClock, setRetryClock] =
+    useState(() => Date.now());
+  const retryAfterUntil =
+    props.status.retryAfterUntil;
+  const retryAfterSeconds =
+    getSpotifyLibraryImportRetryAfterSeconds(
+      props.status,
+      retryClock,
+    );
+  const retryWindowActive =
+    retryAfterSeconds !== null;
+  const resumeDisabled =
+    props.syncing ||
+    props.offline ||
+    retryWindowActive;
+
+  useEffect(
+    () => {
+      setRetryClock(Date.now());
+
+      if (
+        retryAfterUntil === undefined ||
+        retryAfterUntil <= Date.now()
+      ) {
+        return;
+      }
+
+      const timeout = setTimeout(
+        () => {
+          setRetryClock(Date.now());
+        },
+        retryAfterUntil - Date.now(),
+      );
+
+      return () => {
+        clearTimeout(timeout);
+      };
+    }, [retryAfterUntil]);
   const followedPlaylistCount =
     props.status.skippedPlaylists.filter(
       (playlist) =>
@@ -230,13 +297,19 @@ function ImportProgressCard(props: {
 
       {followedPlaylistCount > 0 ? (
         <Text style={styles.importWarning}>
-          {followedPlaylistCount} followed playlist{followedPlaylistCount === 1 ? " was" : "s were"} skipped because Spotify does not allow Canal to read their items.
+          {followedPlaylistCount} followed playlist{followedPlaylistCount === 1 ? " was" : "s were"} skipped because Canal imports items only from playlists you own or collaborate on.
         </Text>
       ) : null}
 
       {inaccessiblePlaylistCount > 0 ? (
         <Text style={styles.importWarning}>
           {inaccessiblePlaylistCount} playlist{inaccessiblePlaylistCount === 1 ? " was" : "s were"} inaccessible when Canal tried to import its items.
+        </Text>
+      ) : null}
+
+      {retryAfterSeconds ? (
+        <Text style={styles.importWarning}>
+          Spotify asked Canal to wait. Resume will be available in about {formatRetryAfter(retryAfterSeconds)}.
         </Text>
       ) : null}
 
@@ -247,18 +320,13 @@ function ImportProgressCard(props: {
             accessibilityLabel="Resume Spotify import"
             accessibilityState={{
               busy: props.syncing,
-              disabled:
-                props.syncing ||
-                props.offline,
+              disabled: resumeDisabled,
             }}
-            disabled={
-              props.syncing ||
-              props.offline
-            }
+            disabled={resumeDisabled}
             onPress={props.onResume}
             style={({ pressed }) => [
               styles.importResumeButton,
-              (props.syncing || props.offline) &&
+              resumeDisabled &&
                 styles.disabledButton,
               pressed && styles.pressed,
             ]}
@@ -307,7 +375,7 @@ function formatSyncTime(
 }
 
 async function openExternalUrl(
-  url?: string,
+  url?: string | null,
 ): Promise<void> {
   if (!url) {
     return;
@@ -352,22 +420,31 @@ function ArtistRow(props: {
   artist: SpotifyArtist;
   rank: number;
 }) {
-  const imageUrl =
-    props.artist.images?.[0]
-      ?.url ?? null;
+  const spotifyUrl =
+    getSpotifyContentUrl(
+      "artist",
+      props.artist,
+    );
 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`Open ${props.artist.name} in Spotify`}
+      accessibilityHint="Opens this artist in Spotify."
+      accessibilityState={{
+        disabled: !spotifyUrl,
+      }}
+      disabled={!spotifyUrl}
       onPress={() => {
         void openExternalUrl(
-          props.artist
-            .external_urls
-            ?.spotify,
+          spotifyUrl,
         );
       }}
       style={({ pressed }) => [
         styles.listRow,
+
+        !spotifyUrl &&
+          styles.disabledRow,
 
         pressed &&
           styles.pressed,
@@ -377,35 +454,21 @@ function ArtistRow(props: {
         {props.rank}
       </Text>
 
-      {imageUrl ? (
-        <Image
-          source={{
-            uri: imageUrl,
-          }}
-          style={{
-            width: 46,
-            height: 46,
-            borderRadius: 23,
-            marginRight: 12,
-          }}
-        />
-      ) : (
-        <View
+      <View
+        style={
+          styles.artistFallback
+        }
+      >
+        <Text
           style={
-            styles.artistFallback
+            styles.fallbackText
           }
         >
-          <Text
-            style={
-              styles.fallbackText
-            }
-          >
-            {props.artist.name
-              .charAt(0)
-              .toUpperCase()}
-          </Text>
-        </View>
-      )}
+          {props.artist.name
+            .charAt(0)
+            .toUpperCase()}
+        </Text>
+      </View>
 
       <View style={styles.rowText}>
         <Text
@@ -427,8 +490,8 @@ function ArtistRow(props: {
         </Text>
       </View>
 
-      <Text style={styles.arrow}>
-        ›
+      <Text style={styles.spotifyLinkText}>
+        Open in Spotify
       </Text>
     </Pressable>
   );
@@ -438,18 +501,31 @@ function TrackRow(props: {
   track: SpotifyTrack;
   rank?: number;
 }) {
+  const spotifyUrl =
+    getSpotifyContentUrl(
+      "track",
+      props.track,
+    );
+
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`Open ${props.track.name} in Spotify`}
+      accessibilityHint="Opens this track in Spotify."
+      accessibilityState={{
+        disabled: !spotifyUrl,
+      }}
+      disabled={!spotifyUrl}
       onPress={() => {
         void openExternalUrl(
-          props.track
-            .external_urls
-            ?.spotify,
+          spotifyUrl,
         );
       }}
       style={({ pressed }) => [
         styles.listRow,
+
+        !spotifyUrl &&
+          styles.disabledRow,
 
         pressed &&
           styles.pressed,
@@ -493,8 +569,8 @@ function TrackRow(props: {
         </Text>
       </View>
 
-      <Text style={styles.arrow}>
-        ›
+      <Text style={styles.spotifyLinkText}>
+        Open in Spotify
       </Text>
     </Pressable>
   );
@@ -503,9 +579,11 @@ function TrackRow(props: {
 function PlaylistRow(props: {
   playlist: SpotifyPlaylist;
 }) {
-  const imageUrl =
-    props.playlist.images?.[0]
-      ?.url ?? null;
+  const spotifyUrl =
+    getSpotifyContentUrl(
+      "playlist",
+      props.playlist,
+    );
 
   const itemCount =
     props.playlist.items
@@ -517,47 +595,40 @@ function PlaylistRow(props: {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`Open ${props.playlist.name} in Spotify`}
+      accessibilityHint="Opens this playlist in Spotify."
+      accessibilityState={{
+        disabled: !spotifyUrl,
+      }}
+      disabled={!spotifyUrl}
       onPress={() => {
         void openExternalUrl(
-          props.playlist
-            .external_urls
-            ?.spotify,
+          spotifyUrl,
         );
       }}
       style={({ pressed }) => [
         styles.listRow,
 
+        !spotifyUrl &&
+          styles.disabledRow,
+
         pressed &&
           styles.pressed,
       ]}
     >
-      {imageUrl ? (
-        <Image
-          source={{
-            uri: imageUrl,
-          }}
-          style={{
-            width: 50,
-            height: 50,
-            borderRadius: 8,
-            marginRight: 12,
-          }}
-        />
-      ) : (
-        <View
+      <View
+        style={
+          styles.playlistFallback
+        }
+      >
+        <Text
           style={
-            styles.playlistFallback
+            styles.fallbackText
           }
         >
-          <Text
-            style={
-              styles.fallbackText
-            }
-          >
-            ≡
-          </Text>
-        </View>
-      )}
+          ≡
+        </Text>
+      </View>
 
       <View style={styles.rowText}>
         <Text
@@ -579,8 +650,8 @@ function PlaylistRow(props: {
         </Text>
       </View>
 
-      <Text style={styles.arrow}>
-        ›
+      <Text style={styles.spotifyLinkText}>
+        Open in Spotify
       </Text>
     </Pressable>
   );
@@ -1260,9 +1331,10 @@ export default function SpotifyLibraryScreen() {
         );
 
         const url =
-          result.playlist
-            .external_urls
-            ?.spotify;
+          getSpotifyContentUrl(
+            "playlist",
+            result.playlist,
+          );
 
         if (url) {
           try {
@@ -1340,11 +1412,6 @@ export default function SpotifyLibraryScreen() {
       .display_name ||
     snapshot?.profile.id ||
     "Your";
-
-  const profileImageUrl =
-    snapshot?.profile
-      .images?.[0]?.url ??
-    null;
 
   const recoveryIssue =
     useMemo(
@@ -1642,35 +1709,21 @@ export default function SpotifyLibraryScreen() {
           ) : snapshot ? (
             <>
               <View style={styles.profileCard}>
-                {profileImageUrl ? (
-                  <Image
-                    source={{
-                      uri: profileImageUrl,
-                    }}
-                    style={{
-                      width: 66,
-                      height: 66,
-                      borderRadius: 33,
-                      marginRight: 15,
-                    }}
-                  />
-                ) : (
-                  <View
+                <View
+                  style={
+                    styles.profileFallback
+                  }
+                >
+                  <Text
                     style={
-                      styles.profileFallback
+                      styles.profileFallbackText
                     }
                   >
-                    <Text
-                      style={
-                        styles.profileFallbackText
-                      }
-                    >
-                      {displayName
-                        .charAt(0)
-                        .toUpperCase()}
-                    </Text>
-                  </View>
-                )}
+                    {displayName
+                      .charAt(0)
+                      .toUpperCase()}
+                  </Text>
+                </View>
 
                 <View
                   style={
@@ -2490,6 +2543,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
 
+  disabledRow: {
+    opacity: 0.5,
+  },
+
   rankText: {
     width: 25,
     color: "#8A827B",
@@ -2557,6 +2614,15 @@ const styles = StyleSheet.create({
     color: "#A29A93",
     fontSize: 25,
     marginLeft: 8,
+  },
+
+  spotifyLinkText: {
+    color: "#9A3F00",
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    marginLeft: 8,
+    textAlign: "right",
   },
 
   successBox: {

@@ -52,6 +52,7 @@ export type SpotifyTrack = {
   id: string;
   name: string;
   uri: string;
+  type?: "track";
   href?: string;
   duration_ms?: number;
   explicit?: boolean;
@@ -111,9 +112,49 @@ export type SpotifyRecentItem = {
 };
 
 export type SpotifyPlaylistTrackItem = {
-  track?: SpotifyTrack | null;
-  item?: SpotifyTrack | null;
+  /** Legacy playlist-item payload. */
+  track?: unknown | null;
+  /** Current playlist-item payload; this can also be an EpisodeObject. */
+  item?: unknown | null;
 };
+
+export type SpotifyContentKind =
+  | "artist"
+  | "playlist"
+  | "track";
+
+type SpotifyContentReference = {
+  id?: unknown;
+  uri?: unknown;
+};
+
+const SPOTIFY_CONTENT_IDENTIFIER =
+  /^[A-Za-z0-9_-]+$/u;
+
+/**
+ * Build a display-time Spotify link from Canal's canonical, allowlisted
+ * identifier fields. Raw provider URLs are intentionally never retained in
+ * the local library snapshot or import checkpoint.
+ */
+export function getSpotifyContentUrl(
+  kind: SpotifyContentKind,
+  value: SpotifyContentReference,
+): string | null {
+  if (
+    typeof value.id !== "string" ||
+    !SPOTIFY_CONTENT_IDENTIFIER.test(
+      value.id,
+    ) ||
+    value.uri !==
+      `spotify:${kind}:${value.id}`
+  ) {
+    return null;
+  }
+
+  return `https://open.spotify.com/${kind}/${encodeURIComponent(
+    value.id,
+  )}`;
+}
 
 export type SpotifySavedTrackItem = {
   added_at: string;
@@ -842,6 +883,49 @@ export async function getAllSpotifyPlaylists(
   );
 }
 
+/**
+ * The current playlist-items endpoint returns `item`, which can be either a
+ * TrackObject or an EpisodeObject. The older response shape uses `track`.
+ * Import only an explicit, canonical TrackObject from either shape.
+ */
+export function getSpotifyTrackFromPlaylistItem(
+  entry: SpotifyPlaylistTrackItem,
+): SpotifyTrack | null {
+  const candidates = [
+    entry.item,
+    entry.track,
+  ];
+
+  for (const value of candidates) {
+    if (
+      !value ||
+      typeof value !== "object"
+    ) {
+      continue;
+    }
+
+    const candidate =
+      value as Partial<SpotifyTrack>;
+
+    if (
+      candidate.type !== "track" ||
+      typeof candidate.id !== "string" ||
+      !SPOTIFY_CONTENT_IDENTIFIER.test(
+        candidate.id,
+      ) ||
+      candidate.uri !==
+        `spotify:track:${candidate.id}` ||
+      candidate.is_local
+    ) {
+      continue;
+    }
+
+    return candidate as SpotifyTrack;
+  }
+
+  return null;
+}
+
 export async function getAllSpotifyPlaylistTracks(
   playlistId: string,
   options: SpotifyPaginatedReadOptions<
@@ -861,20 +945,13 @@ export async function getAllSpotifyPlaylistTracks(
 
   return items
     .map(
-      (entry) =>
-        entry.track ??
-        entry.item ??
-        null,
+      getSpotifyTrackFromPlaylistItem,
     )
     .filter(
       (
         track,
       ): track is SpotifyTrack =>
-        Boolean(
-          track?.id &&
-            track.uri &&
-            !track.is_local,
-        ),
+        track !== null,
     );
 }
 
