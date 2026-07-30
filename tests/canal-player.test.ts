@@ -27,6 +27,7 @@ import {
   advancePlayerSession,
   CanalPlayerStorageError,
   clearPlayerSession,
+  clearPlayerSessionForOwner,
   constrainPlayerSessionToScene,
   createPlayerSession,
   movePlayerSession,
@@ -324,6 +325,70 @@ describe(
             PLAYER_KEY,
           ),
         ).toBe(false);
+      },
+    );
+
+    it(
+      "clears playback only when the stored session belongs to the captured account",
+      async () => {
+        mockStorage.set(
+          PLAYER_KEY,
+          JSON.stringify(
+            playerSession,
+          ),
+        );
+
+        await expect(
+          clearPlayerSessionForOwner(
+            PLAYER_OWNER_ID,
+          ),
+        ).resolves.toBe(
+          true,
+        );
+
+        expect(
+          mockStorage.has(
+            PLAYER_KEY,
+          ),
+        ).toBe(false);
+      },
+    );
+
+    it(
+      "preserves playback owned by a replacement account during stale logout cleanup",
+      async () => {
+        const replacementSession = {
+          ...playerSession,
+          id:
+            "player-replacement-account",
+          ownerId:
+            REPLACEMENT_OWNER_ID,
+        };
+
+        mockStorage.set(
+          PLAYER_KEY,
+          JSON.stringify(
+            replacementSession,
+          ),
+        );
+
+        await expect(
+          clearPlayerSessionForOwner(
+            PLAYER_OWNER_ID,
+          ),
+        ).resolves.toBe(
+          false,
+        );
+
+        expect(
+          mockStorage.get(
+            PLAYER_KEY,
+          ),
+        ).toBe(
+          JSON.stringify(
+            replacementSession,
+          ),
+        );
       },
     );
 

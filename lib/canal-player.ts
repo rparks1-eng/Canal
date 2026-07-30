@@ -799,6 +799,82 @@ export async function writePlayerSession(
   );
 }
 
+export async function clearPlayerSessionForOwner(
+  expectedOwnerId: string,
+): Promise<boolean> {
+  const ownerId =
+    expectedOwnerId.trim();
+
+  if (!ownerId) {
+    throw new Error(
+      "Canal cannot clear playback without an account owner.",
+    );
+  }
+
+  return queuePlayerStorageOperation(
+    async () => {
+      try {
+        const serialized =
+          await AsyncStorage.getItem(
+            PLAYER_KEY,
+          );
+
+        const storedSession =
+          serialized
+            ? normalizePlayerSession(
+                JSON.parse(
+                  serialized,
+                ),
+              )
+            : null;
+
+        if (
+          !storedSession ||
+          storedSession.ownerId !==
+            ownerId
+        ) {
+          return false;
+        }
+
+        playerStorageGeneration +=
+          1;
+
+        playerSessionGenerations.clear();
+
+        rememberClearedPlayerSession(
+          storedSession.id,
+        );
+
+        clearingPlayerSessionIds.delete(
+          storedSession.id,
+        );
+
+        if (
+          activePlayerSessionId ===
+          storedSession.id
+        ) {
+          activePlayerSessionId =
+            null;
+        }
+
+        await AsyncStorage.removeItem(
+          PLAYER_KEY,
+        );
+
+        return true;
+      } catch (error) {
+        throw new CanalPlayerStorageError(
+          "clear",
+          "Canal could not finish clearing playback progress.",
+          {
+            cause: error,
+          },
+        );
+      }
+    },
+  );
+}
+
 export async function clearPlayerSession(
   expectedSessionId?: string,
 ): Promise<void> {

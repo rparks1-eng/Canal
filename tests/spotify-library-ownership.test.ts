@@ -15,6 +15,7 @@ import * as spotifyAuth from "../lib/spotify-auth";
 
 import {
   createSpotifyPlaylist,
+  getSpotifyTopArtists,
   searchSpotifyCatalogTracks,
 } from "../lib/spotify-api";
 
@@ -611,6 +612,121 @@ describe(
     );
 
     it(
+      "preserves an exact successor library value when a revoked OAuth operation finishes its deferred write",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            "account-a",
+          ),
+          {
+            syncLibrary:
+              false,
+          },
+        );
+
+        const connectionGeneration =
+          getSpotifyConnectionGeneration();
+
+        await saveSpotifyLibrarySnapshot(
+          createSnapshot(
+            "account-a",
+          ),
+          {
+            expectedConnectionGeneration:
+              connectionGeneration,
+          },
+        );
+
+        let commitCurrent =
+          true;
+
+        let signalWrite:
+          () => void =
+            () => {};
+
+        const writeStarted =
+          new Promise<void>(
+            (resolve) => {
+              signalWrite =
+                resolve;
+            },
+          );
+
+        let releaseWrite:
+          () => void =
+            () => {};
+
+        const writeMayFinish =
+          new Promise<void>(
+            (resolve) => {
+              releaseWrite =
+                resolve;
+            },
+          );
+
+        mockAsyncStorage.setItem
+          .mockImplementationOnce(
+            async (
+              key: string,
+              value: string,
+            ) => {
+              mockStorage.set(
+                key,
+                value,
+              );
+              signalWrite();
+              await writeMayFinish;
+            },
+          );
+
+        const staleWrite =
+          saveSpotifyLibrarySnapshot(
+            {
+              ...createSnapshot(
+                "account-a",
+              ),
+              syncedAt:
+                "2026-07-30T12:00:00.000Z",
+            },
+            {
+              expectedConnectionGeneration:
+                connectionGeneration,
+              operationCommitGuard:
+                () =>
+                  commitCurrent,
+            },
+          );
+
+        await writeStarted;
+
+        const successorValue =
+          "exact-a2-library-value";
+
+        mockStorage.set(
+          SPOTIFY_LIBRARY_STORAGE_KEY,
+          successorValue,
+        );
+        commitCurrent =
+          false;
+        releaseWrite();
+
+        await expect(
+          staleWrite,
+        ).rejects.toThrow(
+          "connection changed",
+        );
+
+        expect(
+          mockStorage.get(
+            SPOTIFY_LIBRARY_STORAGE_KEY,
+          ),
+        ).toBe(
+          successorValue,
+        );
+      },
+    );
+
+    it(
       "preserves account B cache when account A finishes an obsolete save",
       async () => {
         await saveSpotifySession(
@@ -652,8 +768,11 @@ describe(
         let accountBWriteStarted =
           false;
 
+        let libraryWriteCount =
+          0;
+
         mockAsyncStorage.setItem
-          .mockImplementationOnce(
+          .mockImplementation(
             async (
               key: string,
               value: string,
@@ -663,23 +782,29 @@ describe(
                 value,
               );
 
-              signalAccountAStored();
+              if (
+                key !==
+                  SPOTIFY_LIBRARY_STORAGE_KEY
+              ) {
+                return;
+              }
 
-              await accountAWriteGate;
-            },
-          )
-          .mockImplementationOnce(
-            async (
-              key: string,
-              value: string,
-            ) => {
+              libraryWriteCount +=
+                1;
+
+              if (
+                libraryWriteCount ===
+                  1
+              ) {
+                signalAccountAStored();
+
+                await accountAWriteGate;
+
+                return;
+              }
+
               accountBWriteStarted =
                 true;
-
-              mockStorage.set(
-                key,
-                value,
-              );
             },
           );
 
@@ -967,6 +1092,226 @@ describe(
           fetchMock,
         ).toHaveBeenCalledTimes(
           1,
+        );
+      },
+    );
+
+    it(
+      "does not let a revoked sync share or replace a later operation cache under the same Canal session",
+      async () => {
+        await saveSpotifySession(
+          createSession(
+            "account-a",
+          ),
+          {
+            syncLibrary:
+              false,
+          },
+        );
+
+        const responseResolvers:
+          (
+            (
+              response:
+                Response,
+            ) => void
+          )[] = [];
+
+        let signalInitialReads:
+          () => void =
+            () => {};
+
+        const initialReadsStarted =
+          new Promise<void>(
+            (resolve) => {
+              signalInitialReads =
+                resolve;
+            },
+          );
+
+        let signalSuccessorRead:
+          () => void =
+            () => {};
+
+        const successorReadStarted =
+          new Promise<void>(
+            (resolve) => {
+              signalSuccessorRead =
+                resolve;
+            },
+          );
+
+        const fetchMock =
+          jest
+            .spyOn(
+              global,
+              "fetch",
+            )
+            .mockImplementation(
+              () =>
+                new Promise<Response>(
+                  (resolve) => {
+                    responseResolvers.push(
+                      resolve,
+                    );
+
+                    if (
+                      responseResolvers.length ===
+                        5
+                    ) {
+                      signalInitialReads();
+                    }
+
+                    if (
+                      responseResolvers.length ===
+                        6
+                    ) {
+                      signalSuccessorRead();
+                    }
+                  },
+                ),
+            );
+
+        let initialOperationCurrent =
+          true;
+
+        await saveSpotifySession(
+          {
+            ...createSession(
+              "account-a",
+            ),
+            accessToken:
+              "revoked-b-token",
+          },
+          {
+            syncLibrary:
+              false,
+          },
+        );
+
+        const provisionalSync =
+          syncSpotifyLibrary({
+            operationCommitGuard:
+              () =>
+                initialOperationCurrent,
+          });
+
+        await initialReadsStarted;
+
+        initialOperationCurrent =
+          false;
+
+        await saveSpotifySession(
+          {
+            ...createSession(
+              "account-a",
+            ),
+            accessToken:
+              "successor-c-token",
+          },
+          {
+            syncLibrary:
+              false,
+          },
+        );
+
+        const successorRead =
+          getSpotifyTopArtists(
+            20,
+            {
+              operationCommitGuard:
+                () =>
+                  true,
+            },
+          );
+
+        await successorReadStarted;
+
+        responseResolvers[5](
+          mockResponse(
+            200,
+            {
+              items: [
+                {
+                  id:
+                    "successor-c-artist",
+                  name:
+                    "Successor C",
+                  uri:
+                    "spotify:artist:successor-c",
+                },
+              ],
+            },
+          ),
+        );
+
+        await expect(
+          successorRead,
+        ).resolves.toEqual(
+          expect.objectContaining({
+            items: [
+              expect.objectContaining({
+                id:
+                  "successor-c-artist",
+              }),
+            ],
+          }),
+        );
+
+        for (
+          const resolve of
+          responseResolvers.slice(
+            0,
+            5,
+          )
+        ) {
+          resolve(
+            mockResponse(
+              200,
+              {
+                items: [],
+              },
+            ),
+          );
+        }
+
+        await expect(
+          provisionalSync,
+        ).rejects.toThrow(
+          "connection changed",
+        );
+
+        await expect(
+          getSpotifyTopArtists(
+            20,
+            {
+              operationCommitGuard:
+                () =>
+                  true,
+            },
+          ),
+        ).resolves.toEqual(
+          expect.objectContaining({
+            items: [
+              expect.objectContaining({
+                id:
+                  "successor-c-artist",
+              }),
+            ],
+          }),
+        );
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          6,
+        );
+        expect(
+          (
+            await readSpotifySession()
+          )?.accessToken,
+        ).toBe(
+          "successor-c-token",
         );
       },
     );

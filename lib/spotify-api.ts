@@ -140,7 +140,17 @@ type SpotifyRequestOptions = {
   connectionGuard?:
     SpotifyConnectionGuard;
 
+  operationCommitGuard?:
+    () => boolean;
+
   cacheTtlMs?: number;
+};
+
+type SpotifyGuardedReadOptions = {
+  connectionGuard?:
+    SpotifyConnectionGuard;
+  operationCommitGuard?:
+    () => boolean;
 };
 
 type SpotifyErrorPayload = {
@@ -184,13 +194,15 @@ export class SpotifyApiError extends Error {
 }
 
 type SpotifyGetCacheEntry = {
-  connectionGeneration: number;
+  requestIdentity: string;
   expiresAt: number;
   value: unknown;
 };
 
 type SpotifyGetInFlight = {
-  connectionGeneration: number;
+  requestIdentity: string;
+  operationCommitGuard?:
+    () => boolean;
   promise: Promise<unknown>;
 };
 
@@ -377,11 +389,27 @@ async function assertSpotifyRequestCurrent(
   connectionGeneration: number,
   connectionGuard?:
     SpotifyConnectionGuard,
+  operationCommitGuard?:
+    () => boolean,
 ): Promise<void> {
+  if (
+    operationCommitGuard &&
+    !operationCommitGuard()
+  ) {
+    throw new SpotifySessionChangedError();
+  }
+
   if (connectionGuard) {
     await assertSpotifyConnectionGuardCurrent(
       connectionGuard,
     );
+  }
+
+  if (
+    operationCommitGuard &&
+    !operationCommitGuard()
+  ) {
+    throw new SpotifySessionChangedError();
   }
 
   if (
@@ -390,6 +418,30 @@ async function assertSpotifyRequestCurrent(
   ) {
     throw new SpotifySessionChangedError();
   }
+}
+
+function buildSpotifyRequestIdentity(
+  connectionGeneration: number,
+  connectionGuard?:
+    SpotifyConnectionGuard,
+): string {
+  if (!connectionGuard) {
+    return `ambient:${connectionGeneration}`;
+  }
+
+  return [
+    "guarded",
+    connectionGeneration,
+    connectionGuard
+      .connectionAuthority,
+    connectionGuard
+      .canalOwnerId ??
+      "signed-out",
+    connectionGuard
+      .canalAccountGeneration,
+    connectionGuard
+      .profileId,
+  ].join(":");
 }
 
 async function spotifyRequest<T>(
@@ -423,7 +475,14 @@ async function spotifyRequest<T>(
   await assertSpotifyRequestCurrent(
     connectionGeneration,
     options.connectionGuard,
+    options.operationCommitGuard,
   );
+
+  const requestIdentity =
+    buildSpotifyRequestIdentity(
+      connectionGeneration,
+      options.connectionGuard,
+    );
 
   const existingCache =
     spotifyGetCache.get(
@@ -433,11 +492,17 @@ async function spotifyRequest<T>(
   if (
     existingCache &&
     existingCache
-      .connectionGeneration ===
-      connectionGeneration &&
+      .requestIdentity ===
+      requestIdentity &&
     existingCache.expiresAt >
       Date.now()
   ) {
+    await assertSpotifyRequestCurrent(
+      connectionGeneration,
+      options.connectionGuard,
+      options.operationCommitGuard,
+    );
+
     return existingCache.value as T;
   }
 
@@ -449,9 +514,18 @@ async function spotifyRequest<T>(
   if (
     existingRequest &&
     existingRequest
-      .connectionGeneration ===
-      connectionGeneration
+      .requestIdentity ===
+      requestIdentity &&
+    existingRequest
+      .operationCommitGuard ===
+      options.operationCommitGuard
   ) {
+    await assertSpotifyRequestCurrent(
+      connectionGeneration,
+      options.connectionGuard,
+      options.operationCommitGuard,
+    );
+
     const existingValue =
       await existingRequest
         .promise as T;
@@ -459,6 +533,7 @@ async function spotifyRequest<T>(
     await assertSpotifyRequestCurrent(
       connectionGeneration,
       options.connectionGuard,
+      options.operationCommitGuard,
     );
 
     return existingValue;
@@ -473,7 +548,9 @@ async function spotifyRequest<T>(
   spotifyGetInFlight.set(
     requestUrl,
     {
-      connectionGeneration,
+      requestIdentity,
+      operationCommitGuard:
+        options.operationCommitGuard,
       promise:
         request,
     },
@@ -486,6 +563,7 @@ async function spotifyRequest<T>(
     await assertSpotifyRequestCurrent(
       connectionGeneration,
       options.connectionGuard,
+      options.operationCommitGuard,
     );
 
     const cacheTtlMs =
@@ -499,7 +577,7 @@ async function spotifyRequest<T>(
       spotifyGetCache.set(
         requestUrl,
         {
-          connectionGeneration,
+          requestIdentity,
           expiresAt:
             Date.now() +
             cacheTtlMs,
@@ -532,10 +610,8 @@ export async function getSpotifyProfile(): Promise<
 
 export async function getSpotifyTopArtists(
   limit = 20,
-  options: {
-    connectionGuard?:
-      SpotifyConnectionGuard;
-  } = {},
+  options:
+    SpotifyGuardedReadOptions = {},
 ): Promise<SpotifyPage<SpotifyArtist>> {
   const safeLimit =
     Math.min(
@@ -550,16 +626,16 @@ export async function getSpotifyTopArtists(
     {
       connectionGuard:
         options.connectionGuard,
+      operationCommitGuard:
+        options.operationCommitGuard,
     },
   );
 }
 
 export async function getSpotifyTopTracks(
   limit = 20,
-  options: {
-    connectionGuard?:
-      SpotifyConnectionGuard;
-  } = {},
+  options:
+    SpotifyGuardedReadOptions = {},
 ): Promise<SpotifyPage<SpotifyTrack>> {
   const safeLimit =
     Math.min(
@@ -574,16 +650,16 @@ export async function getSpotifyTopTracks(
     {
       connectionGuard:
         options.connectionGuard,
+      operationCommitGuard:
+        options.operationCommitGuard,
     },
   );
 }
 
 export async function getSpotifyRecentlyPlayed(
   limit = 20,
-  options: {
-    connectionGuard?:
-      SpotifyConnectionGuard;
-  } = {},
+  options:
+    SpotifyGuardedReadOptions = {},
 ): Promise<SpotifyRecentResponse> {
   const safeLimit =
     Math.min(
@@ -596,16 +672,16 @@ export async function getSpotifyRecentlyPlayed(
     {
       connectionGuard:
         options.connectionGuard,
+      operationCommitGuard:
+        options.operationCommitGuard,
     },
   );
 }
 
 export async function getSpotifySavedTracks(
   limit = 20,
-  options: {
-    connectionGuard?:
-      SpotifyConnectionGuard;
-  } = {},
+  options:
+    SpotifyGuardedReadOptions = {},
 ): Promise<
   SpotifyPage<SpotifySavedTrackItem>
 > {
@@ -622,16 +698,16 @@ export async function getSpotifySavedTracks(
     {
       connectionGuard:
         options.connectionGuard,
+      operationCommitGuard:
+        options.operationCommitGuard,
     },
   );
 }
 
 export async function getSpotifyPlaylists(
   limit = 20,
-  options: {
-    connectionGuard?:
-      SpotifyConnectionGuard;
-  } = {},
+  options:
+    SpotifyGuardedReadOptions = {},
 ): Promise<SpotifyPage<SpotifyPlaylist>> {
   const safeLimit =
     Math.min(
@@ -646,6 +722,8 @@ export async function getSpotifyPlaylists(
     {
       connectionGuard:
         options.connectionGuard,
+      operationCommitGuard:
+        options.operationCommitGuard,
     },
   );
 }
@@ -787,10 +865,8 @@ export async function getSpotifyArtistsByIds(
 export async function searchSpotifyCatalogTracks(
   query: string,
   limit = 10,
-  options: {
-    connectionGuard?:
-      SpotifyConnectionGuard;
-  } = {},
+  options:
+    SpotifyGuardedReadOptions = {},
 ): Promise<SpotifyTrack[]> {
   const safeLimit =
     Math.min(
@@ -815,6 +891,8 @@ export async function searchSpotifyCatalogTracks(
           1000,
         connectionGuard:
           options.connectionGuard,
+        operationCommitGuard:
+          options.operationCommitGuard,
       },
     );
 

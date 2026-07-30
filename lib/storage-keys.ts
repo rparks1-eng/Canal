@@ -46,6 +46,9 @@ export const STORAGE_KEYS = {
   spotifyReturnRoute:
     "@canal/spotify-return-route",
 
+  spotifyLibrarySnapshot:
+    "@canal/spotify-library-snapshot",
+
   snapshots:
     "@canal/snapshots",
 
@@ -55,9 +58,57 @@ export const STORAGE_KEYS = {
   spotifyCachePrefix:
     "@canal/spotify-cache:",
 
+  accountCleanupPrefix:
+    "@canal/account-cleanup-incomplete:",
+
   analyticsQueue:
     "@canal/analytics/v1/queue",
 } as const;
 
 export const CANAL_STORAGE_PREFIX =
   "@canal/";
+
+export type SpotifyCacheScopeIdentity = {
+  ownerId: string;
+  sessionGeneration: string;
+  spotifyAccountGeneration: number;
+  spotifyProfileId: string;
+};
+
+export function getSpotifyCacheAuthorityNamespace(
+  identity:
+    Omit<
+      SpotifyCacheScopeIdentity,
+      "spotifyProfileId"
+    >,
+): string {
+  return (
+    STORAGE_KEYS
+      .spotifyCachePrefix +
+    [
+      "v3",
+      encodeURIComponent(
+        identity.ownerId,
+      ),
+      encodeURIComponent(
+        identity.sessionGeneration,
+      ),
+      identity.spotifyAccountGeneration,
+      "",
+    ].join(":")
+  );
+}
+
+export function getSpotifyCacheNamespace(
+  identity: SpotifyCacheScopeIdentity,
+): string {
+  return (
+    getSpotifyCacheAuthorityNamespace(
+      identity,
+    ) +
+    encodeURIComponent(
+      identity.spotifyProfileId,
+    ) +
+    ":"
+  );
+}

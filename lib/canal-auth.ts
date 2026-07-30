@@ -22,6 +22,532 @@ export {
   PASSWORD_RESET_URL,
 };
 
+export type CanalAccountSessionGuard = {
+  userId: string;
+  epoch: number;
+  sessionGeneration: string;
+};
+
+export type CanalAccountSessionMutation = {
+  guard:
+    CanalAccountSessionGuard;
+  assertCurrent:
+    () => Promise<void>;
+  readCurrentStatus:
+    () => Promise<CanalAccountSessionStatus>;
+  signOutLocal:
+    () => Promise<void>;
+};
+
+export type CanalAccountSessionStatus =
+  | "account-changed"
+  | "same-account"
+  | "signed-out"
+  | "unknown";
+
+export class CanalAccountSessionChangedError extends Error {
+  constructor() {
+    super(
+      "The Canal account changed while this action was running. Try again with the current account.",
+    );
+
+    this.name =
+      "CanalAccountSessionChangedError";
+  }
+}
+
+export class CanalLocalSignOutError extends Error {
+  status:
+    CanalAccountSessionStatus;
+
+  constructor(
+    status:
+      CanalAccountSessionStatus,
+    message: string,
+    options: {
+      cause?: unknown;
+    } = {},
+  ) {
+    super(
+      message,
+      options,
+    );
+
+    this.name =
+      "CanalLocalSignOutError";
+
+    this.status =
+      status;
+  }
+}
+
+let sessionMutationTail:
+  Promise<void> =
+    Promise.resolve();
+
+let observedSessionUserId:
+  | string
+  | null
+  | undefined;
+
+let observedSessionGeneration:
+  | string
+  | null
+  | undefined;
+
+let sessionEpoch =
+  0;
+
+function readJwtSessionId(
+  accessToken:
+    string | null | undefined,
+): string | null {
+  const payloadSegment =
+    accessToken
+      ?.split(".")[1];
+
+  if (!payloadSegment) {
+    return null;
+  }
+
+  try {
+    const normalized =
+      payloadSegment
+        .replace(
+          /-/g,
+          "+",
+        )
+        .replace(
+          /_/g,
+          "/",
+        )
+        .padEnd(
+          Math.ceil(
+            payloadSegment.length /
+              4,
+          ) * 4,
+          "=",
+        );
+
+    const payload =
+      JSON.parse(
+        globalThis.atob(
+          normalized,
+        ),
+      ) as {
+        session_id?: unknown;
+      };
+
+    return (
+      typeof payload.session_id ===
+        "string" &&
+      payload.session_id.trim()
+    )
+      ? payload.session_id.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readCanalAccountSessionGeneration(
+  session:
+    Session | null,
+): string | null {
+  if (!session) {
+    return null;
+  }
+
+  const sessionId =
+    readJwtSessionId(
+      session.access_token,
+    );
+
+  if (sessionId) {
+    return `session:${sessionId}`;
+  }
+
+  const lastSignInAt =
+    session.user
+      .last_sign_in_at
+      ?.trim();
+
+  return lastSignInAt
+    ? `signed-in:${lastSignInAt}`
+    : null;
+}
+
+async function queueCanalSessionMutation<
+  Result,
+>(
+  mutation:
+    () => Promise<Result>,
+): Promise<Result> {
+  const previousMutation =
+    sessionMutationTail;
+
+  let releaseMutation:
+    () => void =
+      () => {};
+
+  sessionMutationTail =
+    new Promise<void>(
+      (resolve) => {
+        releaseMutation =
+          resolve;
+      },
+    );
+
+  await previousMutation;
+
+  try {
+    return await mutation();
+  } finally {
+    releaseMutation();
+  }
+}
+
+export function recordCanalAccountSession(
+  userId:
+    string | null,
+  stableSessionGeneration?:
+    string | null,
+): number {
+  const normalizedUserId =
+    userId?.trim() ||
+    null;
+
+  const normalizedGeneration =
+    normalizedUserId
+      ? (
+          stableSessionGeneration
+            ?.trim() ||
+          (
+            observedSessionUserId ===
+              normalizedUserId
+              ? observedSessionGeneration
+              : null
+          ) ||
+          `process:${sessionEpoch + 1}`
+        )
+      : null;
+
+  if (
+    observedSessionUserId ===
+    undefined ||
+    observedSessionUserId !==
+      normalizedUserId ||
+    observedSessionGeneration !==
+      normalizedGeneration
+  ) {
+    observedSessionUserId =
+      normalizedUserId;
+
+    observedSessionGeneration =
+      normalizedGeneration;
+
+    sessionEpoch +=
+      1;
+  }
+
+  return sessionEpoch;
+}
+
+export function getCanalAccountSessionEpoch(): number {
+  return sessionEpoch;
+}
+
+export function getCanalAccountSessionGeneration(): string {
+  if (
+    !observedSessionUserId ||
+    !observedSessionGeneration
+  ) {
+    throw new Error(
+      "Canal cannot identify the current account session generation.",
+    );
+  }
+
+  return observedSessionGeneration;
+}
+
+async function readCurrentCanalSessionSnapshot(): Promise<{
+  userId: string | null;
+  epoch: number;
+  sessionGeneration:
+    string | null;
+}> {
+  const {
+    data: {
+      session,
+    },
+    error,
+  } =
+    await supabase.auth.getSession();
+
+  if (error) {
+    throw error;
+  }
+
+  const userId =
+    session?.user.id?.trim();
+
+  const normalizedUserId =
+    userId ||
+    null;
+
+  recordCanalAccountSession(
+    normalizedUserId,
+    readCanalAccountSessionGeneration(
+      session,
+    ),
+  );
+
+  return {
+    userId:
+      normalizedUserId,
+    epoch:
+      sessionEpoch,
+    sessionGeneration:
+      observedSessionGeneration ??
+      null,
+  };
+}
+
+async function captureCanalAccountSessionGuardUnlocked(): Promise<
+  CanalAccountSessionGuard
+> {
+  const snapshot =
+    await readCurrentCanalSessionSnapshot();
+
+  if (!snapshot.userId) {
+    throw new Error(
+      "Sign in to Canal before changing this account's connections.",
+    );
+  }
+
+  return {
+    userId:
+      snapshot.userId,
+    epoch:
+      snapshot.epoch,
+    sessionGeneration:
+      snapshot.sessionGeneration!,
+  };
+}
+
+async function assertCanalAccountSessionGuardCurrentUnlocked(
+  expected:
+    CanalAccountSessionGuard,
+): Promise<void> {
+  const snapshot =
+    await readCurrentCanalSessionSnapshot();
+
+  if (
+    snapshot.userId !==
+      expected.userId ||
+    snapshot.epoch !==
+      expected.epoch ||
+    snapshot.sessionGeneration !==
+      expected.sessionGeneration
+  ) {
+    throw new CanalAccountSessionChangedError();
+  }
+}
+
+async function readCanalAccountSessionStatusUnlocked(
+  expected:
+    CanalAccountSessionGuard,
+): Promise<CanalAccountSessionStatus> {
+  try {
+    const snapshot =
+      await readCurrentCanalSessionSnapshot();
+
+    if (!snapshot.userId) {
+      return "signed-out";
+    }
+
+    if (
+      snapshot.userId ===
+        expected.userId &&
+      snapshot.epoch ===
+        expected.epoch &&
+      snapshot.sessionGeneration ===
+        expected.sessionGeneration
+    ) {
+      return "same-account";
+    }
+
+    return "account-changed";
+  } catch {
+    return "unknown";
+  }
+}
+
+function assertObservedCanalAccountSessionGuardCurrent(
+  expected:
+    CanalAccountSessionGuard,
+): void {
+  if (
+    observedSessionUserId !==
+      expected.userId ||
+    sessionEpoch !==
+      expected.epoch ||
+    observedSessionGeneration !==
+      expected.sessionGeneration
+  ) {
+    throw new CanalAccountSessionChangedError();
+  }
+}
+
+async function signOutCanalAccountUnlocked(
+  expected:
+    CanalAccountSessionGuard,
+): Promise<void> {
+  await assertCanalAccountSessionGuardCurrentUnlocked(
+    expected,
+  );
+
+  /*
+   * The SDK call is invoked in the same synchronous turn as this
+   * epoch check. Auth events update the observed epoch immediately,
+   * so a queued replacement session cannot cross this boundary.
+   */
+  assertObservedCanalAccountSessionGuardCurrent(
+    expected,
+  );
+
+  let signOutError:
+    unknown =
+      null;
+
+  try {
+    const {
+      error,
+    } =
+      await supabase.auth.signOut({
+        scope:
+          "local",
+      });
+
+    signOutError =
+      error;
+  } catch (error) {
+    signOutError =
+      error;
+  }
+
+  const status =
+    await readCanalAccountSessionStatusUnlocked(
+      expected,
+    );
+
+  if (
+    status ===
+      "signed-out"
+  ) {
+    return;
+  }
+
+  if (
+    status ===
+      "account-changed"
+  ) {
+    throw new CanalAccountSessionChangedError();
+  }
+
+  if (
+    status ===
+      "same-account"
+  ) {
+    throw new CanalLocalSignOutError(
+      status,
+      "Spotify is disconnected, but this device is still signed in to Canal. Retry Log Out.",
+      {
+        cause:
+          signOutError,
+      },
+    );
+  }
+
+  throw new CanalLocalSignOutError(
+    status,
+    "Spotify is disconnected, but Canal could not verify whether this device finished logging out. Check the current account before retrying.",
+    {
+      cause:
+        signOutError,
+    },
+  );
+}
+
+export async function runCanalAccountSessionMutation<
+  Result,
+>(
+  mutation:
+    (
+      context:
+        CanalAccountSessionMutation,
+    ) => Promise<Result>,
+): Promise<Result> {
+  return queueCanalSessionMutation(
+    async () => {
+      const guard =
+        await captureCanalAccountSessionGuardUnlocked();
+
+      let signOutStarted =
+        false;
+
+      return mutation({
+        guard,
+        assertCurrent:
+          () =>
+            assertCanalAccountSessionGuardCurrentUnlocked(
+              guard,
+            ),
+        readCurrentStatus:
+          () =>
+            readCanalAccountSessionStatusUnlocked(
+              guard,
+            ),
+        signOutLocal:
+          async () => {
+            if (signOutStarted) {
+              throw new Error(
+                "Canal already started this local sign-out.",
+              );
+            }
+
+            signOutStarted =
+              true;
+
+            await signOutCanalAccountUnlocked(
+              guard,
+            );
+          },
+      });
+    },
+  );
+}
+
+export async function captureCanalAccountSessionGuard(): Promise<
+  CanalAccountSessionGuard
+> {
+  return queueCanalSessionMutation(
+    captureCanalAccountSessionGuardUnlocked,
+  );
+}
+
+export async function assertCanalAccountSessionGuardCurrent(
+  expected:
+    CanalAccountSessionGuard,
+): Promise<void> {
+  return queueCanalSessionMutation(
+    () =>
+      assertCanalAccountSessionGuardCurrentUnlocked(
+        expected,
+      ),
+  );
+}
+
 function safeDecode(
   value: string,
 ): string {
@@ -179,8 +705,11 @@ export async function completeSupabaseAuthUrl(
       data,
       error,
     } =
-      await supabase.auth.exchangeCodeForSession(
-        code,
+      await queueCanalSessionMutation(
+        () =>
+          supabase.auth.exchangeCodeForSession(
+            code,
+          ),
       );
 
     if (error) {
@@ -216,13 +745,16 @@ export async function completeSupabaseAuthUrl(
       data,
       error,
     } =
-      await supabase.auth.verifyOtp({
-        token_hash:
-          tokenHash,
+      await queueCanalSessionMutation(
+        () =>
+          supabase.auth.verifyOtp({
+            token_hash:
+              tokenHash,
 
-        type:
-          "recovery",
-      });
+            type:
+              "recovery",
+          }),
+      );
 
     if (error) {
       throw error;
@@ -257,13 +789,16 @@ export async function completeSupabaseAuthUrl(
       data,
       error,
     } =
-      await supabase.auth.setSession({
-        access_token:
-          accessToken,
+      await queueCanalSessionMutation(
+        () =>
+          supabase.auth.setSession({
+            access_token:
+              accessToken,
 
-        refresh_token:
-          refreshToken,
-      });
+            refresh_token:
+              refreshToken,
+          }),
+      );
 
     if (error) {
       throw error;
@@ -429,24 +964,27 @@ export async function signUpWithEmail(
     data,
     error,
   } =
-    await supabase.auth.signUp({
-      email,
+    await queueCanalSessionMutation(
+      () =>
+        supabase.auth.signUp({
+          email,
 
-      password:
-        input.password,
+          password:
+            input.password,
 
-      options: {
-        emailRedirectTo:
-          AUTH_CALLBACK_URL,
+          options: {
+            emailRedirectTo:
+              AUTH_CALLBACK_URL,
 
-        data: {
-          display_name:
-            displayName,
+            data: {
+              display_name:
+                displayName,
 
-          handle,
-        },
-      },
-    });
+              handle,
+            },
+          },
+        }),
+    );
 
   if (error) {
     throw error;
@@ -492,12 +1030,15 @@ export async function signInWithEmail(
     data,
     error,
   } =
-    await supabase.auth.signInWithPassword({
-      email:
-        normalizedEmail,
+    await queueCanalSessionMutation(
+      () =>
+        supabase.auth.signInWithPassword({
+          email:
+            normalizedEmail,
 
-      password,
-    });
+          password,
+        }),
+    );
 
   if (error) {
     throw error;
@@ -523,17 +1064,20 @@ export async function signInWithSocial(
     data,
     error,
   } =
-    await supabase.auth.signInWithOAuth({
-      provider,
+    await queueCanalSessionMutation(
+      () =>
+        supabase.auth.signInWithOAuth({
+          provider,
 
-      options: {
-        redirectTo:
-          AUTH_CALLBACK_URL,
+          options: {
+            redirectTo:
+              AUTH_CALLBACK_URL,
 
-        skipBrowserRedirect:
-          true,
-      },
-    });
+            skipBrowserRedirect:
+              true,
+          },
+        }),
+    );
 
   if (error) {
     throw error;
@@ -645,16 +1189,31 @@ export async function updateCanalPassword(
   }
 }
 
-export async function signOutCanalAccount(): Promise<void> {
-  const {
-    error,
-  } =
-    await supabase.auth.signOut({
-      scope:
-        "local",
-    });
+export async function signOutCanalAccount(
+  expected?:
+    CanalAccountSessionGuard,
+): Promise<void> {
+  return queueCanalSessionMutation(
+    async () => {
+      const currentGuard =
+        await captureCanalAccountSessionGuardUnlocked();
 
-  if (error) {
-    throw error;
-  }
+      if (
+        expected &&
+        (
+          expected.userId !==
+            currentGuard.userId ||
+          expected.epoch !==
+            currentGuard.epoch
+        )
+      ) {
+        throw new CanalAccountSessionChangedError();
+      }
+
+      await signOutCanalAccountUnlocked(
+        expected ??
+          currentGuard,
+      );
+    },
+  );
 }

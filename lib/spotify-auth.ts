@@ -14,6 +14,32 @@ import {
   supabase,
 } from "./supabase";
 
+import {
+  getSpotifyCacheAuthorityNamespace,
+  getSpotifyCacheNamespace,
+  STORAGE_KEYS,
+} from "./storage-keys";
+
+import {
+  createCanalAccountCleanupRecord,
+  listCanalAccountCleanupRecords,
+  persistCanalAccountCleanupRecord,
+  readCanalAccountCleanupRecord,
+  removeCanalAccountCleanupRecord,
+  updateCanalAccountCleanupRecord,
+} from "./account-cleanup";
+
+import type {
+  CanalAccountCleanupRecord,
+  CanalAccountCleanupTarget,
+} from "./account-cleanup";
+
+import {
+  getCanalAccountSessionGeneration,
+  readCanalAccountSessionGeneration,
+  recordCanalAccountSession,
+} from "./canal-auth";
+
 export type SpotifyImage = {
   url: string;
   height?: number | null;
@@ -54,6 +80,7 @@ export type SpotifySession = {
 export type SpotifyConnectionGuard = {
   profileId: string;
   connectionGeneration: number;
+  connectionAuthority: number;
   canalOwnerId: string | null;
   canalAccountGeneration: number;
 };
@@ -69,11 +96,86 @@ export type SpotifyCanalAccountGuard = {
   configured: boolean;
 };
 
+export type SpotifyAccountScope = {
+  ownerId: string;
+  sessionGeneration: string;
+  spotifyAccountGeneration: number;
+};
+
+export type SpotifyCacheScope =
+  SpotifyAccountScope & {
+    spotifyProfileId: string;
+  };
+
+export type SpotifySessionCleanupResult = {
+  accountGuard:
+    SpotifyCanalAccountGuard;
+  cleanupIncomplete:
+    CanalAccountCleanupRecord | null;
+  cleanupPersisted: boolean;
+};
+
+export type SpotifyConnectionStateForAccount =
+  | "account-changed"
+  | "connected"
+  | "disconnected"
+  | "unknown";
+
 export type SaveSpotifySessionOptions = {
   syncLibrary?: boolean;
   accountGuard?:
     SpotifyCanalAccountGuard;
+  operationCommitGuard?:
+    () => boolean;
+  onLibrarySyncError?:
+    (error: unknown) => void;
 };
+
+type SpotifyProviderRotationCommit = {
+  accountGuard:
+    SpotifyCanalAccountGuard;
+  complete: () => Promise<void>;
+  rollback: () => Promise<void>;
+};
+
+type SpotifySessionPersistenceCommit = {
+  rollback: () => Promise<void>;
+};
+
+export class SpotifyProviderCleanupIncompleteError extends Error {
+  readonly accountGuard:
+    SpotifyCanalAccountGuard;
+  readonly cleanupRecord:
+    CanalAccountCleanupRecord;
+
+  constructor(
+    accountGuard:
+      SpotifyCanalAccountGuard,
+    cleanupRecord:
+      CanalAccountCleanupRecord,
+  ) {
+    super(
+      "Canal must finish the prior Spotify provider cache cleanup before connecting the replacement account.",
+    );
+
+    this.name =
+      "SpotifyProviderCleanupIncompleteError";
+    this.accountGuard =
+      Object.freeze({
+        ...accountGuard,
+      });
+    this.cleanupRecord =
+      Object.freeze({
+        ...cleanupRecord,
+        cacheKeys: [
+          ...cleanupRecord.cacheKeys,
+        ],
+        targets: [
+          ...cleanupRecord.targets,
+        ],
+      });
+  }
+}
 
 export type SpotifyAccessIssue =
   | "authorization"
@@ -126,11 +228,22 @@ const SPOTIFY_SESSION_ENVELOPE_VERSION =
   2;
 
 const SPOTIFY_ACCOUNT_AUTHORITY_VERSION =
-  1;
+  2;
+
+export const SPOTIFY_SESSION_CLEANUP_TARGETS:
+  readonly CanalAccountCleanupTarget[] = [
+  "spotify-async-session",
+  "spotify-secure-session",
+  "spotify-library-snapshot",
+  "spotify-return-route",
+  "spotify-cache-scan",
+];
 
 type SpotifyAccountAuthority = {
   version: number;
   ownerId: string | null;
+  sessionGeneration:
+    string | null;
   generation: number;
 };
 
@@ -151,6 +264,7 @@ let memorySessionAccountGuard:
 let refreshInFlight:
   | {
       connectionGeneration: number;
+      connectionAuthority: number;
       promise:
         Promise<SpotifySession>;
     }
@@ -160,12 +274,22 @@ let refreshInFlight:
 let spotifyConnectionGeneration =
   0;
 
+let spotifyConnectionAuthority =
+  0;
+
 let sessionMutationTail:
   Promise<void> =
     Promise.resolve();
 
 export function getSpotifyConnectionGeneration(): number {
   return spotifyConnectionGeneration;
+}
+
+function advanceSpotifyConnectionAuthority(): void {
+  spotifyConnectionGeneration +=
+    1;
+  spotifyConnectionAuthority +=
+    1;
 }
 
 function accountGuardFromConnectionGuard(
@@ -190,6 +314,9 @@ function isSpotifyConnectionGuardCurrentUnlocked(
     connectionGuard
       .connectionGeneration ===
       spotifyConnectionGeneration &&
+    connectionGuard
+      .connectionAuthority ===
+      spotifyConnectionAuthority &&
     Boolean(memorySession) &&
     memorySession?.profile.id ===
       connectionGuard.profileId &&
@@ -238,6 +365,8 @@ function captureSpotifyConnectionGuardUnlocked(
       session.profile.id,
     connectionGeneration:
       spotifyConnectionGeneration,
+    connectionAuthority:
+      spotifyConnectionAuthority,
     canalOwnerId:
       memorySessionAccountGuard.ownerId,
     canalAccountGeneration:
@@ -307,8 +436,12 @@ function normalizeSpotifyAccountAuthority(
     value as Partial<SpotifyAccountAuthority>;
 
   if (
-    candidate.version !==
-      SPOTIFY_ACCOUNT_AUTHORITY_VERSION ||
+    (
+      candidate.version !==
+        1 &&
+      candidate.version !==
+        SPOTIFY_ACCOUNT_AUTHORITY_VERSION
+    ) ||
     (
       candidate.ownerId !==
         null &&
@@ -330,6 +463,16 @@ function normalizeSpotifyAccountAuthority(
       SPOTIFY_ACCOUNT_AUTHORITY_VERSION,
     ownerId:
       candidate.ownerId,
+    sessionGeneration:
+      (
+        candidate.version ===
+          SPOTIFY_ACCOUNT_AUTHORITY_VERSION &&
+        typeof candidate.sessionGeneration ===
+          "string" &&
+        candidate.sessionGeneration.trim()
+      )
+        ? candidate.sessionGeneration.trim()
+        : `legacy-authority:${candidate.generation}`,
     generation:
       candidate.generation,
   };
@@ -370,11 +513,21 @@ async function readSpotifyAccountAuthority(): Promise<{
   }
 }
 
-async function readCurrentCanalOwnerId(): Promise<
-  string | null
+type CurrentCanalAccountIdentity = {
+  ownerId: string | null;
+  sessionGeneration:
+    string | null;
+};
+
+async function readCurrentCanalAccountIdentity(): Promise<
+  CurrentCanalAccountIdentity
 > {
   if (!isSupabaseConfigured) {
-    return null;
+    return {
+      ownerId: null,
+      sessionGeneration:
+        null,
+    };
   }
 
   const {
@@ -391,13 +544,36 @@ async function readCurrentCanalOwnerId(): Promise<
   const ownerId =
     session?.user.id;
 
-  return (
+  const normalizedOwnerId =
+    (
     typeof ownerId ===
       "string" &&
     ownerId.length > 0
   )
     ? ownerId
     : null;
+
+  const sessionGeneration =
+    readCanalAccountSessionGeneration(
+      session,
+    );
+
+  recordCanalAccountSession(
+    normalizedOwnerId,
+    sessionGeneration,
+  );
+
+  return {
+    ownerId:
+      normalizedOwnerId,
+    sessionGeneration:
+      normalizedOwnerId
+        ? (
+            sessionGeneration ??
+            getCanalAccountSessionGeneration()
+          )
+        : null,
+  };
 }
 
 async function persistSpotifyAccountAuthority(
@@ -411,6 +587,615 @@ async function persistSpotifyAccountAuthority(
   );
 }
 
+function assertOperationCommitCurrent(
+  operationCommitGuard?:
+    () => boolean,
+): void {
+  if (
+    operationCommitGuard &&
+    !operationCommitGuard()
+  ) {
+    throw new SpotifySessionChangedError();
+  }
+}
+
+async function restoreAsyncStorageValueIfExact(
+  key: string,
+  expectedCurrentValue:
+    string | null,
+  previousValue:
+    string | null,
+): Promise<void> {
+  if (
+    expectedCurrentValue ===
+      previousValue
+  ) {
+    return;
+  }
+
+  const currentValue =
+    await AsyncStorage.getItem(
+      key,
+    );
+
+  if (
+    currentValue !==
+      expectedCurrentValue
+  ) {
+    return;
+  }
+
+  if (previousValue === null) {
+    await AsyncStorage.removeItem(
+      key,
+    );
+  } else {
+    await AsyncStorage.setItem(
+      key,
+      previousValue,
+    );
+  }
+}
+
+async function restoreSecureStorageValueIfExact(
+  expectedCurrentValue:
+    string | null,
+  previousValue:
+    string | null,
+): Promise<void> {
+  if (
+    Platform.OS ===
+      "web"
+  ) {
+    return;
+  }
+
+  if (
+    expectedCurrentValue ===
+      previousValue
+  ) {
+    return;
+  }
+
+  const currentValue =
+    await SecureStore.getItemAsync(
+      SPOTIFY_SECURE_STORAGE_KEY,
+    );
+
+  if (
+    currentValue !==
+      expectedCurrentValue
+  ) {
+    return;
+  }
+
+  if (previousValue === null) {
+    await SecureStore.deleteItemAsync(
+      SPOTIFY_SECURE_STORAGE_KEY,
+    );
+  } else {
+    await SecureStore.setItemAsync(
+      SPOTIFY_SECURE_STORAGE_KEY,
+      previousValue,
+    );
+  }
+}
+
+async function completeAutomaticAuthorityCleanup(
+  sourceAuthority:
+    SpotifyAccountAuthority | null,
+): Promise<void> {
+  const sourceOwnerId =
+    sourceAuthority?.ownerId ??
+    "legacy-unowned";
+
+  const sourceSessionGeneration =
+    sourceAuthority
+      ?.sessionGeneration ??
+    `legacy-authority:${sourceAuthority?.generation ?? 0}`;
+
+  const sourceGeneration =
+    sourceAuthority?.generation ??
+    0;
+
+  const sourceSpotifyProfileId =
+    await readSpotifyProfileIdForGuardUnlocked({
+      ownerId:
+        sourceAuthority?.ownerId ??
+        null,
+      accountGeneration:
+        sourceGeneration,
+      configured:
+        Boolean(
+          sourceAuthority,
+        ),
+    });
+
+  const requestedRecord =
+    createCanalAccountCleanupRecord(
+      {
+        ownerId:
+          sourceOwnerId,
+        sessionGeneration:
+          sourceSessionGeneration,
+        sourceSpotifyAccountGeneration:
+          sourceGeneration,
+        sourceSpotifyProfileId:
+          sourceSpotifyProfileId,
+        spotifyAccountGeneration:
+          sourceGeneration + 1,
+      },
+      "authority-rotation",
+      SPOTIFY_SESSION_CLEANUP_TARGETS,
+    );
+
+  let durableRecord =
+    await readCanalAccountCleanupRecord(
+      requestedRecord,
+    );
+
+  if (!durableRecord) {
+    await persistCanalAccountCleanupRecord(
+      requestedRecord,
+    );
+
+    durableRecord =
+      await readCanalAccountCleanupRecord(
+        requestedRecord,
+      );
+  }
+
+  if (!durableRecord) {
+    throw new Error(
+      "Canal could not safely record the previous account cleanup before changing Spotify ownership.",
+    );
+  }
+
+  memorySession =
+    null;
+  memorySessionAccountGuard =
+    null;
+  refreshInFlight =
+    null;
+
+  if (
+    durableRecord.phase ===
+      "cleanup-pending" &&
+    hasSpotifyCleanupTargets(
+      durableRecord,
+    )
+  ) {
+    const cleanupResult =
+      await performSpotifyCleanupTargets(
+        durableRecord,
+      );
+
+    durableRecord =
+      cleanupResult.record;
+
+    if (
+      hasSpotifyCleanupTargets(
+        durableRecord,
+      ) ||
+      !cleanupResult.persisted
+    ) {
+      throw new Error(
+        "Canal must finish the previous account's Spotify cleanup before loading this account.",
+      );
+    }
+  }
+
+  const completedRecord =
+    durableRecord.phase ===
+      "cleanup-complete"
+      ? durableRecord
+      : updateCanalAccountCleanupRecord(
+          durableRecord,
+          {
+            phase:
+              "cleanup-complete",
+          },
+        );
+
+  await persistCanalAccountCleanupRecord(
+    completedRecord,
+  );
+
+  await removeCanalAccountCleanupRecord(
+    completedRecord,
+  );
+}
+
+async function rotateSpotifyProviderAuthorityUnlocked(
+  sourceGuard:
+    SpotifyCanalAccountGuard,
+  sourceProfileId: string,
+  operationCommitGuard?:
+    () => boolean,
+): Promise<SpotifyProviderRotationCommit> {
+  if (
+    !sourceGuard.configured ||
+    !sourceGuard.ownerId
+  ) {
+    return {
+      accountGuard:
+        sourceGuard,
+      complete:
+        async () => {},
+      rollback:
+        async () => {},
+    };
+  }
+
+  assertOperationCommitCurrent(
+    operationCommitGuard,
+  );
+
+  const currentIdentity =
+    await readCurrentCanalAccountIdentity();
+
+  assertOperationCommitCurrent(
+    operationCommitGuard,
+  );
+
+  if (
+    currentIdentity.ownerId !==
+      sourceGuard.ownerId ||
+    !currentIdentity.sessionGeneration
+  ) {
+    throw new SpotifySessionChangedError();
+  }
+
+  const nextGuard:
+    SpotifyCanalAccountGuard = {
+    ...sourceGuard,
+    accountGeneration:
+      sourceGuard.accountGeneration +
+      1,
+  };
+
+  const requestedRecord =
+    createCanalAccountCleanupRecord(
+      {
+        ownerId:
+          sourceGuard.ownerId,
+        sessionGeneration:
+          currentIdentity
+            .sessionGeneration,
+        sourceSpotifyAccountGeneration:
+          sourceGuard
+            .accountGeneration,
+        sourceSpotifyProfileId:
+          sourceProfileId,
+        spotifyAccountGeneration:
+          nextGuard.accountGeneration,
+      },
+      "authority-rotation",
+      [
+        "spotify-cache-scan",
+      ],
+    );
+
+  const nextAuthority:
+    SpotifyAccountAuthority = {
+    version:
+      SPOTIFY_ACCOUNT_AUTHORITY_VERSION,
+    ownerId:
+      sourceGuard.ownerId,
+    sessionGeneration:
+      currentIdentity
+        .sessionGeneration,
+    generation:
+      nextGuard.accountGeneration,
+  };
+
+  const previousAuthorityValue =
+    await AsyncStorage.getItem(
+      SPOTIFY_ACCOUNT_AUTHORITY_KEY,
+    );
+
+  assertOperationCommitCurrent(
+    operationCommitGuard,
+  );
+
+  const nextAuthorityValue =
+    JSON.stringify(
+      nextAuthority,
+    );
+
+  const previousMemorySession =
+    memorySession;
+
+  const previousMemoryAccountGuard =
+    memorySessionAccountGuard;
+
+  let markerPersisted =
+    false;
+
+  let authorityPersisted =
+    false;
+
+  const rollback =
+    async (): Promise<void> => {
+      if (authorityPersisted) {
+        await restoreAsyncStorageValueIfExact(
+          SPOTIFY_ACCOUNT_AUTHORITY_KEY,
+          nextAuthorityValue,
+          previousAuthorityValue,
+        );
+      }
+
+      if (
+        memorySession ===
+          null &&
+        memorySessionAccountGuard ===
+          null
+      ) {
+        memorySession =
+          previousMemorySession;
+        memorySessionAccountGuard =
+          previousMemoryAccountGuard;
+      }
+
+      if (markerPersisted) {
+        const currentRecord =
+          await readCanalAccountCleanupRecord(
+            requestedRecord,
+          );
+
+        if (
+          currentRecord?.cleanupId ===
+            requestedRecord.cleanupId
+        ) {
+          await removeCanalAccountCleanupRecord(
+            currentRecord,
+          );
+        }
+      }
+    };
+
+  try {
+    await persistCanalAccountCleanupRecord(
+      requestedRecord,
+    );
+    markerPersisted =
+      true;
+
+    assertOperationCommitCurrent(
+      operationCommitGuard,
+    );
+
+    const durableRecord =
+      await readCanalAccountCleanupRecord(
+        requestedRecord,
+      );
+
+    assertOperationCommitCurrent(
+      operationCommitGuard,
+    );
+
+    if (!durableRecord) {
+      throw new Error(
+        "Canal could not safely record the prior Spotify provider cleanup.",
+      );
+    }
+
+    await persistSpotifyAccountAuthority(
+      nextAuthority,
+    );
+    authorityPersisted =
+      true;
+
+    assertOperationCommitCurrent(
+      operationCommitGuard,
+    );
+
+    const persistedAuthority =
+      (
+        await readSpotifyAccountAuthority()
+      ).authority;
+
+    assertOperationCommitCurrent(
+      operationCommitGuard,
+    );
+
+    if (
+      persistedAuthority?.ownerId !==
+        nextAuthority.ownerId ||
+      persistedAuthority.sessionGeneration !==
+        nextAuthority.sessionGeneration ||
+      persistedAuthority.generation !==
+        nextAuthority.generation
+    ) {
+      throw new Error(
+        "Canal could not verify the rotated Spotify provider authority.",
+      );
+    }
+
+    advanceSpotifyConnectionAuthority();
+    memorySession =
+      null;
+    memorySessionAccountGuard =
+      null;
+    refreshInFlight =
+      null;
+
+    return {
+      accountGuard:
+        nextGuard,
+      rollback,
+      complete:
+        async () => {
+          assertOperationCommitCurrent(
+            operationCommitGuard,
+          );
+
+          const cleanupResult =
+            await performSpotifyCleanupTargets(
+              durableRecord,
+              {
+                operationCommitGuard,
+              },
+            );
+
+          assertOperationCommitCurrent(
+            operationCommitGuard,
+          );
+
+          if (
+            hasSpotifyCleanupTargets(
+              cleanupResult.record,
+            ) ||
+            !cleanupResult.persisted
+          ) {
+            throw new SpotifyProviderCleanupIncompleteError(
+              nextGuard,
+              cleanupResult.persisted
+                ? cleanupResult.record
+                : durableRecord,
+            );
+          }
+
+          const completedRecord =
+            updateCanalAccountCleanupRecord(
+              cleanupResult.record,
+              {
+                phase:
+                  "cleanup-complete",
+              },
+            );
+
+          try {
+            assertOperationCommitCurrent(
+              operationCommitGuard,
+            );
+
+            await persistCanalAccountCleanupRecord(
+              completedRecord,
+            );
+
+            assertOperationCommitCurrent(
+              operationCommitGuard,
+            );
+
+            await removeCanalAccountCleanupRecord(
+              completedRecord,
+            );
+
+            assertOperationCommitCurrent(
+              operationCommitGuard,
+            );
+
+            markerPersisted =
+              false;
+          } catch (error) {
+            if (
+              error instanceof
+              SpotifySessionChangedError
+            ) {
+              throw error;
+            }
+
+            const recoverableRecord =
+              (
+                await readCanalAccountCleanupRecord(
+                  completedRecord,
+                )
+              ) ??
+              completedRecord;
+
+            throw new SpotifyProviderCleanupIncompleteError(
+              nextGuard,
+              recoverableRecord,
+            );
+          }
+        },
+    };
+  } catch (error) {
+    await rollback();
+    throw error;
+  }
+}
+
+async function readSpotifyProfileIdForGuardUnlocked(
+  accountGuard:
+    SpotifyCanalAccountGuard,
+): Promise<string | null> {
+  if (
+    memorySession &&
+    isSameCanalAccountGuard(
+      memorySessionAccountGuard,
+      accountGuard,
+    )
+  ) {
+    return memorySession.profile.id;
+  }
+
+  try {
+    let serialized:
+      | string
+      | null =
+      null;
+
+    if (
+      Platform.OS !==
+      "web"
+    ) {
+      serialized =
+        await SecureStore.getItemAsync(
+          SPOTIFY_SECURE_STORAGE_KEY,
+        );
+    }
+
+    if (!serialized) {
+      serialized =
+        await AsyncStorage.getItem(
+          SPOTIFY_ASYNC_STORAGE_KEY,
+        );
+    }
+
+    if (!serialized) {
+      return null;
+    }
+
+    const parsed: unknown =
+      JSON.parse(
+        serialized,
+      );
+
+    const envelope =
+      normalizePersistedSpotifySessionEnvelope(
+        parsed,
+      );
+
+    if (
+      accountGuard.configured
+    ) {
+      if (
+        !envelope ||
+        envelope.ownerId !==
+          accountGuard.ownerId ||
+        envelope.accountGeneration !==
+          accountGuard.accountGeneration
+      ) {
+        return null;
+      }
+
+      return envelope.session.profile.id;
+    }
+
+    return (
+      envelope?.session.profile.id ??
+      normalizeSession(
+        parsed,
+      )?.profile.id ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
 async function resolveCurrentCanalAccountGuardUnlocked(
   options: {
     forceRotate?: boolean;
@@ -419,6 +1204,8 @@ async function resolveCurrentCanalAccountGuardUnlocked(
   guard:
     SpotifyCanalAccountGuard;
   persistedStateUsable: boolean;
+  sessionGeneration:
+    string | null;
 }> {
   if (!isSupabaseConfigured) {
     return {
@@ -428,11 +1215,15 @@ async function resolveCurrentCanalAccountGuardUnlocked(
         configured: false,
       },
       persistedStateUsable: true,
+      sessionGeneration: null,
     };
   }
 
+  const currentIdentity =
+    await readCurrentCanalAccountIdentity();
+
   const ownerId =
-    await readCurrentCanalOwnerId();
+    currentIdentity.ownerId;
 
   const {
     authority,
@@ -445,7 +1236,9 @@ async function resolveCurrentCanalAccountGuardUnlocked(
       true ||
     !authority ||
     authority.ownerId !==
-      ownerId;
+      ownerId ||
+    authority.sessionGeneration !==
+      currentIdentity.sessionGeneration;
 
   if (!shouldRotate) {
     return {
@@ -457,6 +1250,9 @@ async function resolveCurrentCanalAccountGuardUnlocked(
       },
       persistedStateUsable:
         existed,
+      sessionGeneration:
+        currentIdentity
+          .sessionGeneration,
     };
   }
 
@@ -465,6 +1261,9 @@ async function resolveCurrentCanalAccountGuardUnlocked(
     version:
       SPOTIFY_ACCOUNT_AUTHORITY_VERSION,
     ownerId,
+    sessionGeneration:
+      currentIdentity
+        .sessionGeneration,
     generation:
       (
         authority?.generation ??
@@ -472,18 +1271,15 @@ async function resolveCurrentCanalAccountGuardUnlocked(
       ) + 1,
   };
 
+  await completeAutomaticAuthorityCleanup(
+    authority,
+  );
+
   await persistSpotifyAccountAuthority(
     nextAuthority,
   );
 
-  memorySession =
-    null;
-
-  memorySessionAccountGuard =
-    null;
-
-  spotifyConnectionGeneration +=
-    1;
+  advanceSpotifyConnectionAuthority();
 
   return {
     guard: {
@@ -493,6 +1289,9 @@ async function resolveCurrentCanalAccountGuardUnlocked(
       configured: true,
     },
     persistedStateUsable: false,
+    sessionGeneration:
+      currentIdentity
+        .sessionGeneration,
   };
 }
 
@@ -536,6 +1335,133 @@ export async function captureSpotifyCanalAccountGuard(): Promise<
       }
 
       return guard;
+    },
+  );
+}
+
+export async function captureSpotifyAccountScope(): Promise<
+  SpotifyAccountScope
+> {
+  return runSessionMutation(
+    async () => {
+      const {
+        guard,
+        sessionGeneration,
+      } =
+        await resolveCurrentCanalAccountGuardUnlocked();
+
+      if (
+        !guard.ownerId ||
+        !sessionGeneration
+      ) {
+        throw new SpotifyAccessError(
+          "authorization",
+          "Sign in to Canal before using Spotify.",
+        );
+      }
+
+      return {
+        ownerId:
+          guard.ownerId,
+        sessionGeneration,
+        spotifyAccountGeneration:
+          guard.accountGeneration,
+      };
+    },
+  );
+}
+
+export async function assertSpotifyAccountScopeCurrent(
+  expected:
+    SpotifyAccountScope,
+): Promise<void> {
+  await runSessionMutation(
+    async () => {
+      const {
+        guard,
+        sessionGeneration,
+      } =
+        await resolveCurrentCanalAccountGuardUnlocked();
+
+      if (
+        guard.ownerId !==
+          expected.ownerId ||
+        sessionGeneration !==
+          expected.sessionGeneration ||
+        guard.accountGeneration !==
+          expected.spotifyAccountGeneration
+      ) {
+        throw new SpotifySessionChangedError();
+      }
+    },
+  );
+}
+
+export async function captureSpotifyCacheScope(): Promise<
+  SpotifyCacheScope
+> {
+  return runSessionMutation(
+    async () => {
+      const {
+        guard,
+        sessionGeneration,
+      } =
+        await resolveCurrentCanalAccountGuardUnlocked();
+
+      const currentSession =
+        await hydrateSpotifySession();
+
+      if (
+        !guard.ownerId ||
+        !sessionGeneration ||
+        !currentSession
+          ?.profile.id
+      ) {
+        throw new SpotifySessionChangedError();
+      }
+
+      return {
+        ownerId:
+          guard.ownerId,
+        sessionGeneration,
+        spotifyAccountGeneration:
+          guard.accountGeneration,
+        spotifyProfileId:
+          currentSession
+            .profile.id,
+      };
+    },
+  );
+}
+
+export async function assertSpotifyCacheScopeCurrent(
+  expected:
+    SpotifyCacheScope,
+): Promise<void> {
+  await runSessionMutation(
+    async () => {
+      const {
+        guard,
+        sessionGeneration,
+      } =
+        await resolveCurrentCanalAccountGuardUnlocked();
+
+      const currentSession =
+        await hydrateSpotifySession();
+
+      if (
+        guard.ownerId !==
+          expected.ownerId ||
+        sessionGeneration !==
+          expected.sessionGeneration ||
+        guard.accountGeneration !==
+          expected.spotifyAccountGeneration ||
+        currentSession
+          ?.profile.id !==
+          expected.spotifyProfileId
+      ) {
+        throw new SpotifySessionChangedError();
+      }
     },
   );
 }
@@ -738,13 +1664,622 @@ async function removePersistedSpotifySessionBestEffort(): Promise<void> {
   }
 }
 
+function isSpotifyCleanupTarget(
+  target:
+    CanalAccountCleanupTarget,
+): boolean {
+  return (
+    target ===
+      "spotify-async-session" ||
+    target ===
+      "spotify-secure-session" ||
+    target ===
+      "spotify-library-snapshot" ||
+    target ===
+      "spotify-return-route" ||
+    target ===
+      "spotify-cache-scan" ||
+    target ===
+      "spotify-cache-entries"
+  );
+}
+
+function hasSpotifyCleanupTargets(
+  record:
+    CanalAccountCleanupRecord,
+): boolean {
+  return record.targets.some(
+    isSpotifyCleanupTarget,
+  );
+}
+
+function cacheKeyBelongsToCleanupSource(
+  key: string,
+  record:
+    CanalAccountCleanupRecord,
+): boolean {
+  if (
+    !key.startsWith(
+      STORAGE_KEYS
+        .spotifyCachePrefix,
+    )
+  ) {
+    return false;
+  }
+
+  const scopedProfileNamespace =
+    record.sourceSpotifyProfileId
+      ? getSpotifyCacheNamespace({
+          ownerId:
+            record.ownerId,
+          sessionGeneration:
+            record
+              .sessionGeneration,
+          spotifyAccountGeneration:
+            record
+              .sourceSpotifyAccountGeneration,
+          spotifyProfileId:
+            record
+              .sourceSpotifyProfileId,
+        })
+      : null;
+
+  const scopedAuthorityNamespace =
+    getSpotifyCacheAuthorityNamespace({
+      ownerId:
+        record.ownerId,
+      sessionGeneration:
+        record.sessionGeneration,
+      spotifyAccountGeneration:
+        record
+          .sourceSpotifyAccountGeneration,
+    });
+
+  const previousScopedNamespace =
+    (
+      STORAGE_KEYS
+        .spotifyCachePrefix +
+      [
+        "v2",
+        encodeURIComponent(
+          record.ownerId,
+        ),
+        encodeURIComponent(
+          record
+            .sessionGeneration,
+        ),
+        record
+          .sourceSpotifyAccountGeneration,
+        "",
+      ].join(":")
+    );
+
+  return (
+    key.startsWith(
+      scopedAuthorityNamespace,
+    ) ||
+    (
+      scopedProfileNamespace !==
+        null &&
+      key.startsWith(
+        scopedProfileNamespace,
+      )
+    ) ||
+    key.startsWith(
+      previousScopedNamespace,
+    ) ||
+    (
+      !key.startsWith(
+        `${STORAGE_KEYS.spotifyCachePrefix}v2:`,
+      ) &&
+      !key.startsWith(
+        `${STORAGE_KEYS.spotifyCachePrefix}v3:`,
+      )
+    )
+  );
+}
+
+function serializedValueBelongsToCleanupSource(
+  serialized: string | null,
+  record:
+    CanalAccountCleanupRecord,
+): boolean {
+  if (
+    !serialized ||
+    record.ownerId ===
+      "legacy-unowned"
+  ) {
+    return true;
+  }
+
+  try {
+    const value =
+      JSON.parse(
+        serialized,
+      ) as {
+        ownerId?: unknown;
+        accountGeneration?: unknown;
+        spotifyAccountGeneration?: unknown;
+        sessionGeneration?: unknown;
+      };
+
+    const accountGeneration =
+      typeof value.accountGeneration ===
+        "number"
+        ? value.accountGeneration
+        : value
+              .spotifyAccountGeneration;
+
+    if (
+      typeof value.ownerId !==
+        "string" ||
+      typeof accountGeneration !==
+        "number"
+    ) {
+      return true;
+    }
+
+    return (
+      value.ownerId ===
+        record.ownerId &&
+      accountGeneration ===
+        record
+          .sourceSpotifyAccountGeneration &&
+      (
+        typeof value.sessionGeneration !==
+          "string" ||
+        value.sessionGeneration ===
+          record.sessionGeneration
+      )
+    );
+  } catch {
+    return true;
+  }
+}
+
+async function performSpotifyCleanupTargets(
+  record:
+    CanalAccountCleanupRecord,
+  options: {
+    operationCommitGuard?:
+      () => boolean;
+  } = {},
+): Promise<{
+  record:
+    CanalAccountCleanupRecord;
+  persisted: boolean;
+}> {
+  const cacheBackup =
+    new Map<
+      string,
+      string
+    >();
+
+  const restoreCacheBackup =
+    async (): Promise<void> => {
+      for (
+        const [
+          key,
+          value,
+        ] of cacheBackup
+      ) {
+        const currentValue =
+          await AsyncStorage.getItem(
+            key,
+          );
+
+        if (
+          currentValue ===
+            null
+        ) {
+          await AsyncStorage.setItem(
+            key,
+            value,
+          );
+        }
+      }
+    };
+
+  const assertCleanupCommitCurrent =
+    async (): Promise<void> => {
+      try {
+        assertOperationCommitCurrent(
+          options.operationCommitGuard,
+        );
+      } catch (error) {
+        await restoreCacheBackup();
+        throw error;
+      }
+    };
+
+  await assertCleanupCommitCurrent();
+
+  const remainingTargets =
+    new Set(
+      record.targets,
+    );
+
+  const removeAsyncStorageTarget =
+    async (
+      target:
+        CanalAccountCleanupTarget,
+      key: string,
+      ownerScoped = false,
+    ): Promise<void> => {
+      if (
+        !remainingTargets.has(
+          target,
+        )
+      ) {
+        return;
+      }
+
+      try {
+        await assertCleanupCommitCurrent();
+
+        if (ownerScoped) {
+          const serialized =
+            await AsyncStorage.getItem(
+              key,
+            );
+
+          await assertCleanupCommitCurrent();
+
+          if (
+            !serializedValueBelongsToCleanupSource(
+              serialized,
+              record,
+            )
+          ) {
+            remainingTargets.delete(
+              target,
+            );
+
+            return;
+          }
+        }
+
+        await AsyncStorage.removeItem(
+          key,
+        );
+
+        await assertCleanupCommitCurrent();
+
+        remainingTargets.delete(
+          target,
+        );
+      } catch (error) {
+        if (
+          error instanceof
+          SpotifySessionChangedError
+        ) {
+          throw error;
+        }
+
+        // The durable marker retains this exact retry target.
+      }
+    };
+
+  await removeAsyncStorageTarget(
+    "spotify-async-session",
+    SPOTIFY_ASYNC_STORAGE_KEY,
+    true,
+  );
+
+  if (
+    remainingTargets.has(
+      "spotify-secure-session",
+    )
+  ) {
+    if (
+      Platform.OS ===
+      "web"
+    ) {
+      remainingTargets.delete(
+        "spotify-secure-session",
+      );
+    } else {
+      try {
+        await assertCleanupCommitCurrent();
+
+        const serialized =
+          await SecureStore.getItemAsync(
+            SPOTIFY_SECURE_STORAGE_KEY,
+          );
+
+        await assertCleanupCommitCurrent();
+
+        if (
+          !serializedValueBelongsToCleanupSource(
+            serialized,
+            record,
+          )
+        ) {
+          remainingTargets.delete(
+            "spotify-secure-session",
+          );
+        } else {
+        await SecureStore.deleteItemAsync(
+          SPOTIFY_SECURE_STORAGE_KEY,
+        );
+
+        await assertCleanupCommitCurrent();
+
+        remainingTargets.delete(
+          "spotify-secure-session",
+        );
+        }
+      } catch (error) {
+        if (
+          error instanceof
+          SpotifySessionChangedError
+        ) {
+          throw error;
+        }
+
+        // The durable marker retains this exact retry target.
+      }
+    }
+  }
+
+  await removeAsyncStorageTarget(
+    "spotify-library-snapshot",
+    STORAGE_KEYS
+      .spotifyLibrarySnapshot,
+    true,
+  );
+
+  await removeAsyncStorageTarget(
+    "spotify-return-route",
+    STORAGE_KEYS
+      .spotifyReturnRoute,
+    true,
+  );
+
+  let cacheKeys =
+    record.cacheKeys.filter(
+      (key) =>
+        cacheKeyBelongsToCleanupSource(
+          key,
+          record,
+        ),
+    );
+
+  if (
+    remainingTargets.has(
+      "spotify-cache-scan",
+    )
+  ) {
+    try {
+      await assertCleanupCommitCurrent();
+
+      const allKeys =
+        await AsyncStorage.getAllKeys();
+
+      await assertCleanupCommitCurrent();
+
+      cacheKeys =
+        Array.from(
+          new Set([
+            ...cacheKeys,
+            ...allKeys.filter(
+              (key) =>
+                cacheKeyBelongsToCleanupSource(
+                  key,
+                  record,
+                ),
+            ),
+          ]),
+        );
+
+      remainingTargets.delete(
+        "spotify-cache-scan",
+      );
+
+      if (
+        cacheKeys.length >
+        0
+      ) {
+        remainingTargets.add(
+          "spotify-cache-entries",
+        );
+      }
+    } catch (error) {
+      if (
+        error instanceof
+        SpotifySessionChangedError
+      ) {
+        throw error;
+      }
+
+      // Retry must enumerate only for this same account/session generation.
+    }
+  }
+
+  if (
+    remainingTargets.has(
+      "spotify-cache-entries",
+    )
+  ) {
+    const failedCacheKeys:
+      string[] = [];
+
+    if (
+      cacheKeys.length >
+      0
+    ) {
+      try {
+        await assertCleanupCommitCurrent();
+
+        for (
+          const key of
+          cacheKeys
+        ) {
+          const value =
+            await AsyncStorage.getItem(
+              key,
+            );
+
+          await assertCleanupCommitCurrent();
+
+          if (value !== null) {
+            cacheBackup.set(
+              key,
+              value,
+            );
+          }
+        }
+
+        await AsyncStorage.multiRemove(
+          cacheKeys,
+        );
+
+        await assertCleanupCommitCurrent();
+      } catch (error) {
+        if (
+          error instanceof
+          SpotifySessionChangedError
+        ) {
+          throw error;
+        }
+
+        for (
+          const key of
+          cacheKeys
+        ) {
+          try {
+            await assertCleanupCommitCurrent();
+
+            await AsyncStorage.removeItem(
+              key,
+            );
+
+            await assertCleanupCommitCurrent();
+          } catch (fallbackError) {
+            if (
+              fallbackError instanceof
+              SpotifySessionChangedError
+            ) {
+              throw fallbackError;
+            }
+
+            failedCacheKeys.push(
+              key,
+            );
+          }
+        }
+      }
+    }
+
+    try {
+      await assertCleanupCommitCurrent();
+
+      const survivingCacheKeys =
+        (
+          await AsyncStorage.getAllKeys()
+        ).filter(
+          (key) =>
+            cacheKeyBelongsToCleanupSource(
+              key,
+              record,
+          ),
+        );
+
+      await assertCleanupCommitCurrent();
+
+      cacheKeys =
+        Array.from(
+          new Set([
+            ...failedCacheKeys,
+            ...survivingCacheKeys,
+          ]),
+        );
+
+      if (
+        cacheKeys.length ===
+        0
+      ) {
+        remainingTargets.delete(
+          "spotify-cache-entries",
+        );
+      }
+    } catch (error) {
+      if (
+        error instanceof
+        SpotifySessionChangedError
+      ) {
+        throw error;
+      }
+
+      cacheKeys =
+        Array.from(
+          new Set([
+            ...cacheKeys,
+            ...failedCacheKeys,
+          ]),
+        );
+    }
+  }
+
+  const updatedRecord =
+    updateCanalAccountCleanupRecord(
+      record,
+      {
+        targets:
+          Array.from(
+            remainingTargets,
+          ),
+        cacheKeys,
+      },
+  );
+
+  try {
+    await assertCleanupCommitCurrent();
+
+    await persistCanalAccountCleanupRecord(
+      updatedRecord,
+    );
+
+    await assertCleanupCommitCurrent();
+
+    return {
+      record:
+        updatedRecord,
+      persisted: true,
+    };
+  } catch (error) {
+    if (
+      error instanceof
+      SpotifySessionChangedError
+    ) {
+      throw error;
+    }
+
+    return {
+      record:
+        updatedRecord,
+      persisted: false,
+    };
+  }
+}
+
 async function persistSession(
   session: SpotifySession,
   accountGuard:
     SpotifyCanalAccountGuard,
-): Promise<void> {
+  operationCommitGuard?:
+    () => boolean,
+): Promise<SpotifySessionPersistenceCommit> {
+  assertOperationCommitCurrent(
+    operationCommitGuard,
+  );
+
   await assertCanalAccountGuardCurrentUnlocked(
     accountGuard,
+  );
+
+  assertOperationCommitCurrent(
+    operationCommitGuard,
   );
 
   const persistedValue:
@@ -773,32 +2308,141 @@ async function persistSession(
       persistedValue,
     );
 
-  if (Platform.OS === "web") {
-    await AsyncStorage.removeItem(
+  const previousAsyncValue =
+    await AsyncStorage.getItem(
       SPOTIFY_ASYNC_STORAGE_KEY,
     );
 
+  assertOperationCommitCurrent(
+    operationCommitGuard,
+  );
+
+  const previousSecureValue =
+    Platform.OS ===
+      "web"
+      ? null
+      : await SecureStore.getItemAsync(
+          SPOTIFY_SECURE_STORAGE_KEY,
+        );
+
+  assertOperationCommitCurrent(
+    operationCommitGuard,
+  );
+
+  const previousMemorySession =
+    memorySession;
+
+  const previousMemoryAccountGuard =
+    memorySessionAccountGuard;
+
+  let secureValueWritten =
+    false;
+
+  let asyncValueRemoved =
+    false;
+
+  let memoryValueWritten =
+    false;
+
+  const rollback =
+    async (): Promise<void> => {
+      if (secureValueWritten) {
+        await restoreSecureStorageValueIfExact(
+          serialized,
+          previousSecureValue,
+        );
+      }
+
+      if (asyncValueRemoved) {
+        await restoreAsyncStorageValueIfExact(
+          SPOTIFY_ASYNC_STORAGE_KEY,
+          null,
+          previousAsyncValue,
+        );
+      }
+
+      if (
+        memoryValueWritten &&
+        memorySession ===
+          session &&
+        isSameCanalAccountGuard(
+          memorySessionAccountGuard,
+          accountGuard,
+        )
+      ) {
+        memorySession =
+          previousMemorySession;
+        memorySessionAccountGuard =
+          previousMemoryAccountGuard;
+      }
+    };
+
+  if (Platform.OS === "web") {
+    try {
+      assertOperationCommitCurrent(
+        operationCommitGuard,
+      );
+
+      await AsyncStorage.removeItem(
+        SPOTIFY_ASYNC_STORAGE_KEY,
+      );
+      asyncValueRemoved =
+        true;
+
+      assertOperationCommitCurrent(
+        operationCommitGuard,
+      );
+
+      await assertCanalAccountGuardCurrentUnlocked(
+        accountGuard,
+      );
+
+      assertOperationCommitCurrent(
+        operationCommitGuard,
+      );
+
+      memorySession =
+        session;
+      memorySessionAccountGuard =
+        accountGuard;
+      memoryValueWritten =
+        true;
+
+      assertOperationCommitCurrent(
+        operationCommitGuard,
+      );
+
+      return {
+        rollback,
+      };
+    } catch (error) {
+      await rollback();
+      throw error;
+    }
+  }
+
+  try {
+    assertOperationCommitCurrent(
+      operationCommitGuard,
+    );
+
+    await SecureStore.setItemAsync(
+      SPOTIFY_SECURE_STORAGE_KEY,
+      serialized,
+    );
+    secureValueWritten =
+      true;
+
+    assertOperationCommitCurrent(
+      operationCommitGuard,
+    );
+
     await assertCanalAccountGuardCurrentUnlocked(
       accountGuard,
     );
 
-    memorySession =
-      session;
-
-    memorySessionAccountGuard =
-      accountGuard;
-
-    return;
-  }
-
-  await SecureStore.setItemAsync(
-    SPOTIFY_SECURE_STORAGE_KEY,
-    serialized,
-  );
-
-  try {
-    await assertCanalAccountGuardCurrentUnlocked(
-      accountGuard,
+    assertOperationCommitCurrent(
+      operationCommitGuard,
     );
   } catch (error) {
     memorySession =
@@ -807,7 +2451,7 @@ async function persistSession(
     memorySessionAccountGuard =
       null;
 
-    await removePersistedSpotifySessionBestEffort();
+    await rollback();
 
     throw error;
   }
@@ -817,10 +2461,39 @@ async function persistSession(
 
   memorySessionAccountGuard =
     accountGuard;
+  memoryValueWritten =
+    true;
 
-  await AsyncStorage.removeItem(
-    SPOTIFY_ASYNC_STORAGE_KEY,
-  );
+  try {
+    assertOperationCommitCurrent(
+      operationCommitGuard,
+    );
+
+    await AsyncStorage.removeItem(
+      SPOTIFY_ASYNC_STORAGE_KEY,
+    );
+    asyncValueRemoved =
+      true;
+
+    assertOperationCommitCurrent(
+      operationCommitGuard,
+    );
+
+    await assertCanalAccountGuardCurrentUnlocked(
+      accountGuard,
+    );
+
+    assertOperationCommitCurrent(
+      operationCommitGuard,
+    );
+  } catch (error) {
+    await rollback();
+    throw error;
+  }
+
+  return {
+    rollback,
+  };
 }
 
 async function hydrateSpotifySession(): Promise<
@@ -830,6 +2503,7 @@ async function hydrateSpotifySession(): Promise<
     guard:
       accountGuard,
     persistedStateUsable,
+    sessionGeneration,
   } =
     await resolveCurrentCanalAccountGuardUnlocked();
 
@@ -846,6 +2520,38 @@ async function hydrateSpotifySession(): Promise<
     await removePersistedSpotifySessionBestEffort();
 
     return null;
+  }
+
+  if (
+    accountGuard.ownerId &&
+    sessionGeneration
+  ) {
+    const pendingCleanups =
+      await listCanalAccountCleanupRecords({
+        ownerId:
+          accountGuard.ownerId,
+        sessionGeneration,
+        spotifyAccountGeneration:
+          accountGuard.accountGeneration,
+      });
+
+    if (
+      pendingCleanups.some(
+        (record) =>
+          hasSpotifyCleanupTargets(
+            record,
+          ) ||
+          record.phase ===
+            "signout-pending",
+      )
+    ) {
+      memorySession =
+        null;
+      memorySessionAccountGuard =
+        null;
+
+      return null;
+    }
   }
 
   if (
@@ -989,10 +2695,18 @@ export async function readSpotifySession(): Promise<
 export async function saveSpotifySession(
   session: SpotifySession,
   options: SaveSpotifySessionOptions = {},
-): Promise<void> {
+): Promise<SpotifyCanalAccountGuard> {
+  assertOperationCommitCurrent(
+    options.operationCommitGuard,
+  );
+
   const accountGuard =
     options.accountGuard ??
     (await captureSpotifyCanalAccountGuard());
+
+  assertOperationCommitCurrent(
+    options.operationCommitGuard,
+  );
 
   const normalized =
     normalizeSession(session);
@@ -1003,43 +2717,143 @@ export async function saveSpotifySession(
     );
   }
 
-  const previousSession =
+  if (
+    accountGuard.ownerId
+  ) {
+    const pendingCleanups =
+      await listCanalAccountCleanupRecords({
+        ownerId:
+          accountGuard.ownerId,
+        sessionGeneration:
+          getCanalAccountSessionGeneration(),
+        spotifyAccountGeneration:
+          accountGuard.accountGeneration,
+      });
+
+    if (
+      pendingCleanups.some(
+        (pendingCleanup) =>
+        hasSpotifyCleanupTargets(
+          pendingCleanup,
+        ) ||
+        pendingCleanup.phase ===
+          "signout-pending"
+      )
+    ) {
+      throw new Error(
+        "Canal must finish the previous account cleanup before Spotify can reconnect.",
+      );
+    }
+  }
+
+  const saveResult =
     await runSessionMutation(
       async () => {
+        assertOperationCommitCurrent(
+          options.operationCommitGuard,
+        );
+
         await assertCanalAccountGuardCurrentUnlocked(
           accountGuard,
+        );
+
+        assertOperationCommitCurrent(
+          options.operationCommitGuard,
         );
 
         const storedSession =
           await hydrateSpotifySession();
 
+        assertOperationCommitCurrent(
+          options.operationCommitGuard,
+        );
+
         await assertCanalAccountGuardCurrentUnlocked(
           accountGuard,
         );
 
-        await persistSession(
-          normalized,
-          accountGuard,
+        assertOperationCommitCurrent(
+          options.operationCommitGuard,
         );
 
-        spotifyConnectionGeneration +=
-          1;
+        const rotationCommit =
+          storedSession &&
+          storedSession.profile.id !==
+            normalized.profile.id
+            ? await rotateSpotifyProviderAuthorityUnlocked(
+                accountGuard,
+                storedSession
+                  .profile.id,
+                options.operationCommitGuard,
+              )
+            : {
+                accountGuard,
+                complete:
+                  async () => {},
+                rollback:
+                  async () => {},
+              } satisfies SpotifyProviderRotationCommit;
 
-        return storedSession;
+        const effectiveGuard =
+          rotationCommit.accountGuard;
+
+        try {
+          assertOperationCommitCurrent(
+            options.operationCommitGuard,
+          );
+
+          await assertCanalAccountGuardCurrentUnlocked(
+            effectiveGuard,
+          );
+
+          assertOperationCommitCurrent(
+            options.operationCommitGuard,
+          );
+
+          const persistenceCommit =
+            await persistSession(
+              normalized,
+              effectiveGuard,
+              options.operationCommitGuard,
+            );
+
+          assertOperationCommitCurrent(
+            options.operationCommitGuard,
+          );
+
+          advanceSpotifyConnectionAuthority();
+
+          return {
+            effectiveGuard,
+            rollbackPersistenceUnlocked:
+              async () => {
+                await persistenceCommit.rollback();
+              },
+            previousSession:
+              storedSession,
+            rotationCommit,
+          };
+        } catch (error) {
+          await rotationCommit.rollback();
+          throw error;
+        }
       },
     );
 
-  try {
-    const {
-      markAppSignedIn,
-    } = await import(
-      "./app-session"
-    );
+  const previousSession =
+    saveResult.previousSession;
 
-    await markAppSignedIn();
-  } catch {
-    // The Spotify connection is still valid.
-  }
+  const rollbackFullCommit =
+    async (): Promise<void> =>
+      runSessionMutation(
+        async () => {
+          await saveResult
+            .rotationCommit
+            .rollback();
+          await saveResult
+            .rollbackPersistenceUnlocked();
+        },
+      );
 
   const isNewConnection =
     !previousSession ||
@@ -1052,37 +2866,249 @@ export async function saveSpotifySession(
 
   if (shouldSync) {
     try {
+      assertOperationCommitCurrent(
+        options.operationCommitGuard,
+      );
+
       const {
         syncSpotifyLibrary,
       } = await import(
         "./spotify-library"
       );
 
-      await syncSpotifyLibrary();
+      await syncSpotifyLibrary({
+        operationCommitGuard:
+          options.operationCommitGuard,
+      });
+
+      assertOperationCommitCurrent(
+        options.operationCommitGuard,
+      );
     } catch (error) {
+      if (
+        options.operationCommitGuard &&
+        !options.operationCommitGuard()
+      ) {
+        await rollbackFullCommit();
+
+        throw new SpotifySessionChangedError();
+      }
+
       console.warn(
         "Spotify connected, but automatic library sync failed:",
         error,
       );
+
+      options.onLibrarySyncError?.(
+        error,
+      );
     }
   }
-}
 
-export async function clearSpotifySession(): Promise<void> {
+  try {
+    assertOperationCommitCurrent(
+      options.operationCommitGuard,
+    );
+
+    const {
+      markAppSignedIn,
+    } = await import(
+      "./app-session"
+    );
+
+    await markAppSignedIn();
+
+    assertOperationCommitCurrent(
+      options.operationCommitGuard,
+    );
+  } catch {
+    if (
+      options.operationCommitGuard &&
+      !options.operationCommitGuard()
+    ) {
+      await rollbackFullCommit();
+
+      throw new SpotifySessionChangedError();
+    }
+
+    // The Spotify connection is still valid.
+  }
+
   await runSessionMutation(
     async () => {
-      const {
-        guard,
-      } =
-        await resolveCurrentCanalAccountGuardUnlocked({
-          forceRotate:
-            isSupabaseConfigured,
-        });
+      try {
+        assertOperationCommitCurrent(
+          options.operationCommitGuard,
+        );
 
-      if (!guard.configured) {
-        spotifyConnectionGeneration +=
-          1;
+        await saveResult
+          .rotationCommit
+          .complete();
+
+        assertOperationCommitCurrent(
+          options.operationCommitGuard,
+        );
+      } catch (error) {
+        await saveResult
+          .rollbackPersistenceUnlocked();
+
+        if (
+          error instanceof
+          SpotifyProviderCleanupIncompleteError
+        ) {
+          throw error;
+        }
+
+        await saveResult
+          .rotationCommit
+          .rollback();
+
+        throw error;
       }
+    },
+  );
+
+  return saveResult.effectiveGuard;
+}
+
+export async function clearSpotifySession(
+  expectedAccountGuard?:
+    SpotifyCanalAccountGuard,
+  preparedCleanupRecord?:
+    CanalAccountCleanupRecord,
+): Promise<SpotifySessionCleanupResult> {
+  return runSessionMutation(
+    async () => {
+      const {
+        guard:
+          currentGuard,
+        sessionGeneration,
+      } =
+        await resolveCurrentCanalAccountGuardUnlocked();
+
+      if (
+        expectedAccountGuard &&
+        !isSameCanalAccountGuard(
+          expectedAccountGuard,
+          currentGuard,
+        )
+      ) {
+        throw new SpotifySessionChangedError();
+      }
+
+      const guardToClear =
+        expectedAccountGuard ??
+        currentGuard;
+
+      const sourceSpotifyProfileId =
+        await readSpotifyProfileIdForGuardUnlocked(
+          guardToClear,
+        );
+
+      await assertCanalAccountGuardCurrentUnlocked(
+        guardToClear,
+      );
+
+      const nextGuard:
+        SpotifyCanalAccountGuard =
+        guardToClear.configured
+          ? {
+              ...guardToClear,
+              accountGeneration:
+                guardToClear.accountGeneration +
+                1,
+            }
+          : guardToClear;
+
+      const cleanupOwnerId =
+        guardToClear.ownerId ??
+        (
+          guardToClear.configured
+            ? "signed-out"
+            : "local-unconfigured"
+        );
+
+      const requestedRecord =
+        preparedCleanupRecord
+          ? {
+              ...preparedCleanupRecord,
+              sourceSpotifyProfileId,
+            }
+          : createCanalAccountCleanupRecord(
+              {
+                ownerId:
+                  cleanupOwnerId,
+                sessionGeneration:
+                  sessionGeneration ??
+                  "local-unconfigured",
+                sourceSpotifyAccountGeneration:
+                  guardToClear.accountGeneration,
+                sourceSpotifyProfileId,
+                spotifyAccountGeneration:
+                  nextGuard.accountGeneration,
+              },
+              "spotify-disconnect",
+              SPOTIFY_SESSION_CLEANUP_TARGETS,
+            );
+
+      if (
+        requestedRecord.ownerId !==
+          cleanupOwnerId ||
+        requestedRecord.sessionGeneration !==
+          (
+            sessionGeneration ??
+            "local-unconfigured"
+          ) ||
+        requestedRecord.sourceSpotifyAccountGeneration !==
+          guardToClear.accountGeneration ||
+        requestedRecord.sourceSpotifyProfileId !==
+          sourceSpotifyProfileId ||
+        requestedRecord.spotifyAccountGeneration !==
+          nextGuard.accountGeneration ||
+        requestedRecord.phase !==
+          "cleanup-pending"
+      ) {
+        throw new Error(
+          "Canal refused an account cleanup marker that did not match the captured session.",
+        );
+      }
+
+      if (
+        !preparedCleanupRecord ||
+        preparedCleanupRecord.sourceSpotifyProfileId !==
+          sourceSpotifyProfileId
+      ) {
+        await persistCanalAccountCleanupRecord(
+          requestedRecord,
+        );
+      }
+
+      const durableRecord =
+        await readCanalAccountCleanupRecord(
+          requestedRecord,
+        );
+
+      if (!durableRecord) {
+        throw new Error(
+          "Canal could not safely record cleanup before disconnecting Spotify.",
+        );
+      }
+
+      if (
+        guardToClear.configured
+      ) {
+        await persistSpotifyAccountAuthority({
+          version:
+            SPOTIFY_ACCOUNT_AUTHORITY_VERSION,
+          ownerId:
+            guardToClear.ownerId,
+          sessionGeneration,
+          generation:
+            nextGuard.accountGeneration,
+        });
+      }
+
+      advanceSpotifyConnectionAuthority();
 
       memorySession =
         null;
@@ -1090,9 +3116,207 @@ export async function clearSpotifySession(): Promise<void> {
       memorySessionAccountGuard =
         null;
 
-      await removePersistedSpotifySessionBestEffort();
+      refreshInFlight =
+        null;
+
+      const cleanupResult =
+        await performSpotifyCleanupTargets(
+          durableRecord,
+        );
+
+      if (
+        expectedAccountGuard
+      ) {
+        await assertCanalAccountGuardCurrentUnlocked(
+          nextGuard,
+        );
+      }
+
+      if (
+        preparedCleanupRecord
+      ) {
+        return {
+          accountGuard:
+            nextGuard,
+          cleanupIncomplete:
+            cleanupResult.record,
+          cleanupPersisted:
+            cleanupResult.persisted,
+        };
+      }
+
+      if (
+        hasSpotifyCleanupTargets(
+          cleanupResult.record,
+        ) ||
+        !cleanupResult.persisted
+      ) {
+        return {
+          accountGuard:
+            nextGuard,
+          cleanupIncomplete:
+            cleanupResult.record,
+          cleanupPersisted:
+            cleanupResult.persisted,
+        };
+      }
+
+      const completedRecord =
+        updateCanalAccountCleanupRecord(
+          cleanupResult.record,
+          {
+            phase:
+              "cleanup-complete",
+          },
+        );
+
+      try {
+        await persistCanalAccountCleanupRecord(
+          completedRecord,
+        );
+
+        await removeCanalAccountCleanupRecord(
+          completedRecord,
+        );
+
+        return {
+          accountGuard:
+            nextGuard,
+          cleanupIncomplete:
+            null,
+          cleanupPersisted:
+            true,
+        };
+      } catch {
+        return {
+          accountGuard:
+            nextGuard,
+          cleanupIncomplete:
+            completedRecord,
+          cleanupPersisted:
+            true,
+        };
+      }
     },
   );
+}
+
+export async function retrySpotifySessionCleanup(
+  record:
+    CanalAccountCleanupRecord,
+  expectedAccountGuard:
+    SpotifyCanalAccountGuard,
+): Promise<SpotifySessionCleanupResult> {
+  return runSessionMutation(
+    async () => {
+      const {
+        guard:
+          currentGuard,
+        sessionGeneration,
+      } =
+        await resolveCurrentCanalAccountGuardUnlocked();
+
+      if (
+        !isSameCanalAccountGuard(
+          expectedAccountGuard,
+          currentGuard,
+        ) ||
+        record.ownerId !==
+          currentGuard.ownerId ||
+        record.sessionGeneration !==
+          sessionGeneration ||
+        record.spotifyAccountGeneration !==
+          currentGuard.accountGeneration
+      ) {
+        throw new SpotifySessionChangedError();
+      }
+
+      const durableRecord =
+        await readCanalAccountCleanupRecord(
+          record,
+        );
+
+      if (
+        !durableRecord ||
+        durableRecord.cleanupId !==
+          record.cleanupId
+      ) {
+        throw new Error(
+          "Canal could not find the cleanup marker for this account session.",
+        );
+      }
+
+      if (
+        durableRecord.phase !==
+          "cleanup-pending" ||
+        !hasSpotifyCleanupTargets(
+          durableRecord,
+        )
+      ) {
+        return {
+          accountGuard:
+            currentGuard,
+          cleanupIncomplete:
+            durableRecord,
+          cleanupPersisted:
+            true,
+        };
+      }
+
+      const cleanupResult =
+        await performSpotifyCleanupTargets(
+          durableRecord,
+        );
+
+      await assertCanalAccountGuardCurrentUnlocked(
+        currentGuard,
+      );
+
+      return {
+        accountGuard:
+          currentGuard,
+        cleanupIncomplete:
+          cleanupResult.record,
+        cleanupPersisted:
+          cleanupResult.persisted,
+      };
+    },
+  );
+}
+
+export async function readSpotifyConnectionStateForAccount(
+  expectedAccountGuard:
+    SpotifyCanalAccountGuard,
+): Promise<SpotifyConnectionStateForAccount> {
+  try {
+    return await runSessionMutation(
+      async () => {
+        const {
+          guard:
+            currentGuard,
+        } =
+          await resolveCurrentCanalAccountGuardUnlocked();
+
+        if (
+          !isSameCanalAccountGuard(
+            expectedAccountGuard,
+            currentGuard,
+          )
+        ) {
+          return "account-changed";
+        }
+
+        const currentSession =
+          await hydrateSpotifySession();
+
+        return currentSession
+          ? "connected"
+          : "disconnected";
+      },
+    );
+  } catch {
+    return "unknown";
+  }
 }
 
 async function refreshSpotifySession(
@@ -1254,7 +3478,10 @@ async function refreshSpotifySessionOnce(
       !refreshInFlight ||
       refreshInFlight
         .connectionGeneration !==
-        connectionGuard.connectionGeneration
+        connectionGuard.connectionGeneration ||
+      refreshInFlight
+        .connectionAuthority !==
+        connectionGuard.connectionAuthority
     ) {
       let promise:
         Promise<SpotifySession>;
@@ -1277,6 +3504,8 @@ async function refreshSpotifySessionOnce(
       refreshInFlight = {
         connectionGeneration:
           connectionGuard.connectionGeneration,
+        connectionAuthority:
+          connectionGuard.connectionAuthority,
         promise,
       };
     }
@@ -1311,17 +3540,16 @@ async function refreshSpotifySessionOnce(
               });
 
             if (!guard.configured) {
-              spotifyConnectionGeneration +=
-                1;
+              advanceSpotifyConnectionAuthority();
+
+              memorySession =
+                null;
+
+              memorySessionAccountGuard =
+                null;
+
+              await removePersistedSpotifySessionBestEffort();
             }
-
-            memorySession =
-              null;
-
-            memorySessionAccountGuard =
-              null;
-
-            await removePersistedSpotifySessionBestEffort();
 
             return true;
           },
