@@ -1291,7 +1291,7 @@ describe(
     );
 
     it(
-      "honors a persisted Retry-After checkpoint after a cold module reload",
+      "honors a persisted Retry-After checkpoint and saved-track offset after a cold module reload",
       async () => {
         let now = Date.now();
         let rateLimited = true;
@@ -1328,7 +1328,10 @@ describe(
                     urlOffset(url);
                   savedOffsets.push(offset);
 
-                  if (rateLimited) {
+                  if (
+                    rateLimited &&
+                    offset === 50
+                  ) {
                     return response(
                       429,
                       {
@@ -1340,15 +1343,28 @@ describe(
                     );
                   }
 
+                  const items = Array.from(
+                    {
+                      length:
+                        offset === 0
+                          ? 50
+                          : 1,
+                    },
+                    (_, index) => ({
+                      track: track(
+                        offset + index + 1,
+                      ),
+                    }),
+                  );
+
                   return response(200, {
-                    items: [
-                      {
-                        track: track(1),
-                      },
-                    ],
+                    items,
                     offset,
-                    total: 1,
-                    next: null,
+                    total: 51,
+                    next:
+                      offset === 0
+                        ? "https://api.spotify.com/v1/me/tracks?limit=50&offset=50"
+                        : null,
                   });
                 }
 
@@ -1428,21 +1444,28 @@ describe(
         now += 60_001;
         rateLimited = false;
 
-        await expect(
-          coldSyncSpotifyLibrary(),
-        ).resolves.toMatchObject({
-          savedTracks: [
-            {
-              id: "track-1",
-            },
-          ],
+        const resumed =
+          await coldSyncSpotifyLibrary();
+
+        expect(resumed).toMatchObject({
           importStatus: {
             state: "complete",
           },
         });
+        expect(resumed.savedTracks).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              id: "track-1",
+            }),
+            expect.objectContaining({
+              id: "track-51",
+            }),
+          ]),
+        );
         expect(savedOffsets).toEqual([
           0,
-          0,
+          50,
+          50,
         ]);
       },
     );
