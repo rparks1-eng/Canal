@@ -25,6 +25,8 @@ import {
   StatusBar,
 } from "expo-status-bar";
 
+import Slider from "@react-native-community/slider";
+
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
@@ -49,14 +51,14 @@ import {
   clearSceneStudioDraft,
   DEFAULT_SCENE_STUDIO_DRAFT,
   generateSceneFromSpotify,
+  getSceneFamiliarityLevel,
   readSceneStudioDraft,
   SCENE_ACTIVITY_OPTIONS,
   SCENE_ARC_OPTIONS,
   SCENE_ENERGY_OPTIONS,
-  SCENE_FAMILIARITY_OPTIONS,
   SCENE_GENRE_OPTIONS,
   SCENE_MOOD_OPTIONS,
-  saveGeneratedSceneToLibrary,
+  sceneFamiliarityFromLevel,
   writeGeneratedScenePreview,
   writeSceneStudioDraft,
 } from "../lib/scene-studio";
@@ -65,7 +67,6 @@ import type {
   SceneActivity,
   SceneArc,
   SceneEnergy,
-  SceneFamiliarity,
   SceneMood,
   SceneStudioDraft,
 } from "../lib/scene-studio";
@@ -78,10 +79,6 @@ import {
 import type {
   SpotifyLibrarySnapshot,
 } from "../lib/spotify-library";
-
-import {
-  createPlayerSession,
-} from "../lib/canal-player";
 
 import {
   useConnectivity,
@@ -557,6 +554,22 @@ export default function SceneStudioScreen() {
     );
   };
 
+  const updateFamiliarityLevel = (
+    value: number,
+  ): void => {
+    const familiarityLevel = Math.round(
+      Math.min(Math.max(value, 0), 100),
+    );
+
+    setErrorMessage(null);
+    setDraft((current) => ({
+      ...current,
+      familiarityLevel,
+      familiarity:
+        sceneFamiliarityFromLevel(familiarityLevel),
+    }));
+  };
+
   const toggleMood = (
     mood: SceneMood,
   ): void => {
@@ -767,28 +780,13 @@ export default function SceneStudioScreen() {
           result,
         );
 
-        const savedScene =
-          await saveGeneratedSceneToLibrary(
-            result,
-          );
-
-        await createPlayerSession(
-          savedScene,
-        );
-
         setSnapshot(
           latestSnapshot,
         );
 
-        router.replace({
-          pathname:
-            "/now-playing",
-
-          params: {
-            sceneId:
-              savedScene.id,
-          },
-        });
+        router.push(
+          "/scene-preview" as never,
+        );
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -1160,31 +1158,45 @@ export default function SceneStudioScreen() {
         <View style={styles.sectionCard}>
           <SectionTitle
             title="Familiarity"
-            subtitle="Decide how strongly Canal should favor your most obvious favorites."
+            subtitle="Move toward New to reach deeper into your complete imported library and vary each mix."
           />
 
-          <View style={styles.optionGrid}>
-            {SCENE_FAMILIARITY_OPTIONS.map(
-              (option) => (
-                <OptionCard
-                  key={option.value}
-                  label={option.label}
-                  description={
-                    option.description
-                  }
-                  selected={
-                    draft.familiarity ===
-                    option.value
-                  }
-                  onPress={() =>
-                    updateDraft(
-                      "familiarity",
-                      option.value as SceneFamiliarity,
-                    )
-                  }
-                />
-              ),
-            )}
+          <View style={styles.familiaritySummary}>
+            <Text style={styles.familiarityValue}>
+              {getSceneFamiliarityLevel(draft) <= 33
+                ? "Mostly familiar"
+                : getSceneFamiliarityLevel(draft) >= 67
+                  ? "More unexpected"
+                  : "Balanced mix"}
+            </Text>
+
+            <Text style={styles.familiarityPercent}>
+              {getSceneFamiliarityLevel(draft)}% new
+            </Text>
+          </View>
+
+          <Slider
+            accessibilityLabel="Song familiarity"
+            accessibilityHint="Move left for familiar favorites or right for less obvious songs from your imported library."
+            minimumValue={0}
+            maximumValue={100}
+            step={1}
+            value={getSceneFamiliarityLevel(draft)}
+            onValueChange={updateFamiliarityLevel}
+            minimumTrackTintColor="#F47A24"
+            maximumTrackTintColor="#E7E0DA"
+            thumbTintColor="#F47A24"
+            style={styles.familiaritySlider}
+          />
+
+          <View style={styles.familiarityLabels}>
+            <Text style={styles.familiarityLabel}>
+              Familiar
+            </Text>
+
+            <Text style={styles.familiarityLabel}>
+              New
+            </Text>
           </View>
         </View>
 
@@ -1431,9 +1443,9 @@ const styles = StyleSheet.create({
   },
 
   backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
@@ -1578,6 +1590,43 @@ const styles = StyleSheet.create({
 
   optionGrid: {
     gap: 10,
+  },
+
+  familiaritySummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  familiarityValue: {
+    color: "#302D2A",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  familiarityPercent: {
+    color: "#B64F08",
+    fontSize: 13,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+  },
+
+  familiaritySlider: {
+    width: "100%",
+    height: 48,
+    marginTop: 4,
+  },
+
+  familiarityLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+
+  familiarityLabel: {
+    color: "#77706A",
+    fontSize: 12,
+    fontWeight: "700",
   },
 
   optionCard: {

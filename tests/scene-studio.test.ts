@@ -109,6 +109,27 @@ function snapshot(): SpotifyLibrarySnapshot {
   };
 }
 
+function largeLibrarySnapshot(): SpotifyLibrarySnapshot {
+  const tracks = Array.from(
+    { length: 1_000 },
+    (_, index) => track(index + 1),
+  );
+
+  return {
+    ...snapshot(),
+    topTracks: tracks.slice(0, 20),
+    recentTracks: tracks.slice(0, 20),
+    savedTracks: tracks,
+    playlistTracks: [],
+    trackGenres: Object.fromEntries(
+      tracks.map((item) => [
+        item.id,
+        ["jazz", "ambient"],
+      ]),
+    ),
+  };
+}
+
 describe(
   "Spotify Scene generation",
   () => {
@@ -180,6 +201,66 @@ describe(
           result.scene.genres,
         ).toContain(
           "Jazz",
+        );
+      },
+    );
+
+    it(
+      "reaches deeper into a full imported library and varies New mixes",
+      () => {
+        const library = largeLibrarySnapshot();
+        const familiar = generateSceneFromSpotify(
+          {
+            ...DEFAULT_SCENE_STUDIO_DRAFT,
+            familiarity: "familiar",
+            familiarityLevel: 0,
+          },
+          library,
+          { variationSeed: "familiar-seed" },
+        );
+        const firstNewMix = generateSceneFromSpotify(
+          {
+            ...DEFAULT_SCENE_STUDIO_DRAFT,
+            familiarity: "discovery",
+            familiarityLevel: 100,
+          },
+          library,
+          { variationSeed: "new-seed-a" },
+        );
+        const secondNewMix = generateSceneFromSpotify(
+          {
+            ...DEFAULT_SCENE_STUDIO_DRAFT,
+            familiarity: "discovery",
+            familiarityLevel: 100,
+          },
+          library,
+          { variationSeed: "new-seed-b" },
+        );
+        const averageTrackNumber = (
+          result: typeof familiar,
+        ): number =>
+          result.trackSignals.reduce(
+            (total, signal) =>
+              total +
+              Number(
+                signal.track.id.replace("track-", ""),
+              ),
+            0,
+          ) / result.trackSignals.length;
+
+        expect(
+          averageTrackNumber(firstNewMix),
+        ).toBeGreaterThan(
+          averageTrackNumber(familiar) + 100,
+        );
+        expect(
+          firstNewMix.trackSignals.map(
+            (signal) => signal.track.id,
+          ),
+        ).not.toEqual(
+          secondNewMix.trackSignals.map(
+            (signal) => signal.track.id,
+          ),
         );
       },
     );
