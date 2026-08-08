@@ -331,5 +331,34 @@ describe(
         );
       },
     );
+
+    it(
+      "routes generation to an editable preview with separate save and play actions",
+      () => {
+        const studioSource = readFileSync(
+          require.resolve("../app/scene-studio"),
+          "utf8",
+        );
+        const previewSource = readFileSync(
+          require.resolve("../app/scene-preview"),
+          "utf8",
+        );
+
+        expect(studioSource).toContain(
+          'router.push(\n          "/scene-preview"',
+        );
+        expect(studioSource).not.toContain(
+          "saveGeneratedSceneToLibrary",
+        );
+        expect(studioSource).toContain(
+          "@react-native-community/slider",
+        );
+        expect(previewSource).toContain(
+          "Edit Scene Parameters",
+        );
+        expect(previewSource).toContain("Save Scene");
+        expect(previewSource).toContain("Play Scene");
+      },
+    );
   },
 );

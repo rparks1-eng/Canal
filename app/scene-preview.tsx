@@ -196,6 +196,11 @@ export default function ScenePreviewScreen() {
   ] = useState(false);
 
   const [
+    playing,
+    setPlaying,
+  ] = useState(false);
+
+  const [
     exporting,
     setExporting,
   ] = useState(false);
@@ -571,24 +576,13 @@ export default function ScenePreviewScreen() {
           result,
         );
 
-        const savedScene =
-          await saveGeneratedSceneToLibrary(
-            result,
-          );
-
-        await createPlayerSession(
-          savedScene,
+        await saveGeneratedSceneToLibrary(
+          result,
         );
 
-        router.replace({
-          pathname:
-            "/now-playing",
-
-          params: {
-            sceneId:
-              savedScene.id,
-          },
-        });
+        setMessage(
+          "Scene saved. You can keep editing this preview or play it when you are ready.",
+        );
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -599,6 +593,41 @@ export default function ScenePreviewScreen() {
         setSaving(
           false,
         );
+      }
+    };
+
+  const play =
+    async (): Promise<void> => {
+      if (!result || playing) {
+        return;
+      }
+
+      setPlaying(true);
+      setMessage("");
+      setErrorMessage("");
+
+      try {
+        await writeGeneratedScenePreview(result);
+
+        const savedScene =
+          await saveGeneratedSceneToLibrary(result);
+
+        await createPlayerSession(savedScene);
+
+        router.push({
+          pathname: "/now-playing",
+          params: {
+            sceneId: savedScene.id,
+          },
+        });
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not play this Scene.",
+        );
+      } finally {
+        setPlaying(false);
       }
     };
 
@@ -804,7 +833,7 @@ export default function ScenePreviewScreen() {
             styles.headerTitle
           }
         >
-          Edit Scene
+          Scene Preview
         </Text>
 
         <View
@@ -1150,7 +1179,7 @@ export default function ScenePreviewScreen() {
                       styles.sectionSubtitle
                     }
                   >
-                    Remove any track before saving or exporting.
+                    Review, add, or remove tracks before saving.
                   </Text>
                 </View>
 
@@ -1288,7 +1317,7 @@ export default function ScenePreviewScreen() {
                     styles.secondaryText
                   }
                 >
-                  Edit Mood and Activity
+                  Edit Scene Parameters
                 </Text>
               </Pressable>
 
@@ -1314,7 +1343,22 @@ export default function ScenePreviewScreen() {
                       styles.primaryText
                     }
                   >
-                    Save & Play Scene
+                    Save Scene
+                  </Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={playing || saving}
+                onPress={() => void play()}
+                style={styles.playButton}
+              >
+                {playing ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.playText}>
+                    Play Scene
                   </Text>
                 )}
               </Pressable>
@@ -1416,9 +1460,9 @@ const styles =
     },
 
     backButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
       alignItems:
         "center",
       justifyContent:
@@ -1440,7 +1484,7 @@ const styles =
     },
 
     headerSpacer: {
-      width: 42,
+      width: 48,
     },
 
     content: {
@@ -1650,7 +1694,7 @@ const styles =
 
     addButton: {
       minWidth: 54,
-      minHeight: 35,
+      minHeight: 48,
       borderRadius: 11,
       alignItems:
         "center",
@@ -1709,6 +1753,8 @@ const styles =
     },
 
     removeButton: {
+      minHeight: 48,
+      justifyContent: "center",
       borderWidth: 1,
       borderColor:
         "#E4B8B4",
@@ -1760,6 +1806,20 @@ const styles =
     },
 
     primaryText: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    playButton: {
+      minHeight: 53,
+      borderRadius: 17,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#211E1B",
+    },
+
+    playText: {
       color: "#FFFFFF",
       fontSize: 14,
       fontWeight: "900",

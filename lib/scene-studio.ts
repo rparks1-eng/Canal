@@ -217,6 +217,7 @@ export type SceneStudioDraft = {
   durationMinutes: number;
   energy: SceneEnergy;
   familiarity: SceneFamiliarity;
+  familiarityLevel: number;
   arc: SceneArc;
   includeRecent: boolean;
   allowExplicit: boolean;
@@ -281,6 +282,7 @@ export const DEFAULT_SCENE_STUDIO_DRAFT: SceneStudioDraft = {
   durationMinutes: 35,
   energy: "medium",
   familiarity: "balanced",
+  familiarityLevel: 50,
   arc: "build",
   includeRecent: true,
   allowExplicit: false,
@@ -535,12 +537,83 @@ function clamp(
   );
 }
 
+export function sceneFamiliarityFromLevel(
+  value: number,
+): SceneFamiliarity {
+  const level = clamp(
+    Number.isFinite(value)
+      ? value
+      : 50,
+    0,
+    100,
+  );
+
+  if (level <= 33) {
+    return "familiar";
+  }
+
+  if (level >= 67) {
+    return "discovery";
+  }
+
+  return "balanced";
+}
+
+export function getSceneFamiliarityLevel(
+  draft: Pick<
+    SceneStudioDraft,
+    | "familiarity"
+    | "familiarityLevel"
+  >,
+): number {
+  if (
+    Number.isFinite(
+      draft.familiarityLevel,
+    )
+  ) {
+    return Math.round(
+      clamp(
+        draft.familiarityLevel,
+        0,
+        100,
+      ),
+    );
+  }
+
+  if (draft.familiarity === "familiar") {
+    return 0;
+  }
+
+  if (draft.familiarity === "discovery") {
+    return 100;
+  }
+
+  return 50;
+}
+
 function normalizeText(
   value: string,
 ): string {
   return value
     .trim()
     .toLowerCase();
+}
+
+function seededUnitInterval(
+  value: string,
+): number {
+  let hash = 2166136261;
+
+  for (
+    let index = 0;
+    index < value.length;
+    index += 1
+  ) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0) / 4294967295;
 }
 
 function includesKeyword(
@@ -760,69 +833,46 @@ function getSourceBaseScore(
 
 function getSourceMultiplier(
   source: SceneTrackSource,
-  familiarity: SceneFamiliarity,
+  familiarityLevel: number,
 ): number {
-  if (
-    familiarity === "familiar"
-  ) {
-    if (source === "top") {
-      return 1.45;
-    }
+  const familiar: Record<SceneTrackSource, number> = {
+    top: 1.45,
+    saved: 1.2,
+    recent: 0.9,
+    playlist: 1.15,
+    discovery: 0.35,
+  };
+  const balanced: Record<SceneTrackSource, number> = {
+    top: 1.1,
+    saved: 1.05,
+    recent: 1,
+    playlist: 1.05,
+    discovery: 0.8,
+  };
+  const newMusic: Record<SceneTrackSource, number> = {
+    top: 0.68,
+    saved: 1.08,
+    recent: 0.72,
+    playlist: 1,
+    discovery: 1.55,
+  };
+  const level = clamp(familiarityLevel, 0, 100);
 
-    if (source === "saved") {
-      return 1.2;
-    }
+  if (level <= 50) {
+    const progress = level / 50;
 
-    if (source === "playlist") {
-      return 1.15;
-    }
-
-    if (source === "discovery") {
-      return 0.35;
-    }
-
-    return 0.9;
+    return (
+      familiar[source] +
+      (balanced[source] - familiar[source]) * progress
+    );
   }
 
-  if (
-    familiarity === "discovery"
-  ) {
-    if (source === "top") {
-      return 0.75;
-    }
+  const progress = (level - 50) / 50;
 
-    if (source === "saved") {
-      return 1.05;
-    }
-
-    if (source === "playlist") {
-      return 0.95;
-    }
-
-    if (source === "discovery") {
-      return 1.55;
-    }
-
-    return 1.1;
-  }
-
-  if (source === "top") {
-    return 1.1;
-  }
-
-  if (source === "saved") {
-    return 1.05;
-  }
-
-  if (source === "playlist") {
-    return 1.05;
-  }
-
-  if (source === "discovery") {
-    return 0.8;
-  }
-
-  return 1;
+  return (
+    balanced[source] +
+    (newMusic[source] - balanced[source]) * progress
+  );
 }
 
 function getPrimaryArtistId(
@@ -908,8 +958,12 @@ function getGenreMatchScore(
 function scoreCandidate(
   candidate: InternalCandidate,
   draft: SceneStudioDraft,
+  generationSeed: string,
 ): number {
   let score = 0;
+  const familiarityLevel =
+    getSceneFamiliarityLevel(draft);
+  const novelty = familiarityLevel / 100;
 
   for (
     const source of
@@ -927,7 +981,7 @@ function scoreCandidate(
       ) *
       getSourceMultiplier(
         source,
-        draft.familiarity,
+        familiarityLevel,
       );
   }
 
@@ -953,26 +1007,29 @@ function scoreCandidate(
     draft,
   );
 
-  if (
-    draft.familiarity ===
-    "discovery"
-  ) {
-    const popularity =
-      candidate.track.popularity ??
-      50;
+  const lessObviousRank = Math.max(
+    candidate.sourceRanks.saved ?? 0,
+    candidate.sourceRanks.playlist ?? 0,
+  );
+  const libraryDepth =
+    lessObviousRank > 0
+      ? clamp(
+          Math.log2(lessObviousRank + 1) / 11,
+          0,
+          1,
+        )
+      : 0;
 
-    score +=
-      (100 - popularity) *
-      0.12;
+  score +=
+    libraryDepth *
+    (novelty * 28 - (1 - novelty) * 7);
 
-    if (
-      candidate.sources.has(
-        "top",
-      ) &&
-      candidate.sources.size === 1
-    ) {
-      score -= 7;
-    }
+  if (candidate.sources.has("top")) {
+    score -= novelty * 55;
+  }
+
+  if (candidate.sources.has("recent")) {
+    score -= novelty * 18;
   }
 
   if (
@@ -1006,7 +1063,11 @@ function scoreCandidate(
     score -= 1000;
   }
 
-  score += Math.random() * 3;
+  score +=
+    seededUnitInterval(
+      `${generationSeed}:${candidate.track.id}`,
+    ) *
+    (3 + novelty * 24);
 
   return score;
 }
@@ -1086,6 +1147,7 @@ function addCandidate(
 function buildCandidatePool(
   draft: SceneStudioDraft,
   snapshot: SpotifyLibrarySnapshot,
+  generationSeed: string,
 ): InternalCandidate[] {
   const artistGenreMap =
     buildArtistGenreMap(
@@ -1178,6 +1240,7 @@ function buildCandidatePool(
       scoreCandidate(
         candidate,
         draft,
+        generationSeed,
       );
   }
 
@@ -1214,8 +1277,7 @@ function selectTracksForDuration(
   let currentDurationMs = 0;
 
   const artistLimit =
-    draft.familiarity ===
-    "familiar"
+    getSceneFamiliarityLevel(draft) <= 25
       ? 3
       : 2;
 
@@ -1697,19 +1759,16 @@ function buildRationale(
     );
   }
 
-  if (
-    draft.familiarity ===
-    "familiar"
-  ) {
+  const familiarityLevel =
+    getSceneFamiliarityLevel(draft);
+
+  if (familiarityLevel <= 33) {
     rationale.push(
       "The sequence prioritizes your strongest top-track and saved-track signals.",
     );
-  } else if (
-    draft.familiarity ===
-    "discovery"
-  ) {
+  } else if (familiarityLevel >= 67) {
     rationale.push(
-      "The sequence increases artist variety and favors less obvious tracks already present in your imported library.",
+      "The sequence increases artist variety and reaches deeper into your full imported library for less obvious choices.",
     );
   } else {
     rationale.push(
@@ -1753,9 +1812,17 @@ function buildRationale(
 export async function writeSceneStudioDraft(
   draft: SceneStudioDraft,
 ): Promise<void> {
+  const familiarityLevel =
+    getSceneFamiliarityLevel(draft);
+
   await AsyncStorage.setItem(
     SCENE_STUDIO_DRAFT_STORAGE_KEY,
-    JSON.stringify(draft),
+    JSON.stringify({
+      ...draft,
+      familiarityLevel,
+      familiarity:
+        sceneFamiliarityFromLevel(familiarityLevel),
+    }),
   );
 }
 
@@ -1789,10 +1856,24 @@ export async function readSceneStudioDraft(): Promise<
     const parsed =
       JSON.parse(serialized) as
         Partial<SceneStudioDraft>;
+    const familiarityLevel =
+      typeof parsed.familiarityLevel === "number" &&
+      Number.isFinite(parsed.familiarityLevel)
+        ? Math.round(
+            clamp(parsed.familiarityLevel, 0, 100),
+          )
+        : parsed.familiarity === "familiar"
+          ? 0
+          : parsed.familiarity === "discovery"
+            ? 100
+            : 50;
 
     return {
       ...DEFAULT_SCENE_STUDIO_DRAFT,
       ...parsed,
+      familiarityLevel,
+      familiarity:
+        sceneFamiliarityFromLevel(familiarityLevel),
 
       moods:
         Array.isArray(
@@ -1875,12 +1956,27 @@ export async function readGeneratedScenePreview(): Promise<
       return null;
     }
 
+    const familiarityLevel =
+      typeof parsed.draft?.familiarityLevel === "number" &&
+      Number.isFinite(parsed.draft.familiarityLevel)
+        ? Math.round(
+            clamp(parsed.draft.familiarityLevel, 0, 100),
+          )
+        : parsed.draft?.familiarity === "familiar"
+          ? 0
+          : parsed.draft?.familiarity === "discovery"
+            ? 100
+            : 50;
+
     return {
       ...parsed,
 
       draft: {
         ...DEFAULT_SCENE_STUDIO_DRAFT,
         ...parsed.draft,
+        familiarityLevel,
+        familiarity:
+          sceneFamiliarityFromLevel(familiarityLevel),
         moods:
           Array.isArray(
             parsed.draft?.moods,
@@ -1935,11 +2031,18 @@ export async function clearGeneratedScenePreview(): Promise<void> {
 export function generateSceneFromSpotify(
   draft: SceneStudioDraft,
   snapshot: SpotifyLibrarySnapshot,
+  options: {
+    variationSeed?: string;
+  } = {},
 ): GeneratedSceneResult {
+  const id = createSceneId();
+  const generationSeed =
+    options.variationSeed ?? id;
   const candidatePool =
     buildCandidatePool(
       draft,
       snapshot,
+      generationSeed,
     );
 
   if (
@@ -2020,9 +2123,6 @@ export function generateSceneFromSpotify(
   const now =
     new Date().toISOString();
 
-  const id =
-    createSceneId();
-
   const sceneName =
     draft.name.trim() ||
     buildDefaultSceneName(
@@ -2057,7 +2157,9 @@ export function generateSceneFromSpotify(
       draft.energy,
 
     familiarity:
-      draft.familiarity,
+      sceneFamiliarityFromLevel(
+        getSceneFamiliarityLevel(draft),
+      ),
 
     artists:
       selectedArtists.join(
@@ -2101,6 +2203,12 @@ export function generateSceneFromSpotify(
     id,
     draft: {
       ...draft,
+      familiarity:
+        sceneFamiliarityFromLevel(
+          getSceneFamiliarityLevel(draft),
+        ),
+      familiarityLevel:
+        getSceneFamiliarityLevel(draft),
       moods: [
         ...draft.moods,
       ],
