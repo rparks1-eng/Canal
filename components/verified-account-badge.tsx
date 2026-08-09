@@ -1,8 +1,16 @@
-import { Image } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet } from "react-native";
 
 export function VerifiedAccountBadge({ size = 18 }: { size?: number }) {
-  return <Image accessibilityLabel="Verified music account" contentFit="contain" source={require("../assets/badges/verified-music.png")} style={[styles.badge, { width: size, height: size }]} />;
+  return (
+    <Ionicons
+      accessibilityLabel="Verified music account"
+      color="#168AF4"
+      name="checkmark-circle"
+      size={size}
+      style={styles.badge}
+    />
+  );
 }
 
 const styles = StyleSheet.create({ badge: { flexShrink: 0 } });

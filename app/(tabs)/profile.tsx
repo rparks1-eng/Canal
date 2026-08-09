@@ -23,6 +23,7 @@ import {
 
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   router,
@@ -1353,7 +1354,7 @@ function ProfileScreenContent() {
           }
         >
           <View>
-            <Text style={styles.eyebrow}>CANAL IDENTITY</Text>
+            <Text style={styles.eyebrow}>YOUR SOUNDSCAPE</Text>
             <Text
               style={
                 styles.title
@@ -1367,7 +1368,7 @@ function ProfileScreenContent() {
                 styles.subtitle
               }
             >
-              Your music, people, and moments in one place.
+              The people, Scenes, and listening moments that shape your world.
             </Text>
           </View>
 
@@ -1412,26 +1413,34 @@ function ProfileScreenContent() {
               styles.identityCard
             }
           >
-            <View
-              style={
-                styles.avatar
-              }
-            >
-              {displayProfile.avatarUrl ? (
-                <Image
-                  accessibilityLabel={`${displayProfile.displayName} profile picture`}
-                  contentFit="cover"
-                  source={displayProfile.avatarUrl}
-                  style={styles.avatarImage}
-                />
-              ) : (
-                <Text style={styles.avatarText}>{avatarText}</Text>
-              )}
-            </View>
+            <View style={styles.identitySummary}>
+              <View style={styles.avatarFrame}>
+                <View style={styles.avatar}>
+                  {displayProfile.avatarUrl ? (
+                    <Image
+                      accessibilityLabel={`${displayProfile.displayName} profile picture`}
+                      contentFit="cover"
+                      source={displayProfile.avatarUrl}
+                      style={styles.avatarImage}
+                    />
+                  ) : (
+                    <Text style={styles.avatarText}>{avatarText}</Text>
+                  )}
+                </View>
+              </View>
 
-            <View style={styles.profileNameRow}>
-              <Text style={styles.profileName}>{displayProfile.displayName}</Text>
-              {displayProfile.isVerified ? <VerifiedAccountBadge size={19} /> : null}
+              <View style={styles.identityCopy}>
+                <View style={styles.profileNameRow}>
+                  <Text numberOfLines={1} style={styles.profileName}>
+                    {displayProfile.displayName}
+                  </Text>
+                  {displayProfile.isVerified ? <VerifiedAccountBadge size={19} /> : null}
+                </View>
+
+                <Text style={styles.handle}>{displayProfile.handle}</Text>
+
+                <Text style={styles.soundscapeLabel}>CANAL LISTENER</Text>
+              </View>
 
               {profile ? (
                 <Pressable
@@ -1441,7 +1450,7 @@ function ProfileScreenContent() {
                   onPress={beginEditing}
                   style={({ pressed }) => [styles.heroEditButton, pressed && styles.pressed]}
                 >
-                  <Image source="sf:pencil" style={styles.heroEditIcon} tintColor={canalDynamicColors.text} />
+                  <Text style={styles.heroEditText}>Edit</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -1450,38 +1459,28 @@ function ProfileScreenContent() {
               {displayProfile.bio || "Add a short note about what moves you."}
             </Text>
 
-            <Text
-              style={
-                styles.handle
-              }
-            >
-              {
-                displayProfile.handle
-              }
-            </Text>
+            <View style={styles.identityMetaRow}>
+              <View style={styles.visibilityBadge}>
+                <Text style={styles.visibilityBadgeText}>
+                  {displayProfile
+                    .isCanal
+                    ? "Canal profile"
+                    : displayProfile
+                        .isVerified
+                      ? "Verified profile"
+                      : profile
+                        ? profile.isPublic
+                          ? "Public profile"
+                          : "Private profile"
+                        : "Saved profile details"}
+                </Text>
+              </View>
 
-            <View
-              style={
-                styles.visibilityBadge
-              }
-            >
-              <Text
-                style={
-                  styles.visibilityBadgeText
-                }
-              >
-                {displayProfile
-                  .isCanal
-                  ? "Canal profile"
-                  : displayProfile
-                      .isVerified
-                    ? "Verified profile"
-                    : profile
-                      ? profile.isPublic
-                        ? "Public profile"
-                        : "Private profile"
-                      : "Saved profile details"}
-              </Text>
+              {displayProfile.favoriteActivities ? (
+                <Text numberOfLines={1} style={styles.favoriteActivityValue}>
+                  {displayProfile.favoriteActivities}
+                </Text>
+              ) : null}
             </View>
 
             {sceneDataResolved ? (
@@ -1513,12 +1512,6 @@ function ProfileScreenContent() {
               </View>
             ) : null}
 
-            {displayProfile.favoriteActivities ? (
-              <View style={styles.favoriteActivityRow}>
-                <Text style={styles.favoriteActivityLabel}>IN ROTATION</Text>
-                <Text numberOfLines={1} style={styles.favoriteActivityValue}>{displayProfile.favoriteActivities}</Text>
-              </View>
-            ) : null}
           </View>
         ) : sceneDataResolved ? (
           <View
@@ -1581,7 +1574,7 @@ function ProfileScreenContent() {
             style={({ pressed }) => [styles.profileAction, pressed && styles.pressed]}
           >
             <View style={styles.profileActionIconSurface}>
-              <Image source="sf:dot.radiowaves.left.and.right" style={styles.profileActionIcon} tintColor={canalDynamicColors.mint} />
+              <Ionicons color="#8DE5D2" name="radio-outline" size={22} />
             </View>
             <Text style={styles.profileActionTitle}>My Stages</Text>
             <Text numberOfLines={2} style={styles.profileActionCopy}>Host, resume, or close a live room.</Text>
@@ -1594,7 +1587,7 @@ function ProfileScreenContent() {
             style={({ pressed }) => [styles.profileAction, pressed && styles.pressed]}
           >
             <View style={styles.profileActionIconSurface}>
-              <Image source="sf:person.2" style={styles.profileActionIcon} tintColor={canalDynamicColors.mint} />
+              <Ionicons color="#8DE5D2" name="people-outline" size={22} />
             </View>
             <Text style={styles.profileActionTitle}>Find people</Text>
             <Text numberOfLines={2} style={styles.profileActionCopy}>Follow creators and shared taste.</Text>
@@ -1741,7 +1734,7 @@ function ProfileScreenContent() {
                   styles.connectionStat
                 }
               >
-                <Image source="sf:bell" style={styles.connectionIcon} tintColor={canalDynamicColors.text} />
+                <Ionicons color="#F6FEFF" name="notifications-outline" size={19} />
 
                 <Text
                   style={
@@ -1842,7 +1835,7 @@ function ProfileScreenContent() {
                           styles.playlistIcon
                         }
                       >
-                        <Image source="sf:music.note" style={styles.playlistSymbol} tintColor={canalDynamicColors.text} />
+                        <Ionicons color="#07130B" name="musical-note" size={20} />
                       </View>
 
                       <View
@@ -2568,9 +2561,9 @@ const styles =
 
     content: {
       paddingHorizontal: 20,
-      paddingTop: 8,
+      paddingTop: 10,
       paddingBottom: 120,
-      gap: 12,
+      gap: 14,
     },
 
     header: {
@@ -2582,7 +2575,7 @@ const styles =
     },
 
     eyebrow: {
-      color: canalDynamicColors.mint,
+      color: "rgba(220, 255, 249, 0.86)",
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 2,
@@ -2599,6 +2592,8 @@ const styles =
     subtitle: {
       color: "rgba(235, 245, 255, 0.76)",
       fontSize: 13,
+      lineHeight: 18,
+      maxWidth: 270,
       marginTop: 3,
     },
 
@@ -2672,51 +2667,66 @@ const styles =
     },
 
     identityCard: {
-      alignItems:
-        "center",
-      backgroundColor:
-        "#FFFFFF",
-      borderRadius: 24,
-      padding: 17,
-      gap: 15,
+      backgroundColor: "rgba(5, 36, 55, 0.64)",
+      borderWidth: 1,
+      borderColor: "rgba(220, 255, 249, 0.20)",
+      borderRadius: 28,
+      borderCurve: "continuous",
+      padding: 18,
+      gap: 14,
+      overflow: "hidden",
     },
 
     identitySummary: {
+      width: "100%",
       flexDirection: "row",
       alignItems: "center",
-      gap: 14,
+      gap: 13,
     },
 
     identityCopy: {
       flex: 1,
       alignItems: "flex-start",
+      minWidth: 0,
     },
 
     localLibraryTitle: {
-      color: "#1B1B1B",
+      color: "#F6FEFF",
       fontSize: 19,
       fontWeight: "900",
     },
 
     localLibraryText: {
       maxWidth: 300,
-      color: "#746D67",
+      color: "rgba(226, 243, 247, 0.72)",
       fontSize: 12,
       lineHeight: 18,
       textAlign: "center",
       marginTop: 6,
     },
 
+    avatarFrame: {
+      width: 86,
+      height: 86,
+      borderRadius: 28,
+      borderCurve: "continuous",
+      padding: 3,
+      backgroundColor: "rgba(229, 255, 249, 0.16)",
+      borderWidth: 1,
+      borderColor: "rgba(229, 255, 249, 0.28)",
+    },
+
     avatar: {
-      width: 82,
-      height: 82,
-      borderRadius: 41,
+      width: "100%",
+      height: "100%",
+      borderRadius: 24,
+      borderCurve: "continuous",
+      overflow: "hidden",
       alignItems:
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#F47A24",
+      backgroundColor: "rgba(82, 110, 208, 0.84)",
     },
 
     avatarText: {
@@ -2728,64 +2738,80 @@ const styles =
     avatarImage: {
       width: "100%",
       height: "100%",
-      borderRadius: 41,
+      borderRadius: 24,
     },
 
     profileName: {
-      color: "#1B1B1B",
-      fontSize: 25,
+      flexShrink: 1,
+      color: "#F8FEFF",
+      fontSize: 26,
       fontFamily: "Georgia",
       fontWeight: "500",
+      letterSpacing: -0.5,
     },
 
     profileNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
 
     heroEditButton: {
-      width: 48,
+      minWidth: 48,
       height: 48,
-      borderRadius: 24,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "rgba(229, 255, 249, 0.12)",
-      borderWidth: 1,
-      borderColor: canalDynamicColors.line,
+      paddingHorizontal: 4,
     },
 
-    heroEditIcon: {
-      width: 18,
-      height: 18,
+    heroEditText: {
+      color: "#8DE5D2",
+      fontSize: 12,
+      fontWeight: "900",
     },
 
     heroBio: {
-      color: "#504A45",
+      color: "rgba(239, 250, 252, 0.88)",
       fontSize: 14,
       lineHeight: 21,
-      maxWidth: 320,
+      maxWidth: 360,
     },
 
     heroBioEmpty: {
-      color: "#817972",
+      color: "rgba(205, 226, 232, 0.64)",
       fontStyle: "italic",
     },
 
     handle: {
-      color: "#817972",
+      color: "rgba(213, 234, 239, 0.72)",
       fontSize: 13,
-      marginTop: 3,
+      marginTop: 2,
+    },
+
+    soundscapeLabel: {
+      color: "#8DE5D2",
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+      marginTop: 8,
+    },
+
+    identityMetaRow: {
+      width: "100%",
+      minHeight: 30,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
     },
 
     visibilityBadge: {
-      backgroundColor:
-        "#FFF0E5",
-      borderRadius: 11,
+      backgroundColor: "rgba(141, 229, 210, 0.13)",
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: "rgba(141, 229, 210, 0.22)",
       paddingHorizontal: 10,
       paddingVertical: 6,
-      marginTop: 7,
     },
 
     visibilityBadgeText: {
-      color: "#F47A24",
-      fontSize: 11,
+      color: "#BDF4E8",
+      fontSize: 10,
       fontWeight: "900",
     },
 
@@ -2795,7 +2821,7 @@ const styles =
       marginTop: 2,
       paddingTop: 14,
       borderTopWidth: 1,
-      borderTopColor: canalDynamicColors.line,
+      borderTopColor: "rgba(220, 255, 249, 0.16)",
     },
 
     stat: {
@@ -2805,13 +2831,13 @@ const styles =
     },
 
     statValue: {
-      color: "#1B1B1B",
+      color: "#F8FEFF",
       fontSize: 21,
       fontWeight: "900",
     },
 
     statLabel: {
-      color: "#817972",
+      color: "rgba(207, 230, 235, 0.66)",
       fontSize: 10,
       marginTop: 3,
     },
@@ -2833,8 +2859,9 @@ const styles =
 
     favoriteActivityValue: {
       flex: 1,
-      color: canalDynamicColors.muted,
+      color: "rgba(213, 234, 239, 0.72)",
       fontSize: 12,
+      textAlign: "right",
     },
 
     profileActions: {
@@ -2844,14 +2871,14 @@ const styles =
 
     profileAction: {
       flex: 1,
-      minHeight: 126,
-      justifyContent: "flex-end",
-      padding: 15,
-      borderRadius: 22,
+      minHeight: 116,
+      justifyContent: "space-between",
+      padding: 14,
+      borderRadius: 20,
       borderCurve: "continuous",
-      backgroundColor: canalDynamicColors.surface,
+      backgroundColor: "rgba(5, 36, 55, 0.50)",
       borderWidth: 1,
-      borderColor: canalDynamicColors.line,
+      borderColor: "rgba(220, 255, 249, 0.16)",
     },
 
     profileActionIconSurface: {
@@ -2860,8 +2887,8 @@ const styles =
       alignItems: "center",
       justifyContent: "center",
       borderRadius: 15,
-      backgroundColor: canalDynamicColors.elevated,
-      marginBottom: 12,
+      backgroundColor: "rgba(141, 229, 210, 0.12)",
+      marginBottom: 10,
     },
 
     profileActionIcon: {
@@ -2870,13 +2897,13 @@ const styles =
     },
 
     profileActionTitle: {
-      color: canalDynamicColors.text,
+      color: "#F6FEFF",
       fontSize: 15,
       fontWeight: "900",
     },
 
     profileActionCopy: {
-      color: canalDynamicColors.muted,
+      color: "rgba(207, 230, 235, 0.68)",
       fontSize: 10,
       lineHeight: 14,
       marginTop: 4,
@@ -2884,11 +2911,10 @@ const styles =
 
     connectionCard: {
       borderWidth: 1,
-      borderColor:
-        canalDynamicColors.line,
+      borderColor: "rgba(220, 255, 249, 0.16)",
       borderRadius: 22,
-      backgroundColor:
-        "#FFFFFF",
+      borderCurve: "continuous",
+      backgroundColor: "rgba(5, 36, 55, 0.50)",
       padding: 17,
       gap: 16,
     },
@@ -2904,21 +2930,22 @@ const styles =
     },
 
     connectionTitle: {
-      color: "#1B1B1B",
+      color: "#F6FEFF",
       fontSize: 17,
       fontWeight: "900",
     },
 
     connectionSubtitle: {
-      color: "#817972",
+      color: "rgba(207, 230, 235, 0.68)",
       fontSize: 10,
       marginTop: 3,
     },
 
     discoverText: {
-      color: "#F47A24",
+      color: "#8DE5D2",
       fontSize: 11,
       fontWeight: "900",
+      paddingVertical: 14,
     },
 
     connectionStats: {
@@ -2935,12 +2962,11 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 15,
-      backgroundColor:
-        "rgba(229, 255, 249, 0.1)",
+      backgroundColor: "rgba(229, 255, 249, 0.08)",
     },
 
     connectionValue: {
-      color: "#241B16",
+      color: "#F8FEFF",
       fontSize: 17,
       fontWeight: "900",
       fontVariant: [
@@ -2954,7 +2980,7 @@ const styles =
     },
 
     connectionLabel: {
-      color: "#817972",
+      color: "rgba(207, 230, 235, 0.68)",
       fontSize: 9,
       fontWeight: "800",
       marginTop: 4,
@@ -2962,11 +2988,10 @@ const styles =
 
     playlistCard: {
       borderWidth: 1,
-      borderColor:
-        canalDynamicColors.line,
+      borderColor: "rgba(220, 255, 249, 0.16)",
       borderRadius: 22,
-      backgroundColor:
-        canalDynamicColors.surface,
+      borderCurve: "continuous",
+      backgroundColor: "rgba(5, 36, 55, 0.50)",
       padding: 17,
       gap: 14,
     },
@@ -2981,19 +3006,19 @@ const styles =
     },
 
     playlistTitle: {
-      color: "#17241A",
+      color: "#F6FEFF",
       fontSize: 17,
       fontWeight: "900",
     },
 
     playlistSubtitle: {
-      color: "#6E7B70",
+      color: "rgba(207, 230, 235, 0.68)",
       fontSize: 10,
       marginTop: 3,
     },
 
     playlistCount: {
-      color: "#1DB954",
+      color: "#8DE5D2",
       fontSize: 14,
       fontWeight: "900",
       fontVariant: [
@@ -3013,8 +3038,7 @@ const styles =
         "center",
       gap: 11,
       borderRadius: 15,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: "rgba(229, 255, 249, 0.08)",
       padding: 10,
     },
 
@@ -3046,13 +3070,13 @@ const styles =
     },
 
     playlistName: {
-      color: "#17241A",
+      color: "#F6FEFF",
       fontSize: 12,
       fontWeight: "900",
     },
 
     playlistMeta: {
-      color: "#6E7B70",
+      color: "rgba(207, 230, 235, 0.68)",
       fontSize: 9,
       marginTop: 3,
     },
@@ -3063,7 +3087,7 @@ const styles =
     },
 
     playlistEmpty: {
-      color: "#6E7B70",
+      color: "rgba(207, 230, 235, 0.72)",
       fontSize: 11,
       lineHeight: 17,
     },
@@ -3121,28 +3145,30 @@ const styles =
     },
 
     infoCard: {
-      backgroundColor:
-        "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "rgba(220, 255, 249, 0.16)",
+      backgroundColor: "rgba(5, 36, 55, 0.50)",
       borderRadius: 22,
+      borderCurve: "continuous",
       padding: 18,
     },
 
     sectionLabel: {
-      color: "#A09993",
+      color: "#8DE5D2",
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
 
     sectionValue: {
-      color: "#393532",
+      color: "#F0FAFC",
       fontSize: 14,
       lineHeight: 21,
       marginTop: 7,
     },
 
     emptyValue: {
-      color: "#99918A",
+      color: "rgba(207, 230, 235, 0.58)",
       fontStyle: "italic",
     },
 
@@ -3169,19 +3195,18 @@ const styles =
     },
 
     collectionCreateButton: {
-      minHeight: 38,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
         "center",
       borderRadius: 13,
-      backgroundColor:
-        "#F47A24",
+      backgroundColor: "rgba(141, 229, 210, 0.16)",
       paddingHorizontal: 16,
     },
 
     collectionCreateText: {
-      color: "#FFFFFF",
+      color: "#BDF4E8",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -3197,11 +3222,9 @@ const styles =
       alignItems:
         "center",
       borderWidth: 1,
-      borderColor:
-        canalDynamicColors.line,
+      borderColor: "rgba(220, 255, 249, 0.16)",
       borderRadius: 18,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: "rgba(5, 36, 55, 0.50)",
       paddingHorizontal: 16,
       paddingVertical: 13,
     },
@@ -3211,20 +3234,20 @@ const styles =
     },
 
     collectionTitle: {
-      color: "#1B1B1B",
+      color: "#F6FEFF",
       fontSize: 14,
       fontWeight: "900",
     },
 
     collectionMeta: {
-      color: "#817972",
+      color: "rgba(207, 230, 235, 0.68)",
       fontSize: 10,
       lineHeight: 15,
       marginTop: 4,
     },
 
     collectionArrow: {
-      color: "#F47A24",
+      color: "#8DE5D2",
       fontSize: 24,
       marginLeft: 10,
     },
@@ -3299,41 +3322,40 @@ const styles =
     },
 
     snapshotSectionTitle: {
-      color: "#1B1B1B",
+      color: "#F6FEFF",
       fontSize: 19,
       fontWeight: "900",
     },
 
     snapshotSectionSubtitle: {
-      color: "#817972",
+      color: "rgba(207, 230, 235, 0.68)",
       fontSize: 11,
       marginTop: 3,
     },
 
     snapshotCount: {
-      color: "#F47A24",
+      color: "#8DE5D2",
       fontSize: 13,
       fontWeight: "900",
     },
 
     snapshotEmpty: {
       borderWidth: 1,
-      borderColor:
-        canalDynamicColors.line,
+      borderColor: "rgba(220, 255, 249, 0.16)",
       borderRadius: 20,
-      backgroundColor:
-        "#FFFFFF",
+      borderCurve: "continuous",
+      backgroundColor: "rgba(5, 36, 55, 0.50)",
       padding: 18,
     },
 
     snapshotEmptyTitle: {
-      color: "#1B1B1B",
+      color: "#F6FEFF",
       fontSize: 15,
       fontWeight: "900",
     },
 
     snapshotEmptyText: {
-      color: "#746D67",
+      color: "rgba(207, 230, 235, 0.70)",
       fontSize: 12,
       lineHeight: 18,
       marginTop: 5,
@@ -3363,32 +3385,35 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#F47A24",
+      backgroundColor: "rgba(141, 229, 210, 0.17)",
+      borderWidth: 1,
+      borderColor: "rgba(141, 229, 210, 0.25)",
     },
 
     editButtonText: {
-      color: "#FFFFFF",
+      color: "#BDF4E8",
       fontSize: 15,
       fontWeight: "900",
     },
 
     editCard: {
-      backgroundColor:
-        "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "rgba(220, 255, 249, 0.16)",
+      backgroundColor: "rgba(5, 36, 55, 0.72)",
       borderRadius: 22,
+      borderCurve: "continuous",
       padding: 18,
     },
 
     editTitle: {
-      color: "#1B1B1B",
+      color: "#F6FEFF",
       fontSize: 19,
       fontWeight: "900",
       marginBottom: 2,
     },
 
     fieldLabel: {
-      color: "#5E5752",
+      color: "rgba(220, 240, 244, 0.78)",
       fontSize: 11,
       fontWeight: "800",
       marginTop: 13,
@@ -3401,9 +3426,8 @@ const styles =
       borderColor:
         canalDynamicColors.line,
       borderRadius: 15,
-      backgroundColor:
-        canalDynamicColors.elevated,
-      color: "#1B1B1B",
+      backgroundColor: "rgba(229, 255, 249, 0.08)",
+      color: "#F6FEFF",
       fontSize: 14,
       paddingHorizontal: 14,
       paddingVertical: 12,
@@ -3432,13 +3456,13 @@ const styles =
     },
 
     publicTitle: {
-      color: "#2A2623",
+      color: "#F6FEFF",
       fontSize: 14,
       fontWeight: "900",
     },
 
     publicDescription: {
-      color: "#817972",
+      color: "rgba(207, 230, 235, 0.68)",
       fontSize: 11,
       lineHeight: 17,
       marginTop: 4,
