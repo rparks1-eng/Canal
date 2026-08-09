@@ -10,7 +10,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "jest --runInBand",
+    "test": "jest --runInBand --detectOpenHandles --forceExit",
     "launcher:test": "bash -n script/build_and_run.sh && node script/validate_public_env.test.cjs && node script/build_and_run.test.cjs && node script/release_preflight.test.cjs && node script/release_ballot_smoke.test.cjs",
     "release:preflight": "node script/release_preflight.cjs",
     "smoke:release-ballot:ios": "node script/release_ballot_smoke.cjs",
