@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -18,6 +19,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../providers/auth-provider";
+
 import {
   readFavoriteSceneIds,
   removeFavoriteScene,
@@ -28,6 +31,16 @@ import {
 } from "../lib/public-scenes";
 
 export default function FavoritesScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+
+  return (
+    <FavoritesScreenContent
+      key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`}
+    />
+  );
+}
+
+function FavoritesScreenContent() {
   const [
     favoriteScenes,
     setFavoriteScenes,
@@ -121,6 +134,21 @@ export default function FavoritesScreen() {
     }
   }
 
+  function confirmRemoveFavorite(scene: PublicScene) {
+    Alert.alert(
+      `Remove ${scene.name} from Favorites?`,
+      "The Scene stays available in Explore.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => { void removeFavorite(scene.id); },
+        },
+      ],
+    );
+  }
+
   return (
     <SafeAreaView
       style={styles.screen}
@@ -135,6 +163,7 @@ export default function FavoritesScreen() {
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -165,6 +194,7 @@ export default function FavoritesScreen() {
           </Text>
 
           <Pressable
+            accessibilityLabel="Explore Scenes"
             accessibilityRole="button"
             onPress={() =>
               router.push(
@@ -225,7 +255,7 @@ export default function FavoritesScreen() {
               <Ionicons
                 name="heart-outline"
                 size={32}
-                color="#ff9a50"
+                color={canalDynamicColors.gold}
               />
             </View>
 
@@ -244,6 +274,7 @@ export default function FavoritesScreen() {
             </Text>
 
             <Pressable
+              accessibilityLabel="Explore Scenes"
               accessibilityRole="button"
               onPress={() =>
                 router.push(
@@ -278,6 +309,7 @@ export default function FavoritesScreen() {
                   }
                 >
                   <Pressable
+                    accessibilityLabel={`Open ${scene.name}`}
                     accessibilityRole="button"
                     onPress={() =>
                       router.push({
@@ -352,20 +384,23 @@ export default function FavoritesScreen() {
                     <Ionicons
                       name="chevron-forward"
                       size={19}
-                      color="#717a73"
+                      color={canalDynamicColors.muted}
                     />
                   </Pressable>
 
                   <Pressable
+                    accessibilityLabel={`Remove ${scene.name} from Favorites`}
                     accessibilityRole="button"
+                    accessibilityState={{
+                      busy: removingSceneId === scene.id,
+                      disabled: removingSceneId === scene.id,
+                    }}
                     disabled={
                       removingSceneId ===
                       scene.id
                     }
                     onPress={() => {
-                      void removeFavorite(
-                        scene.id,
-                      );
+                      confirmRemoveFavorite(scene);
                     }}
                     style={({ pressed }) => [
                       styles.removeButton,
@@ -387,7 +422,7 @@ export default function FavoritesScreen() {
                         <Ionicons
                           name="heart-dislike-outline"
                           size={18}
-                          color="#ff9187"
+                          color={canalDynamicColors.danger}
                         />
 
                         <Text
@@ -431,7 +466,7 @@ function getInitials(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -450,24 +485,24 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 90,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: canalDynamicColors.muted,
     fontSize: 14,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   headerAction: {
-    color: "#ff9a50",
+    color: canalDynamicColors.lavender,
     fontSize: 13,
     fontWeight: "700",
     textAlign: "right",
@@ -475,21 +510,22 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginBottom: 8,
-    color: "#ff9a50",
+    color: canalDynamicColors.lavender,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
+    fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "700",
   },
 
   description: {
     marginTop: 10,
-    color: "#aeb6b0",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -520,13 +556,13 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 19,
     fontWeight: "700",
   },
 
   emptyText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -555,9 +591,9 @@ const styles = StyleSheet.create({
   sceneCard: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 20,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   sceneMain: {
@@ -578,7 +614,7 @@ const styles = StyleSheet.create({
   },
 
   artworkText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 16,
     fontWeight: "800",
   },
@@ -589,21 +625,21 @@ const styles = StyleSheet.create({
   },
 
   sceneName: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   creator: {
     marginTop: 5,
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 10,
     fontWeight: "600",
   },
 
   sceneDetails: {
     marginTop: 7,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 10,
   },
 
@@ -614,11 +650,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
     borderTopWidth: 1,
-    borderTopColor: "#303833",
+    borderTopColor: canalDynamicColors.line,
   },
 
   removeText: {
-    color: "#ff9187",
+    color: canalDynamicColors.danger,
     fontSize: 11,
     fontWeight: "800",
   },

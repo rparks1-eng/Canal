@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -54,12 +55,13 @@ type BlockedUserListItem = {
 
 export default function BlockedUsersScreen() {
   const {
+    accountEpoch,
+    sessionGeneration,
     user,
   } = useAuth();
 
   const identityKey =
-    user?.id ??
-    "signed-out";
+    `${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`;
 
   return (
     <BlockedUsersScreenContent
@@ -361,6 +363,7 @@ function BlockedUsersScreenContent(
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -435,7 +438,7 @@ function BlockedUsersScreenContent(
               <Ionicons
                 name="shield-checkmark-outline"
                 size={31}
-                color="#9ff3b5"
+                color={canalDynamicColors.mint}
               />
             </View>
 
@@ -639,7 +642,7 @@ function createFallbackUser(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -658,7 +661,7 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 90,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
@@ -667,34 +670,35 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   eyebrow: {
     marginBottom: 8,
-    color: "#ff9a50",
+    color: canalDynamicColors.lavender,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
+    fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "700",
   },
 
   description: {
     marginTop: 10,
-    color: "#aeb6b0",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -725,13 +729,13 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 18,
     fontWeight: "700",
   },
 
   emptyText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
   },
 
@@ -745,9 +749,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 14,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 19,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   avatar: {
@@ -761,7 +765,7 @@ const styles = StyleSheet.create({
   },
 
   avatarText: {
-    color: "#ff9187",
+    color: canalDynamicColors.danger,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -779,13 +783,13 @@ const styles = StyleSheet.create({
 
   username: {
     marginTop: 4,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 12,
   },
 
   unblockButton: {
     minWidth: 78,
-    minHeight: 40,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 12,
@@ -796,7 +800,7 @@ const styles = StyleSheet.create({
   },
 
   unblockText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "800",
   },

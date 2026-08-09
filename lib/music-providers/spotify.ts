@@ -311,6 +311,13 @@ function normalizeSpotifyTrack(
     cleanText(
       track.album?.name,
     );
+  const albumImageUrl =
+    cleanText(track.album?.imageUrl) ??
+    cleanText(track.album?.images?.[0]?.url);
+  const safeAlbumImageUrl =
+    albumImageUrl?.startsWith("https://")
+      ? albumImageUrl
+      : undefined;
   const uri =
     cleanText(
       track.uri,
@@ -356,7 +363,8 @@ function normalizeSpotifyTrack(
       true,
     artists,
     ...(albumId ||
-    albumName
+    albumName ||
+    safeAlbumImageUrl
       ? {
           album: {
             ...(albumId
@@ -369,6 +377,9 @@ function normalizeSpotifyTrack(
                   name:
                     albumName,
                 }
+              : {}),
+            ...(safeAlbumImageUrl
+              ? { imageUrl: safeAlbumImageUrl }
               : {}),
           },
         }

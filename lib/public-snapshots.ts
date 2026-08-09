@@ -10,6 +10,7 @@ import {
 import {
   canonicalSpotifyTrackUrl,
 } from "./spotify-track-links";
+import { addSpotifyArtworkToSnapshots } from "./spotify-scene-artwork";
 
 import {
   isSnapshotTemplateTheme,
@@ -40,10 +41,15 @@ export type PublicSnapshotRow = {
   user_id: string;
   scene_id: string;
   scene_name: string;
+  scene_activity?: string | null;
   track_id: string | null;
   track_title: string | null;
   track_artist: string | null;
+  track_image_url?: string | null;
   spotify_url: string | null;
+  media_path: string | null;
+  media_type: string | null;
+  media_mime_type: string | null;
   position_ms: number;
   note: string;
   mood: string | null;
@@ -70,10 +76,15 @@ const SNAPSHOT_COLUMNS = [
   "user_id",
   "scene_id",
   "scene_name",
+  "scene_activity",
   "track_id",
   "track_title",
   "track_artist",
+  "track_image_url",
   "spotify_url",
+  "media_path",
+  "media_type",
+  "media_mime_type",
   "position_ms",
   "note",
   "mood",
@@ -93,6 +104,17 @@ const UUID_PATTERN =
 
 const CONTROL_CHARACTER_PATTERN =
   /[\u0000-\u001f\u007f]/;
+
+const SNAPSHOT_MEDIA_URL_TTL_SECONDS = 3600;
+const SNAPSHOT_MEDIA_CACHE_TTL_MS = 55 * 60 * 1000;
+const SNAPSHOT_MEDIA_CACHE_LIMIT = 300;
+
+type SnapshotMediaCacheEntry = {
+  signedUrl: string;
+  expiresAt: number;
+};
+
+const snapshotMediaUrlCache = new Map<string, SnapshotMediaCacheEntry>();
 
 export async function loadPublicSnapshotFeed(
   limit = 100,
@@ -203,7 +225,7 @@ async function loadPublicSnapshots(
     viewerId,
   );
 
-  return normalizePublicSnapshotRows(
+  const snapshots = normalizePublicSnapshotRows(
     rows.filter(
       (row) =>
         row.user_id ===
@@ -215,6 +237,16 @@ async function loadPublicSnapshots(
     viewerId,
     creators,
   );
+
+  const hydratedMedia = await hydratePublicSnapshotMediaBatch(
+    snapshots,
+    viewerId,
+  );
+
+  const hydrated = await addSpotifyArtworkToSnapshots(hydratedMedia);
+
+  await assertPublicSnapshotViewer(viewerId);
+  return hydrated;
 }
 
 async function loadCreators(
@@ -436,6 +468,11 @@ function normalizePublicSnapshot(
     sceneId,
     sceneName,
 
+    sceneActivity:
+      cleanOptionalString(
+        row.scene_activity,
+      ),
+
     trackId:
       cleanOptionalString(
         row.track_id,
@@ -451,11 +488,27 @@ function normalizePublicSnapshot(
         row.track_artist,
       ),
 
+    trackImageUrl:
+      cleanOptionalString(
+        row.track_image_url,
+      ),
+
     spotifyUrl:
       canonicalSpotifyTrackUrl(
         row.spotify_url,
       ) ??
       undefined,
+
+    mediaPath:
+      cleanOptionalString(row.media_path),
+
+    mediaType:
+      row.media_type === "photo" || row.media_type === "video"
+        ? row.media_type
+        : undefined,
+
+    mediaMimeType:
+      cleanOptionalString(row.media_mime_type),
 
     positionMs:
       typeof row.position_ms ===
@@ -506,6 +559,79 @@ function normalizePublicSnapshot(
         ownerId,
       ),
   };
+}
+
+async function hydratePublicSnapshotMediaBatch(
+  snapshots: PublicCanalSnapshot[],
+  viewerId: string,
+): Promise<PublicCanalSnapshot[]> {
+  const now = Date.now();
+  const pathsToSign = new Set<string>();
+
+  for (const snapshot of snapshots) {
+    if (!snapshot.mediaPath || !snapshot.mediaType) continue;
+    const cached = snapshotMediaUrlCache.get(
+      snapshotMediaCacheKey(viewerId, snapshot.mediaPath, snapshot.updatedAt),
+    );
+    if (!cached || cached.expiresAt <= now) pathsToSign.add(snapshot.mediaPath);
+  }
+
+  if (pathsToSign.size > 0) {
+    const paths = Array.from(pathsToSign).slice(0, 100);
+    const { data, error } = await supabase.storage
+      .from("snapshot-media")
+      .createSignedUrls(paths, SNAPSHOT_MEDIA_URL_TTL_SECONDS);
+
+    if (!error && data) {
+      const snapshotsByPath = new Map<string, PublicCanalSnapshot[]>();
+      for (const snapshot of snapshots) {
+        if (!snapshot.mediaPath) continue;
+        const matching = snapshotsByPath.get(snapshot.mediaPath) ?? [];
+        matching.push(snapshot);
+        snapshotsByPath.set(snapshot.mediaPath, matching);
+      }
+
+      for (const signed of data) {
+        if (!signed.path || !signed.signedUrl || signed.error) continue;
+        for (const snapshot of snapshotsByPath.get(signed.path) ?? []) {
+          snapshotMediaUrlCache.set(
+            snapshotMediaCacheKey(viewerId, signed.path, snapshot.updatedAt),
+            {
+              signedUrl: signed.signedUrl,
+              expiresAt: now + SNAPSHOT_MEDIA_CACHE_TTL_MS,
+            },
+          );
+        }
+      }
+      trimSnapshotMediaCache();
+    }
+  }
+
+  return snapshots.map((snapshot) => {
+    if (!snapshot.mediaPath || !snapshot.mediaType) return snapshot;
+    const cached = snapshotMediaUrlCache.get(
+      snapshotMediaCacheKey(viewerId, snapshot.mediaPath, snapshot.updatedAt),
+    );
+    return cached && cached.expiresAt > now
+      ? { ...snapshot, mediaUri: cached.signedUrl }
+      : snapshot;
+  });
+}
+
+function snapshotMediaCacheKey(
+  viewerId: string,
+  mediaPath: string,
+  updatedAt: string,
+): string {
+  return `${viewerId}\u0000${mediaPath}\u0000${updatedAt}`;
+}
+
+function trimSnapshotMediaCache(): void {
+  while (snapshotMediaUrlCache.size > SNAPSHOT_MEDIA_CACHE_LIMIT) {
+    const oldestKey = snapshotMediaUrlCache.keys().next().value;
+    if (typeof oldestKey !== "string") return;
+    snapshotMediaUrlCache.delete(oldestKey);
+  }
 }
 
 function normalizeCreator(

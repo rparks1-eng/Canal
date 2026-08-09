@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -20,17 +21,44 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ProfileAvatar } from "../components/profile-avatar";
+
+import { useAuth } from "../providers/auth-provider";
+
 import {
   followUser,
   readRelationshipState,
   unfollowUser,
 } from "../lib/relationships";
+
+import type {
+  BlockedUserReference,
+} from "../lib/relationships";
+
 import {
-  DirectoryUser,
-  getDirectoryUsers,
-} from "../lib/user-directory";
+  discoverableProfilesFromScenes,
+  profileIsBlocked,
+} from "../lib/social-discovery";
+
+import type {
+  DiscoverableProfile,
+} from "../lib/social-discovery";
+
+import {
+  loadExploreScenes,
+} from "../lib/social";
 
 export default function FriendsScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+
+  return (
+    <FriendsScreenContent
+      key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`}
+    />
+  );
+}
+
+function FriendsScreenContent() {
   const [query, setQuery] =
     useState("");
 
@@ -45,6 +73,20 @@ export default function FriendsScreen() {
   ] = useState<string[]>([]);
 
   const [
+    blockedTargets,
+    setBlockedTargets,
+  ] = useState<
+    BlockedUserReference[]
+  >([]);
+
+  const [
+    users,
+    setUsers,
+  ] = useState<
+    DiscoverableProfile[]
+  >([]);
+
+  const [
     operationUsername,
     setOperationUsername,
   ] = useState("");
@@ -52,19 +94,19 @@ export default function FriendsScreen() {
   const [isLoading, setIsLoading] =
     useState(true);
 
-  const users =
-    useMemo(
-      () => getDirectoryUsers(),
-      [],
-    );
-
   const loadRelationships =
     useCallback(async () => {
       try {
         setIsLoading(true);
 
-        const relationshipState =
-          await readRelationshipState();
+        const [
+          relationshipState,
+          publicScenes,
+        ] =
+          await Promise.all([
+            readRelationshipState(),
+            loadExploreScenes(),
+          ]);
 
         setFollowing(
           relationshipState.following,
@@ -72,6 +114,18 @@ export default function FriendsScreen() {
 
         setBlocked(
           relationshipState.blocked,
+        );
+
+        setBlockedTargets(
+          relationshipState
+            .blockedTargets ??
+            [],
+        );
+
+        setUsers(
+          discoverableProfilesFromScenes(
+            publicScenes,
+          ),
         );
       } catch (error) {
         console.error(
@@ -102,8 +156,10 @@ export default function FriendsScreen() {
       return users
         .filter(
           (user) =>
-            !blocked.includes(
-              user.username,
+            !profileIsBlocked(
+              user,
+              blocked,
+              blockedTargets,
             ),
         )
         .filter((user) => {
@@ -113,10 +169,11 @@ export default function FriendsScreen() {
 
           return [
             user.displayName,
-            user.username,
+            user.handle,
             user.bio,
             ...user.genres,
-            ...user.favoriteArtists,
+            ...user.artists,
+            user.favoriteActivities,
           ].some((value) =>
             value
               .toLowerCase()
@@ -127,35 +184,43 @@ export default function FriendsScreen() {
         });
     }, [
       blocked,
+      blockedTargets,
       query,
       users,
     ]);
 
   async function toggleFollowing(
-    user: DirectoryUser,
+    user: DiscoverableProfile,
   ) {
+    const username =
+      user.handle
+        .trim()
+        .toLowerCase()
+        .replace(/^@+/u, "");
+
     const isFollowing =
       following.includes(
-        user.username,
+        username,
       );
 
     try {
       setOperationUsername(
-        user.username,
+        user.id,
       );
 
       if (isFollowing) {
         const state =
           await unfollowUser(
-            user.username,
+            username,
             user.displayName,
+            user.id,
           );
 
         setFollowing(
           following.filter(
-            (username) =>
-              username !==
-              user.username,
+            (candidate) =>
+              candidate !==
+              username,
           ),
         );
 
@@ -165,15 +230,16 @@ export default function FriendsScreen() {
       } else {
         const state =
           await followUser(
-            user.username,
+            username,
             user.displayName,
+            user.id,
           );
 
         setFollowing(
           Array.from(
             new Set([
               ...following,
-              user.username,
+              username,
             ]),
           ),
         );
@@ -198,13 +264,13 @@ export default function FriendsScreen() {
   }
 
   function openUser(
-    username: string,
+    userId: string,
   ) {
     router.push({
       pathname:
-        "/friend/[username]",
+        "/creator/[userId]",
       params: {
-        username,
+        userId,
       },
     });
   }
@@ -224,6 +290,7 @@ export default function FriendsScreen() {
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -254,6 +321,7 @@ export default function FriendsScreen() {
           </Text>
 
           <Pressable
+            accessibilityLabel="Invite friends"
             accessibilityRole="button"
             onPress={() =>
               router.push(
@@ -301,29 +369,33 @@ export default function FriendsScreen() {
           <Ionicons
             name="search-outline"
             size={20}
-            color="#8f9891"
+            color={canalDynamicColors.muted}
           />
 
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Search people or music taste"
-            placeholderTextColor="#777f79"
+            placeholderTextColor={canalDynamicColors.muted}
             autoCapitalize="none"
             style={styles.searchInput}
           />
 
           {query ? (
             <Pressable
+              accessibilityLabel="Clear people search"
               accessibilityRole="button"
               onPress={() =>
                 setQuery("")
+              }
+              style={
+                styles.clearSearchButton
               }
             >
               <Ionicons
                 name="close-circle"
                 size={20}
-                color="#777f79"
+                color={canalDynamicColors.muted}
               />
             </Pressable>
           ) : null}
@@ -331,6 +403,7 @@ export default function FriendsScreen() {
 
         <View style={styles.quickActions}>
           <Pressable
+            accessibilityLabel="View following"
             accessibilityRole="button"
             onPress={() =>
               router.push(
@@ -346,7 +419,7 @@ export default function FriendsScreen() {
             <Ionicons
               name="people-outline"
               size={20}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
 
             <Text
@@ -369,6 +442,7 @@ export default function FriendsScreen() {
           </Pressable>
 
           <Pressable
+            accessibilityLabel="View blocked users"
             accessibilityRole="button"
             onPress={() =>
               router.push(
@@ -384,7 +458,7 @@ export default function FriendsScreen() {
             <Ionicons
               name="ban-outline"
               size={20}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
 
             <Text
@@ -424,7 +498,7 @@ export default function FriendsScreen() {
             <Ionicons
               name="people-outline"
               size={31}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
 
             <Text
@@ -447,27 +521,34 @@ export default function FriendsScreen() {
           >
             {visibleUsers.map(
               (user) => {
+                const username =
+                  user.handle
+                    .trim()
+                    .toLowerCase()
+                    .replace(/^@+/u, "");
+
                 const isFollowing =
                   following.includes(
-                    user.username,
+                    username,
                   );
 
                 const isOperating =
                   operationUsername ===
-                  user.username;
+                  user.id;
 
                 return (
                   <View
-                    key={user.username}
+                    key={user.id}
                     style={
                       styles.userCard
                     }
                   >
                     <Pressable
+                      accessibilityLabel={`Open ${user.displayName}`}
                       accessibilityRole="button"
                       onPress={() =>
                         openUser(
-                          user.username,
+                          user.id,
                         )
                       }
                       style={({ pressed }) => [
@@ -476,19 +557,11 @@ export default function FriendsScreen() {
                           styles.pressed,
                       ]}
                     >
-                      <View
-                        style={
-                          styles.avatar
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.avatarText
-                          }
-                        >
-                          {user.initials}
-                        </Text>
-                      </View>
+                      <ProfileAvatar
+                        avatarUrl={user.avatarUrl}
+                        displayName={user.displayName}
+                        size={57}
+                      />
 
                       <View
                         style={
@@ -510,7 +583,7 @@ export default function FriendsScreen() {
                             styles.username
                           }
                         >
-                          @{user.username}
+                          {user.handle}
                         </Text>
 
                         <Text
@@ -529,7 +602,7 @@ export default function FriendsScreen() {
                       <Ionicons
                         name="chevron-forward"
                         size={19}
-                        color="#717a73"
+                        color={canalDynamicColors.muted}
                       />
                     </Pressable>
 
@@ -539,10 +612,11 @@ export default function FriendsScreen() {
                       }
                     >
                       <Pressable
+                        accessibilityLabel={`Open ${user.displayName}`}
                         accessibilityRole="button"
                         onPress={() =>
                           openUser(
-                            user.username,
+                            user.id,
                           )
                         }
                         style={({ pressed }) => [
@@ -567,7 +641,16 @@ export default function FriendsScreen() {
                       />
 
                       <Pressable
+                        accessibilityLabel={`${isFollowing ? "Unfollow" : "Follow"} ${user.displayName}`}
                         accessibilityRole="button"
+                        accessibilityState={{
+                          busy:
+                            isOperating,
+                          disabled:
+                            isOperating,
+                          selected:
+                            isFollowing,
+                        }}
                         disabled={
                           isOperating
                         }
@@ -636,7 +719,7 @@ function showPendingRelationshipSync(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -655,24 +738,24 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 80,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   headerAction: {
-    color: "#ff9a50",
+    color: canalDynamicColors.lavender,
     fontSize: 14,
     fontWeight: "700",
     textAlign: "right",
@@ -680,21 +763,22 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginBottom: 8,
-    color: "#ff9a50",
+    color: canalDynamicColors.lavender,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
+    fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "700",
   },
 
   description: {
     marginTop: 10,
-    color: "#aeb6b0",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -706,15 +790,24 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 15,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 17,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   searchInput: {
     flex: 1,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
+  },
+
+  clearSearchButton: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent:
+      "center",
+    marginRight: -14,
   },
 
   quickActions: {
@@ -730,13 +823,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 16,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   quickActionText: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -774,13 +867,13 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 18,
     fontWeight: "700",
   },
 
   emptyText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -793,9 +886,9 @@ const styles = StyleSheet.create({
   userCard: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 20,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   userMain: {
@@ -816,7 +909,7 @@ const styles = StyleSheet.create({
   },
 
   avatarText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 15,
     fontWeight: "800",
   },
@@ -834,7 +927,7 @@ const styles = StyleSheet.create({
 
   username: {
     marginTop: 4,
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -846,31 +939,32 @@ const styles = StyleSheet.create({
   },
 
   cardFooter: {
-    minHeight: 47,
+    minHeight: 48,
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: "#303833",
+    borderTopColor: canalDynamicColors.line,
   },
 
   footerAction: {
+    minHeight: 48,
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
 
   footerActionText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 11,
     fontWeight: "800",
   },
 
   followingText: {
-    color: "#9ff3b5",
+    color: canalDynamicColors.mint,
   },
 
   footerDivider: {
     width: 1,
-    backgroundColor: "#303833",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   disabled: {

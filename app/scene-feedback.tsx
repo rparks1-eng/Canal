@@ -1,5 +1,7 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -38,6 +40,12 @@ import {
 import type {
   StoredScene,
 } from "../lib/scenes";
+import { useAuth } from "../providers/auth-provider";
+import { captureSceneStudioScope } from "../lib/scene-studio-scope";
+import { recordStoredSceneRecommendationFeedback } from "../lib/scene-recommendation-feedback";
+
+import { canalColors } from "../theme/canal-colors";
+import { canalTypography } from "../theme/canal-typography";
 
 const OPTIONS: {
   value: SceneFeedbackRating;
@@ -95,6 +103,7 @@ const OPTIONS: {
 ];
 
 export default function SceneFeedbackScreen() {
+  const { user, accountEpoch, sessionGeneration } = useAuth();
   const params =
     useLocalSearchParams<{
       sceneId?: string;
@@ -131,6 +140,7 @@ export default function SceneFeedbackScreen() {
     submitting,
     setSubmitting,
   ] = useState(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     const load =
@@ -150,15 +160,18 @@ export default function SceneFeedbackScreen() {
   const submit =
     async (): Promise<void> => {
       if (
+        submittingRef.current ||
         !scene ||
         !rating
       ) {
         return;
       }
 
+      submittingRef.current = true;
       setSubmitting(true);
 
-      await Promise.all([
+      try {
+        await Promise.all([
         addFeedbackEntry({
           sceneId:
             scene.id,
@@ -177,11 +190,9 @@ export default function SceneFeedbackScreen() {
           rating,
           note.trim(),
         ),
-      ]);
+        ]);
 
-      setSubmitting(false);
-
-      router.replace({
+        router.replace({
         pathname:
           "/scene-snapshot",
 
@@ -189,7 +200,11 @@ export default function SceneFeedbackScreen() {
           sceneId:
             scene.id,
         },
-      });
+        });
+      } finally {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
     };
 
   if (!scene) {
@@ -266,14 +281,18 @@ export default function SceneFeedbackScreen() {
           </Text>
         </View>
 
-        <View style={styles.options}>
+        <View
+          accessibilityRole="radiogroup"
+          style={styles.options}
+        >
           {OPTIONS.map(
             (option) => (
               <Pressable
                 key={option.value}
-                accessibilityRole="button"
+                accessibilityLabel={`${option.label}. ${option.description}`}
+                accessibilityRole="radio"
                 accessibilityState={{
-                  selected:
+                  checked:
                     rating ===
                     option.value,
                 }}
@@ -347,10 +366,11 @@ export default function SceneFeedbackScreen() {
         </Text>
 
         <TextInput
+          accessibilityLabel="Optional Scene feedback note"
           value={note}
           onChangeText={setNote}
           placeholder="What worked or did not work?"
-          placeholderTextColor="#9A938C"
+          placeholderTextColor={canalDynamicColors.muted}
           multiline
           maxLength={300}
           textAlignVertical="top"
@@ -359,6 +379,8 @@ export default function SceneFeedbackScreen() {
 
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Save feedback and continue"
+          accessibilityState={{ disabled: !rating || submitting, busy: submitting }}
           disabled={
             !rating ||
             submitting
@@ -394,10 +416,20 @@ export default function SceneFeedbackScreen() {
 
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Skip feedback"
           onPress={() =>
-            router.replace(
-              "/(tabs)",
-            )
+            void (async () => {
+              const feedbackScope = captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration });
+              if (scene && feedbackScope) {
+                await recordStoredSceneRecommendationFeedback({
+                  scope: feedbackScope,
+                  currentScope: () => captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration }),
+                  scene,
+                  action: "skip",
+                });
+              }
+              router.replace("/(tabs)");
+            })()
           }
           style={({ pressed }) => [
             styles.skipButton,
@@ -423,8 +455,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalColors.light.page,
     },
 
     center: {
@@ -442,7 +473,7 @@ const styles =
     },
 
     eyebrow: {
-      color: "#F47A24",
+      color: canalColors.light.accent,
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 1,
@@ -450,15 +481,14 @@ const styles =
     },
 
     title: {
-      color: "#181818",
-      fontSize: 29,
-      fontWeight: "900",
+      ...canalTypography.title,
+      color: canalColors.light.ink,
       textAlign: "center",
       marginTop: 6,
     },
 
     subtitle: {
-      color: "#746D67",
+      color: canalColors.light.muted,
       fontSize: 14,
       lineHeight: 20,
       textAlign: "center",
@@ -476,7 +506,7 @@ const styles =
     },
 
     sceneActivity: {
-      color: "#FFB781",
+      color: canalDynamicColors.gold,
       fontSize: 10,
       fontWeight: "900",
       textTransform:
@@ -485,7 +515,7 @@ const styles =
     },
 
     sceneName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
       textAlign: "center",
@@ -503,13 +533,13 @@ const styles =
     },
 
     option: {
+      minHeight: 72,
       flexDirection: "row",
       alignItems: "center",
       borderWidth: 1,
       borderColor:
         "#E5DED8",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 17,
       padding: 14,
     },
@@ -517,12 +547,11 @@ const styles =
     optionSelected: {
       borderColor:
         "#F47A24",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     optionLabel: {
-      color: "#292522",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
@@ -532,7 +561,7 @@ const styles =
     },
 
     optionDescription: {
-      color: "#77706A",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 16,
       marginTop: 3,
@@ -570,7 +599,7 @@ const styles =
     },
 
     noteLabel: {
-      color: "#5F5853",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "800",
       marginTop: 19,
@@ -582,10 +611,9 @@ const styles =
       borderWidth: 1,
       borderColor:
         "#E5DED8",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 17,
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 14,
       padding: 13,
     },
@@ -603,13 +631,13 @@ const styles =
     },
 
     submitText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
 
     skipButton: {
-      minHeight: 46,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
@@ -618,7 +646,7 @@ const styles =
     },
 
     skipText: {
-      color: "#77706A",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       fontWeight: "700",
     },

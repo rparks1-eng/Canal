@@ -25,6 +25,12 @@ const SOURCES = {
 
   rootLayout:
     "app/_layout.tsx",
+
+  bottomNav:
+    "components/CanalBottomNav.tsx",
+
+  tabLayout:
+    "app/(tabs)/_layout.tsx",
 } as const;
 
 function readSource(
@@ -177,6 +183,23 @@ describe(
         ).toMatch(
           /<Stack\s+key=\{\s*userId\s*\?\?\s*"signed-out"\s*\}/u,
         );
+      },
+    );
+
+    it(
+      "keeps the primary navigation available on authenticated stack routes",
+      () => {
+        expect(sources.rootLayout).toContain("showPersistentNavigation");
+        expect(sources.rootLayout).toContain("<CanalBottomNav />");
+        expect(sources.rootLayout).not.toContain('rootSegment !== "scene-studio"');
+        expect(sources.tabLayout).toContain("tabBar={() => (");
+        expect(sources.tabLayout).toContain("<CanalBottomNav />");
+        expect(sources.bottomNav).toContain('route: "/(tabs)"');
+        expect(sources.bottomNav).toContain('route: "/(tabs)/library"');
+        expect(sources.bottomNav).toContain('route: "/scene-studio"');
+        expect(sources.bottomNav).not.toContain('route: "/(tabs)/activity"');
+        expect(sources.bottomNav).toContain('route: "/(tabs)/profile"');
+        expect(sources.bottomNav).toContain('route: "/(tabs)/explore"');
       },
     );
 

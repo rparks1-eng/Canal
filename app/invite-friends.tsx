@@ -1,8 +1,10 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
 } from "expo-router";
 import {
+  useRef,
   useState,
 } from "react";
 import {
@@ -19,14 +21,33 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   shareCanalInvite,
 } from "../lib/canal-invites";
+import { useAuth } from "../providers/auth-provider";
 
 export default function InviteFriendsScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+
+  return (
+    <InviteFriendsContent
+      key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`}
+    />
+  );
+}
+
+function InviteFriendsContent() {
   const [isSharing, setIsSharing] =
     useState(false);
+  const shareInFlight = useRef(false);
+  const [shareError, setShareError] = useState("");
 
   async function shareInvite() {
+    if (shareInFlight.current) {
+      return;
+    }
+
     try {
+      shareInFlight.current = true;
       setIsSharing(true);
+      setShareError("");
 
       const result =
         await shareCanalInvite();
@@ -41,13 +62,17 @@ export default function InviteFriendsScreen() {
         );
       }
     } catch (error) {
-      Alert.alert(
-        "Unable to share",
+      const message =
         error instanceof Error
           ? error.message
-          : "Canal could not share this invite.",
+          : "Canal could not share this invite.";
+      setShareError(message);
+      Alert.alert(
+        "Unable to share",
+        message,
       );
     } finally {
+      shareInFlight.current = false;
       setIsSharing(false);
     }
   }
@@ -66,6 +91,7 @@ export default function InviteFriendsScreen() {
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -109,7 +135,7 @@ export default function InviteFriendsScreen() {
             <Ionicons
               name="people-outline"
               size={43}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
           </View>
 
@@ -132,7 +158,9 @@ export default function InviteFriendsScreen() {
         </View>
 
         <Pressable
+          accessibilityLabel="Share Canal invite"
           accessibilityRole="button"
+          accessibilityState={{ busy: isSharing, disabled: isSharing }}
           disabled={isSharing}
           onPress={() => {
             void shareInvite();
@@ -154,7 +182,7 @@ export default function InviteFriendsScreen() {
               <Ionicons
                 name="share-social-outline"
                 size={21}
-                color="#17110c"
+                color={canalDynamicColors.text}
               />
 
               <Text
@@ -167,6 +195,22 @@ export default function InviteFriendsScreen() {
             </>
           )}
         </Pressable>
+
+        {shareError ? (
+          <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.shareError}>
+            <Text selectable style={styles.shareErrorText}>{shareError}</Text>
+            <Pressable
+              accessibilityLabel="Retry sharing Canal invite"
+              accessibilityRole="button"
+              accessibilityState={{ busy: isSharing, disabled: isSharing }}
+              disabled={isSharing}
+              onPress={() => { void shareInvite(); }}
+              style={styles.retryButton}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View
           style={styles.optionsCard}
@@ -217,7 +261,7 @@ export default function InviteFriendsScreen() {
           <Ionicons
             name="information-circle-outline"
             size={22}
-            color="#ff9a50"
+            color={canalDynamicColors.gold}
           />
 
           <Text style={styles.noteText}>
@@ -261,7 +305,7 @@ function OptionRow({
         <Ionicons
           name={icon}
           size={22}
-          color="#ff9a50"
+          color={canalDynamicColors.gold}
         />
       </View>
 
@@ -286,7 +330,7 @@ function OptionRow({
       <Ionicons
         name="chevron-forward"
         size={19}
-        color="#717a73"
+        color={canalDynamicColors.muted}
       />
     </Pressable>
   );
@@ -295,7 +339,7 @@ function OptionRow({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -314,7 +358,7 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 90,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
@@ -323,13 +367,14 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
+    fontFamily: "Georgia",
     fontSize: 16,
     fontWeight: "700",
   },
@@ -349,7 +394,7 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginTop: 18,
-    color: "#ff9a50",
+    color: canalDynamicColors.lavender,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
@@ -357,7 +402,8 @@ const styles = StyleSheet.create({
 
   heading: {
     marginTop: 8,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
+    fontFamily: "Georgia",
     fontSize: 28,
     fontWeight: "700",
     textAlign: "center",
@@ -366,7 +412,7 @@ const styles = StyleSheet.create({
   description: {
     maxWidth: 350,
     marginTop: 10,
-    color: "#aeb6b0",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
     textAlign: "center",
@@ -388,12 +434,38 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  shareError: {
+    gap: 8,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: canalDynamicColors.dangerSurface,
+  },
+
+  shareErrorText: {
+    color: "#8D211C",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  retryButton: {
+    minHeight: 48,
+    alignSelf: "flex-start",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+
+  retryButtonText: {
+    color: "#8D211C",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
   optionsCard: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 21,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   optionRow: {
@@ -405,7 +477,7 @@ const styles = StyleSheet.create({
 
   optionIcon: {
     width: 45,
-    height: 45,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -419,14 +491,14 @@ const styles = StyleSheet.create({
   },
 
   optionTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "700",
   },
 
   optionDescription: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 16,
   },
@@ -449,7 +521,7 @@ const styles = StyleSheet.create({
 
   noteText: {
     flex: 1,
-    color: "#bca99b",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 17,
   },

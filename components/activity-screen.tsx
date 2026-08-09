@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -30,6 +31,14 @@ import {
   classifyRecoveryIssue,
 } from "../lib/recovery-issue";
 
+import {
+  resolvePublicProfileIdByHandle,
+} from "../lib/social";
+
+import {
+  respondToStageCollaborationInvite,
+} from "../lib/stage-collaboration-invites";
+
 import type {
   RecoveryIssue,
 } from "../lib/recovery-issue";
@@ -46,10 +55,17 @@ import {
   useConnectivity,
 } from "../providers/connectivity-provider";
 
+import {
+  useNotificationCenter,
+} from "../providers/notification-center-provider";
+
 type IoniconName =
   keyof typeof Ionicons.glyphMap;
 
 export default function ActivityScreen() {
+  const {
+    clearUnreadCount,
+  } = useNotificationCenter();
   const {
     refresh:
       refreshConnectivity,
@@ -92,6 +108,7 @@ export default function ActivityScreen() {
         );
 
         await markAllActivityRead();
+        clearUnreadCount();
       } catch (error) {
         console.error(
           "Unable to load activity:",
@@ -112,6 +129,7 @@ export default function ActivityScreen() {
         setIsLoading(false);
       }
     }, [
+      clearUnreadCount,
       connectivityStatus,
     ]);
 
@@ -187,21 +205,114 @@ export default function ActivityScreen() {
     }
   }
 
-  function openActivityItem(
+  async function openActivityItem(
     item: CanalActivityItem,
-  ) {
+  ): Promise<void> {
+    if (
+      item.stageId &&
+      item.stageInviteId
+    ) {
+      Alert.alert(
+        "Join as a collaborator?",
+        item.description,
+        [
+          {
+            text: "Not now",
+            style: "cancel",
+          },
+          {
+            text: "Decline",
+            style: "destructive",
+            onPress: () => {
+              void respondToStageCollaborationInvite(
+                item.stageInviteId!,
+                false,
+              ).then(loadActivity);
+            },
+          },
+          {
+            text: "Join and contribute",
+            onPress: () => {
+              void respondToStageCollaborationInvite(
+                item.stageInviteId!,
+                true,
+              ).then(
+                (stageId) =>
+                  router.push({
+                    pathname:
+                      "/stage-contribution",
+                    params: {
+                      stageId,
+                    },
+                  }),
+              );
+            },
+          },
+        ],
+      );
+
+      return;
+    }
+
+    if (item.stageId) {
+      router.push({
+        pathname:
+          "/stage-contribution",
+        params: {
+          stageId:
+            item.stageId,
+        },
+      });
+
+      return;
+    }
+
+    if (item.snapshotId) {
+      router.push({
+        pathname: "/snapshots/[snapshotId]",
+        params: {
+          snapshotId: item.snapshotId,
+          ...(item.commentId
+            ? { commentId: item.commentId }
+            : {}),
+        },
+      } as never);
+
+      return;
+    }
+
     if (!item.username) {
       return;
     }
 
-    router.push({
-      pathname:
-        "/friend/[username]",
-      params: {
-        username:
+    try {
+      const profileId =
+        await resolvePublicProfileIdByHandle(
           item.username,
-      },
-    });
+        );
+
+      if (!profileId) {
+        Alert.alert(
+          "Profile unavailable",
+          "This Canal profile is no longer public or available.",
+        );
+
+        return;
+      }
+
+      router.push({
+        pathname:
+          "/creator/[userId]",
+        params: {
+          userId: profileId,
+        },
+      });
+    } catch {
+      Alert.alert(
+        "Unable to open profile",
+        "Canal could not load this profile right now. Try again.",
+      );
+    }
   }
 
   return (
@@ -217,11 +328,26 @@ export default function ActivityScreen() {
         }
       >
         <View style={styles.header}>
-          <View
-            style={
-              styles.headerSpacer
+          <Pressable
+            accessibilityHint="Returns to your profile."
+            accessibilityLabel="Back to Profile"
+            accessibilityRole="button"
+            onPress={() =>
+              router.replace(
+                "/(tabs)/profile",
+              )
             }
-          />
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              color={canalDynamicColors.text}
+              name="chevron-back"
+              size={24}
+            />
+          </Pressable>
 
           <Text
             style={
@@ -315,7 +441,7 @@ export default function ActivityScreen() {
               <Ionicons
                 name="notifications-outline"
                 size={31}
-                color="#ff9a50"
+                color={canalDynamicColors.gold}
               />
             </View>
 
@@ -334,6 +460,7 @@ export default function ActivityScreen() {
             </Text>
 
             <Pressable
+              accessibilityLabel="Find friends"
               accessibilityRole="button"
               onPress={() =>
                 router.push(
@@ -371,17 +498,19 @@ export default function ActivityScreen() {
                   accessibilityLabel={`${item.title}. ${item.description}`}
                   accessibilityRole="button"
                   disabled={
-                    !item.username
+                    !item.username &&
+                    !item.snapshotId
                   }
                   onPress={() =>
-                    openActivityItem(
+                    void openActivityItem(
                       item,
                     )
                   }
                   style={({ pressed }) => [
                     styles.activityCard,
                     pressed &&
-                      item.username &&
+                      (item.username ||
+                        item.snapshotId) &&
                       styles.pressed,
                   ]}
                 >
@@ -450,11 +579,12 @@ export default function ActivityScreen() {
                     ) : null}
                   </View>
 
-                  {item.username ? (
+                  {item.username ||
+                  item.snapshotId ? (
                     <Ionicons
                       name="chevron-forward"
                       size={19}
-                      color="#717a73"
+                      color={canalDynamicColors.muted}
                     />
                   ) : null}
                 </Pressable>
@@ -621,7 +751,7 @@ function formatActivityDate(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -640,7 +770,14 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 80,
-    minHeight: 44,
+    minHeight: 48,
+    justifyContent: "center",
+  },
+
+  backButton: {
+    width: 80,
+    minHeight: 48,
+    alignItems: "flex-start",
     justifyContent: "center",
   },
 
@@ -649,13 +786,13 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   clearText: {
-    color: "#ff9187",
+    color: canalDynamicColors.danger,
     fontSize: 13,
     fontWeight: "700",
     textAlign: "right",
@@ -663,28 +800,29 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginBottom: 8,
-    color: "#ff9a50",
+    color: canalDynamicColors.lavender,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
+    fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "700",
   },
 
   description: {
     marginTop: 10,
-    color: "#aeb6b0",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
   },
 
   pendingText: {
     marginTop: 5,
-    color: "#ffb27a",
+    color: canalDynamicColors.gold,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -715,13 +853,13 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 18,
     fontWeight: "700",
   },
 
   emptyText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -753,14 +891,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 14,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 19,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   activityIcon: {
     width: 47,
-    height: 47,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -773,14 +911,14 @@ const styles = StyleSheet.create({
   },
 
   activityTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "700",
   },
 
   activityDescription: {
     marginTop: 4,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 16,
   },

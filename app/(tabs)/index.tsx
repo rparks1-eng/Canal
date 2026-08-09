@@ -1,3 +1,5 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   useCallback,
   useState,
@@ -19,6 +21,23 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
+
+import {
+  StatusBar,
+} from "expo-status-bar";
+
+import {
+  CanalHeaderActions,
+} from "../../components/canal-ui/canal-header-actions";
+import { CanalAmbientBackground } from "../../components/canal-ui/canal-ambient-background";
+
+import {
+  scenePresentation,
+} from "../../components/canal-ui/scene-signature";
+
+import {
+  SceneCardBackdrop,
+} from "../../components/canal-ui/scene-card-visual";
 
 import {
   RecoveryNotice,
@@ -75,6 +94,9 @@ function SceneCard(props: {
   scene: StoredScene;
   compact?: boolean;
 }) {
+  const presentation =
+    scenePresentation(props.scene);
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -94,47 +116,41 @@ function SceneCard(props: {
           ? styles.compactSceneCard
           : styles.sceneCard,
 
+        {
+          backgroundColor:
+            presentation.colors[2],
+          borderColor:
+            `${presentation.accent}40`,
+        },
+
         pressed &&
           styles.pressed,
       ]}
     >
-      <View
-        style={
-          styles.sceneAccent
-        }
-      />
-
+      <SceneCardBackdrop presentation={presentation} />
       <Text
-        style={
-          styles.sceneActivity
-        }
+        style={[styles.sceneActivity, { color: presentation.accent }]}
       >
         {props.scene.activity}
       </Text>
 
       <Text
         numberOfLines={2}
-        style={
-          styles.sceneName
-        }
+        style={[styles.sceneName, { color: "#FFFFFF" }]}
       >
         {props.scene.name}
       </Text>
 
       <Text
         numberOfLines={2}
-        style={
-          styles.sceneMood
-        }
+        style={[styles.sceneMood, { color: "rgba(255,255,255,0.7)" }]}
       >
         {props.scene.emotions ||
           `${props.scene.energy} energy`}
       </Text>
 
       <Text
-        style={
-          styles.sceneMeta
-        }
+        style={[styles.sceneMeta, { color: `${presentation.accent}C7` }]}
       >
         {
           props.scene.tracks
@@ -392,6 +408,8 @@ export default function HomeScreen() {
       style={styles.safeArea}
       edges={["top"]}
     >
+      <CanalAmbientBackground />
+      <StatusBar style="auto" />
       <ScrollView
         contentContainerStyle={
           styles.content
@@ -401,7 +419,7 @@ export default function HomeScreen() {
         }
       >
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerCopy}>
             <Text
               style={
                 styles.eyebrow
@@ -415,7 +433,7 @@ export default function HomeScreen() {
                 styles.title
               }
             >
-              Find your sound.
+              What should this moment sound like?
             </Text>
 
             <Text
@@ -423,33 +441,70 @@ export default function HomeScreen() {
                 styles.subtitle
               }
             >
-              Music shaped around the moment,
-              not just the genre.
+              Start something new, return to a Scene,
+              or bring everyone together live.
             </Text>
           </View>
 
+          <CanalHeaderActions showSettings={false} />
+        </View>
+
+        {history[0] ? (
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={`Continue ${history[0].sceneName}`}
             onPress={() =>
-              router.push(
-                "/settings",
-              )
+              router.push({
+                pathname: "/now-playing",
+                params: {
+                  sceneId:
+                    history[0].sceneId,
+                },
+              } as never)
             }
             style={({ pressed }) => [
-              styles.spotifyButton,
-
-              pressed &&
-                styles.pressed,
+              styles.continueCard,
+              pressed && styles.pressed,
             ]}
           >
-            <Text
-              style={
-                styles.spotifyButtonText
-              }
-            >
-              S
-            </Text>
+            <View style={styles.continueCopy}>
+              <Text style={styles.continueEyebrow}>
+                CONTINUE LISTENING
+              </Text>
+              <Text numberOfLines={1} style={styles.continueTitle}>
+                {history[0].sceneName}
+              </Text>
+            </View>
+            <View style={styles.continuePlay}>
+              <Text style={styles.continuePlayText}>▶</Text>
+            </View>
           </Pressable>
+        ) : null}
+
+        <View style={styles.stageStrip}>
+          <View style={styles.stageStripCopy}>
+            <Text style={styles.stageStripEyebrow}>STAGE</Text>
+            <Text style={styles.stageStripTitle}>Make the room part of the music.</Text>
+            <Text style={styles.stageStripText}>Blend Scenes with friends and listen together live.</Text>
+          </View>
+          <View style={styles.stageStripActions}>
+            <Pressable
+              accessibilityLabel="Start a collaborative Stage"
+              accessibilityRole="button"
+              onPress={() => router.push("/create-stage")}
+              style={({ pressed }) => [styles.stagePrimary, pressed && styles.pressed]}
+            >
+              <Text style={styles.stagePrimaryText}>Go Live</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Join a Stage with a code"
+              accessibilityRole="button"
+              onPress={() => router.push("/join-stage")}
+              style={({ pressed }) => [styles.stageJoin, pressed && styles.pressed]}
+            >
+              <Text style={styles.stageJoinText}>Join code</Text>
+            </Pressable>
+          </View>
         </View>
 
         <Pressable
@@ -505,6 +560,68 @@ export default function HomeScreen() {
           </Text>
         </Pressable>
 
+        {recommendationIssue?.action ===
+        "reconnect-spotify" ? (
+          <View
+            accessibilityLiveRegion="polite"
+            style={
+              styles.spotifyReconnectCard
+            }
+          >
+            <View
+              style={
+                styles.spotifyReconnectCopy
+              }
+            >
+              <Text
+                selectable
+                style={
+                  styles.spotifyReconnectTitle
+                }
+              >
+                Using your saved music
+              </Text>
+              <Text
+                selectable
+                style={
+                  styles.spotifyReconnectText
+                }
+              >
+                Scenes keep working from the cached library. Reconnect only to refresh Spotify.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Reconnect Spotify"
+              accessibilityRole="button"
+              accessibilityState={{
+                busy:
+                  refreshingRecommendations,
+              }}
+              disabled={
+                refreshingRecommendations
+              }
+              onPress={() =>
+                void recoverRecommendations()
+              }
+              style={({ pressed }) => [
+                styles.spotifyReconnectButton,
+                refreshingRecommendations &&
+                  styles.disabled,
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                style={
+                  styles.spotifyReconnectButtonText
+                }
+              >
+                Reconnect
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {scenes.length === 0 ? (
           <EmptyScenes />
         ) : (
@@ -514,13 +631,13 @@ export default function HomeScreen() {
                 styles.sectionHeader
               }
             >
-              <View>
+              <View style={styles.sectionCopy}>
                 <Text
                   style={
                     styles.sectionTitle
                   }
                 >
-                  Recommended Scenes
+                  Made for now
                 </Text>
 
                 <Text
@@ -535,12 +652,18 @@ export default function HomeScreen() {
               </View>
 
               <Pressable
+                accessibilityLabel="See all Scenes"
                 accessibilityRole="button"
                 onPress={() =>
                   router.push(
                     "/(tabs)/library",
                   )
                 }
+                hitSlop={6}
+                style={({ pressed }) => [
+                  styles.seeAllButton,
+                  pressed && styles.pressed,
+                ]}
               >
                 <Text
                   style={
@@ -572,7 +695,9 @@ export default function HomeScreen() {
               )}
             </ScrollView>
 
-            {recommendationIssue ? (
+            {recommendationIssue &&
+            recommendationIssue.action !==
+              "reconnect-spotify" ? (
               <RecoveryNotice
                 busy={
                   refreshingRecommendations
@@ -711,12 +836,12 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "transparent",
     },
 
     content: {
       paddingHorizontal: 20,
-      paddingBottom: 40,
+      paddingBottom: 110,
     },
 
     header: {
@@ -729,23 +854,31 @@ const styles =
       marginBottom: 22,
     },
 
+    headerCopy: {
+      flex: 1,
+      minWidth: 0,
+      paddingRight: 4,
+    },
+
     eyebrow: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.4,
     },
 
     title: {
-      color: "#181818",
-      fontSize: 31,
-      fontWeight: "900",
+      color: canalDynamicColors.text,
+      fontSize: 38,
+      lineHeight: 41,
+      fontWeight: "500",
+      letterSpacing: -1.1,
       marginTop: 4,
     },
 
     subtitle: {
       maxWidth: 280,
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 20,
       marginTop: 5,
@@ -764,16 +897,136 @@ const styles =
     },
 
     spotifyButtonText: {
-      color: "#FFFFFF",
+      color: "#041F13",
       fontSize: 20,
       fontWeight: "900",
+    },
+
+    stageStrip: {
+      gap: 14,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.surface,
+      boxShadow: "0 16px 38px rgba(2, 24, 43, 0.12)",
+      padding: 18,
+      marginBottom: 18,
+    },
+
+    continueCard: {
+      minHeight: 68,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 11,
+      borderRadius: 19,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.surface,
+      padding: 10,
+      marginBottom: 11,
+    },
+
+    continueCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    continueEyebrow: {
+      color: canalDynamicColors.mint,
+      fontSize: 8,
+      fontWeight: "800",
+      letterSpacing: 1,
+    },
+
+    continueTitle: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 17,
+      fontWeight: "500",
+      marginTop: 3,
+    },
+
+    continuePlay: {
+      width: 44,
+      height: 44,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 22,
+      backgroundColor: canalDynamicColors.elevated,
+    },
+
+    continuePlayText: {
+      color: canalDynamicColors.text,
+      fontSize: 15,
+    },
+
+    stageStripCopy: {
+      gap: 4,
+    },
+
+    stageStripEyebrow: {
+      color: canalDynamicColors.mint,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.3,
+    },
+
+    stageStripTitle: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 21,
+      fontWeight: "900",
+    },
+
+    stageStripText: {
+      color: canalDynamicColors.muted,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+
+    stageStripActions: {
+      flexDirection: "row",
+      gap: 10,
+    },
+
+    stagePrimary: {
+      minHeight: 48,
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 15,
+      backgroundColor: canalDynamicColors.mint,
+    },
+
+    stagePrimaryText: {
+      color: canalDynamicColors.onAccent,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    stageJoin: {
+      minHeight: 48,
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 15,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+    },
+
+    stageJoinText: {
+      color: canalDynamicColors.text,
+      fontSize: 13,
+      fontWeight: "800",
     },
 
     hero: {
       flexDirection: "row",
       alignItems: "center",
       backgroundColor:
-        "#2B1710",
+        canalDynamicColors.surface,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
       borderRadius: 25,
       padding: 18,
       marginBottom: 27,
@@ -787,13 +1040,15 @@ const styles =
         "center",
       justifyContent:
         "center",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.goldLine,
       backgroundColor:
-        "#F47A24",
+        canalDynamicColors.goldSurface,
       marginRight: 14,
     },
 
     heroOrbText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.gold,
       fontSize: 30,
       lineHeight: 32,
     },
@@ -803,40 +1058,39 @@ const styles =
     },
 
     heroTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 19,
       fontWeight: "900",
     },
 
     heroDescription: {
-      color: "#DCC4B8",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
       marginTop: 4,
     },
 
     heroArrow: {
-      color: "#FFB781",
+      color: canalDynamicColors.mint,
       fontSize: 30,
       marginLeft: 8,
     },
 
     emptyCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 20,
       marginBottom: 22,
     },
 
     emptyTitle: {
-      color: "#181818",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 21,
       marginTop: 7,
@@ -851,11 +1105,11 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        canalDynamicColors.gold,
     },
 
     primaryButtonText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.onAccent,
       fontSize: 15,
       fontWeight: "800",
     },
@@ -863,29 +1117,44 @@ const styles =
     sectionHeader: {
       flexDirection: "row",
       alignItems:
-        "flex-end",
+        "center",
       justifyContent:
         "space-between",
+      gap: 12,
       marginBottom: 12,
       marginTop: 4,
     },
 
+    sectionCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+
     sectionTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
     },
 
     sectionSubtitle: {
-      color: "#77706A",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       marginTop: 3,
     },
 
     seeAll: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 13,
       fontWeight: "800",
+    },
+
+    seeAllButton: {
+      minWidth: 62,
+      minHeight: 48,
+      flexShrink: 0,
+      alignItems: "flex-end",
+      justifyContent: "center",
+      paddingHorizontal: 4,
     },
 
     horizontalScenes: {
@@ -895,28 +1164,86 @@ const styles =
     },
 
     recommendationWarning: {
-      color: "#7A5B12",
+      color: "#F0D17E",
       fontSize: 12,
       lineHeight: 17,
       paddingHorizontal: 2,
     },
 
+    spotifyReconnectCard: {
+      minHeight: 72,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      padding: 13,
+      marginBottom: 18,
+      borderRadius: 20,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.surface,
+      boxShadow: "0 10px 28px rgba(3, 18, 39, 0.14)",
+    },
+
+    spotifyReconnectCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 3,
+    },
+
+    spotifyReconnectTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    spotifyReconnectText: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      lineHeight: 15,
+    },
+
+    spotifyReconnectButton: {
+      minWidth: 100,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 14,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      backgroundColor: "#1DB954",
+    },
+
+    spotifyReconnectButtonText: {
+      color: "#FFFFFF",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    disabled: {
+      opacity: 0.55,
+    },
+
     compactSceneCard: {
       width: 215,
       minHeight: 190,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      overflow: "hidden",
       padding: 17,
+      boxShadow: "0 16px 36px rgba(3, 18, 39, 0.22)",
     },
 
     sceneCard: {
       minHeight: 155,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 21,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      overflow: "hidden",
       padding: 17,
       marginBottom: 12,
+      boxShadow: "0 14px 32px rgba(3, 18, 39, 0.2)",
     },
 
     sceneAccent: {
@@ -929,7 +1256,7 @@ const styles =
     },
 
     sceneActivity: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 10,
       fontWeight: "900",
       textTransform:
@@ -938,21 +1265,21 @@ const styles =
     },
 
     sceneName: {
-      color: "#181818",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
       marginTop: 5,
     },
 
     sceneMood: {
-      color: "#655F5A",
+      color: "#B8C3BE",
       fontSize: 13,
       lineHeight: 18,
       marginTop: 5,
     },
 
     sceneMeta: {
-      color: "#8A827B",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 14,
     },
@@ -961,20 +1288,22 @@ const styles =
       position: "absolute",
       top: 16,
       right: 16,
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 16,
     },
 
     statsCard: {
       backgroundColor:
-        "#F3ECE7",
+        canalDynamicColors.surface,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
       borderRadius: 22,
       padding: 18,
       marginTop: 10,
     },
 
     statsTitle: {
-      color: "#332E2A",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
@@ -991,13 +1320,13 @@ const styles =
     },
 
     statValue: {
-      color: "#181818",
+      color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
     },
 
     statLabel: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 2,
     },

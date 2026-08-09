@@ -1,4 +1,6 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
+  useRef,
   useState,
 } from "react";
 
@@ -128,6 +130,9 @@ export default function LoginScreen() {
     setLoading,
   ] = useState(false);
 
+  const submissionInFlight =
+    useRef(false);
+
   const [
     message,
     setMessage,
@@ -151,10 +156,11 @@ export default function LoginScreen() {
 
   const submitEmail =
     async (): Promise<void> => {
-      if (loading) {
+      if (submissionInFlight.current) {
         return;
       }
 
+      submissionInFlight.current = true;
       setLoading(true);
       setMessage("");
       setErrorMessage("");
@@ -223,6 +229,7 @@ export default function LoginScreen() {
             : "Canal could not authenticate your account.",
         );
       } finally {
+        submissionInFlight.current = false;
         setLoading(false);
       }
     };
@@ -233,10 +240,11 @@ export default function LoginScreen() {
         | "google"
         | "apple",
     ): Promise<void> => {
-      if (loading) {
+      if (submissionInFlight.current) {
         return;
       }
 
+      submissionInFlight.current = true;
       setLoading(true);
       setMessage("");
       setErrorMessage("");
@@ -267,6 +275,7 @@ export default function LoginScreen() {
             : `${provider} sign-in failed.`,
         );
       } finally {
+        submissionInFlight.current = false;
         setLoading(false);
       }
     };
@@ -377,7 +386,9 @@ export default function LoginScreen() {
             }
           >
             <Pressable
+              accessibilityLabel="Sign in mode"
               accessibilityRole="button"
+              accessibilityState={{ selected: mode === "sign-in" }}
               onPress={() =>
                 changeMode(
                   "sign-in",
@@ -405,7 +416,9 @@ export default function LoginScreen() {
             </Pressable>
 
             <Pressable
+              accessibilityLabel="Create account mode"
               accessibilityRole="button"
+              accessibilityState={{ selected: mode === "create-account" }}
               onPress={() =>
                 changeMode(
                   "create-account",
@@ -452,7 +465,7 @@ export default function LoginScreen() {
                   setDisplayName
                 }
                 placeholder="Your name"
-                placeholderTextColor="#9A938C"
+                placeholderTextColor={canalDynamicColors.muted}
                 autoCapitalize="words"
                 maxLength={60}
                 style={
@@ -476,7 +489,7 @@ export default function LoginScreen() {
                   setHandle
                 }
                 placeholder="@yourhandle"
-                placeholderTextColor="#9A938C"
+                placeholderTextColor={canalDynamicColors.muted}
                 autoCapitalize="none"
                 autoCorrect={
                   false
@@ -505,7 +518,7 @@ export default function LoginScreen() {
               setEmail
             }
             placeholder="you@example.com"
-            placeholderTextColor="#9A938C"
+            placeholderTextColor={canalDynamicColors.muted}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={
@@ -533,7 +546,7 @@ export default function LoginScreen() {
               setPassword
             }
             placeholder="At least 8 characters"
-            placeholderTextColor="#9A938C"
+            placeholderTextColor={canalDynamicColors.muted}
             secureTextEntry
             textContentType={
               mode ===
@@ -549,6 +562,7 @@ export default function LoginScreen() {
           {mode ===
           "sign-in" ? (
             <Pressable
+              accessibilityLabel="Forgot password"
               accessibilityRole="button"
               onPress={() =>
                 router.push(
@@ -570,7 +584,18 @@ export default function LoginScreen() {
           ) : null}
 
           <Pressable
+            accessibilityLabel={
+              mode === "sign-in"
+                ? "Sign In to Canal"
+                : "Create Canal Account"
+            }
             accessibilityRole="button"
+            accessibilityState={{
+              busy: loading,
+              disabled:
+                loading ||
+                !configured,
+            }}
             disabled={
               loading ||
               !configured
@@ -636,7 +661,14 @@ export default function LoginScreen() {
           </View>
 
           <Pressable
+            accessibilityLabel="Continue with Google"
             accessibilityRole="button"
+            accessibilityState={{
+              busy: loading,
+              disabled:
+                loading ||
+                !configured,
+            }}
             disabled={
               loading ||
               !configured
@@ -669,7 +701,14 @@ export default function LoginScreen() {
           </Pressable>
 
           <Pressable
+            accessibilityLabel="Continue with Apple"
             accessibilityRole="button"
+            accessibilityState={{
+              busy: loading,
+              disabled:
+                loading ||
+                !configured,
+            }}
             disabled={
               loading ||
               !configured
@@ -756,8 +795,7 @@ const styles =
 
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     content: {
@@ -778,7 +816,7 @@ const styles =
       alignSelf:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     logoText: {
@@ -789,7 +827,7 @@ const styles =
     },
 
     brand: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
       fontSize: 21,
       fontWeight: "900",
       textAlign: "center",
@@ -797,7 +835,8 @@ const styles =
     },
 
     title: {
-      color: "#181818",
+      fontFamily: "Georgia",
+      color: canalDynamicColors.text,
       fontSize: 28,
       lineHeight: 34,
       fontWeight: "900",
@@ -806,7 +845,7 @@ const styles =
     },
 
     subtitle: {
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 21,
       textAlign: "center",
@@ -815,8 +854,7 @@ const styles =
     },
 
     configurationBox: {
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       borderRadius: 17,
       padding: 14,
       marginBottom: 15,
@@ -846,7 +884,7 @@ const styles =
 
     modeButton: {
       flex: 1,
-      minHeight: 41,
+      minHeight: 48,
       borderRadius: 11,
       alignItems:
         "center",
@@ -855,22 +893,21 @@ const styles =
     },
 
     modeButtonSelected: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     modeText: {
-      color: "#77706A",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       fontWeight: "800",
     },
 
     modeTextSelected: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
     },
 
     inputLabel: {
-      color: "#5E5752",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "800",
       marginBottom: 6,
@@ -883,9 +920,8 @@ const styles =
       borderColor:
         "#E2DAD4",
       borderRadius: 15,
-      backgroundColor:
-        "#FFFFFF",
-      color: "#1B1B1B",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       fontSize: 15,
       paddingHorizontal: 14,
     },
@@ -893,11 +929,13 @@ const styles =
     forgotButton: {
       alignSelf:
         "flex-end",
+      minHeight: 48,
+      justifyContent: "center",
       paddingVertical: 10,
     },
 
     forgotText: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
       fontSize: 12,
       fontWeight: "800",
     },
@@ -910,7 +948,7 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       marginTop: 12,
     },
 
@@ -935,7 +973,7 @@ const styles =
     },
 
     dividerText: {
-      color: "#918981",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "800",
       marginHorizontal: 11,
@@ -951,8 +989,7 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     socialButtonText: {
@@ -980,8 +1017,7 @@ const styles =
     },
 
     messageBox: {
-      backgroundColor:
-        "#EAF9EF",
+      backgroundColor: canalDynamicColors.successSurface,
       borderRadius: 15,
       padding: 13,
       marginTop: 15,
@@ -994,21 +1030,20 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 15,
       padding: 13,
       marginTop: 15,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },
 
     musicNotice: {
-      color: "#918981",
+      color: "#6D6B64",
       fontSize: 10,
       lineHeight: 16,
       textAlign: "center",

@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useCallback,
   useMemo,
@@ -1474,7 +1475,7 @@ function NewCreatorReleaseContent(
                 setTitle
               }
               placeholder="Summer Canal Sessions"
-              placeholderTextColor="#9A938C"
+              placeholderTextColor={canalDynamicColors.muted}
               returnKeyType="next"
               style={
                 styles.input
@@ -1527,7 +1528,7 @@ function NewCreatorReleaseContent(
                 setDescription
               }
               placeholder="Tell listeners what connects these Scenes."
-              placeholderTextColor="#9A938C"
+              placeholderTextColor={canalDynamicColors.muted}
               style={[
                 styles.input,
                 styles.descriptionInput,
@@ -1668,8 +1669,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     header: {
@@ -1691,18 +1691,17 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 22,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
     },
 
     headerTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
@@ -1730,26 +1729,25 @@ const styles =
       borderRadius: 24,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     eyebrow: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
 
     title: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 26,
       fontWeight: "900",
       lineHeight: 32,
     },
 
     subtitle: {
-      color: "#665E57",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
     },
@@ -1764,7 +1762,7 @@ const styles =
     },
 
     loadingText: {
-      color: "#716861",
+      color: canalDynamicColors.muted,
       fontSize: 13,
     },
 
@@ -1819,18 +1817,17 @@ const styles =
       borderRadius: 22,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     emptyTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#6D655E",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
     },
@@ -1888,13 +1885,13 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
     },
 
     sectionDescription: {
-      color: "#756C65",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -1916,8 +1913,7 @@ const styles =
       borderRadius: 18,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     collectionCardSelected: {
@@ -1965,13 +1961,13 @@ const styles =
     },
 
     collectionTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
 
     collectionMeta: {
-      color: "#776E67",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontVariant: [
         "tabular-nums",
@@ -1995,7 +1991,7 @@ const styles =
     },
 
     label: {
-      color: "#6E655E",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.6,
@@ -2019,9 +2015,8 @@ const styles =
       borderRadius: 16,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
-      color: "#1B1B1B",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       fontSize: 14,
     },
 

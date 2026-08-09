@@ -6,6 +6,8 @@ import {
   useState,
 } from "react";
 
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   ActivityIndicator,
   Alert,
@@ -29,6 +31,8 @@ import {
 import {
   PublicSnapshotGrid,
 } from "../../components/PublicSnapshotCard";
+
+import { ProfileAvatar } from "../../components/profile-avatar";
 
 import {
   RecoveryNotice,
@@ -112,32 +116,6 @@ function safeBack(): void {
   router.replace(
     "/(tabs)/explore" as never,
   );
-}
-
-function creatorInitials(
-  profile: PublicCanalProfile,
-): string {
-  return profile.displayName
-    .trim()
-    .split(
-      /\s+/,
-    )
-    .filter(
-      Boolean,
-    )
-    .slice(
-      0,
-      2,
-    )
-    .map(
-      (word) =>
-        word
-          .charAt(
-            0,
-          )
-          .toUpperCase(),
-    )
-    .join("") || "C";
 }
 
 export default function CreatorProfileScreen() {
@@ -888,19 +866,6 @@ function CreatorProfileScreenContent(
       }
     };
 
-  const initials =
-    useMemo(
-      () =>
-        profile
-          ? creatorInitials(
-              profile,
-            )
-          : "C",
-      [
-        profile,
-      ],
-    );
-
   const save =
     async (
       scene: PublicCanalScene,
@@ -1545,19 +1510,11 @@ function CreatorProfileScreenContent(
                 styles.profileCard
               }
             >
-              <View
-                style={
-                  styles.avatar
-                }
-              >
-                <Text
-                  style={
-                    styles.avatarText
-                  }
-                >
-                  {initials}
-                </Text>
-              </View>
+              <ProfileAvatar
+                avatarUrl={profile.avatarUrl}
+                displayName={profile.displayName}
+                size={80}
+              />
 
               <Text
                 style={
@@ -1722,7 +1679,7 @@ function CreatorProfileScreenContent(
                         >
                           <ActivityIndicator
                             size="small"
-                            color="#F47A24"
+                            color="#4C46C8"
                           />
 
                           <Text
@@ -1807,7 +1764,7 @@ function CreatorProfileScreenContent(
                         >
                           {followBusy ? (
                             <ActivityIndicator
-                              color="#FFFFFF"
+                              color="#FFFDF8"
                             />
                           ) : (
                             <Text
@@ -2409,7 +2366,7 @@ function CreatorProfileScreenContent(
                         key ? (
                           <ActivityIndicator
                             size="small"
-                            color="#FFFFFF"
+                            color="#FFFDF8"
                           />
                         ) : (
                           <Text
@@ -2458,8 +2415,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     header: {
@@ -2474,25 +2430,25 @@ const styles =
     },
 
     backButton: {
-      width: 42,
-      height: 42,
+      width: 48,
+      height: 48,
       borderRadius: 21,
       alignItems:
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
     },
 
     headerTitle: {
-      color: "#1B1B1B",
+      fontFamily: "Georgia",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
@@ -2517,8 +2473,7 @@ const styles =
     profileCard: {
       alignItems:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 24,
       padding: 22,
     },
@@ -2526,8 +2481,7 @@ const styles =
     blockedFallbackCard: {
       alignItems:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 24,
       padding: 22,
       marginTop: 14,
@@ -2542,39 +2496,38 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     avatarText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 27,
       fontWeight: "900",
     },
 
     name: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
       marginTop: 12,
     },
 
     handle: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 13,
       marginTop: 3,
     },
 
     verifiedBadge: {
       borderRadius: 9,
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       paddingHorizontal: 9,
       paddingVertical: 5,
       marginTop: 8,
     },
 
     verifiedBadgeText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.5,
@@ -2589,7 +2542,7 @@ const styles =
     },
 
     blockedFallbackText: {
-      color: "#4F4944",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
       textAlign: "center",
@@ -2598,22 +2551,21 @@ const styles =
 
     activitiesBox: {
       width: "100%",
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
       borderRadius: 16,
       padding: 14,
       marginTop: 15,
     },
 
     activitiesLabel: {
-      color: "#A09993",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.6,
     },
 
     activitiesText: {
-      color: "#4F4944",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
       marginTop: 5,
@@ -2635,12 +2587,13 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 15,
-      backgroundColor:
-        "#FFF7F1",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: "rgba(226, 255, 249, 0.10)",
     },
 
     connectionValue: {
-      color: "#241B16",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
       fontVariant: [
@@ -2649,7 +2602,7 @@ const styles =
     },
 
     connectionLabel: {
-      color: "#817972",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "800",
       marginTop: 4,
@@ -2669,7 +2622,7 @@ const styles =
     },
 
     relationshipStatusText: {
-      color: "#817972",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "700",
     },
@@ -2688,24 +2641,25 @@ const styles =
         "center",
       borderRadius: 15,
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       marginTop: 12,
     },
 
     followButtonActive: {
-      backgroundColor:
-        "#51463E",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: "rgba(7, 43, 63, 0.42)",
     },
 
     followButtonText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 12,
       fontWeight: "900",
     },
 
     blockButton: {
       width: "100%",
-      minHeight: 46,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
@@ -2714,12 +2668,11 @@ const styles =
       borderColor:
         "#E6B8B4",
       borderRadius: 15,
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
     },
 
     blockButtonText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -2735,8 +2688,7 @@ const styles =
       borderColor:
         "#E6B8B4",
       borderRadius: 15,
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       marginTop: 12,
     },
 
@@ -2761,13 +2713,13 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 19,
       fontWeight: "900",
     },
 
     sceneCount: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -2786,8 +2738,7 @@ const styles =
       borderColor:
         "#EEE5DE",
       borderRadius: 19,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       paddingHorizontal: 16,
       paddingVertical: 14,
     },
@@ -2797,27 +2748,27 @@ const styles =
     },
 
     collectionTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
 
     collectionDescription: {
-      color: "#6F6862",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 16,
       marginTop: 4,
     },
 
     collectionMeta: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
       fontSize: 9,
       fontWeight: "900",
       marginTop: 7,
     },
 
     collectionArrow: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
       fontSize: 26,
       marginLeft: 12,
     },
@@ -2830,8 +2781,7 @@ const styles =
       flexDirection: "row",
       alignItems:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 19,
       padding: 13,
     },
@@ -2851,13 +2801,12 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       marginRight: 11,
     },
 
     sceneArtworkText: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
       fontSize: 21,
       fontWeight: "900",
     },
@@ -2867,27 +2816,27 @@ const styles =
     },
 
     sceneName: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#817972",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
     },
 
     saveButton: {
       minWidth: 65,
-      minHeight: 38,
+      minHeight: 48,
       borderRadius: 13,
       alignItems:
         "center",
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       marginLeft: 10,
       paddingHorizontal: 10,
     },
@@ -2898,27 +2847,25 @@ const styles =
     },
 
     saveButtonText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 10,
       fontWeight: "900",
     },
 
     emptyCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 19,
       padding: 18,
     },
 
     emptyText: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 19,
     },
 
     successBox: {
-      backgroundColor:
-        "#EAF9EF",
+      backgroundColor: canalDynamicColors.successSurface,
       borderRadius: 15,
       padding: 13,
       marginTop: 14,
@@ -2931,15 +2878,14 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 15,
       padding: 13,
       marginTop: 14,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },

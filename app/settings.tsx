@@ -1,3 +1,5 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
+
 import {
   useCallback,
   useRef,
@@ -23,6 +25,11 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
+import { CanalAmbientBackground } from "../components/canal-ui/canal-ambient-background";
+
+import Animated, {
+  FadeInUp,
+} from "react-native-reanimated";
 
 import {
   isCanalAccountChangedError,
@@ -464,7 +471,8 @@ export default function SettingsScreen() {
         "bottom",
       ]}
     >
-      <View style={styles.header}>
+      <CanalAmbientBackground />
+      <Animated.View entering={FadeInUp.duration(240)} style={styles.header}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back"
@@ -506,10 +514,10 @@ export default function SettingsScreen() {
               styles.subtitle
             }
           >
-            Account and music connections.
+            Shape how Canal looks, connects, and remembers.
           </Text>
         </View>
-      </View>
+      </Animated.View>
 
       <ScrollView
         contentContainerStyle={
@@ -519,7 +527,42 @@ export default function SettingsScreen() {
           false
         }
       >
-        <View style={styles.sectionCard}>
+        <View
+          style={[styles.sectionCard, styles.appearanceCard]}
+        >
+          <Text style={styles.sectionTitle}>Appearance</Text>
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={styles.appearancePreview}
+          >
+            <View style={styles.previewOrbOne} />
+            <View style={styles.previewOrbTwo} />
+            <View style={styles.previewGlass}>
+              <View style={styles.previewLineWide} />
+              <View style={styles.previewLineShort} />
+            </View>
+          </View>
+          <Pressable
+            accessibilityLabel="Open Appearance settings"
+            accessibilityRole="button"
+            onPress={() => router.push("/appearance")}
+            style={({ pressed }) => [styles.serviceRow, pressed && styles.pressed]}
+          >
+            <View style={styles.appearanceMark}>
+              <Text style={styles.appearanceMarkText}>Aa</Text>
+            </View>
+            <View style={styles.serviceText}>
+              <Text style={styles.serviceName}>Light, Dark or System</Text>
+              <Text style={styles.serviceStatus}>Choose how Canal looks on this device.</Text>
+            </View>
+            <Text style={styles.arrow}>›</Text>
+          </Pressable>
+        </View>
+
+        <View
+          style={styles.sectionCard}
+        >
           <Text
             style={
               styles.sectionTitle
@@ -656,7 +699,9 @@ export default function SettingsScreen() {
           </View>
         ) : null}
 
-        <View style={styles.sectionCard}>
+        <View
+          style={styles.sectionCard}
+        >
           <Text
             style={
               styles.sectionTitle
@@ -678,7 +723,9 @@ export default function SettingsScreen() {
           </Text>
         </View>
 
-        <View style={styles.sectionCard}>
+        <View
+          style={styles.sectionCard}
+        >
           <Text
             style={
               styles.sectionTitle
@@ -820,16 +867,16 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "transparent",
     },
 
     header: {
       flexDirection: "row",
       alignItems:
-        "flex-start",
+        "center",
       paddingHorizontal: 20,
       paddingTop: 10,
-      paddingBottom: 17,
+      paddingBottom: 20,
     },
 
     backButton: {
@@ -841,12 +888,12 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#FFFFFF",
+        canalDynamicColors.elevated,
       marginRight: 12,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
@@ -854,35 +901,105 @@ const styles =
 
     headerText: {
       flex: 1,
+      alignItems: "center",
+      paddingRight: 60,
     },
 
     title: {
-      color: "#181818",
-      fontSize: 28,
-      fontWeight: "900",
+      color: canalDynamicColors.text,
+      fontSize: 27,
+      fontWeight: "500",
+      letterSpacing: -0.7,
     },
 
     subtitle: {
-      color: "#746D67",
-      fontSize: 14,
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 18,
       marginTop: 4,
+      textAlign: "center",
     },
 
     content: {
       paddingHorizontal: 20,
-      paddingBottom: 45,
+      paddingBottom: 110,
       gap: 14,
     },
 
     sectionCard: {
       backgroundColor:
-        "#FFFFFF",
+        canalDynamicColors.surface,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
       borderRadius: 22,
       padding: 18,
+      boxShadow: "0 16px 38px rgba(8, 18, 47, 0.18)",
+    },
+
+    appearanceCard: {
+      padding: 16,
+    },
+
+    appearancePreview: {
+      height: 88,
+      overflow: "hidden",
+      borderRadius: 19,
+      borderCurve: "continuous",
+      backgroundColor: "#526DAA",
+      marginBottom: 13,
+    },
+
+    previewOrbOne: {
+      position: "absolute",
+      width: "115%",
+      height: 42,
+      top: 4,
+      left: -18,
+      transform: [{ rotate: "-7deg" }],
+      backgroundColor: canalDynamicColors.elevated,
+    },
+
+    previewOrbTwo: {
+      position: "absolute",
+      width: "115%",
+      height: 38,
+      right: -20,
+      bottom: 2,
+      transform: [{ rotate: "8deg" }],
+      backgroundColor: "rgba(177, 157, 237, 0.38)",
+    },
+
+    previewGlass: {
+      position: "absolute",
+      left: 16,
+      right: 16,
+      bottom: 14,
+      height: 42,
+      justifyContent: "center",
+      gap: 7,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      borderRadius: 15,
+      backgroundColor: canalDynamicColors.surface,
+      paddingHorizontal: 13,
+    },
+
+    previewLineWide: {
+      width: "58%",
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: canalDynamicColors.elevated,
+    },
+
+    previewLineShort: {
+      width: "34%",
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: canalDynamicColors.elevated,
     },
 
     sectionTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
       marginBottom: 12,
@@ -894,7 +1011,7 @@ const styles =
         "center",
       borderTopWidth: 1,
       borderTopColor:
-        "#F0ECE8",
+        canalDynamicColors.line,
       paddingVertical: 13,
     },
 
@@ -909,6 +1026,22 @@ const styles =
       backgroundColor:
         "#1DB954",
       marginRight: 12,
+    },
+
+    appearanceMark: {
+      width: 46,
+      height: 46,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 15,
+      backgroundColor: "#A991E8",
+    },
+
+    appearanceMarkText: {
+      color: "#10201C",
+      fontFamily: "Georgia",
+      fontSize: 19,
+      fontWeight: "900",
     },
 
     spotifyMarkText: {
@@ -926,7 +1059,7 @@ const styles =
         "center",
       borderRadius: 14,
       backgroundColor:
-        "#FFF0E4",
+        canalDynamicColors.elevated,
     },
 
     privacyMarkText: {
@@ -940,19 +1073,20 @@ const styles =
     },
 
     serviceName: {
-      color: "#272320",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
 
     serviceStatus: {
-      color: "#77706A",
-      fontSize: 11,
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 17,
       marginTop: 3,
     },
 
     arrow: {
-      color: "#AAA19A",
+      color: canalDynamicColors.muted,
       fontSize: 26,
       marginLeft: 8,
     },
@@ -977,38 +1111,42 @@ const styles =
 
     messageBox: {
       backgroundColor:
-        "#EFF5FF",
+        canalDynamicColors.surface,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
       borderRadius: 16,
       padding: 14,
     },
 
     messageText: {
-      color: "#36567C",
+      color: canalDynamicColors.text,
       fontSize: 12,
       lineHeight: 18,
     },
 
     explanationText: {
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
     },
 
     logoutCard: {
       backgroundColor:
-        "#FFF4F2",
+        canalDynamicColors.dangerSurface,
+      borderWidth: 1,
+      borderColor: "rgba(255, 171, 176, 0.42)",
       borderRadius: 22,
       padding: 18,
     },
 
     logoutTitle: {
-      color: "#A62E27",
+      color: "#FFD8DB",
       fontSize: 18,
       fontWeight: "900",
     },
 
     logoutDescription: {
-      color: "#7E514D",
+      color: "#F5C3C7",
       fontSize: 12,
       lineHeight: 18,
       marginTop: 6,

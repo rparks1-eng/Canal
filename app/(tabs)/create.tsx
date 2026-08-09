@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import * as Haptics from "expo-haptics";
 import {
   router,
@@ -317,8 +318,7 @@ const styles =
   StyleSheet.create({
     screen: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     content: {
@@ -334,7 +334,7 @@ const styles =
     },
 
     kicker: {
-      color: "#D35F14",
+      color: canalDynamicColors.gold,
       fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.4,
@@ -342,7 +342,7 @@ const styles =
 
     heading: {
       maxWidth: 330,
-      color: "#211B17",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 38,
       fontWeight: "900",
@@ -366,8 +366,7 @@ const styles =
       borderColor: "#E9DED5",
       borderRadius: 24,
       borderCurve: "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       boxShadow:
         "0 8px 24px rgba(57, 35, 20, 0.06)",
     },
@@ -398,7 +397,7 @@ const styles =
     },
 
     actionSymbolText: {
-      color: "#D35F14",
+      color: canalDynamicColors.gold,
       fontSize: 25,
       lineHeight: 28,
       fontWeight: "800",
@@ -425,7 +424,7 @@ const styles =
     },
 
     actionTitle: {
-      color: "#241D18",
+      color: canalDynamicColors.text,
       fontSize: 20,
       lineHeight: 24,
       fontWeight: "900",
@@ -436,7 +435,7 @@ const styles =
     },
 
     actionDescription: {
-      color: "#7D746D",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 19,
     },
@@ -452,7 +451,7 @@ const styles =
     },
 
     chevronAccent: {
-      color: "#FF9A50",
+      color: canalDynamicColors.gold,
     },
 
     liveLink: {
@@ -465,13 +464,13 @@ const styles =
     },
 
     liveLinkText: {
-      color: "#D35F14",
+      color: canalDynamicColors.gold,
       fontSize: 15,
       fontWeight: "800",
     },
 
     liveLinkArrow: {
-      color: "#D35F14",
+      color: canalDynamicColors.gold,
       fontSize: 21,
       fontWeight: "700",
     },

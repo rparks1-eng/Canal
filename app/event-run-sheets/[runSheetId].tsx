@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useCallback,
   useEffect,
@@ -1164,8 +1165,7 @@ const styles =
     safeArea: {
       flex:
         1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.surface,
     },
     header: {
       minHeight:
@@ -1344,8 +1344,7 @@ const styles =
         "#F47A24",
       borderRadius:
         24,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       boxShadow:
         "0 10px 28px rgba(120, 63, 22, 0.12)",
     },
@@ -1436,8 +1435,7 @@ const styles =
         "#E9DED5",
       borderRadius:
         24,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
     sectionTitle: {
       color:

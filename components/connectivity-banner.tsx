@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useEffect,
   useRef,
@@ -248,7 +249,7 @@ const styles =
     },
 
     title: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight:
         "900",

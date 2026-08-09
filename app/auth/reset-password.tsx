@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useEffect,
   useRef,
@@ -10,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -56,6 +58,8 @@ export default function ResetPasswordScreen() {
     useRef<string | null>(
       null,
     );
+
+  const saveInFlight = useRef(false);
 
   const [
     recoveryState,
@@ -208,10 +212,7 @@ export default function ResetPasswordScreen() {
 
   const savePassword =
     async (): Promise<void> => {
-      if (
-        recoveryState !==
-        "ready"
-      ) {
+      if (saveInFlight.current || recoveryState !== "ready") {
         return;
       }
 
@@ -225,6 +226,8 @@ export default function ResetPasswordScreen() {
 
         return;
       }
+
+      saveInFlight.current = true;
 
       setRecoveryState(
         "saving",
@@ -275,6 +278,8 @@ export default function ResetPasswordScreen() {
         setRecoveryState(
           "ready",
         );
+      } finally {
+        saveInFlight.current = false;
       }
     };
 
@@ -306,10 +311,13 @@ export default function ResetPasswordScreen() {
             : undefined
         }
       >
-        <View
-          style={
+        <ScrollView
+          contentContainerStyle={
             styles.content
           }
+          contentInsetAdjustmentBehavior="automatic"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
           {recoveryState ===
           "checking" ? (
@@ -396,7 +404,7 @@ export default function ResetPasswordScreen() {
                   setPassword
                 }
                 placeholder="New password"
-                placeholderTextColor="#9A938C"
+                placeholderTextColor={canalDynamicColors.muted}
                 secureTextEntry
                 textContentType="newPassword"
                 autoCapitalize="none"
@@ -416,7 +424,7 @@ export default function ResetPasswordScreen() {
                   setConfirmation
                 }
                 placeholder="Confirm new password"
-                placeholderTextColor="#9A938C"
+                placeholderTextColor={canalDynamicColors.muted}
                 secureTextEntry
                 textContentType="newPassword"
                 autoCapitalize="none"
@@ -431,6 +439,11 @@ export default function ResetPasswordScreen() {
 
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Update Password"
+                accessibilityState={{
+                  busy: recoveryState === "saving",
+                  disabled: recoveryState === "saving",
+                }}
                 disabled={
                   recoveryState ===
                   "saving"
@@ -479,7 +492,7 @@ export default function ResetPasswordScreen() {
               ) : null}
             </>
           ) : null}
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -493,33 +506,34 @@ const styles =
 
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     content: {
-      flex: 1,
+      flexGrow: 1,
       justifyContent:
         "center",
       paddingHorizontal: 24,
+      paddingTop: 24,
       paddingBottom: 70,
     },
 
     checkingText: {
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       textAlign: "center",
       marginTop: 15,
     },
 
     title: {
-      color: "#181818",
+      fontFamily: "Georgia",
+      color: canalDynamicColors.text,
       fontSize: 29,
       fontWeight: "900",
     },
 
     subtitle: {
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 21,
       marginTop: 8,
@@ -532,9 +546,8 @@ const styles =
       borderColor:
         "#E2DAD4",
       borderRadius: 15,
-      backgroundColor:
-        "#FFFFFF",
-      color: "#1B1B1B",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       fontSize: 15,
       paddingHorizontal: 14,
     },
@@ -551,7 +564,7 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       marginTop: 16,
       paddingHorizontal: 18,
     },
@@ -563,7 +576,7 @@ const styles =
     },
 
     errorTitle: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 25,
       fontWeight: "900",
       textAlign: "center",
@@ -578,15 +591,14 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 15,
       padding: 14,
       marginTop: 15,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },

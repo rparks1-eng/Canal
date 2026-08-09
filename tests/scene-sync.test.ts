@@ -8,9 +8,12 @@ import {
 
 import {
   readScenes,
+  writeScenes,
 } from "../lib/scenes";
 import {
   clearSceneSyncOwnership,
+  deleteSceneForCurrentOwner,
+  prepareSceneLibraryForUser,
   syncScenesWithCloud,
 } from "../lib/scene-sync";
 import {
@@ -31,6 +34,8 @@ jest.mock(
       auth: {
         getUser:
           jest.fn(),
+        getSession:
+          jest.fn(),
       },
       from:
         jest.fn(),
@@ -41,6 +46,11 @@ jest.mock(
 const mockGetUser =
   jest.mocked(
     supabase.auth.getUser,
+  );
+
+const mockGetSession =
+  jest.mocked(
+    supabase.auth.getSession,
   );
 
 const mockFrom =
@@ -79,6 +89,8 @@ function sceneRow(
       userId,
     id:
       sceneId,
+    revision:
+      1,
     payload: {
       id:
         sceneId,
@@ -115,6 +127,8 @@ function sceneRow(
       createdAt,
       updatedAt:
         createdAt,
+      revision:
+        1,
     },
     created_at:
       createdAt,
@@ -144,6 +158,22 @@ describe(
                 user: {
                   id:
                     currentUserId,
+                },
+              },
+              error:
+                null,
+            }) as never,
+        );
+
+        mockGetSession.mockImplementation(
+          async () =>
+            ({
+              data: {
+                session: {
+                  user: {
+                    id:
+                      currentUserId,
+                  },
                 },
               },
               error:
@@ -283,6 +313,156 @@ describe(
               "user-b",
           },
         ]);
+      },
+    );
+
+    it(
+      "does not upload a timestamp-newer local Scene with a stale cloud revision",
+      async () => {
+        const remote =
+          sceneRow(
+            "user-a",
+            "shared-scene",
+          );
+        remote.revision = 7;
+        remote.payload.revision = 7;
+
+        const upsert =
+          jest.fn(
+            async () => ({
+              error: null,
+            }),
+          );
+
+        mockFrom.mockImplementation(
+          () =>
+            ({
+              select: jest.fn(
+                () => ({
+                  eq: jest.fn(
+                    async () => ({
+                      data: [remote],
+                      error: null,
+                    }),
+                  ),
+                }),
+              ),
+              upsert,
+            }) as never,
+        );
+
+        await prepareSceneLibraryForUser(
+          "user-a",
+        );
+
+        await writeScenes([
+          {
+            ...remote.payload,
+            revision: 6,
+            updatedAt:
+              "2026-07-29T12:00:00.000Z",
+          },
+        ] as never);
+
+        await syncScenesWithCloud();
+
+        expect(upsert).not.toHaveBeenCalled();
+        expect(
+          (await readScenes())[0]?.revision,
+        ).toBe(7);
+      },
+    );
+
+    it(
+      "keeps an intentionally deleted Scene removed when a stale cloud row returns",
+      async () => {
+        const staleRow =
+          sceneRow(
+            "user-a",
+            "night",
+          );
+
+        const update =
+          jest.fn(
+            () => ({
+              eq:
+                jest.fn(
+                  () => ({
+                    eq:
+                      jest.fn(
+                        async () => ({
+                          error:
+                            null,
+                        }),
+                      ),
+                  }),
+                ),
+            }),
+          );
+
+        mockFrom.mockImplementation(
+          () =>
+            ({
+              select:
+                jest.fn(
+                  () => ({
+                    eq:
+                      jest.fn(
+                        async () => ({
+                          data: [
+                            staleRow,
+                          ],
+                          error:
+                            null,
+                        }),
+                      ),
+                  }),
+                ),
+              update,
+              upsert:
+                jest.fn(
+                  async () => ({
+                    error:
+                      null,
+                  }),
+                ),
+            }) as never,
+        );
+
+        await prepareSceneLibraryForUser(
+          "user-a",
+        );
+
+        await writeScenes([
+          staleRow.payload,
+        ] as never);
+
+        await deleteSceneForCurrentOwner(
+          "night",
+        );
+
+        expect(
+          await readScenes(),
+        ).toEqual([]);
+
+        const result =
+          await syncScenesWithCloud();
+
+        expect(
+          result.total,
+        ).toBe(0);
+
+        expect(
+          await readScenes(),
+        ).toEqual([]);
+
+        expect(
+          update,
+        ).toHaveBeenCalled();
+
+        expect(
+          mockGetUser,
+        ).toHaveBeenCalledTimes(3);
       },
     );
   },

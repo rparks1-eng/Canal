@@ -1,12 +1,16 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   useCallback,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
   ActivityIndicator,
   Alert,
+  Animated as NativeAnimated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,10 +27,30 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
+import { CanalAmbientBackground } from "../../components/canal-ui/canal-ambient-background";
+
+import Animated, {
+  FadeInUp,
+} from "react-native-reanimated";
+
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
+
+import {
+  CanalHeaderActions,
+} from "../../components/canal-ui/canal-header-actions";
+
+import {
+  scenePresentation,
+} from "../../components/canal-ui/scene-signature";
+
+import {
+  SceneCardBackdrop,
+  ScenePaletteMark,
+} from "../../components/canal-ui/scene-card-visual";
 
 import {
   useReconnectReload,
@@ -52,6 +76,10 @@ import type {
 } from "../../lib/scenes";
 
 import {
+  syncScenesWithCloud,
+} from "../../lib/scene-sync";
+
+import {
   removeSavedSceneCompletely,
 } from "../../lib/saved-scene-management";
 
@@ -68,6 +96,10 @@ type LibraryFilter =
   | "created"
   | "saved"
   | "favorites";
+
+type LibraryLayout =
+  | "list"
+  | "grid";
 
 export default function LibraryScreen() {
   const {
@@ -100,6 +132,18 @@ export default function LibraryScreen() {
     );
 
   const [
+    layout,
+    setLayout,
+  ] = useState<LibraryLayout>(
+    "list",
+  );
+
+  const [
+    animationRevision,
+    setAnimationRevision,
+  ] = useState(0);
+
+  const [
     loading,
     setLoading,
   ] = useState(true);
@@ -127,6 +171,44 @@ export default function LibraryScreen() {
       null,
     );
 
+  const cardMotion = useRef(
+    new Map<string, NativeAnimated.Value>(),
+  ).current;
+
+  const motionForScene = useCallback(
+    (sceneId: string): NativeAnimated.Value => {
+      const existing = cardMotion.get(sceneId);
+
+      if (existing) {
+        return existing;
+      }
+
+      const value = new NativeAnimated.Value(0);
+      cardMotion.set(sceneId, value);
+      return value;
+    },
+    [cardMotion],
+  );
+
+  const animateSceneCard = useCallback(
+    (
+      sceneId: string,
+      target: number,
+    ): void => {
+      NativeAnimated.spring(
+        motionForScene(sceneId),
+        {
+          toValue: target,
+          damping: 18,
+          stiffness: 190,
+          mass: 0.7,
+          useNativeDriver: true,
+        },
+      ).start();
+    },
+    [motionForScene],
+  );
+
   const load =
     useCallback(
       async (): Promise<void> => {
@@ -139,6 +221,15 @@ export default function LibraryScreen() {
         );
 
         try {
+          try {
+            await syncScenesWithCloud();
+          } catch (syncError) {
+            console.warn(
+              "Canal could not refresh cross-device Scenes; showing the latest local Library instead:",
+              syncError,
+            );
+          }
+
           setScenes(
             await readScenes(),
           );
@@ -425,6 +516,34 @@ export default function LibraryScreen() {
       );
     };
 
+  const openSceneActions = (scene: StoredScene): void => {
+    const options = [
+      {
+        text: "Open Scene",
+        onPress: () => router.push({
+          pathname: "/scenes/[sceneId]",
+          params: { sceneId: scene.id },
+        } as never),
+      },
+      ...(scene.libraryType === "saved"
+        ? []
+        : [{
+            text: scene.visibility === "public" ? "Make Private" : "Make Public",
+            onPress: () => void changeVisibility(
+              scene,
+              scene.visibility === "public" ? "private" : "public",
+            ),
+          }]),
+      {
+        text: scene.libraryType === "saved" ? "Remove from Library" : "Delete Scene",
+        style: "destructive" as const,
+        onPress: () => confirmDelete(scene),
+      },
+      { text: "Cancel", style: "cancel" as const },
+    ];
+    Alert.alert(scene.name, "Manage this Scene.", options);
+  };
+
   return (
     <SafeAreaView
       style={
@@ -434,6 +553,7 @@ export default function LibraryScreen() {
         "top",
       ]}
     >
+      <CanalAmbientBackground />
       <ScrollView
         contentContainerStyle={
           styles.content
@@ -443,18 +563,20 @@ export default function LibraryScreen() {
           false
         }
       >
-        <View
+        <Animated.View
+          entering={FadeInUp.duration(260)}
           style={
             styles.header
           }
         >
-          <View>
+          <View style={styles.headerCopy}>
+            <Text style={styles.eyebrow}>YOUR COLLECTION</Text>
             <Text
               style={
                 styles.title
               }
             >
-              Library
+              Your Library
             </Text>
 
             <Text
@@ -462,30 +584,12 @@ export default function LibraryScreen() {
                 styles.subtitle
               }
             >
-              Your created and saved Scenes.
+              Scenes you made, saved, and returned to—kept in one living collection.
             </Text>
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              router.push(
-                "/scene-studio" as never,
-              )
-            }
-            style={
-              styles.createButton
-            }
-          >
-            <Text
-              style={
-                styles.createButtonText
-              }
-            >
-              + Create
-            </Text>
-          </Pressable>
-        </View>
+            <CanalHeaderActions />
+        </Animated.View>
 
         <Pressable
           accessibilityRole="button"
@@ -530,6 +634,7 @@ export default function LibraryScreen() {
         </Pressable>
 
         <TextInput
+          accessibilityLabel="Search your Library"
           value={
             query
           }
@@ -537,7 +642,7 @@ export default function LibraryScreen() {
             setQuery
           }
           placeholder="Search your Library"
-          placeholderTextColor="#9A938C"
+          placeholderTextColor={canalDynamicColors.muted}
           autoCapitalize="none"
           autoCorrect={
             false
@@ -566,11 +671,20 @@ export default function LibraryScreen() {
                   value
                 }
                 accessibilityRole="button"
-                onPress={() =>
+                accessibilityState={{
+                  selected:
+                    filter ===
+                    value,
+                }}
+                onPress={() => {
                   setFilter(
                     value,
-                  )
-                }
+                  );
+                  setAnimationRevision(
+                    (current) =>
+                      current + 1,
+                  );
+                }}
                 style={[
                   styles.filterButton,
 
@@ -600,6 +714,38 @@ export default function LibraryScreen() {
               </Pressable>
             ),
           )}
+
+          <View style={styles.filterSpacer} />
+
+          <View
+            accessibilityRole="tablist"
+            style={styles.layoutToggle}
+          >
+            {(
+              [
+                ["list", "list-outline"],
+                ["grid", "grid-outline"],
+              ] as const
+            ).map(([value, icon]) => (
+              <Pressable
+                key={value}
+                accessibilityLabel={`${value} view`}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: layout === value }}
+                onPress={() => setLayout(value)}
+                style={[
+                  styles.layoutButton,
+                  layout === value && styles.layoutButtonSelected,
+                ]}
+              >
+                <Ionicons
+                  color={layout === value ? "#123F54" : canalDynamicColors.muted}
+                  name={icon}
+                  size={17}
+                />
+              </Pressable>
+            ))}
+          </View>
         </View>
 
         {message ? (
@@ -678,15 +824,19 @@ export default function LibraryScreen() {
           </View>
         ) : (
           <View
-            style={
-              styles.list
-            }
+            style={[
+              styles.list,
+              layout === "grid" && styles.grid,
+            ]}
           >
             {filteredScenes.map(
-              (scene) => {
+              (scene, index) => {
                 const busy =
                   busySceneId ===
                   scene.id;
+
+                const presentation =
+                  scenePresentation(scene);
 
                 const sourceHandle =
                   typeof scene
@@ -696,17 +846,77 @@ export default function LibraryScreen() {
                         .sourceCreatorHandle
                     : "";
 
+                const motion =
+                  motionForScene(
+                    scene.id,
+                  );
+
                 return (
-                  <View
-                    key={
-                      scene.id
-                    }
-                    style={
-                      styles.sceneCard
-                    }
+                  <Animated.View
+                    key={`${animationRevision}:${scene.id}`}
+                    entering={FadeInUp.duration(300).delay(Math.min(index, 7) * 42)}
+                    style={[
+                      styles.sceneWrapper,
+                      layout === "grid" && styles.sceneWrapperGrid,
+                    ]}
                   >
+                    <NativeAnimated.View
+                      style={[
+                        styles.sceneCard,
+                        layout === "grid" && styles.sceneCardGrid,
+                      {
+                        backgroundColor:
+                          presentation.colors[2],
+                        borderColor:
+                          `${presentation.accent}44`,
+                      },
+                        {
+                          transform: [
+                            {
+                              translateY:
+                                motion.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0, -3],
+                                }),
+                            },
+                            {
+                              scale:
+                                motion.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [1, 1.018],
+                                }),
+                            },
+                          ],
+                        },
+                      ]}
+                    >
+                    <SceneCardBackdrop presentation={presentation} />
                     <Pressable
                       accessibilityRole="button"
+                      onHoverIn={() =>
+                        animateSceneCard(
+                          scene.id,
+                          1,
+                        )
+                      }
+                      onHoverOut={() =>
+                        animateSceneCard(
+                          scene.id,
+                          0,
+                        )
+                      }
+                      onPressIn={() =>
+                        animateSceneCard(
+                          scene.id,
+                          0.6,
+                        )
+                      }
+                      onPressOut={() =>
+                        animateSceneCard(
+                          scene.id,
+                          0,
+                        )
+                      }
                       onPress={() =>
                         router.push({
                           pathname:
@@ -718,40 +928,32 @@ export default function LibraryScreen() {
                           },
                         } as never)
                       }
-                      style={
-                        styles.sceneMain
-                      }
+                      style={[
+                        styles.sceneMain,
+                        layout === "grid" && styles.sceneMainGrid,
+                      ]}
                     >
+                      <ScenePaletteMark
+                        presentation={presentation}
+                        style={layout === "grid" ? styles.scenePaletteMarkGrid : styles.scenePaletteMark}
+                      />
                       <View
-                        style={
-                          styles.artwork
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.artworkText
-                          }
-                        >
-                          {scene.name
-                            .charAt(
-                              0,
-                            )
-                            .toUpperCase()}
-                        </Text>
-                      </View>
-
-                      <View
-                        style={
-                          styles.sceneText
-                        }
+                        style={[
+                          styles.sceneText,
+                          layout === "grid" && styles.sceneTextGrid,
+                        ]}
                       >
                         <Text
                           numberOfLines={
                             1
                           }
-                          style={
-                            styles.sceneName
-                          }
+                          style={[
+                            styles.sceneName,
+                            {
+                              color:
+                                "#FFFFFF",
+                            },
+                          ]}
                         >
                           {scene.name}
                         </Text>
@@ -760,9 +962,7 @@ export default function LibraryScreen() {
                           numberOfLines={
                             1
                           }
-                          style={
-                            styles.sceneMeta
-                          }
+                          style={[styles.sceneMeta, { color: `${presentation.accent}CC` }]}
                         >
                           {scene.activity ||
                             "Any activity"}{" "}
@@ -779,9 +979,7 @@ export default function LibraryScreen() {
                           numberOfLines={
                             1
                           }
-                          style={
-                            styles.sourceText
-                          }
+                          style={[styles.sourceText, { color: "rgba(255,255,255,0.64)" }]}
                         >
                           {scene.libraryType ===
                           "saved"
@@ -790,112 +988,25 @@ export default function LibraryScreen() {
                         </Text>
                       </View>
 
-                      <Text
-                        style={
-                          styles.arrow
-                        }
-                      >
-                        ›
-                      </Text>
-                    </Pressable>
-
-                    <View
-                      style={
-                        styles.actionRow
-                      }
-                    >
-                      {scene.libraryType ===
-                      "saved" ? (
-                        <View
-                          style={
-                            styles.privateBadge
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.privateBadgeText
-                            }
-                          >
-                            Private saved copy
-                          </Text>
-                        </View>
-                      ) : (
-                        <View
-                          style={
-                            styles.visibilityButtons
-                          }
-                        >
-                          <VisibilityButton
-                            label="Private"
-                            selected={
-                              scene.visibility ===
-                              "private"
-                            }
-                            disabled={
-                              busy
-                            }
-                            onPress={() =>
-                              void changeVisibility(
-                                scene,
-                                "private",
-                              )
-                            }
-                          />
-
-                          <VisibilityButton
-                            label="Public"
-                            publicButton
-                            selected={
-                              scene.visibility ===
-                              "public"
-                            }
-                            disabled={
-                              busy
-                            }
-                            onPress={() =>
-                              void changeVisibility(
-                                scene,
-                                "public",
-                              )
-                            }
-                          />
-                        </View>
-                      )}
-
                       <Pressable
+                        accessibilityLabel={`Manage ${scene.name}`}
                         accessibilityRole="button"
-                        disabled={
-                          busy
-                        }
-                        onPress={() =>
-                          confirmDelete(
-                            scene,
-                          )
-                        }
-                        style={
-                          styles.deleteButton
-                        }
+                        disabled={busy}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          openSceneActions(scene);
+                        }}
+                        style={({ pressed }) => [
+                          styles.manageButton,
+                          layout === "grid" && styles.manageButtonGrid,
+                          pressed && styles.pressed,
+                        ]}
                       >
-                        {busy ? (
-                          <ActivityIndicator
-                            size="small"
-                            color="#A62E27"
-                          />
-                        ) : (
-                          <Text
-                            style={
-                              styles.deleteText
-                            }
-                          >
-                            {scene.libraryType ===
-                            "saved"
-                              ? "Remove"
-                              : "Delete"}
-                          </Text>
-                        )}
+                        <Ionicons color={presentation.accent} name="ellipsis-horizontal" size={18} />
                       </Pressable>
-                    </View>
-                  </View>
+                    </Pressable>
+                    </NativeAnimated.View>
+                  </Animated.View>
                 );
               },
             )}
@@ -935,82 +1046,64 @@ function Notice(
   );
 }
 
-function VisibilityButton(
-  props: {
-    label: string;
-    selected: boolean;
-    publicButton?: boolean;
-    disabled: boolean;
-    onPress: () => void;
-  },
-) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={
-        props.disabled
-      }
-      onPress={
-        props.onPress
-      }
-      style={[
-        styles.visibilityButton,
-
-        props.selected &&
-          (
-            props.publicButton
-              ? styles.publicSelected
-              : styles.privateSelected
-          ),
-      ]}
-    >
-      <Text
-        style={[
-          styles.visibilityText,
-
-          props.selected &&
-            styles.visibilityTextSelected,
-        ]}
-      >
-        {props.label}
-      </Text>
-    </Pressable>
-  );
-}
-
 const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "transparent",
     },
 
     content: {
       paddingHorizontal: 20,
       paddingTop: 10,
       paddingBottom: 120,
+      gap: 11,
     },
 
     header: {
+      position: "relative",
       flexDirection: "row",
       alignItems:
         "center",
       justifyContent:
         "space-between",
-      marginBottom: 16,
+      marginBottom: 2,
+    },
+
+    headerCopy: {
+      flex: 1,
+      minWidth: 0,
+      paddingRight: 104,
+    },
+
+    headerActions: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+    },
+
+    eyebrow: {
+      color: canalDynamicColors.text,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 2.1,
+      marginBottom: 8,
     },
 
     title: {
-      color: "#181818",
-      fontSize: 30,
-      fontWeight: "900",
+      color: canalDynamicColors.text,
+      fontSize: 34,
+      fontWeight: "500",
+      letterSpacing: -1.1,
     },
 
     subtitle: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       marginTop: 3,
+      lineHeight: 19,
+      maxWidth: 325,
     },
 
     createButton: {
@@ -1042,16 +1135,16 @@ const styles =
         14,
       borderWidth: 1,
       borderColor:
-        "#E7B88F",
+        canalDynamicColors.line,
       borderRadius:
         20,
       backgroundColor:
-        "#FFF1E5",
+        canalDynamicColors.surface,
+      boxShadow: "0 14px 34px rgba(2, 31, 46, 0.14)",
     },
 
     collaborationTitle: {
-      color:
-        "#7D3A10",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight:
         "900",
@@ -1059,8 +1152,7 @@ const styles =
 
     collaborationText: {
       marginTop: 3,
-      color:
-        "#7D6656",
+      color: canalDynamicColors.muted,
       fontSize: 12,
     },
 
@@ -1069,23 +1161,22 @@ const styles =
     },
 
     searchInput: {
-      minHeight: 49,
+      minHeight: 48,
       borderWidth: 1,
       borderColor:
-        "#E2DAD4",
-      borderRadius: 16,
-      backgroundColor:
-        "#FFFFFF",
-      color: "#1B1B1B",
+        canalDynamicColors.line,
+      borderRadius: 13,
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       paddingHorizontal: 14,
     },
 
     filters: {
       flexDirection: "row",
-      flexWrap: "wrap",
+      alignItems: "center",
       gap: 8,
-      marginTop: 12,
-      marginBottom: 14,
+      marginTop: 0,
+      marginBottom: 0,
     },
 
     filterButton: {
@@ -1093,61 +1184,172 @@ const styles =
       borderColor:
         "#E2DAD4",
       borderRadius: 13,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       paddingHorizontal: 11,
       paddingVertical: 8,
+    },
+
+    filterSpacer: {
+      flex: 1,
+    },
+
+    layoutToggle: {
+      flexDirection: "row",
+      borderRadius: 13,
+      backgroundColor: canalDynamicColors.surface,
+      padding: 3,
+    },
+
+    layoutButton: {
+      width: 34,
+      height: 32,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    layoutButtonSelected: {
+      backgroundColor: "rgba(222, 255, 248, 0.92)",
     },
 
     filterSelected: {
       borderColor:
         "#F47A24",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     filterText: {
-      color: "#756E68",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "800",
     },
 
     filterTextSelected: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
     },
 
     list: {
-      gap: 13,
+      gap: 7,
+    },
+
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 9,
+    },
+
+    sceneWrapper: {
+      width: "100%",
+    },
+
+    sceneWrapperGrid: {
+      width: "48.6%",
     },
 
     sceneCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 21,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      overflow: "hidden",
       padding: 14,
+      boxShadow: "0 14px 34px rgba(2, 30, 45, 0.13)",
+    },
+
+    sceneCardGrid: {
+      width: "100%",
+      minHeight: 164,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+    },
+
+    featuredSceneCard: {
+      minHeight: 230,
+      justifyContent: "flex-end",
+      overflow: "hidden",
+      backgroundColor: canalDynamicColors.surface,
+      borderRadius: 27,
+      padding: 18,
+      boxShadow: "0 19px 45px rgba(2, 28, 47, 0.22)",
+    },
+
+    featuredManageButton: {
+      position: "absolute",
+      zIndex: 3,
+      top: 12,
+      right: 12,
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 24,
+      backgroundColor: canalDynamicColors.surface,
+    },
+
+    featuredSceneMain: {
+      minHeight: 190,
+      alignItems: "flex-start",
+      justifyContent: "flex-end",
+    },
+
+    featuredSceneText: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+
+    featuredSceneName: {
+      fontFamily: "Georgia",
+      fontSize: 30,
+      fontWeight: "500",
+      letterSpacing: -0.6,
     },
 
     sceneMain: {
       flexDirection: "row",
       alignItems:
         "center",
+      minHeight: 58,
+      zIndex: 1,
+    },
+
+    sceneMainGrid: {
+      flex: 1,
+      alignItems: "flex-end",
+    },
+
+    sceneTextGrid: {
+      alignSelf: "flex-end",
+      paddingBottom: 2,
+      paddingRight: 0,
     },
 
     artwork: {
-      width: 58,
-      height: 58,
-      borderRadius: 17,
+      width: 76,
+      height: 50,
+      borderRadius: 12,
       alignItems:
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       marginRight: 12,
     },
 
+    featuredArtwork: {
+      position: "absolute",
+      width: 210,
+      height: 210,
+      borderRadius: 105,
+      right: -64,
+      top: -74,
+      backgroundColor: "rgba(206, 255, 245, 0.2)",
+      marginRight: 0,
+    },
+
     artworkText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 23,
       fontWeight: "900",
     },
@@ -1156,28 +1358,58 @@ const styles =
       flex: 1,
     },
 
+    scenePaletteMark: {
+      marginRight: 12,
+    },
+
+    scenePaletteMarkGrid: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      width: 40,
+      height: 40,
+      borderRadius: 13,
+    },
+
     sceneName: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
     },
 
     sourceText: {
-      color: "#9A938C",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
     },
 
     arrow: {
-      color: "#B4AAA3",
+      color: canalDynamicColors.muted,
       fontSize: 25,
       marginLeft: 8,
+    },
+
+    manageButton: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 24,
+    },
+
+    manageButtonGrid: {
+      position: "absolute",
+      top: -3,
+      right: -3,
+      width: 40,
+      height: 40,
+      backgroundColor: "rgba(5, 15, 34, 0.34)",
     },
 
     actionRow: {
@@ -1188,7 +1420,7 @@ const styles =
         "space-between",
       borderTopWidth: 1,
       borderTopColor:
-        "#F0ECE8",
+        "#29332F",
       marginTop: 13,
       paddingTop: 11,
     },
@@ -1197,7 +1429,7 @@ const styles =
       flexDirection: "row",
       borderRadius: 12,
       backgroundColor:
-        "#EEE7E1",
+        "#151D1B",
       padding: 3,
     },
 
@@ -1213,7 +1445,7 @@ const styles =
 
     privateSelected: {
       backgroundColor:
-        "#7C746D",
+        "#A991E8",
     },
 
     publicSelected: {
@@ -1222,7 +1454,7 @@ const styles =
     },
 
     visibilityText: {
-      color: "#756E68",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "900",
     },
@@ -1234,7 +1466,7 @@ const styles =
     privateBadge: {
       borderRadius: 11,
       backgroundColor:
-        "#F2EEEA",
+        "#151D1B",
       paddingHorizontal: 10,
       paddingVertical: 8,
     },
@@ -1260,7 +1492,7 @@ const styles =
     },
 
     deleteText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 10,
       fontWeight: "900",
     },
@@ -1273,22 +1505,22 @@ const styles =
 
     successNotice: {
       backgroundColor:
-        "#EAF9EF",
+        "#10241E",
     },
 
     errorNotice: {
       backgroundColor:
-        "#FFF0EF",
+        "#261716",
     },
 
     successText: {
-      color: "#1D7138",
+      color: canalDynamicColors.mint,
       fontSize: 12,
       lineHeight: 18,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -1299,26 +1531,28 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
     },
 
     emptyCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 22,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
     },
 
     emptyTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
       marginTop: 7,

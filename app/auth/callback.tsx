@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useEffect,
   useState,
@@ -105,6 +106,11 @@ export default function AuthCallbackScreen() {
             </Text>
 
             <Pressable
+              accessibilityLabel="Return to Login"
+              accessibilityRole="button"
+              accessibilityState={{
+                disabled: false,
+              }}
               onPress={() =>
                 router.replace(
                   "/login" as never,
@@ -147,8 +153,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     content: {
@@ -161,13 +166,13 @@ const styles =
     },
 
     loadingText: {
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       marginTop: 14,
     },
 
     errorTitle: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 23,
       fontWeight: "900",
     },
@@ -188,7 +193,7 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       marginTop: 18,
       paddingHorizontal: 22,
     },

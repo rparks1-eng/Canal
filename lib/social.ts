@@ -589,6 +589,45 @@ export async function loadPublicProfile(
   };
 }
 
+export async function resolvePublicProfileIdByHandle(
+  handle: string,
+): Promise<string | null> {
+  requireSupabaseConfiguration();
+
+  const normalizedHandle = handle
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/u, "");
+
+  if (!normalizedHandle) {
+    return null;
+  }
+
+  const {
+    data,
+    error,
+  } = await supabase
+    .from("profiles")
+    .select("id, is_public")
+    .eq("handle", normalizedHandle)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Canal could not resolve this profile: ${error.message}`,
+    );
+  }
+
+  if (
+    typeof data?.id !== "string" ||
+    data.is_public !== true
+  ) {
+    return null;
+  }
+
+  return data.id;
+}
+
 export async function loadPublicScene(
   ownerId: string,
   sceneId: string,

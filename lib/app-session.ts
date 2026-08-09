@@ -28,6 +28,10 @@ import {
 } from "./canal-player";
 
 import {
+  invalidateSceneStudio,
+} from "./scene-studio-lifecycle";
+
+import {
   captureSpotifyCanalAccountGuard,
   clearSpotifySession,
   readSpotifyConnectionStateForAccount,
@@ -623,6 +627,11 @@ export async function disconnectSpotifyOnly(): Promise<
 
       await assertCurrent();
 
+      await invalidateSceneStudio({
+        reason: "disconnect",
+        ownerId: guard.userId,
+      });
+
       const currentRecord =
         cleanupResult.cleanupIncomplete ??
         cleanupRecord;
@@ -705,6 +714,11 @@ export async function logoutAllMusicPlatforms(): Promise<
         );
 
       await assertCurrent();
+
+      await invalidateSceneStudio({
+        reason: "logout",
+        ownerId: guard.userId,
+      });
 
       let currentRecord =
         spotifyCleanup.cleanupIncomplete ??

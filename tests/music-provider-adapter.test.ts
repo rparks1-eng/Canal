@@ -91,6 +91,8 @@ function spotifyTrack(
         "  Provider Album  ",
       uri:
         "spotify:album:album-a",
+      imageUrl:
+        "https://i.scdn.co/image/album-a",
       popularity:
         88,
     } as SpotifyTrack["album"],
@@ -389,6 +391,8 @@ describe(
                 "album-a",
               name:
                 "Provider Album",
+              imageUrl:
+                "https://i.scdn.co/image/album-a",
             },
           },
         ]);

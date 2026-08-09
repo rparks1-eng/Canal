@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   router,
   useFocusEffect,
@@ -22,6 +23,8 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
+
+import { ProfileAvatar } from "../components/profile-avatar";
 
 import {
   captureProfileSocialAccount,
@@ -58,35 +61,6 @@ function firstParam(
         ""
     : value ??
         "";
-}
-
-function connectionInitials(
-  connection: ProfileConnection,
-): string {
-  return (
-    connection.profile.displayName
-      .trim()
-      .split(
-        /\s+/,
-      )
-      .filter(
-        Boolean,
-      )
-      .slice(
-        0,
-        2,
-      )
-      .map(
-        (word) =>
-          word
-            .charAt(
-              0,
-            )
-            .toUpperCase(),
-      )
-      .join("") ||
-    "C"
-  );
 }
 
 export default function FollowingScreen() {
@@ -177,6 +151,11 @@ export default function FollowingScreen() {
   ] = useState("");
 
   const [
+    dismissedError,
+    setDismissedError,
+  ] = useState("");
+
+  const [
     loadedIdentity,
     setLoadedIdentity,
   ] = useState("");
@@ -203,6 +182,9 @@ export default function FollowingScreen() {
         null,
       );
       setErrorMessage(
+        "",
+      );
+      setDismissedError(
         "",
       );
       setOperationId(
@@ -240,6 +222,9 @@ export default function FollowingScreen() {
           null,
         );
         setErrorMessage(
+          "",
+        );
+        setDismissedError(
           "",
         );
 
@@ -383,7 +368,9 @@ export default function FollowingScreen() {
       : null;
 
   const currentErrorMessage =
-    isCurrentIdentity
+    isCurrentIdentity &&
+    errorMessage !==
+      dismissedError
       ? errorMessage
       : "";
 
@@ -476,6 +463,9 @@ export default function FollowingScreen() {
       profile.id,
     );
     setErrorMessage(
+      "",
+    );
+    setDismissedError(
       "",
     );
 
@@ -663,6 +653,7 @@ export default function FollowingScreen() {
           }
         >
           <Pressable
+            accessibilityLabel="Show following"
             accessibilityRole="tab"
             accessibilityState={{
               selected:
@@ -697,6 +688,7 @@ export default function FollowingScreen() {
           </Pressable>
 
           <Pressable
+            accessibilityLabel="Show followers"
             accessibilityRole="tab"
             accessibilityState={{
               selected:
@@ -740,7 +732,7 @@ export default function FollowingScreen() {
             setQuery
           }
           placeholder="Search people"
-          placeholderTextColor="#8E8781"
+          placeholderTextColor={canalDynamicColors.muted}
           autoCapitalize="none"
           autoCorrect={
             false
@@ -757,16 +749,44 @@ export default function FollowingScreen() {
               styles.error
             }
           >
-            <Text
-              selectable
+            <View
               style={
-                styles.errorText
+                styles.errorHeader
               }
             >
-              {currentErrorMessage}
-            </Text>
+              <Text
+                selectable
+                style={
+                  styles.errorText
+                }
+              >
+                {currentErrorMessage}
+              </Text>
+
+              <Pressable
+                accessibilityLabel="Dismiss following error"
+                accessibilityRole="button"
+                onPress={() =>
+                  setDismissedError(
+                    currentErrorMessage,
+                  )
+                }
+                style={
+                  styles.dismissErrorButton
+                }
+              >
+                <Text
+                  style={
+                    styles.dismissErrorText
+                  }
+                >
+                  ×
+                </Text>
+              </Pressable>
+            </View>
 
             <Pressable
+              accessibilityLabel="Retry profile connections"
               accessibilityRole="button"
               onPress={() =>
                 void load()
@@ -794,7 +814,7 @@ export default function FollowingScreen() {
           >
             <ActivityIndicator
               size="large"
-              color="#F47A24"
+              color="#4C46C8"
             />
           </View>
         ) : visibleConnections
@@ -868,21 +888,11 @@ export default function FollowingScreen() {
                         styles.profileButton
                       }
                     >
-                      <View
-                        style={
-                          styles.avatar
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.avatarText
-                          }
-                        >
-                          {connectionInitials(
-                            connection,
-                          )}
-                        </Text>
-                      </View>
+                      <ProfileAvatar
+                        avatarUrl={profile.avatarUrl}
+                        displayName={profile.displayName}
+                        size={56}
+                      />
 
                       <View
                         style={
@@ -958,7 +968,7 @@ export default function FollowingScreen() {
                         profile.id ? (
                           <ActivityIndicator
                             size="small"
-                            color="#FFFFFF"
+                            color="#FFFDF8"
                           />
                         ) : (
                           <Text
@@ -989,12 +999,11 @@ const styles =
   StyleSheet.create({
     screen: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
     page: {
       paddingHorizontal: 20,
-      paddingBottom: 42,
+      paddingBottom: 120,
       gap: 16,
     },
     header: {
@@ -1005,8 +1014,8 @@ const styles =
         "center",
     },
     backButton: {
-      width: 44,
-      height: 44,
+      width: 48,
+      height: 48,
       alignItems:
         "center",
       justifyContent:
@@ -1016,7 +1025,7 @@ const styles =
         "#F4EAE2",
     },
     backText: {
-      color: "#241B16",
+      color: canalDynamicColors.text,
       fontSize: 32,
       lineHeight: 34,
     },
@@ -1029,12 +1038,13 @@ const styles =
       width: 44,
     },
     title: {
-      color: "#241B16",
+      fontFamily: "Georgia",
+      color: canalDynamicColors.text,
       fontSize: 21,
       fontWeight: "900",
     },
     subtitle: {
-      color: "#7A716A",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 2,
     },
@@ -1048,6 +1058,8 @@ const styles =
         "#F1E7DF",
     },
     segmentButton: {
+      minHeight: 48,
+      justifyContent: "center",
       flex: 1,
       alignItems:
         "center",
@@ -1055,16 +1067,15 @@ const styles =
       paddingVertical: 11,
     },
     segmentButtonActive: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
     segmentText: {
-      color: "#7A716A",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "800",
     },
     segmentTextActive: {
-      color: "#241B16",
+      color: canalDynamicColors.text,
     },
     search: {
       minHeight: 48,
@@ -1072,9 +1083,8 @@ const styles =
       borderColor:
         "#E7D8CC",
       borderRadius: 15,
-      backgroundColor:
-        "#FFFFFF",
-      color: "#241B16",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       fontSize: 14,
       paddingHorizontal: 16,
     },
@@ -1098,8 +1108,7 @@ const styles =
       borderColor:
         "#ECDDD2",
       borderRadius: 18,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 13,
     },
     profileButton: {
@@ -1119,10 +1128,10 @@ const styles =
         "center",
       borderRadius: 23,
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
     avatarText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 13,
       fontWeight: "900",
     },
@@ -1139,19 +1148,18 @@ const styles =
     },
     name: {
       flexShrink: 1,
-      color: "#241B16",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
     handle: {
-      color: "#7A716A",
+      color: "#6D6B64",
       fontSize: 11,
     },
     verified: {
       borderRadius: 6,
-      backgroundColor:
-        "#FFF0E5",
-      color: "#B9500B",
+      backgroundColor: canalDynamicColors.warningSurface,
+      color: canalDynamicColors.gold,
       fontSize: 8,
       fontWeight: "900",
       paddingHorizontal: 5,
@@ -1159,14 +1167,14 @@ const styles =
     },
     followButton: {
       minWidth: 78,
-      minHeight: 38,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
         "center",
       borderRadius: 12,
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       paddingHorizontal: 12,
     },
     followButtonActive: {
@@ -1174,7 +1182,7 @@ const styles =
         "#51463E",
     },
     followText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1185,12 +1193,38 @@ const styles =
       padding: 14,
       gap: 10,
     },
+    errorHeader: {
+      flexDirection:
+        "row",
+      alignItems:
+        "flex-start",
+      gap: 10,
+    },
+    dismissErrorButton: {
+      width: 48,
+      height: 48,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      marginTop: -12,
+      marginRight: -12,
+    },
+    dismissErrorText: {
+      color: "#8D211C",
+      fontSize: 25,
+      lineHeight: 28,
+      fontWeight: "700",
+    },
     errorText: {
+      flex: 1,
       color: "#9E3029",
       fontSize: 12,
       lineHeight: 18,
     },
     retryButton: {
+      minHeight: 48,
+      justifyContent: "center",
       alignSelf:
         "flex-start",
       borderRadius: 10,
@@ -1200,7 +1234,7 @@ const styles =
       paddingVertical: 8,
     },
     retryText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 10,
       fontWeight: "900",
     },
@@ -1211,17 +1245,16 @@ const styles =
       borderColor:
         "#ECDDD2",
       borderRadius: 18,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 28,
     },
     emptyTitle: {
-      color: "#241B16",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
     emptyText: {
-      color: "#7A716A",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
       textAlign:

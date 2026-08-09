@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useCallback,
   useRef,
@@ -107,14 +108,17 @@ function closeTemplates(): void {
 
 export default function SnapshotTemplatesScreen() {
   const {
+    accountEpoch,
+    sessionGeneration,
     user,
   } = useAuth();
 
   return (
     <SnapshotTemplatesContent
       key={
-        user?.id ??
-        "signed-out"
+        user?.id
+          ? `${user.id}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`
+          : "signed-out"
       }
     />
   );
@@ -666,7 +670,7 @@ function SnapshotTemplatesContent() {
               setName
             }
             placeholder="Night Drive"
-            placeholderTextColor="#8B837C"
+            placeholderTextColor={canalDynamicColors.muted}
             maxLength={60}
             style={styles.input}
           />
@@ -678,7 +682,7 @@ function SnapshotTemplatesContent() {
               setBrandLabel
             }
             placeholder="ARI STUDIO"
-            placeholderTextColor="#8B837C"
+            placeholderTextColor={canalDynamicColors.muted}
             autoCapitalize="characters"
             maxLength={32}
             style={styles.input}
@@ -814,11 +818,19 @@ function SnapshotTemplatesContent() {
 
             <Switch
               accessibilityLabel="Use this template by default"
+              accessibilityRole="switch"
+              accessibilityState={{
+                checked:
+                  isDefault,
+              }}
               value={
                 isDefault
               }
               onValueChange={
                 setIsDefault
+              }
+              style={
+                styles.switchControl
               }
               trackColor={{
                 false:
@@ -865,7 +877,18 @@ function SnapshotTemplatesContent() {
             ) : null}
 
             <Pressable
+              accessibilityLabel={
+                editingId
+                  ? "Save Snapshot template changes"
+                  : "Create Snapshot template"
+              }
               accessibilityRole="button"
+              accessibilityState={{
+                disabled:
+                  Boolean(
+                    busyId,
+                  ),
+              }}
               disabled={
                 Boolean(
                   busyId,
@@ -1152,8 +1175,7 @@ const styles =
   StyleSheet.create({
     screen: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     page: {
@@ -1179,27 +1201,28 @@ const styles =
 
     headerButton: {
       minWidth: 68,
-      minHeight: 44,
+      minHeight: 48,
       justifyContent:
         "center",
     },
 
     backText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 15,
       fontWeight: "800",
     },
 
     headerTitle: {
       flex: 1,
-      color: "#211C19",
-      fontSize: 16,
-      fontWeight: "900",
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 22,
+      fontWeight: "400",
       textAlign: "center",
     },
 
     headerAction: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 15,
       fontWeight: "900",
       textAlign: "right",
@@ -1210,21 +1233,21 @@ const styles =
     },
 
     eyebrow: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 1.2,
     },
 
     heading: {
-      color: "#211C19",
+      color: canalDynamicColors.text,
       fontSize: 30,
       fontWeight: "900",
       lineHeight: 35,
     },
 
     description: {
-      color: "#6E6660",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       lineHeight: 22,
     },
@@ -1256,8 +1279,7 @@ const styles =
       borderRadius: 24,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 16,
     },
 
@@ -1304,7 +1326,7 @@ const styles =
     },
 
     formTitle: {
-      color: "#211C19",
+      color: canalDynamicColors.text,
       fontSize: 19,
       fontWeight: "900",
     },
@@ -1319,14 +1341,14 @@ const styles =
         "continuous",
       backgroundColor:
         "#FFFDFC",
-      color: "#211C19",
+      color: canalDynamicColors.text,
       fontSize: 15,
       paddingHorizontal: 14,
       paddingVertical: 12,
     },
 
     fieldLabel: {
-      color: "#4F4944",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -1372,13 +1394,13 @@ const styles =
     },
 
     themeLabel: {
-      color: "#2B2520",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
 
     themeDescription: {
-      color: "#756D67",
+      color: canalDynamicColors.muted,
       fontSize: 11,
     },
 
@@ -1388,7 +1410,7 @@ const styles =
     },
 
     selectedRadioMark: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
     },
 
     defaultRow: {
@@ -1414,15 +1436,19 @@ const styles =
       flex: 1,
       gap: 3,
     },
+    switchControl: {
+      minWidth: 48,
+      minHeight: 48,
+    },
 
     defaultTitle: {
-      color: "#2B2520",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
 
     defaultDescription: {
-      color: "#756D67",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 16,
     },
@@ -1446,7 +1472,7 @@ const styles =
       borderCurve:
         "continuous",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       paddingHorizontal: 18,
     },
 
@@ -1495,7 +1521,7 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#211C19",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
     },
@@ -1517,19 +1543,18 @@ const styles =
       borderRadius: 20,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 18,
     },
 
     emptyTitle: {
-      color: "#2B2520",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#756D67",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 19,
     },
@@ -1551,8 +1576,7 @@ const styles =
       borderRadius: 20,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 12,
     },
 
@@ -1586,7 +1610,7 @@ const styles =
     },
 
     templateName: {
-      color: "#2B2520",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
@@ -1603,7 +1627,7 @@ const styles =
 
     smallButton: {
       minWidth: 62,
-      minHeight: 44,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
@@ -1618,7 +1642,7 @@ const styles =
     },
 
     smallButtonText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 12,
       fontWeight: "900",
     },

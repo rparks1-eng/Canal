@@ -29,6 +29,7 @@ import {
 import {
   RecoveryNotice,
 } from "../components/recovery-notice";
+import { Image } from "expo-image";
 
 import {
   classifyAnalyticsFailure,
@@ -66,6 +67,8 @@ import {
 import {
   useConnectivity,
 } from "../providers/connectivity-provider";
+
+import { canalTypography } from "../theme/canal-typography";
 
 function safeBack(): void {
   if (
@@ -173,7 +176,10 @@ export default function PublicSceneScreen() {
 
   const exportInFlight =
     useRef(false);
-
+  const saveInFlight =
+    useRef(false);
+  const shareInFlight =
+    useRef(false);
   const load =
     useCallback(
       async (): Promise<void> => {
@@ -237,12 +243,15 @@ export default function PublicSceneScreen() {
   const save =
     async (): Promise<void> => {
       if (
+        saveInFlight.current ||
         !item ||
         saving
       ) {
         return;
       }
 
+      saveInFlight.current =
+        true;
       setSaving(
         true,
       );
@@ -275,6 +284,8 @@ export default function PublicSceneScreen() {
             : "Canal could not save this Scene.",
         );
       } finally {
+        saveInFlight.current =
+          false;
         setSaving(
           false,
         );
@@ -284,12 +295,15 @@ export default function PublicSceneScreen() {
   const share =
     async (): Promise<void> => {
       if (
+        shareInFlight.current ||
         !item ||
         sharing
       ) {
         return;
       }
 
+      shareInFlight.current =
+        true;
       setSharing(
         true,
       );
@@ -320,6 +334,8 @@ export default function PublicSceneScreen() {
             : "Canal could not share this public Scene.",
         );
       } finally {
+        shareInFlight.current =
+          false;
         setSharing(
           false,
         );
@@ -567,6 +583,7 @@ export default function PublicSceneScreen() {
       >
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Back from Public Scene"
           onPress={
             safeBack
           }
@@ -624,24 +641,6 @@ export default function PublicSceneScreen() {
                   styles.hero
                 }
               >
-                <View
-                  style={
-                    styles.artwork
-                  }
-                >
-                  <Text
-                    style={
-                      styles.artworkText
-                    }
-                  >
-                    {item.scene.name
-                      .charAt(
-                        0,
-                      )
-                      .toUpperCase()}
-                  </Text>
-                </View>
-
                 <Text
                   style={
                     styles.sceneName
@@ -664,6 +663,7 @@ export default function PublicSceneScreen() {
 
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel={`Open creator ${item.creator.displayName}`}
                   onPress={() =>
                     router.push({
                       pathname:
@@ -699,6 +699,7 @@ export default function PublicSceneScreen() {
 
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel="Export Public Scene to Spotify"
                   accessibilityState={{
                     busy:
                       exporting ||
@@ -748,6 +749,14 @@ export default function PublicSceneScreen() {
 
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel="Save Private Copy"
+                  accessibilityState={{
+                    busy: saving,
+                    disabled:
+                      item.isMine ||
+                      item.savedByMe ||
+                      saving,
+                  }}
                   disabled={
                     item.isMine ||
                     item.savedByMe ||
@@ -977,14 +986,11 @@ export default function PublicSceneScreen() {
                         styles.trackRow
                       }
                     >
-                      <Text
-                        style={
-                          styles.trackNumber
-                        }
-                      >
-                        {index +
-                          1}
-                      </Text>
+                      {track.imageUrl ? (
+                        <Image source={track.imageUrl} contentFit="cover" style={styles.trackArtwork} />
+                      ) : (
+                        <Text style={styles.trackNumber}>{index + 1}</Text>
+                      )}
 
                       <View
                         style={
@@ -1064,8 +1070,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: "transparent",
     },
 
     header: {
@@ -1080,27 +1085,25 @@ const styles =
     },
 
     backButton: {
-      width: 42,
-      height: 42,
+      width: 48,
+      height: 48,
       borderRadius: 21,
       alignItems:
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
     },
 
     headerTitle: {
-      color: "#1B1B1B",
-      fontSize: 16,
-      fontWeight: "900",
+      ...canalTypography.chrome,
+      color: canalDynamicColors.text,
     },
 
     headerSpacer: {
@@ -1124,47 +1127,44 @@ const styles =
     hero: {
       alignItems:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 24,
       padding: 22,
     },
 
     artwork: {
       width: 92,
-      height: 92,
-      borderRadius: 27,
+      height: 72,
+      borderRadius: 20,
       alignItems:
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     artworkText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 35,
       fontWeight: "900",
     },
 
     sceneName: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
       textAlign: "center",
-      marginTop: 14,
+      marginTop: 0,
     },
 
     sceneMeta: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       marginTop: 6,
     },
 
     creatorButton: {
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 13,
       paddingHorizontal: 13,
       paddingVertical: 9,
@@ -1172,7 +1172,7 @@ const styles =
     },
 
     creatorText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1185,8 +1185,7 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#1ED760",
+      backgroundColor: canalDynamicColors.mint,
       marginTop: 16,
     },
 
@@ -1211,7 +1210,7 @@ const styles =
     },
 
     saveButtonText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -1224,8 +1223,9 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#F4EEE9",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: "rgba(226, 255, 249, 0.08)",
       marginTop: 10,
     },
 
@@ -1247,8 +1247,7 @@ const styles =
     },
 
     successBox: {
-      backgroundColor:
-        "#EAF9EF",
+      backgroundColor: canalDynamicColors.successSurface,
       borderRadius: 16,
       padding: 14,
     },
@@ -1260,6 +1259,7 @@ const styles =
     },
 
     openSpotifyButton: {
+      minHeight: 48,
       alignSelf:
         "flex-start",
       borderRadius: 11,
@@ -1277,46 +1277,45 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 16,
       padding: 14,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },
 
     connectButton: {
+      minHeight: 48,
       alignSelf:
         "flex-start",
       borderRadius: 11,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       paddingHorizontal: 12,
       paddingVertical: 9,
       marginTop: 10,
     },
 
     connectText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 10,
       fontWeight: "900",
     },
 
     detailCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 18,
     },
 
     sectionTitle: {
-      color: "#1B1B1B",
-      fontSize: 18,
-      fontWeight: "900",
+      ...canalTypography.title,
+      color: canalDynamicColors.text,
+      fontSize: 22,
+      lineHeight: 27,
       marginBottom: 8,
     },
 
@@ -1328,19 +1327,19 @@ const styles =
         "space-between",
       borderTopWidth: 1,
       borderTopColor:
-        "#F0ECE8",
+        canalDynamicColors.line,
       paddingVertical: 11,
     },
 
     detailLabel: {
-      color: "#817972",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "800",
     },
 
     detailValue: {
       maxWidth: "68%",
-      color: "#322E2B",
+      color: canalDynamicColors.text,
       fontSize: 11,
       lineHeight: 17,
       textAlign: "right",
@@ -1352,7 +1351,7 @@ const styles =
         "center",
       borderTopWidth: 1,
       borderTopColor:
-        "#F0ECE8",
+        canalDynamicColors.line,
       paddingVertical: 11,
     },
 
@@ -1367,15 +1366,23 @@ const styles =
       flex: 1,
     },
 
+    trackArtwork: {
+      width: 42,
+      height: 42,
+      borderRadius: 11,
+      marginRight: 10,
+    },
+
     trackTitle: {
-      color: "#282421",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },
 
     trackArtist: {
-      color: "#817972",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 3,
     },
   });
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";

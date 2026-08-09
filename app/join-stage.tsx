@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import * as Haptics from "expo-haptics";
 import {
   Stack,
@@ -11,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
+  Switch,
   StyleSheet,
   Text,
   TextInput,
@@ -36,6 +38,8 @@ export default function JoinStageScreen() {
     error,
     setError,
   ] = useState("");
+
+  const [joinAsCollaborator, setJoinAsCollaborator] = useState(false);
 
   function updateCode(
     value: string,
@@ -74,6 +78,8 @@ export default function JoinStageScreen() {
       const stage =
         await joinLiveStageByCode(
           code,
+          undefined,
+          joinAsCollaborator,
         );
 
       if (!stage) {
@@ -98,7 +104,10 @@ export default function JoinStageScreen() {
 
       router.replace({
         pathname:
-          "/live-stage/[stageId]",
+          stage.membershipRole ===
+          "collaborator"
+            ? "/stage-contribution"
+            : "/live-stage/[stageId]",
         params: {
           stageId:
             stage.id,
@@ -208,9 +217,9 @@ export default function JoinStageScreen() {
           >
             A Stage code lets you
             enter both public and
-            private rooms. You’ll join
-            as a listener and can chat
-            right away.
+            private rooms. Choose whether
+            to listen or contribute your
+            own Scene take.
           </Text>
 
           <View
@@ -229,7 +238,7 @@ export default function JoinStageScreen() {
               }}
               accessibilityLabel="Six-digit Stage code"
               placeholder="000000"
-              placeholderTextColor="#4A403A"
+              placeholderTextColor={canalDynamicColors.muted}
               keyboardType="number-pad"
               returnKeyType="done"
               maxLength={6}
@@ -246,6 +255,18 @@ export default function JoinStageScreen() {
             >
               {code.length}/6
             </Text>
+          </View>
+
+          <View style={styles.roleRow}>
+            <View style={styles.roleCopy}>
+              <Text style={styles.roleTitle}>Join as a collaborator</Text>
+              <Text style={styles.roleDescription}>Contribute an existing Scene or create your own mood, activity, and genre take.</Text>
+            </View>
+            <Switch
+              accessibilityLabel="Join this Stage as a collaborator"
+              value={joinAsCollaborator}
+              onValueChange={setJoinAsCollaborator}
+            />
           </View>
 
           {error ? (
@@ -361,6 +382,22 @@ const styles =
       gap: 12,
     },
 
+    roleRow: {
+      width: "100%",
+      minHeight: 72,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 18,
+      backgroundColor: "rgba(255,255,255,0.06)",
+    },
+
+    roleCopy: { flex: 1, gap: 3 },
+    roleTitle: { color: canalDynamicColors.text, fontSize: 15, fontWeight: "800" },
+    roleDescription: { color: canalDynamicColors.muted, fontSize: 12, lineHeight: 17 },
+
     signal: {
       width: 108,
       height: 108,
@@ -411,7 +448,7 @@ const styles =
     },
 
     heading: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 31,
       lineHeight: 37,
       fontWeight: "900",
@@ -421,7 +458,7 @@ const styles =
 
     description: {
       maxWidth: 335,
-      color: "#AA9D95",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       lineHeight: 22,
       textAlign: "center",
@@ -443,7 +480,7 @@ const styles =
       borderCurve: "continuous",
       backgroundColor:
         "#1B1613",
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 36,
       lineHeight: 44,
       fontWeight: "800",
@@ -499,13 +536,13 @@ const styles =
     },
 
     joinIcon: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
     },
 
     joinText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },

@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import type {
@@ -1550,7 +1551,7 @@ function EventRunSheetBuilderContent(
                   setTitle
                 }
                 placeholder="Event title"
-                placeholderTextColor="#9A938C"
+                placeholderTextColor={canalDynamicColors.muted}
                 style={
                   styles.input
                 }
@@ -1571,7 +1572,7 @@ function EventRunSheetBuilderContent(
                   setVenueLabel
                 }
                 placeholder="Venue or room"
-                placeholderTextColor="#9A938C"
+                placeholderTextColor={canalDynamicColors.muted}
                 style={
                   styles.input
                 }
@@ -1606,7 +1607,7 @@ function EventRunSheetBuilderContent(
                     setLocalDateTime
                   }
                   placeholder="YYYY-MM-DDTHH:mm"
-                  placeholderTextColor="#9A938C"
+                  placeholderTextColor={canalDynamicColors.muted}
                   style={
                     styles.input
                   }
@@ -1732,7 +1733,7 @@ function EventRunSheetBuilderContent(
                   setTimeZone
                 }
                 placeholder="America/New_York"
-                placeholderTextColor="#9A938C"
+                placeholderTextColor={canalDynamicColors.muted}
                 style={
                   styles.input
                 }
@@ -1927,8 +1928,7 @@ const styles =
     safeArea: {
       flex:
         1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.surface,
     },
     header: {
       minHeight:
@@ -2051,8 +2051,7 @@ const styles =
         "#E9DED5",
       borderRadius:
         24,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
     emptyTitle: {
       color:
@@ -2075,8 +2074,7 @@ const styles =
         "#E9DED5",
       borderRadius:
         24,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
     sectionTitle: {
       color:
@@ -2305,8 +2303,7 @@ const styles =
         "#E1A06F",
       borderRadius:
         26,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
     secondaryButtonText: {
       color:

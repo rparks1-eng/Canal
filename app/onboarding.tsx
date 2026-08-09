@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useEffect,
   useState,
@@ -206,7 +207,7 @@ export default function OnboardingScreen() {
         "bottom",
       ]}
     >
-      <StatusBar style="dark" />
+      <StatusBar style="auto" />
 
       <View
         style={
@@ -1120,8 +1121,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     screen: {
@@ -1140,14 +1140,14 @@ const styles =
     },
 
     brand: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
       fontSize: 24,
       fontWeight: "900",
       letterSpacing: -1,
     },
 
     stepCount: {
-      color: "#8A827B",
+      color: "#6D6B64",
       fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.6,
@@ -1174,11 +1174,11 @@ const styles =
 
     progressLineActive: {
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     progressLabel: {
-      color: "#A49B94",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "800",
       letterSpacing: 0.8,
@@ -1188,7 +1188,7 @@ const styles =
     },
 
     progressLabelActive: {
-      color: "#473C34",
+      color: canalDynamicColors.text,
     },
 
     content: {
@@ -1203,7 +1203,7 @@ const styles =
     },
 
     eyebrow: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 1.8,
@@ -1211,7 +1211,8 @@ const styles =
     },
 
     title: {
-      color: "#1A1816",
+      fontFamily: "Georgia",
+      color: canalDynamicColors.text,
       fontSize: 33,
       lineHeight: 39,
       fontWeight: "900",
@@ -1220,7 +1221,7 @@ const styles =
     },
 
     description: {
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       lineHeight: 23,
       marginTop: 12,
@@ -1238,8 +1239,7 @@ const styles =
       borderColor:
         "#EBDDD3",
       borderRadius: 28,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     canalDisc: {
@@ -1251,11 +1251,11 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     canalDiscText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 44,
       fontWeight: "900",
       marginTop: -6,
@@ -1322,7 +1322,7 @@ const styles =
       minHeight: 218,
       borderRadius: 28,
       backgroundColor:
-        "#191714",
+        "#191A18",
       padding: 22,
     },
 
@@ -1341,7 +1341,7 @@ const styles =
     },
 
     scenePreviewName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "800",
       marginTop: 6,
@@ -1396,13 +1396,13 @@ const styles =
     },
 
     mixLabel: {
-      color: "#8F8882",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "700",
     },
 
     mixValue: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "800",
       marginTop: 3,
@@ -1421,7 +1421,7 @@ const styles =
       height: 7,
       borderRadius: 4,
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     detailRow: {
@@ -1438,19 +1438,18 @@ const styles =
       borderColor:
         "#E8DED6",
       borderRadius: 16,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 12,
     },
 
     detailNumber: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
       fontSize: 10,
       fontWeight: "900",
     },
 
     detailText: {
-      color: "#4E4640",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 15,
       fontWeight: "800",
@@ -1477,11 +1476,11 @@ const styles =
         "center",
       borderRadius: 28,
       backgroundColor:
-        "#191714",
+        "#191A18",
     },
 
     exploreVisualMark: {
-      color: "#F47A24",
+      color: canalDynamicColors.lavender,
       fontSize: 82,
       fontWeight: "900",
       lineHeight: 90,
@@ -1528,7 +1527,7 @@ const styles =
     },
 
     exportName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 21,
       lineHeight: 26,
       fontWeight: "900",
@@ -1566,8 +1565,7 @@ const styles =
       borderTopWidth: 1,
       borderTopColor:
         "#EEE3DB",
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
       paddingHorizontal: 24,
       paddingTop: 14,
       paddingBottom: 8,
@@ -1581,7 +1579,7 @@ const styles =
         "center",
       borderRadius: 18,
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     primaryButtonText: {
@@ -1600,8 +1598,7 @@ const styles =
       borderColor:
         "#DDD0C6",
       borderRadius: 16,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     secondaryButtonText: {
@@ -1615,11 +1612,11 @@ const styles =
         "center",
       justifyContent:
         "center",
-      minHeight: 34,
+      minHeight: 48,
     },
 
     backLinkText: {
-      color: "#8A827B",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "700",
     },

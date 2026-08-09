@@ -10,6 +10,9 @@ import {
 import {
     CANAL_STORAGE_PREFIX,
 } from "./storage-keys";
+import {
+    invalidateSceneStudio,
+} from "./scene-studio-lifecycle";
 
 export type CanalDataExport = {
   exportedAt: string;
@@ -122,6 +125,10 @@ export async function getCanalStorageSummary(): Promise<{
 }
 
 export async function clearAllCanalData(): Promise<void> {
+  await invalidateSceneStudio({
+    reason: "device-clear",
+  });
+
   const allKeys =
     await AsyncStorage.getAllKeys();
 

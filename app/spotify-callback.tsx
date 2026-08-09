@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { useEffect } from "react";
 
 import {
@@ -52,7 +53,7 @@ export default function SpotifyCallbackScreen() {
         "bottom",
       ]}
     >
-      <StatusBar style="dark" />
+      <StatusBar style="auto" />
 
       <View style={styles.content}>
         <ActivityIndicator size="large" />
@@ -73,7 +74,7 @@ export default function SpotifyCallbackScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#FFF9F4",
+    backgroundColor: canalDynamicColors.baseCanvas,
   },
 
   content: {
@@ -84,7 +85,8 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    color: "#181818",
+      fontFamily: "Georgia",
+    color: canalDynamicColors.text,
     fontSize: 23,
     fontWeight: "800",
     marginTop: 18,
@@ -92,7 +94,7 @@ const styles = StyleSheet.create({
   },
 
   message: {
-    color: "#6C655F",
+    color: "#6D6B64",
     fontSize: 15,
     lineHeight: 22,
     marginTop: 8,

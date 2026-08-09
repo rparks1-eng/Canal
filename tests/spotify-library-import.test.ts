@@ -135,6 +135,16 @@ function track(index: number) {
         uri: "spotify:artist:1",
       },
     ],
+    album: {
+      id: `album-${index}`,
+      name: `Album ${index}`,
+      uri: `spotify:album:album-${index}`,
+      images: [
+        {
+          url: `https://i.scdn.co/image/album-${index}`,
+        },
+      ],
+    },
   };
 }
 
@@ -543,6 +553,11 @@ describe(
           imported.savedTracks,
         ).toHaveLength(1200);
         expect(
+          imported.savedTracks[0]?.album?.imageUrl,
+        ).toBe(
+          "https://i.scdn.co/image/album-0",
+        );
+        expect(
           imported.playlists,
         ).toHaveLength(52);
         expect(
@@ -621,6 +636,7 @@ describe(
 
         let retryWindow = true;
         const savedOffsets: number[] = [];
+        let metadataRequestCount = 0;
 
         jest.spyOn(global, "fetch").mockImplementation(
           async (input) => {
@@ -630,6 +646,7 @@ describe(
               url.includes("/me/top/") ||
               url.includes("/recently-played")
             ) {
+              metadataRequestCount += 1;
               return response(200, { items: [] });
             }
 
@@ -716,6 +733,7 @@ describe(
             now,
           ),
         ).toBe(2);
+        expect(metadataRequestCount).toBe(0);
 
         retryWindow = false;
         now += 3_000;
@@ -728,6 +746,7 @@ describe(
           50,
           50,
         ]);
+        expect(metadataRequestCount).toBe(3);
         await expect(
           readSpotifyLibraryImportStatus(),
         ).resolves.toBeNull();

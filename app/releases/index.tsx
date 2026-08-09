@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useCallback,
   useMemo,
@@ -1196,8 +1197,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     header: {
@@ -1219,25 +1219,24 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 22,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
     },
 
     addText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 28,
       fontWeight: "700",
       lineHeight: 30,
     },
 
     headerTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
@@ -1266,21 +1265,21 @@ const styles =
     },
 
     eyebrow: {
-      color: "#FFB781",
+      color: canalDynamicColors.gold,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
 
     title: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 28,
       fontWeight: "900",
       lineHeight: 33,
     },
 
     subtitle: {
-      color: "#E8D9D0",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
     },
@@ -1305,12 +1304,11 @@ const styles =
       borderRadius: 18,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     summaryValue: {
-      color: "#2B211B",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
       fontVariant: [
@@ -1319,7 +1317,7 @@ const styles =
     },
 
     summaryLabel: {
-      color: "#8B8179",
+      color: canalDynamicColors.muted,
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.6,
@@ -1352,8 +1350,7 @@ const styles =
     },
 
     filterButtonSelected: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     filterButtonText: {
@@ -1363,7 +1360,7 @@ const styles =
     },
 
     filterButtonTextSelected: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
     },
 
     staleNotice: {
@@ -1434,7 +1431,7 @@ const styles =
     },
 
     loadingText: {
-      color: "#716861",
+      color: canalDynamicColors.muted,
       fontSize: 13,
     },
 
@@ -1449,18 +1446,17 @@ const styles =
       borderRadius: 24,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     emptyTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#6B625B",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
     },
@@ -1476,18 +1472,17 @@ const styles =
       borderRadius: 20,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     filteredEmptyTitle: {
-      color: "#2B211B",
+      color: canalDynamicColors.text,
       fontSize: 17,
       fontWeight: "900",
     },
 
     filteredEmptyText: {
-      color: "#71675F",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -1502,8 +1497,7 @@ const styles =
       borderRadius: 14,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     showAllButtonText: {
@@ -1546,14 +1540,14 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 19,
       fontWeight: "900",
     },
 
     sectionCount: {
       minWidth: 26,
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 12,
       fontWeight: "900",
       fontVariant: [
@@ -1563,7 +1557,7 @@ const styles =
     },
 
     sectionDescription: {
-      color: "#746B64",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
     },

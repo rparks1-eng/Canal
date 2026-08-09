@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useCallback,
   useEffect,
@@ -95,6 +96,7 @@ import type {
 } from "../lib/spotify-auth";
 
 import {
+  getLatestSpotifyLibrarySnapshot,
   readSpotifyLibrarySnapshot,
   syncSpotifyLibrary,
 } from "../lib/spotify-library";
@@ -811,6 +813,10 @@ export default function MusicServicesScreen() {
         let snapshot =
           await readSpotifyLibrarySnapshot();
 
+        let libraryStatusMessage:
+          string | null =
+          null;
+
         if (!canCommit()) {
           return;
         }
@@ -859,6 +865,27 @@ export default function MusicServicesScreen() {
           return;
         }
 
+        if (snapshot) {
+          const latestLibrary =
+            await getLatestSpotifyLibrarySnapshot();
+
+          if (!canCommit()) {
+            return;
+          }
+
+          snapshot =
+            latestLibrary.snapshot ??
+            snapshot;
+
+          if (latestLibrary.warning) {
+            libraryStatusMessage =
+              latestLibrary.warning;
+            setStatusMessage(
+              latestLibrary.warning,
+            );
+          }
+        }
+
         if (!snapshot) {
           setConnectionState(
             "syncing",
@@ -890,6 +917,11 @@ export default function MusicServicesScreen() {
             setErrorMessage(
               syncErrorMessage,
             );
+            setStatusMessage(
+              "Spotify is connected, but its library is not ready yet.",
+            );
+            libraryStatusMessage =
+              "Spotify is connected, but its library is not ready yet.";
             announce(
               syncErrorMessage,
             );
@@ -903,6 +935,12 @@ export default function MusicServicesScreen() {
         setLibraryReady(
           Boolean(snapshot),
         );
+        if (snapshot) {
+          setStatusMessage(
+            libraryStatusMessage ??
+              "",
+          );
+        }
         setConnectionState(
           "connected",
         );
@@ -932,6 +970,7 @@ export default function MusicServicesScreen() {
         setErrorCause(
           () => error,
         );
+        setStatusMessage("");
         announce(
           loadErrorMessage,
         );
@@ -2598,6 +2637,10 @@ export default function MusicServicesScreen() {
       ],
     );
 
+  const showsInlineSpotifyReconnect =
+    recoveryIssue?.action ===
+    "reconnect-spotify";
+
   const retryCleanup =
     async (
       allowSignOut: boolean,
@@ -2982,6 +3025,44 @@ export default function MusicServicesScreen() {
                     ? "Your last snapshot stays available on this device. Reconnect Spotify to refresh it and export playlists."
                     : "Use Sync Spotify Library before creating a Scene."}
               </Text>
+
+              {showsInlineSpotifyReconnect ? (
+                <Pressable
+                  accessibilityLabel="Reconnect Spotify"
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    disabled:
+                      connectivityStatus ===
+                        "offline" ||
+                      !requestReady ||
+                      accountAction !==
+                        null,
+                  }}
+                  disabled={
+                    connectivityStatus ===
+                      "offline" ||
+                    !requestReady ||
+                    accountAction !==
+                      null
+                  }
+                  onPress={() =>
+                    void connect()
+                  }
+                  style={({ pressed }) => [
+                    styles.reconnectButton,
+                    pressed &&
+                      styles.pressed,
+                  ]}
+                >
+                  <Text
+                    style={
+                      styles.reconnectButtonText
+                    }
+                  >
+                    Reconnect Spotify
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
 
             <Pressable
@@ -3162,7 +3243,8 @@ export default function MusicServicesScreen() {
           </View>
         ) : null}
 
-        {recoveryIssue ? (
+        {recoveryIssue &&
+        !showsInlineSpotifyReconnect ? (
           <RecoveryNotice
             busy={
               visibleConnectionState ===
@@ -3280,8 +3362,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     header: {
@@ -3301,13 +3382,12 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       marginRight: 12,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
@@ -3318,13 +3398,14 @@ const styles =
     },
 
     title: {
-      color: "#181818",
+      fontFamily: "Georgia",
+      color: canalDynamicColors.text,
       fontSize: 28,
       fontWeight: "900",
     },
 
     subtitle: {
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 20,
       marginTop: 4,
@@ -3340,8 +3421,7 @@ const styles =
       flexDirection: "row",
       alignItems:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 17,
     },
@@ -3370,13 +3450,13 @@ const styles =
     },
 
     serviceName: {
-      color: "#181818",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
     },
 
     serviceStatus: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 17,
       marginTop: 3,
@@ -3415,6 +3495,26 @@ const styles =
       marginTop: 4,
     },
 
+    reconnectButton: {
+      minHeight: 48,
+      alignSelf: "flex-start",
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 12,
+      paddingHorizontal: 17,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      backgroundColor: "#1DB954",
+    },
+
+    reconnectButtonText: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "800",
+    },
+
     primaryButton: {
       minHeight: 53,
       borderRadius: 17,
@@ -3441,7 +3541,7 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       paddingHorizontal: 17,
     },
 
@@ -3458,8 +3558,7 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderWidth: 1,
       borderColor:
         "#D8D0CA",
@@ -3485,14 +3584,13 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 16,
       padding: 14,
     },
 
     errorTitle: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -3505,21 +3603,20 @@ const styles =
     },
 
     explanationCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 20,
       padding: 17,
     },
 
     explanationTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
       marginBottom: 8,
     },
 
     explanationText: {
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 19,
       marginTop: 3,
@@ -3540,13 +3637,13 @@ const styles =
     },
 
     logoutButtonText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 14,
       fontWeight: "900",
     },
 
     redirectText: {
-      color: "#968E87",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       lineHeight: 14,
       textAlign: "center",

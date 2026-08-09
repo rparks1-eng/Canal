@@ -1,10 +1,14 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
+  use,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   ActivityIndicator,
@@ -24,6 +28,10 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
+
+import {
+  Image,
+} from "expo-image";
 
 import {
   advancePlayerSession,
@@ -53,14 +61,45 @@ import {
 } from "../lib/spotify-track-links";
 
 import {
+  addSpotifyArtworkToStoredScene,
+} from "../lib/spotify-scene-artwork";
+
+import {
   recordListeningHistory,
 } from "../lib/canal-session";
+import {
+  recordStoredSceneRecommendationFeedback,
+} from "../lib/scene-recommendation-feedback";
+import {
+  captureSceneStudioScope,
+} from "../lib/scene-studio-scope";
 
-import CanalBottomNav from "../components/CanalBottomNav";
+
+import {
+  LinerNotesAction,
+  LinerNotesOverlay,
+} from "../components/liner-notes/LinerNotesOverlay";
+
+import type {
+  LinerNotesTrack,
+} from "../components/liner-notes/LinerNotesOverlay";
+
+import {
+  useLinerNotesContext,
+} from "../components/liner-notes/useLinerNotesContext";
+
+import {
+  useConnectivity,
+} from "../providers/connectivity-provider";
 
 import {
   useAuth,
 } from "../providers/auth-provider";
+
+import { canalColors } from "../theme/canal-colors";
+import { canalTypography } from "../theme/canal-typography";
+import { CanalAtmosphereContext } from "../theme/canal-atmosphere-context";
+import { sceneAtmosphere } from "../components/canal-ui/scene-signature";
 
 function formatTime(
   totalSeconds: number,
@@ -124,9 +163,16 @@ function playerIssueMessage(
 }
 
 export default function NowPlayingScreen() {
+  const { setOverride } = use(CanalAtmosphereContext);
   const {
+    accountEpoch,
     user,
+    sessionGeneration,
   } = useAuth();
+
+  const {
+    status: connectivityStatus,
+  } = useConnectivity();
 
   const accountKey =
     user?.id ??
@@ -150,6 +196,26 @@ export default function NowPlayingScreen() {
     useState<StoredScene | null>(
       null,
     );
+
+  useEffect(() => {
+    if (!scene) return;
+    setOverride(sceneAtmosphere(scene));
+    return () => setOverride(null);
+  }, [scene, setOverride]);
+
+  const [contextTrack, setContextTrack] =
+    useState<LinerNotesTrack | null>(null);
+  const linerNotes = useLinerNotesContext({
+    track: contextTrack,
+    visible: Boolean(contextTrack),
+    userId: user?.id ?? null,
+    sessionGeneration,
+    connectivityStatus,
+  });
+
+  useEffect(() => {
+    setContextTrack(null);
+  }, [accountKey]);
 
   const [
     session,
@@ -219,6 +285,9 @@ export default function NowPlayingScreen() {
 
   const finishingRef =
     useRef(false);
+
+  const artworkWindowInFlightRef =
+    useRef<string | null>(null);
 
   const isCurrentPlayerLoad =
     useCallback(
@@ -512,6 +581,103 @@ export default function NowPlayingScreen() {
     void loadPlayer();
   }, [
     loadPlayer,
+  ]);
+
+  useEffect(() => {
+    if (
+      !scene ||
+      scene.tracks.every(
+        (track) =>
+          Boolean(
+            track.imageUrl,
+          ),
+      )
+    ) {
+      return;
+    }
+
+    const loadGeneration =
+      playerLoadGenerationRef.current;
+
+    const requestKey = [
+      accountKey,
+      scene.id,
+      scene.tracks
+        .filter(
+          (track) =>
+            !track.imageUrl,
+        )
+        .map(
+          (track) =>
+            track.id,
+        )
+        .join(","),
+    ].join(":");
+
+    if (
+      artworkWindowInFlightRef.current ===
+      requestKey
+    ) {
+      return;
+    }
+
+    artworkWindowInFlightRef.current =
+      requestKey;
+
+    void addSpotifyArtworkToStoredScene(
+      scene,
+    )
+      .then((enriched) => {
+        if (
+          !isCurrentPlayerLoad(
+            loadGeneration,
+          )
+        ) {
+          return;
+        }
+
+        setScene((current) => {
+          if (
+            !current ||
+            current.id !==
+              enriched.id
+          ) {
+            return current;
+          }
+
+          const artworkChanged =
+            enriched.tracks.some(
+              (track, index) =>
+                track.imageUrl !==
+                current.tracks[index]
+                  ?.imageUrl,
+            );
+
+          return artworkChanged
+            ? {
+                ...current,
+                tracks:
+                  enriched.tracks,
+              }
+            : current;
+        });
+      })
+      .catch(() => {
+        // Artwork is optional; playback remains usable when Spotify oEmbed is unavailable.
+      })
+      .finally(() => {
+        if (
+          artworkWindowInFlightRef.current ===
+          requestKey
+        ) {
+          artworkWindowInFlightRef.current =
+            null;
+        }
+      });
+  }, [
+    accountKey,
+    isCurrentPlayerLoad,
+    scene,
   ]);
 
   useEffect(() => {
@@ -850,6 +1016,17 @@ export default function NowPlayingScreen() {
           ),
         ]);
 
+        const feedbackScope = captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration });
+        if (feedbackScope) {
+          await recordStoredSceneRecommendationFeedback({
+            scope: feedbackScope,
+            currentScope: () => captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration }),
+            scene,
+            action: "replay",
+            trackIds: scene.tracks.slice(0, session.currentIndex + 1).map((track) => track.id),
+          });
+        }
+
         await clearPlayerSession(
           session.id,
         );
@@ -1140,6 +1317,7 @@ export default function NowPlayingScreen() {
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Back from Now Playing"
           onPress={() => {
             if (router.canGoBack()) {
               router.back();
@@ -1154,13 +1332,7 @@ export default function NowPlayingScreen() {
               styles.pressed,
           ]}
         >
-          <Text
-            style={
-              styles.backText
-            }
-          >
-            ‹
-          </Text>
+          <Ionicons color={canalDynamicColors.text} name="chevron-back" size={24} />
         </Pressable>
 
         <View
@@ -1201,13 +1373,7 @@ export default function NowPlayingScreen() {
               styles.pressed,
           ]}
         >
-          <Text
-            style={
-              styles.doneText
-            }
-          >
-            Edit
-          </Text>
+          <Ionicons color={canalDynamicColors.text} name="options-outline" size={22} />
         </Pressable>
       </View>
 
@@ -1219,19 +1385,23 @@ export default function NowPlayingScreen() {
           false
         }
       >
-        <View style={styles.artwork}>
-          <View style={styles.orbOne} />
-          <View style={styles.orbTwo} />
-          <View style={styles.orbThree} />
+        {currentTrack.imageUrl ? (
+          <Image
+            accessibilityLabel={`${currentTrack.title} album artwork from Spotify`}
+            contentFit="cover"
+            source={{ uri: currentTrack.imageUrl }}
+            style={styles.artwork}
+            transition={180}
+          />
+        ) : (
+          <View style={styles.artwork}>
+            <View style={styles.orbOne} />
+            <View style={styles.orbTwo} />
+            <View style={styles.orbThree} />
 
-          <Text
-            style={
-              styles.artworkText
-            }
-          >
-            ◉
-          </Text>
-        </View>
+            <Text style={styles.artworkText}>◉</Text>
+          </View>
+        )}
 
         <Text
           numberOfLines={2}
@@ -1281,6 +1451,7 @@ export default function NowPlayingScreen() {
         <View style={styles.controls}>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Previous track"
             onPress={() =>
               void move(-1)
             }
@@ -1302,6 +1473,8 @@ export default function NowPlayingScreen() {
 
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={session.isPlaying ? "Pause Scene" : "Play Scene"}
+            accessibilityState={{ selected: session.isPlaying }}
             onPress={() =>
               void togglePlay()
             }
@@ -1325,6 +1498,7 @@ export default function NowPlayingScreen() {
 
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Next track"
             onPress={() =>
               void move(1)
             }
@@ -1351,6 +1525,35 @@ export default function NowPlayingScreen() {
             session.elapsedSeconds,
           )}
         </Text>
+
+        <View style={styles.playbackActions}>
+          <LinerNotesAction
+            label="Context"
+            onPress={() => setContextTrack({
+              title: currentTrack.title,
+              artist: currentTrack.artist,
+            })}
+            style={styles.playbackAction}
+          />
+          <Pressable
+            accessibilityLabel="View Scene details"
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: "/scenes/[sceneId]", params: { sceneId: scene.id } })}
+            style={styles.playbackAction}
+          >
+            <Ionicons color={canalDynamicColors.text} name="sparkles-outline" size={18} />
+            <Text style={styles.playbackActionText}>Scene details</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Create a Snapshot from this Scene"
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: "/scene-snapshot", params: { sceneId: scene.id } } as never)}
+            style={styles.playbackAction}
+          >
+            <Ionicons color={canalDynamicColors.text} name="camera-outline" size={18} />
+            <Text style={styles.playbackActionText}>Snapshot</Text>
+          </Pressable>
+        </View>
 
         {message ? (
           <View style={styles.notice}>
@@ -1390,6 +1593,7 @@ export default function NowPlayingScreen() {
 
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Retry saving playback progress"
               accessibilityState={{
                 busy:
                   storageBusy,
@@ -1450,9 +1654,9 @@ export default function NowPlayingScreen() {
                 .filter(Boolean)
                 .slice(0, 2),
             ].map(
-              (tag) => (
+              (tag, index) => (
                 <View
-                  key={tag}
+                  key={`${index}:${tag}`}
                   style={
                     styles.tag
                   }
@@ -1496,20 +1700,24 @@ export default function NowPlayingScreen() {
                     styles.queueRow
                   }
                 >
-                  <View
-                    style={[
-                      styles.queueImage,
-                      styles.queueImagePlaceholder,
-                    ]}
-                  >
-                    <Text
-                      style={
-                        styles.queueImageText
-                      }
+                  {track.imageUrl ? (
+                    <Image
+                      accessibilityLabel={`${track.title} album artwork from Spotify`}
+                      contentFit="cover"
+                      source={{ uri: track.imageUrl }}
+                      style={styles.queueImage}
+                      transition={120}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.queueImage,
+                        styles.queueImagePlaceholder,
+                      ]}
                     >
-                      ♪
-                    </Text>
-                  </View>
+                      <Text style={styles.queueImageText}>♪</Text>
+                    </View>
+                  )}
 
                   <Text
                     style={
@@ -1544,6 +1752,16 @@ export default function NowPlayingScreen() {
                       {track.artist}
                     </Text>
                   </View>
+
+                  <LinerNotesAction
+                    compact
+                    onPress={() =>
+                      setContextTrack({
+                        title: track.title,
+                        artist: track.artist,
+                      })
+                    }
+                  />
                 </View>
               ),
             )
@@ -1572,7 +1790,15 @@ export default function NowPlayingScreen() {
         </Pressable>
       </ScrollView>
 
-      <CanalBottomNav />
+      <LinerNotesOverlay
+        context={linerNotes.context}
+        onClose={() => setContextTrack(null)}
+        onRetry={linerNotes.retry}
+        state={linerNotes.state}
+        track={contextTrack}
+        visible={Boolean(contextTrack)}
+      />
+
     </SafeAreaView>
   );
 }
@@ -1581,8 +1807,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: "#11100F",
     },
 
     center: {
@@ -1595,7 +1820,7 @@ const styles =
     },
 
     missingTitle: {
-      color: "#181818",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
       marginBottom: 15,
@@ -1603,7 +1828,7 @@ const styles =
     },
 
     missingCopy: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 21,
       marginBottom: 18,
@@ -1620,20 +1845,19 @@ const styles =
     },
 
     backButton: {
-      width: 42,
-      height: 42,
+      width: 48,
+      height: 48,
       borderRadius: 21,
       alignItems:
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: "rgba(5, 42, 58, 0.38)",
       marginRight: 10,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalColors.dark.ink,
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
@@ -1645,41 +1869,47 @@ const styles =
     },
 
     headerEyebrow: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
 
     headerTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "800",
       marginTop: 2,
     },
 
     doneButton: {
-      paddingHorizontal: 10,
-      paddingVertical: 9,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(5, 42, 58, 0.30)",
     },
 
     doneText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 13,
       fontWeight: "800",
     },
 
     content: {
-      paddingHorizontal: 24,
-      paddingBottom: 45,
+      paddingHorizontal: 18,
+      paddingBottom: 120,
       alignItems: "center",
+      gap: 10,
     },
 
     artwork: {
-      width: "100%",
+      width: "88%",
+      maxWidth: 330,
       aspectRatio: 1,
-      maxHeight: 360,
-      borderRadius: 31,
+      borderRadius: 22,
+      borderCurve: "continuous",
       alignItems:
         "center",
       justifyContent:
@@ -1687,7 +1917,8 @@ const styles =
       overflow: "hidden",
       backgroundColor:
         "#2B1710",
-      marginTop: 8,
+      marginTop: 2,
+      boxShadow: "0 18px 34px rgba(7, 32, 48, 0.22)",
     },
 
     orbOne: {
@@ -1733,15 +1964,15 @@ const styles =
     },
 
     trackTitle: {
-      color: "#181818",
-      fontSize: 25,
-      fontWeight: "900",
+      ...canalTypography.title,
+      color: canalDynamicColors.text,
       textAlign: "center",
-      marginTop: 22,
+      marginTop: 6,
+      fontFamily: "Georgia",
     },
 
     trackArtist: {
-      color: "#746D67",
+      color: "rgba(239, 255, 251, 0.76)",
       fontSize: 14,
       marginTop: 6,
     },
@@ -1750,8 +1981,7 @@ const styles =
       width: "100%",
       height: 5,
       borderRadius: 3,
-      backgroundColor:
-        "#DDD4CD",
+      backgroundColor: "rgba(255, 255, 255, 0.25)",
       overflow: "hidden",
       marginTop: 23,
     },
@@ -1772,7 +2002,7 @@ const styles =
     },
 
     timeText: {
-      color: "#8A827B",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontVariant: [
         "tabular-nums",
@@ -1780,12 +2010,12 @@ const styles =
     },
 
     timeLabel: {
-      color: "#A09790",
+      color: canalDynamicColors.muted,
       fontSize: 9,
     },
 
     controls: {
-      width: "78%",
+      width: "66%",
       flexDirection: "row",
       alignItems: "center",
       justifyContent:
@@ -1794,28 +2024,27 @@ const styles =
     },
 
     secondaryControl: {
-      width: 54,
-      height: 54,
-      borderRadius: 27,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
       alignItems:
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: "rgba(5, 42, 58, 0.38)",
     },
 
     secondaryControlText: {
-      color: "#2B2622",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
     },
 
     playButton: {
-      width: 76,
-      height: 76,
-      borderRadius: 38,
+      width: 66,
+      height: 66,
+      borderRadius: 33,
       alignItems:
         "center",
       justifyContent:
@@ -1825,7 +2054,7 @@ const styles =
     },
 
     playButtonText: {
-      color: "#FFFFFF",
+      color: "#4E4287",
       fontSize: 27,
       fontWeight: "900",
       marginLeft: 2,
@@ -1839,8 +2068,7 @@ const styles =
 
     notice: {
       width: "100%",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       borderRadius: 15,
       padding: 13,
       marginTop: 16,
@@ -1881,15 +2109,14 @@ const styles =
     },
 
     storageRetryButton: {
-      minHeight: 40,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
         "center",
       alignSelf:
         "flex-start",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalColors.dark.surface,
       borderRadius: 12,
       borderCurve:
         "continuous",
@@ -1905,15 +2132,14 @@ const styles =
 
     sceneProfile: {
       width: "100%",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 20,
       padding: 17,
       marginTop: 19,
     },
 
     profileTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
@@ -1926,15 +2152,14 @@ const styles =
     },
 
     tag: {
-      backgroundColor:
-        "#F3ECE7",
+      backgroundColor: "rgba(235, 255, 250, 0.12)",
       borderRadius: 999,
       paddingHorizontal: 11,
       paddingVertical: 7,
     },
 
     tagText: {
-      color: "#5A524D",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "700",
       textTransform:
@@ -1943,15 +2168,16 @@ const styles =
 
     queueCard: {
       width: "100%",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: "rgba(7, 43, 58, 0.32)",
+      borderWidth: 1,
+      borderColor: "rgba(235, 255, 250, 0.14)",
       borderRadius: 20,
       padding: 17,
       marginTop: 14,
     },
 
     queueTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
       marginBottom: 7,
@@ -1967,8 +2193,7 @@ const styles =
       flexDirection: "row",
       alignItems: "center",
       borderTopWidth: 1,
-      borderTopColor:
-        "#F0ECE8",
+      borderTopColor: "rgba(235, 255, 250, 0.10)",
       paddingVertical: 11,
     },
 
@@ -1991,7 +2216,7 @@ const styles =
     },
 
     queueImageText: {
-      color: "#8A827B",
+      color: canalDynamicColors.muted,
       fontSize: 18,
     },
 
@@ -2009,7 +2234,7 @@ const styles =
     },
 
     queueTrack: {
-      color: "#25211F",
+      color: "#F7FFFD",
       fontSize: 13,
       fontWeight: "800",
     },
@@ -2028,8 +2253,9 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#2B1710",
+      backgroundColor: "rgba(7, 43, 58, 0.42)",
+      borderWidth: 1,
+      borderColor: "rgba(235, 255, 250, 0.18)",
       marginTop: 15,
       paddingHorizontal: 15,
     },
@@ -2039,6 +2265,36 @@ const styles =
       fontSize: 14,
       fontWeight: "900",
       textAlign: "center",
+    },
+
+    playbackActions: {
+      width: "100%",
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 2,
+    },
+
+    playbackAction: {
+      minHeight: 48,
+      flex: 1,
+      minWidth: 104,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderColor: "rgba(235, 255, 250, 0.17)",
+      borderRadius: 16,
+      borderCurve: "continuous",
+      backgroundColor: "rgba(7, 43, 58, 0.34)",
+    },
+
+    playbackActionText: {
+      color: "#F4FFFC",
+      fontSize: 12,
+      fontWeight: "800",
     },
 
     primaryButton: {

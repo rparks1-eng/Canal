@@ -1398,8 +1398,12 @@ function isRevisionConflict(
     SupabaseOperationError,
 ): boolean {
   return (
-    error.code ===
-      "40001" &&
+    (
+      error.code ===
+        "40001" ||
+      error.code ===
+        "P0001"
+    ) &&
     error.message.includes(
       "SCENE_REVISION_CONFLICT",
     )

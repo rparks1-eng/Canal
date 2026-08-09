@@ -32,6 +32,9 @@ jest.mock(
       },
       from:
         jest.fn(),
+      storage: {
+        from: jest.fn(),
+      },
     },
   }),
 );
@@ -45,6 +48,8 @@ const mockFrom =
   jest.mocked(
     supabase.from,
   );
+
+const mockStorageFrom = jest.mocked(supabase.storage.from);
 
 function snapshotRow(
   overrides:
@@ -60,6 +65,9 @@ function snapshotRow(
     track_title: "Signal",
     track_artist: "Canal Artist",
     spotify_url: null,
+    media_path: null,
+    media_type: null,
+    media_mime_type: null,
     position_ms: 4000,
     note: "Deep work",
     mood: "calm",
@@ -80,6 +88,82 @@ describe(
   () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      mockStorageFrom.mockReturnValue({
+        createSignedUrls: jest.fn(async () => ({ data: [], error: null })),
+      } as never);
+    });
+
+    it("signs Snapshot media in one bounded batch and reuses the scoped cache", async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: "viewer" } },
+        error: null,
+      } as never);
+
+      const snapshotsQuery = {
+        select: jest.fn(() => snapshotsQuery),
+        eq: jest.fn(() => snapshotsQuery),
+        order: jest.fn(() => snapshotsQuery),
+        limit: jest.fn(async () => ({
+          data: [
+            snapshotRow({
+              id: "snapshot-media-1",
+              user_id: "viewer",
+              media_path: "viewer/photo-1.jpg",
+              media_type: "photo",
+            }),
+            snapshotRow({
+              id: "snapshot-media-2",
+              user_id: "viewer",
+              media_path: "viewer/video-1.mp4",
+              media_type: "video",
+            }),
+          ],
+          error: null,
+        })),
+      };
+      const creatorsQuery = {
+        select: jest.fn(() => creatorsQuery),
+        in: jest.fn(async () => ({
+          data: [{
+            id: "viewer",
+            display_name: "Viewer",
+            handle: "viewer",
+            is_verified: false,
+            is_canal: false,
+          }],
+          error: null,
+        })),
+      };
+      const createSignedUrls = jest.fn(async () => ({
+        data: [
+          { path: "viewer/photo-1.jpg", signedUrl: "https://media.test/photo", error: null },
+          { path: "viewer/video-1.mp4", signedUrl: "https://media.test/video", error: null },
+        ],
+        error: null,
+      }));
+      mockStorageFrom.mockReturnValue({ createSignedUrls } as never);
+      mockFrom
+        .mockReturnValueOnce(snapshotsQuery as never)
+        .mockReturnValueOnce(creatorsQuery as never)
+        .mockReturnValueOnce(snapshotsQuery as never)
+        .mockReturnValueOnce(creatorsQuery as never);
+
+      const first = await loadPublicSnapshotFeed();
+      const second = await loadPublicSnapshotFeed();
+
+      expect(createSignedUrls).toHaveBeenCalledTimes(1);
+      expect(createSignedUrls).toHaveBeenCalledWith(
+        ["viewer/photo-1.jpg", "viewer/video-1.mp4"],
+        3600,
+      );
+      expect(first.map((snapshot) => snapshot.mediaUri)).toEqual([
+        "https://media.test/photo",
+        "https://media.test/video",
+      ]);
+      expect(second.map((snapshot) => snapshot.mediaUri)).toEqual([
+        "https://media.test/photo",
+        "https://media.test/video",
+      ]);
     });
 
     it(

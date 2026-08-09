@@ -27,6 +27,10 @@ export type RelationshipActivity = {
   description: string;
   username?: string;
   displayName?: string;
+  snapshotId?: string;
+  commentId?: string;
+  stageId?: string;
+  stageInviteId?: string;
   createdAt: string;
   isRead: boolean;
   syncStatus?: "pending" | "synced";
@@ -39,6 +43,10 @@ type ActivityRow = {
   description: string;
   username: string | null;
   display_name: string | null;
+  snapshot_id: string | null;
+  comment_id: string | null;
+  stage_id: string | null;
+  stage_invite_id: string | null;
   created_at: string;
   is_read: boolean;
 };
@@ -96,6 +104,10 @@ export type RecordActivityInput = {
   description: string;
   username?: string;
   displayName?: string;
+  snapshotId?: string;
+  commentId?: string;
+  stageId?: string;
+  stageInviteId?: string;
 };
 
 export async function readRelationshipState(): Promise<RelationshipState> {
@@ -917,7 +929,7 @@ async function readActivityForUser(
       await supabase
         .from("activity_events")
         .select(
-          "id, type, title, description, username, display_name, created_at, is_read",
+          "id, type, title, description, username, display_name, snapshot_id, comment_id, stage_id, stage_invite_id, created_at, is_read",
         )
         .eq(
           "user_id",
@@ -1078,6 +1090,14 @@ async function recordActivityForUser(
 
       displayName:
         input.displayName?.trim() ||
+        undefined,
+
+      stageId:
+        input.stageId?.trim() ||
+        undefined,
+
+      stageInviteId:
+        input.stageInviteId?.trim() ||
         undefined,
 
       createdAt:
@@ -1414,6 +1434,26 @@ function normalizeActivity(
         record.displayName,
       ),
 
+    snapshotId:
+      readOptionalString(
+        record.snapshotId,
+      ),
+
+    commentId:
+      readOptionalString(
+        record.commentId,
+      ),
+
+    stageId:
+      readOptionalString(
+        record.stageId,
+      ),
+
+    stageInviteId:
+      readOptionalString(
+        record.stageInviteId,
+      ),
+
     createdAt:
       readString(
         record.createdAt,
@@ -1659,6 +1699,18 @@ async function upsertCloudActivity(
             display_name:
               item.displayName ??
               null,
+            snapshot_id:
+              item.snapshotId ??
+              null,
+            comment_id:
+              item.commentId ??
+              null,
+            stage_id:
+              item.stageId ??
+              null,
+            stage_invite_id:
+              item.stageInviteId ??
+              null,
             created_at:
               item.createdAt,
             is_read:
@@ -1693,6 +1745,18 @@ function normalizeActivityRow(
       undefined,
     displayName:
       row.display_name ??
+      undefined,
+    snapshotId:
+      row.snapshot_id ??
+      undefined,
+    commentId:
+      row.comment_id ??
+      undefined,
+    stageId:
+      row.stage_id ??
+      undefined,
+    stageInviteId:
+      row.stage_invite_id ??
       undefined,
     createdAt:
       row.created_at,

@@ -12,6 +12,19 @@ export const SNAPSHOT_TEMPLATE_THEMES = [
 export type SnapshotTemplateTheme =
   (typeof SNAPSHOT_TEMPLATE_THEMES)[number];
 
+export type BuiltInSnapshotStyle = Readonly<{
+  id: string;
+  name: string;
+  brandLabel: "canal";
+  theme: SnapshotTemplateTheme;
+}>;
+
+export const BUILT_IN_SNAPSHOT_STYLES: readonly BuiltInSnapshotStyle[] = [
+  { id: "canal-sunset", name: "Sunset Glow", brandLabel: "canal", theme: "sunset" },
+  { id: "canal-midnight", name: "Deep Night", brandLabel: "canal", theme: "midnight" },
+  { id: "canal-paper", name: "Paper Note", brandLabel: "canal", theme: "paper" },
+] as const;
+
 export type SnapshotTemplate = {
   id: string;
   ownerId: string;

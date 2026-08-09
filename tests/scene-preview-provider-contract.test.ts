@@ -242,7 +242,7 @@ describe(
     );
 
     it(
-      "keeps the preview route and pure recommendation/editor modules off Spotify wire types",
+      "keeps disabled Studio and Preview routes off provider wire types",
       () => {
         const previewSource =
           readFileSync(
@@ -283,17 +283,17 @@ describe(
         expect(
           previewSource,
         ).toContain(
-          "musicProviders",
+          "spotifyMusicProvider",
         );
         expect(
           previewSource,
         ).toContain(
-          "getMusicLibraryTrackSuggestions",
+          "createSceneStudioRepository",
         );
-        expect(
-          previewSource,
-        ).not.toMatch(
-          /SpotifySceneSearchTrack|readSpotifyLibrarySnapshot|searchSpotifySceneTracks|getSpotifyLibraryTrackSuggestions/,
+        expect(previewSource).toContain("readSpotifyLibrarySnapshot");
+        expect(previewSource).toContain("generateSceneWithSpotifyGenreFallback");
+        expect(previewSource).not.toMatch(
+          /SpotifySceneSearchTrack|searchSpotifySceneTracks|getSpotifyLibraryTrackSuggestions|spotifyAuthenticatedFetch/,
         );
         expect(
           editorSource,
@@ -305,13 +305,7 @@ describe(
         ).not.toMatch(
           /spotify-library|SpotifyLibrarySnapshot/,
         );
-        for (
-          const source of [
-            previewSource,
-            publicSceneSource,
-            sceneDetailSource,
-          ]
-        ) {
+        for (const source of [publicSceneSource, sceneDetailSource]) {
           expect(
             source,
           ).toContain(
@@ -320,7 +314,6 @@ describe(
         }
         expect(
           [
-            previewSource,
             publicSceneSource,
             sceneDetailSource,
           ].join(
@@ -333,7 +326,7 @@ describe(
     );
 
     it(
-      "routes generation to an editable preview with separate save and play actions",
+      "generates a private editable Preview without navigating to playback",
       () => {
         const studioSource = readFileSync(
           require.resolve("../app/scene-studio"),
@@ -344,20 +337,56 @@ describe(
           "utf8",
         );
 
-        expect(studioSource).toContain(
-          'router.push(\n          "/scene-preview"',
-        );
+        expect(studioSource).toContain('"Generate editable preview"');
+        expect(studioSource).toContain("readSpotifyConnectionStateForAccount");
+        expect(studioSource).toContain("readSpotifyLibrarySnapshot");
+        expect(studioSource).toContain("generateSceneWithSpotifyGenreFallback");
+        expect(studioSource).toContain("savePreview");
+        expect(studioSource).toContain('router.push("/scene-preview")');
         expect(studioSource).not.toContain(
           "saveGeneratedSceneToLibrary",
         );
-        expect(studioSource).toContain(
-          "@react-native-community/slider",
+        expect(studioSource).not.toContain('router.push("/now-playing")');
+        expect(previewSource).toContain("Return to Scene Studio");
+        expect(previewSource).toContain("spotifyMusicProvider.searchCatalog");
+        expect(previewSource).toContain("addMusicTrackToGeneratedScene");
+        expect(previewSource).toContain("Canal generated this private draft from your synced Spotify library");
+        expect(previewSource).toContain(">Swap</Text>");
+        expect(previewSource).toContain("replaceTrackInGeneratedSceneEditor");
+        expect(previewSource).toContain("createSceneStudioRepository");
+        expect(previewSource).toContain('pathname: "/scenes/[sceneId]"');
+        expect(previewSource).toContain("sceneId: savedScene.id");
+        expect(previewSource).not.toContain("readLibrarySnapshot");
+        expect(previewSource).not.toContain("MusicTasteProfile");
+      },
+    );
+
+    it(
+      "renders persisted Spotify artwork in Preview, polished Scene, and Now Playing",
+      () => {
+        const previewSource = readFileSync(
+          require.resolve("../app/scene-preview"),
+          "utf8",
         );
-        expect(previewSource).toContain(
-          "Edit Scene Parameters",
+        const sceneDetailSource = readFileSync(
+          require.resolve("../app/scenes/[sceneId]"),
+          "utf8",
         );
-        expect(previewSource).toContain("Save Scene");
-        expect(previewSource).toContain("Play Scene");
+        const nowPlayingSource = readFileSync(
+          require.resolve("../app/now-playing"),
+          "utf8",
+        );
+
+        expect(previewSource).toContain("track.album?.imageUrl");
+        expect(sceneDetailSource).toContain("addSpotifyArtworkToStoredScene");
+        expect(sceneDetailSource).toContain("track.imageUrl ?");
+        expect(nowPlayingSource).toContain("addSpotifyArtworkToStoredScene");
+        expect(nowPlayingSource).toContain("currentTrack.imageUrl ?");
+        expect(nowPlayingSource).toContain("track.imageUrl ?");
+        expect(nowPlayingSource).toContain("styles.queueImage");
+        expect([sceneDetailSource, nowPlayingSource].join("\n")).toContain(
+          'from "expo-image"',
+        );
       },
     );
   },

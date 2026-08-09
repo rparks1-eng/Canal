@@ -32,14 +32,24 @@ export type SnapshotVisibility =
   | "public"
   | "private";
 
+export type SnapshotMediaType =
+  | "photo"
+  | "video";
+
 export type Snapshot = {
   id: string;
   sceneId: string;
   sceneName: string;
+  sceneActivity?: string;
   trackId?: string;
   trackTitle?: string;
   trackArtist?: string;
+  trackImageUrl?: string;
   spotifyUrl?: string;
+  mediaType?: SnapshotMediaType;
+  mediaUri?: string;
+  mediaPath?: string;
+  mediaMimeType?: string;
   positionMs: number;
   note: string;
   mood?: string;
@@ -62,15 +72,22 @@ export type Snapshot = {
 export type CreateSnapshotInput = {
   sceneId: string;
   sceneName: string;
+  sceneActivity?: string;
   trackId?: string;
   trackTitle?: string;
   trackArtist?: string;
+  trackImageUrl?: string;
   spotifyUrl?: string;
+  mediaType?: SnapshotMediaType;
+  mediaUri?: string;
+  mediaMimeType?: string;
   positionMs?: number;
   note?: string;
   mood?: string;
   visibility?: SnapshotVisibility;
   templateId?: string;
+  templateBrandLabel?: string;
+  templateTheme?: SnapshotTemplateTheme;
 };
 
 export type UpdateSnapshotInput = {
@@ -533,6 +550,11 @@ export async function createSnapshotWithStatus(
       input.sceneName.trim() ||
       "Untitled Scene",
 
+    sceneActivity:
+      cleanOptionalString(
+        input.sceneActivity,
+      ),
+
     trackId:
       cleanOptionalString(
         input.trackId,
@@ -548,11 +570,28 @@ export async function createSnapshotWithStatus(
         input.trackArtist,
       ),
 
+    trackImageUrl:
+      cleanSnapshotArtworkUrl(
+        input.trackImageUrl,
+      ),
+
     spotifyUrl:
       canonicalSpotifyTrackUrl(
         input.spotifyUrl,
       ) ??
       undefined,
+
+    mediaType:
+      input.mediaType === "photo" ||
+      input.mediaType === "video"
+        ? input.mediaType
+        : undefined,
+
+    mediaUri:
+      cleanOptionalString(input.mediaUri),
+
+    mediaMimeType:
+      cleanOptionalString(input.mediaMimeType),
 
     positionMs:
       typeof input.positionMs ===
@@ -589,6 +628,18 @@ export async function createSnapshotWithStatus(
       cleanTemplateId(
         input.templateId,
       ),
+
+    templateBrandLabel:
+      cleanTemplateBrandLabel(
+        input.templateBrandLabel,
+      ),
+
+    templateTheme:
+      isSnapshotTemplateTheme(
+        input.templateTheme,
+      )
+        ? input.templateTheme
+        : undefined,
 
     ownerId:
       expectedUserId ??
@@ -1427,6 +1478,11 @@ function normalizeSnapshot(
     sceneId,
     sceneName,
 
+    sceneActivity:
+      readOptionalString(
+        record.sceneActivity,
+      ),
+
     trackId:
       readOptionalString(
         record.trackId,
@@ -1440,6 +1496,11 @@ function normalizeSnapshot(
     trackArtist:
       readOptionalString(
         record.trackArtist,
+      ),
+
+    trackImageUrl:
+      cleanSnapshotArtworkUrl(
+        record.trackImageUrl,
       ),
 
     spotifyUrl:
@@ -1593,6 +1654,38 @@ function cleanOptionalString(
     undefined;
 }
 
+function cleanSnapshotArtworkUrl(
+  value: unknown,
+): string | undefined {
+  if (
+    typeof value !== "string" ||
+    value.length > 2_048
+  ) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(value);
+    const allowedHost =
+      url.hostname === "i.scdn.co" ||
+      url.hostname === "image-cdn-ak.spotifycdn.com" ||
+      url.hostname === "image-cdn-fa.spotifycdn.com";
+
+    return url.protocol === "https:" &&
+      allowedHost &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.search &&
+      !url.hash &&
+      /^\/image\/[A-Za-z0-9]{16,128}$/u.test(url.pathname)
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function cleanTemplateId(
   value:
     | string
@@ -1608,6 +1701,15 @@ function cleanTemplateId(
       cleaned,
     )
     ? cleaned
+    : undefined;
+}
+
+function cleanTemplateBrandLabel(
+  value: string | undefined,
+): "canal" | undefined {
+  return typeof value === "string" &&
+    value.trim().toLowerCase() === "canal"
+    ? "canal"
     : undefined;
 }
 
@@ -1646,8 +1748,12 @@ function normalizeTemplateProvenance(
     };
   }
 
+  const builtInStyle =
+    !templateId &&
+    templateBrandLabel.toLowerCase() === "canal";
+
   if (
-    !templateId ||
+    (!templateId && !builtInStyle) ||
     !templateBrandLabel ||
     Array.from(
       templateBrandLabel,
@@ -1664,7 +1770,8 @@ function normalizeTemplateProvenance(
   }
 
   return {
-    templateId,
+    templateId:
+      templateId || undefined,
     templateBrandLabel,
     templateTheme:
       record.templateTheme,

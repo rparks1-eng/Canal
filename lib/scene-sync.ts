@@ -21,9 +21,13 @@ const ACTIVE_SCENE_USER_KEY =
 const ISOLATION_VERSION =
   "account-isolation-v3";
 
+const SCENE_DELETION_KEY_PREFIX =
+  "@canal/scene-deletions:v1";
+
 type SceneRow = {
   user_id: string;
   id: string;
+  revision: number;
   payload: Record<
     string,
     unknown
@@ -50,10 +54,34 @@ type ActiveSceneSync = {
   promise: Promise<SceneSyncResult>;
 };
 
+type CompletedSceneSync = {
+  owner: SceneCacheOwner;
+  completedAt: number;
+  result: SceneSyncResult;
+};
+
+const SCENE_SYNC_MIN_INTERVAL_MS =
+  30_000;
+
+const SCENE_SYNC_FAILURE_BACKOFF_MS =
+  30_000;
+
 const activeSyncs =
   new Map<
     string,
     ActiveSceneSync
+  >();
+
+const completedSyncs =
+  new Map<
+    string,
+    CompletedSceneSync
+  >();
+
+const failedSyncUntil =
+  new Map<
+    string,
+    number
   >();
 
 let observedUserId:
@@ -157,10 +185,103 @@ function timestamp(
     : 0;
 }
 
+function sceneRevision(
+  value: unknown,
+): number | null {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value > 0
+    ? value
+    : null;
+}
+
 function isolationKey(
   userId: string,
 ): string {
   return `@canal/scene-isolation:${ISOLATION_VERSION}:${userId}`;
+}
+
+function sceneDeletionKey(
+  userId: string,
+): string {
+  return `${SCENE_DELETION_KEY_PREFIX}:${userId}`;
+}
+
+async function readSceneDeletionIds(
+  owner: SceneCacheOwner,
+): Promise<Set<string>> {
+  await assertSceneCacheOwner(
+    owner,
+  );
+
+  const stored =
+    await AsyncStorage.getItem(
+      sceneDeletionKey(
+        owner.userId,
+      ),
+    );
+
+  await assertSceneCacheOwner(
+    owner,
+  );
+
+  if (!stored) {
+    return new Set();
+  }
+
+  try {
+    const parsed =
+      JSON.parse(stored) as unknown;
+
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter(
+            (value): value is string =>
+              typeof value === "string" &&
+              value.length > 0 &&
+              value.length <= 256,
+          )
+        : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+async function applySceneDeletionToCloud(
+  owner: SceneCacheOwner,
+  sceneId: string,
+): Promise<void> {
+  await assertSceneCacheOwner(
+    owner,
+  );
+
+  const {
+    error,
+  } = await supabase
+    .from("scenes")
+    .update({
+      deleted_at:
+        new Date().toISOString(),
+    })
+    .eq(
+      "user_id",
+      owner.userId,
+    )
+    .eq(
+      "id",
+      sceneId,
+    );
+
+  if (error) {
+    throw new Error(
+      `Canal could not delete this Scene from Supabase: ${error.message}`,
+    );
+  }
+
+  await assertSceneCacheOwner(
+    owner,
+  );
 }
 
 function rowToScene(
@@ -254,11 +375,48 @@ async function captureSceneCacheOwner(): Promise<
   );
 }
 
+async function captureLocalSceneCacheOwner(): Promise<
+  SceneCacheOwner
+> {
+  requireSupabaseConfiguration();
+
+  const {
+    data: {
+      session,
+    },
+    error,
+  } =
+    await supabase.auth.getSession();
+
+  if (error) {
+    throw error;
+  }
+
+  const userId =
+    session?.user.id;
+
+  if (!userId) {
+    observeSceneUser(
+      null,
+    );
+
+    throw new Error(
+      "You must be signed into Canal before Scenes can synchronize.",
+    );
+  }
+
+  return (
+    observeSceneUser(
+      userId,
+    ) as SceneCacheOwner
+  );
+}
+
 export async function assertSceneCacheOwner(
   expectedOwner: SceneCacheOwner,
 ): Promise<void> {
   const currentOwner =
-    await captureSceneCacheOwner();
+    await captureLocalSceneCacheOwner();
 
   if (
     !sameSceneCacheOwner(
@@ -510,28 +668,64 @@ export async function deleteSceneFromCloud(
     owner,
   );
 
-  const {
-    error,
-  } =
-    await supabase
-      .from(
-        "scenes",
-      )
-      .delete()
-      .eq(
-        "user_id",
-        owner.userId,
-      )
-      .eq(
-        "id",
+  await applySceneDeletionToCloud(
+    owner,
+    sceneId,
+  );
+
+  await assertSceneCacheOwner(
+    owner,
+  );
+}
+
+export async function deleteSceneForCurrentOwner(
+  sceneId: string,
+): Promise<void> {
+  const owner =
+    await capturePreparedSceneCacheOwner();
+
+  await withSceneCacheMutationLock(
+    async () => {
+      const deletionIds =
+        await readSceneDeletionIds(
+          owner,
+        );
+
+      deletionIds.add(
         sceneId,
       );
 
-  if (error) {
-    throw new Error(
-      `Canal could not delete the cloud Scene: ${error.message}`,
-    );
-  }
+      const scenes =
+        await readScenes();
+
+      await AsyncStorage.setItem(
+        sceneDeletionKey(
+          owner.userId,
+        ),
+        JSON.stringify(
+          Array.from(
+            deletionIds,
+          ).slice(-500),
+        ),
+      );
+
+      await writeScenes(
+        scenes.filter(
+          (scene) =>
+            scene.id !== sceneId,
+        ),
+      );
+
+      await assertSceneCacheOwner(
+        owner,
+      );
+    },
+  );
+
+  await applySceneDeletionToCloud(
+    owner,
+    sceneId,
+  );
 
   await assertSceneCacheOwner(
     owner,
@@ -563,7 +757,7 @@ async function performSceneSync(
         "scenes",
       )
       .select(
-        "user_id, id, payload, created_at, updated_at, deleted_at",
+        "user_id, id, payload, revision, created_at, updated_at, deleted_at",
       )
       .eq(
         "user_id",
@@ -585,6 +779,26 @@ async function performSceneSync(
       data ??
       []
     ) as SceneRow[];
+
+  let deletionIds =
+    await readSceneDeletionIds(
+      owner,
+    );
+
+  for (const row of remoteRows) {
+    if (row.deleted_at) {
+      deletionIds.add(
+        row.id,
+      );
+    }
+  }
+
+  for (const sceneId of deletionIds) {
+    await applySceneDeletionToCloud(
+      owner,
+      sceneId,
+    );
+  }
 
   const remoteById =
     new Map<
@@ -628,8 +842,7 @@ async function performSceneSync(
     }
   }
 
-  const uploads:
-    Array<{
+  const uploads: {
       user_id: string;
       id: string;
       payload: Record<
@@ -639,7 +852,7 @@ async function performSceneSync(
       created_at: string;
       updated_at: string;
       deleted_at: null;
-    }> = [];
+    }[] = [];
 
   for (
     const localScene of
@@ -691,6 +904,29 @@ async function performSceneSync(
         remoteRow.updated_at,
       )
     ) {
+      const remoteRevision =
+        sceneRevision(
+          remoteRow.revision,
+        );
+      const localRevision =
+        sceneRevision(
+          localScene.revision,
+        );
+
+      /*
+       * A newer local timestamp is not authority to overwrite a newer
+       * collaborative revision. Keep the server copy and let the user
+       * explicitly resolve the conflict instead of submitting a stale
+       * upsert that the revision trigger must reject.
+       */
+      if (
+        remoteRevision !== null &&
+        localRevision !==
+          remoteRevision
+      ) {
+        continue;
+      }
+
       uploads.push({
         user_id:
           owner.userId,
@@ -703,6 +939,13 @@ async function performSceneSync(
 
           ownerId:
             owner.userId,
+
+          ...(remoteRevision !== null
+            ? {
+                revision:
+                  remoteRevision,
+              }
+            : {}),
         },
 
         created_at:
@@ -742,38 +985,66 @@ async function performSceneSync(
     }
   }
 
+  let uploaded =
+    0;
+
   if (
     uploads.length >
     0
   ) {
-    await assertSceneCacheOwner(
-      owner,
-    );
+    deletionIds =
+      await readSceneDeletionIds(
+        owner,
+      );
 
-    const {
-      error: uploadError,
-    } =
-      await supabase
-        .from(
-          "scenes",
-        )
-        .upsert(
-          uploads,
-          {
-            onConflict:
-              "user_id,id",
-          },
+    const safeUploads =
+      uploads.filter(
+        (upload) =>
+          !deletionIds.has(
+            upload.id,
+          ),
+      );
+
+    if (safeUploads.length > 0) {
+      await assertSceneCacheOwner(
+        owner,
+      );
+
+      const {
+        error: uploadError,
+      } =
+        await supabase
+          .from(
+            "scenes",
+          )
+          .upsert(
+            safeUploads,
+            {
+              onConflict:
+                "user_id,id",
+            },
+          );
+
+      if (uploadError) {
+        throw new Error(
+          `Canal could not upload this account's Scenes: ${uploadError.message}`,
         );
+      }
 
-    if (uploadError) {
-      throw new Error(
-        `Canal could not upload this account's Scenes: ${uploadError.message}`,
+      uploaded +=
+        safeUploads.length;
+
+      await assertSceneCacheOwner(
+        owner,
       );
     }
 
-    await assertSceneCacheOwner(
-      owner,
-    );
+    for (const sceneId of deletionIds) {
+      await applySceneDeletionToCloud(
+        owner,
+        sceneId,
+      );
+    }
   }
 
   for (
@@ -802,7 +1073,14 @@ async function performSceneSync(
   const mergedScenes =
     Array.from(
       merged.values(),
-    ).sort(
+    )
+      .filter(
+        (scene) =>
+          !deletionIds.has(
+            scene.id,
+          ),
+      )
+      .sort(
       (
         first,
         second,
@@ -820,9 +1098,39 @@ async function performSceneSync(
     mergedScenes,
   );
 
+  const pendingDeletionIds =
+    Array.from(
+      deletionIds,
+    ).filter(
+      (sceneId) => {
+        const row =
+          remoteById.get(
+            sceneId,
+          );
+
+        return Boolean(
+          row &&
+          !row.deleted_at,
+        );
+      },
+    );
+
+  await AsyncStorage.setItem(
+    sceneDeletionKey(
+      owner.userId,
+    ),
+    JSON.stringify(
+      pendingDeletionIds,
+    ),
+  );
+
+  await assertSceneCacheOwner(
+    owner,
+  );
+
   return {
     uploaded:
-      uploads.length,
+      uploaded,
 
     downloaded,
 
@@ -838,7 +1146,7 @@ export async function syncScenesWithCloud(): Promise<
   SceneSyncResult
 > {
   const owner =
-    await captureSceneCacheOwner();
+    await captureLocalSceneCacheOwner();
 
   const existing =
     activeSyncs.get(
@@ -855,12 +1163,55 @@ export async function syncScenesWithCloud(): Promise<
     return existing.promise;
   }
 
+  const completed =
+    completedSyncs.get(
+      owner.userId,
+    );
+
+  if (
+    completed &&
+    sameSceneCacheOwner(
+      completed.owner,
+      owner,
+    ) &&
+    Date.now() -
+      completed.completedAt <
+      SCENE_SYNC_MIN_INTERVAL_MS
+  ) {
+    return completed.result;
+  }
+
+  const retryAt =
+    failedSyncUntil.get(
+      owner.userId,
+    ) ?? 0;
+
+  if (Date.now() < retryAt) {
+    throw new Error(
+      "Canal is waiting before retrying Scene synchronization after a temporary Supabase error.",
+    );
+  }
+
   const active: ActiveSceneSync = {
     owner,
     promise:
-      performSceneSync(
-        owner,
-      ),
+      (async () => {
+        const validatedOwner =
+          await captureSceneCacheOwner();
+
+        if (
+          !sameSceneCacheOwner(
+            owner,
+            validatedOwner,
+          )
+        ) {
+          throw sceneCacheOwnerChangedError();
+        }
+
+        return performSceneSync(
+          owner,
+        );
+      })(),
   };
 
   activeSyncs.set(
@@ -869,7 +1220,32 @@ export async function syncScenesWithCloud(): Promise<
   );
 
   try {
-    return await active.promise;
+    const result =
+      await active.promise;
+
+    completedSyncs.set(
+      owner.userId,
+      {
+        owner,
+        completedAt:
+          Date.now(),
+        result,
+      },
+    );
+
+    failedSyncUntil.delete(
+      owner.userId,
+    );
+
+    return result;
+  } catch (error) {
+    failedSyncUntil.set(
+      owner.userId,
+      Date.now() +
+        SCENE_SYNC_FAILURE_BACKOFF_MS,
+    );
+
+    throw error;
   } finally {
     if (
       activeSyncs.get(
@@ -894,6 +1270,8 @@ export async function clearSceneSyncOwnership(): Promise<void> {
   );
 
   activeSyncs.clear();
+  completedSyncs.clear();
+  failedSyncUntil.clear();
 
   await withSceneCacheMutationLock(
     async () => {

@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -19,6 +20,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { useAuth } from "../providers/auth-provider";
 
 import {
   getCurrentLiveStageTrack,
@@ -49,6 +52,16 @@ type IoniconName =
   keyof typeof Ionicons.glyphMap;
 
 export default function SearchScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+
+  return (
+    <SearchScreenContent
+      key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`}
+    />
+  );
+}
+
+function SearchScreenContent() {
   const params =
     useLocalSearchParams();
 
@@ -82,6 +95,8 @@ export default function SearchScreen() {
 
   const [isLoading, setIsLoading] =
     useState(true);
+  const [loadError, setLoadError] =
+    useState("");
 
   const directoryUsers =
     useMemo(
@@ -93,6 +108,7 @@ export default function SearchScreen() {
     useCallback(async () => {
       try {
         setIsLoading(true);
+        setLoadError("");
 
         const [
           scenes,
@@ -122,6 +138,12 @@ export default function SearchScreen() {
 
         setBlockedUsers(
           blocked,
+        );
+      } catch (error) {
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Canal could not load search results.",
         );
       } finally {
         setIsLoading(false);
@@ -214,6 +236,7 @@ export default function SearchScreen() {
     >
       <View style={styles.header}>
         <Pressable
+          accessibilityLabel="Go back"
           accessibilityRole="button"
           onPress={() => {
             if (router.canGoBack()) {
@@ -255,14 +278,14 @@ export default function SearchScreen() {
           <Ionicons
             name="search-outline"
             size={21}
-            color="#8f9891"
+            color={canalDynamicColors.muted}
           />
 
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Search Canal"
-            placeholderTextColor="#777f79"
+            placeholderTextColor={canalDynamicColors.muted}
             autoFocus={
               !initialQuery
             }
@@ -273,6 +296,7 @@ export default function SearchScreen() {
 
           {query ? (
             <Pressable
+              accessibilityLabel="Clear search"
               accessibilityRole="button"
               onPress={() =>
                 setQuery("")
@@ -281,7 +305,7 @@ export default function SearchScreen() {
               <Ionicons
                 name="close-circle"
                 size={21}
-                color="#777f79"
+                color={canalDynamicColors.muted}
               />
             </Pressable>
           ) : null}
@@ -296,7 +320,19 @@ export default function SearchScreen() {
         </Text>
       </View>
 
-      {isLoading ? (
+      {loadError ? (
+        <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.centered}>
+          <Text selectable style={styles.errorText}>{loadError}</Text>
+          <Pressable
+            accessibilityLabel="Retry Search"
+            accessibilityRole="button"
+            onPress={() => { void loadSearchData(); }}
+            style={styles.retryButton}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : isLoading ? (
         <View
           style={styles.centered}
         >
@@ -325,7 +361,7 @@ export default function SearchScreen() {
                 <Ionicons
                   name="search"
                   size={30}
-                  color="#ff9a50"
+                  color={canalDynamicColors.gold}
                 />
               </View>
 
@@ -351,7 +387,7 @@ export default function SearchScreen() {
               <Ionicons
                 name="search-outline"
                 size={31}
-                color="#ff9a50"
+                color={canalDynamicColors.gold}
               />
 
               <Text
@@ -624,6 +660,7 @@ function SearchResultRow({
 }) {
   return (
     <Pressable
+      accessibilityLabel={`${title}. ${subtitle}`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [
@@ -636,7 +673,7 @@ function SearchResultRow({
         <Ionicons
           name={icon}
           size={22}
-          color="#ff9a50"
+          color={canalDynamicColors.gold}
         />
       </View>
 
@@ -681,7 +718,7 @@ function SearchResultRow({
       <Ionicons
         name="chevron-forward"
         size={19}
-        color="#717a73"
+        color={canalDynamicColors.muted}
       />
     </Pressable>
   );
@@ -833,7 +870,7 @@ function firstParam(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "transparent",
   },
 
   header: {
@@ -846,7 +883,7 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 80,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
@@ -855,13 +892,14 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
+    fontFamily: "Georgia",
     fontSize: 16,
     fontWeight: "700",
   },
@@ -880,12 +918,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#5d3b24",
     borderRadius: 18,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   searchInput: {
     flex: 1,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 15,
   },
 
@@ -899,6 +937,26 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  errorText: {
+    maxWidth: 320,
+    color: "#8D211C",
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+  },
+
+  retryButton: {
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+
+  retryButtonText: {
+    color: canalDynamicColors.lavender,
+    fontSize: 14,
+    fontWeight: "800",
   },
 
   page: {
@@ -928,7 +986,7 @@ const styles = StyleSheet.create({
 
   introTitle: {
     marginTop: 13,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 19,
     fontWeight: "700",
   },
@@ -936,7 +994,7 @@ const styles = StyleSheet.create({
   introText: {
     maxWidth: 330,
     marginTop: 8,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -953,14 +1011,14 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 18,
     fontWeight: "700",
   },
 
   emptyText: {
     maxWidth: 320,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -977,13 +1035,13 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 19,
     fontWeight: "700",
   },
 
   sectionCount: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -991,9 +1049,9 @@ const styles = StyleSheet.create({
   resultList: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 20,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   resultRow: {
@@ -1007,7 +1065,7 @@ const styles = StyleSheet.create({
 
   resultIcon: {
     width: 44,
-    height: 44,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 11,
@@ -1021,14 +1079,14 @@ const styles = StyleSheet.create({
   },
 
   resultTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "700",
   },
 
   resultSubtitle: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
   },
 

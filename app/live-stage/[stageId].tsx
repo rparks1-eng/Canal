@@ -1,5 +1,8 @@
 import * as Haptics from "expo-haptics";
+import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   Stack,
   router,
@@ -7,6 +10,7 @@ import {
   useLocalSearchParams,
 } from "expo-router";
 import {
+  use,
   useCallback,
   useEffect,
   useMemo,
@@ -16,6 +20,7 @@ import {
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   KeyboardAvoidingView,
   Linking,
@@ -34,6 +39,14 @@ import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
 import {
+  LinerNotesOverlay,
+  type LinerNotesTrack,
+} from "../../components/liner-notes/LinerNotesOverlay";
+import {
+  useLinerNotesContext,
+} from "../../components/liner-notes/useLinerNotesContext";
+import { StageEmojiPicker } from "../../components/stage-emoji-picker";
+import {
   useReconnectReload,
 } from "../../hooks/use-reconnect-reload";
 import {
@@ -41,6 +54,8 @@ import {
 } from "../../lib/canal-invites";
 import {
   advanceLiveStageTrack,
+  deleteLiveStageMessage,
+  editLiveStageMessage,
   endLiveStage,
   getCurrentLiveStageTrack,
   getLiveStageTrackImageUrl,
@@ -58,19 +73,23 @@ import {
   reportLiveStageMessage,
   sendLiveStageMessage,
   subscribeToLiveStage,
+  toggleLiveStageMessageReaction,
+  type LiveStageMessageReaction,
 } from "../../lib/live-stages";
-import {
-  createSnapshot,
-} from "../../lib/snapshots";
 import {
   classifyRecoveryIssue,
 } from "../../lib/recovery-issue";
+import {
+  addSpotifyArtworkToLiveStage,
+} from "../../lib/spotify-scene-artwork";
 import {
   useAuth,
 } from "../../providers/auth-provider";
 import {
   useConnectivity,
 } from "../../providers/connectivity-provider";
+import { CanalAtmosphereContext } from "../../theme/canal-atmosphere-context";
+import { stageAtmosphere } from "../../components/canal-ui/scene-signature";
 
 const LIVE_STAGE_REPORT_REASONS:
   readonly {
@@ -145,6 +164,7 @@ function MessageRow(
   props: {
     canRemove: boolean;
     canReport: boolean;
+    canEdit: boolean;
     message:
       LiveStageMessage;
     removeDisabled:
@@ -160,8 +180,15 @@ function MessageRow(
     ) => void;
     reportDisabled:
       boolean;
+    onEdit: (message: LiveStageMessage) => void;
+    onDelete: (message: LiveStageMessage) => void;
+    onReact: (message: LiveStageMessage, reaction: LiveStageMessageReaction) => void;
+    onOpenReactionPicker: (message: LiveStageMessage) => void;
+    onViewReactors: (message: LiveStageMessage, reaction: LiveStageMessageReaction) => void;
   },
 ) {
+  const [actionsVisible, setActionsVisible] = useState(false);
+
   return (
     <View
       style={[
@@ -231,7 +258,11 @@ function MessageRow(
           </View>
         ) : null}
 
-        <View
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Message from ${props.message.displayName}: ${props.message.body}`}
+          accessibilityHint="Long press for reactions and message actions"
+          onLongPress={() => setActionsVisible((visible) => !visible)}
           style={[
             styles.messageBubble,
             props.message
@@ -253,7 +284,7 @@ function MessageRow(
                 .body
             }
           </Text>
-        </View>
+        </Pressable>
 
         {props.message
           .isMine ? (
@@ -269,13 +300,56 @@ function MessageRow(
           </Text>
         ) : null}
 
-        {props.canReport ||
-        props.canRemove ? (
-          <View
-            style={
-              styles.messageActions
-            }
-          >
+        <View style={styles.reactionRow}>
+          {Object.entries(props.message.reactions).filter(([, count]) => count > 0).map(([reaction, count]) => {
+            const active = props.message.myReactions.includes(reaction);
+            return <Pressable
+              key={reaction}
+              accessibilityRole="button"
+              accessibilityLabel={`${active ? "Remove" : "Add"} ${reaction} reaction. ${count} ${count === 1 ? "person" : "people"} reacted.`}
+              accessibilityHint="Long press to view who reacted"
+              hitSlop={7}
+              onLongPress={() => props.onViewReactors(props.message, reaction)}
+              onPress={() => props.onReact(props.message, reaction)}
+              style={[styles.reactionButton, active && styles.reactionButtonActive]}
+            >
+                <Text style={styles.reactionEmoji}>{reaction}</Text>
+                <Text style={styles.reactionCount}>{count}</Text>
+            </Pressable>;
+          })}
+          <Pressable accessibilityRole="button" accessibilityLabel="Add emoji reaction" hitSlop={6} onPress={() => props.onOpenReactionPicker(props.message)} style={styles.addReactionButton}>
+            <Ionicons color={canalDynamicColors.mint} name="add" size={19} />
+          </Pressable>
+        </View>
+
+        {actionsVisible ? (
+          <View style={styles.messageActions}>
+            <Pressable
+              accessibilityLabel="React to message"
+              accessibilityRole="button"
+              onPress={() => {
+                setActionsVisible(false);
+                props.onOpenReactionPicker(props.message);
+              }}
+              style={styles.messageAction}
+            >
+              <Ionicons color={canalDynamicColors.mint} name="happy-outline" size={15} />
+              <Text style={styles.messageActionText}>React</Text>
+            </Pressable>
+
+            {props.canEdit ? (
+              <>
+                <Pressable accessibilityRole="button" accessibilityLabel="Edit your message" onPress={() => { setActionsVisible(false); props.onEdit(props.message); }} style={styles.messageAction}>
+                  <Ionicons color={canalDynamicColors.text} name="pencil-outline" size={14} />
+                  <Text style={styles.messageActionText}>Edit</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Delete your message" onPress={() => { setActionsVisible(false); props.onDelete(props.message); }} style={[styles.messageAction, styles.messageRemoveAction]}>
+                  <Ionicons color={canalDynamicColors.danger} name="trash-outline" size={14} />
+                  <Text style={[styles.messageActionText, styles.messageRemoveActionText]}>Delete</Text>
+                </Pressable>
+              </>
+            ) : null}
+
             {props.canReport ? (
               <Pressable
                 accessibilityLabel={`Report message from ${props.message.displayName}`}
@@ -292,6 +366,7 @@ function MessageRow(
                     .reportDisabled
                 }
                 onPress={() => {
+                  setActionsVisible(false);
                   props.onReport(
                     props.message,
                   );
@@ -307,6 +382,7 @@ function MessageRow(
                     styles.pressed,
                 ]}
               >
+                <Ionicons color={canalDynamicColors.text} name="flag-outline" size={14} />
                 <Text
                   style={
                     styles.messageActionText
@@ -333,6 +409,7 @@ function MessageRow(
                     .removeDisabled
                 }
                 onPress={() => {
+                  setActionsVisible(false);
                   props.onRemove(
                     props.message,
                   );
@@ -349,6 +426,7 @@ function MessageRow(
                     styles.pressed,
                 ]}
               >
+                <Ionicons color={canalDynamicColors.danger} name="remove-circle-outline" size={14} />
                 <Text
                   style={[
                     styles.messageActionText,
@@ -367,9 +445,11 @@ function MessageRow(
 }
 
 export default function LiveStageScreen() {
+  const { setOverride } = use(CanalAtmosphereContext);
   const {
     configured,
     profile,
+    sessionGeneration,
     user,
   } = useAuth();
 
@@ -398,6 +478,36 @@ export default function LiveStageScreen() {
   const inviteCode =
     firstParam(
       params.code,
+    );
+
+  const stageHeaderLeft =
+    useCallback(
+      () => (
+        <Pressable
+          accessibilityLabel="Back from Stage"
+          accessibilityRole="button"
+          hitSlop={10}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(tabs)/live");
+            }
+          }}
+          style={({ pressed }) => [
+            styles.headerBack,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            color={canalDynamicColors.text}
+            name="chevron-back"
+            size={24}
+            style={styles.headerBackIcon}
+          />
+        </Pressable>
+      ),
+      [],
     );
 
   const accountKey =
@@ -509,6 +619,36 @@ export default function LiveStageScreen() {
     messageBody,
     setMessageBody,
   ] = useState("");
+  const [editingMessageId, setEditingMessageId] = useState("");
+  const [reactionMessage, setReactionMessage] = useState<LiveStageMessage | null>(null);
+  const [contextTrack, setContextTrack] = useState<LinerNotesTrack | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [queueExpanded, setQueueExpanded] = useState(false);
+  const chatReveal = useRef(new Animated.Value(0)).current;
+
+  const openChat = useCallback(() => {
+    setChatOpen(true);
+    chatReveal.setValue(0);
+    requestAnimationFrame(() => {
+      Animated.spring(chatReveal, {
+        damping: 18,
+        mass: 0.8,
+        stiffness: 210,
+        toValue: 1,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [chatReveal]);
+
+  const closeChat = useCallback(() => {
+    Animated.timing(chatReveal, {
+      duration: 180,
+      toValue: 0,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setChatOpen(false);
+    });
+  }, [chatReveal]);
 
   const [
     error,
@@ -569,6 +709,12 @@ export default function LiveStageScreen() {
     roomKey
       ? storedStage
       : null;
+
+  useEffect(() => {
+    if (!stage) return;
+    setOverride(stageAtmosphere(stage));
+    return () => setOverride(null);
+  }, [setOverride, stage]);
 
   const messages =
     committedRoomKey ===
@@ -774,6 +920,7 @@ export default function LiveStageScreen() {
     );
     setError("");
     setMessageBody("");
+    setEditingMessageId("");
     setNewSnapshotId("");
     setRealtimeStatus(
       "connecting",
@@ -872,6 +1019,14 @@ export default function LiveStageScreen() {
       [stage],
     );
 
+  const linerNotes = useLinerNotesContext({
+    track: contextTrack,
+    visible: Boolean(contextTrack),
+    userId: user?.id ?? null,
+    sessionGeneration: sessionGeneration ?? null,
+    connectivityStatus,
+  });
+
   const currentTrackSpotifyUrl =
     useMemo(
       () =>
@@ -884,11 +1039,33 @@ export default function LiveStageScreen() {
   const currentTrackImageUrl =
     useMemo(
       () =>
+        currentTrack?.imageUrl ??
         getLiveStageTrackImageUrl(
           currentTrack,
         ),
       [currentTrack],
     );
+
+  useEffect(() => {
+    if (!stage) return;
+    const indexes = [0, 1, 2, 3].map((offset) => stage.currentTrackIndex + offset);
+    const missing = indexes.some((index) => stage.tracks[index] && !stage.tracks[index].imageUrl);
+    if (!missing) return;
+
+    const requestedRoomKey = roomKey;
+    void addSpotifyArtworkToLiveStage(stage, indexes).then((hydrated) => {
+      if (requestedRoomKey !== roomKeyRef.current || !focusedRef.current) return;
+      const images = new Map(
+        hydrated.tracks.filter((track) => track.imageUrl).map((track) => [track.id, track.imageUrl]),
+      );
+      setStage((current) => current && current.id === hydrated.id
+        ? { ...current, tracks: current.tracks.map((track) => {
+            const imageUrl = images.get(track.id);
+            return imageUrl ? { ...track, imageUrl } : track;
+          }) }
+        : current);
+    });
+  }, [roomKey, stage]);
 
   const stageKind =
     stage
@@ -918,6 +1095,10 @@ export default function LiveStageScreen() {
   const isHost =
     stage?.membershipRole ===
     "host";
+
+  const isCollaborator =
+    stage?.membershipRole ===
+    "collaborator";
 
   const isMember =
     Boolean(
@@ -1399,11 +1580,15 @@ export default function LiveStageScreen() {
       );
       setError("");
 
-      const message =
-        await sendLiveStageMessage(
-          stage.id,
-          submittedBody,
-        );
+      if (editingMessageId) {
+        await editLiveStageMessage(editingMessageId, submittedBody);
+        if (operationRoomKey !== roomKeyRef.current || !focusedRef.current) return;
+        setEditingMessageId("");
+        setMessageBody("");
+        await loadRoom();
+        return;
+      }
+      const message = await sendLiveStageMessage(stage.id, submittedBody);
 
       if (
         operationId !==
@@ -1488,6 +1673,35 @@ export default function LiveStageScreen() {
         false,
       );
     }
+  }
+
+  function beginEditMessage(message: LiveStageMessage) {
+    setEditingMessageId(message.id);
+    setMessageBody(message.body);
+  }
+
+  function confirmDeleteOwnMessage(message: LiveStageMessage) {
+    Alert.alert("Delete message?", "This removes it from the Stage chat for everyone.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => { void (async () => { await deleteLiveStageMessage(message.id); await loadRoom(); })(); } },
+    ]);
+  }
+
+  function toggleReaction(message: LiveStageMessage, reaction: LiveStageMessageReaction) {
+    if (cloudIsOffline || isEnded) return;
+    void (async () => {
+      try {
+        await toggleLiveStageMessageReaction(message.id, reaction, message.myReactions.includes(reaction));
+        await loadRoom();
+      } catch (reactionError) {
+        setError(reactionError instanceof Error ? reactionError.message : "Canal could not update that reaction.");
+      }
+    })();
+  }
+
+  function viewReactionMembers(message: LiveStageMessage, reaction: LiveStageMessageReaction) {
+    const names = (message.reactionUsers[reaction] ?? []).map((member) => member.displayName);
+    Alert.alert(`${reaction} reactions`, names.length > 0 ? names.join("\n") : "No reactions yet.");
   }
 
   async function performModeration(
@@ -1876,112 +2090,23 @@ export default function LiveStageScreen() {
     }
   }
 
-  async function captureSnapshot() {
-    if (
-      !stage ||
-      snapshotRef.current
-    ) {
-      return;
-    }
-
-    snapshotRef.current =
-      true;
-
-    const operationId =
-      snapshotOperationIdRef
-        .current +
-      1;
-
-    snapshotOperationIdRef.current =
-      operationId;
-
-    const operationRoomKey =
-      roomKey;
-
-    try {
-      setCapturingSnapshot(
-        true,
-      );
-
-      const snapshot =
-        await createSnapshot({
-          sceneId:
-            stage.sceneId ??
-            `stage-${stage.id}`,
-          sceneName:
-            stage.name,
-          trackId:
-            currentTrack?.id,
-          trackTitle:
-            currentTrack?.title,
-          trackArtist:
-            currentTrack?.artist,
-          spotifyUrl:
-            currentTrackSpotifyUrl ??
-            undefined,
-          positionMs: 0,
-          note:
-            "Captured during a live Canal Stage.",
-          mood:
-            stage.activity,
-          visibility:
-            stage.visibility,
-        });
-
-      if (
-        operationId !==
-          snapshotOperationIdRef
-            .current ||
-        operationRoomKey !==
-          roomKeyRef.current ||
-        !focusedRef.current
-      ) {
-        return;
-      }
-
-      setNewSnapshotId(
-        snapshot.id,
-      );
-
-      Alert.alert(
-        "Snapshot captured",
-        "This live moment is now in your Snapshots.",
-      );
-    } catch (
-      snapshotError
-    ) {
-      if (
-        operationId !==
-          snapshotOperationIdRef
-            .current ||
-        operationRoomKey !==
-          roomKeyRef.current ||
-        !focusedRef.current
-      ) {
-        return;
-      }
-
-      setError(
-        snapshotError instanceof
-          Error
-          ? snapshotError.message
-          : "Canal could not capture this moment.",
-      );
-    } finally {
-      if (
-        operationId !==
-          snapshotOperationIdRef
-            .current
-      ) {
-        return;
-      }
-
-      snapshotRef.current =
-        false;
-      setCapturingSnapshot(
-        false,
-      );
-    }
+  function captureSnapshot() {
+    if (!stage || capturingSnapshot) return;
+    router.push({
+      pathname: "/snapshot-camera",
+      params: {
+        source: "stage",
+        stageId: stage.id,
+        sceneId: stage.sceneId ?? `stage-${stage.id}`,
+        sceneName: stage.name,
+        trackId: currentTrack?.id ?? "",
+        trackTitle: currentTrack?.title ?? "",
+        trackArtist: currentTrack?.artist ?? "",
+        trackImageUrl: currentTrack?.imageUrl ?? "",
+        spotifyUrl: currentTrackSpotifyUrl ?? "",
+        mood: stage.activity,
+      },
+    });
   }
 
   async function openCurrentTrack() {
@@ -2173,15 +2298,6 @@ export default function LiveStageScreen() {
             </View>
           </View>
 
-          <Text
-            selectable
-            style={
-              styles.stageName
-            }
-          >
-            {stage.name}
-          </Text>
-
           {stage.hostId ? (
             <Pressable
               accessibilityLabel={`View ${stage.hostName}'s creator profile`}
@@ -2250,14 +2366,6 @@ export default function LiveStageScreen() {
               {provenanceLabel.toUpperCase()}
             </Text>
 
-            <Text
-              selectable
-              style={
-                styles.provenanceCopy
-              }
-            >
-              {provenanceCopy}
-            </Text>
           </View>
         </View>
 
@@ -2323,43 +2431,58 @@ export default function LiveStageScreen() {
           </View>
         ) : null}
 
+        {isCollaborator &&
+        !isEnded ? (
+          <Pressable
+            accessibilityLabel="Add or change my Stage contribution"
+            accessibilityRole="button"
+            onPress={() => {
+              router.push({
+                pathname:
+                  "/stage-contribution",
+                params: {
+                  stageId:
+                    stage.id,
+                },
+              });
+            }}
+            style={
+              styles.collaborationAction
+            }
+          >
+            <Text
+              style={
+                styles.collaborationActionText
+              }
+            >
+              Add or change my contribution
+            </Text>
+          </Pressable>
+        ) : null}
+
         <View
           style={
             styles.nowPlayingCard
           }
         >
-          {currentTrackImageUrl ? (
-            <Image
-              source={
-                currentTrackImageUrl
-              }
-              contentFit="cover"
-              transition={180}
-              style={
-                styles.artwork
-              }
-            />
-          ) : (
-            <View
-              style={
-                styles.artworkFallback
-              }
-            >
-              <Text
-                style={
-                  styles.artworkNote
-                }
-              >
-                ♪
-              </Text>
-            </View>
-          )}
+          <View style={styles.artworkFrame}>
+            {currentTrackImageUrl ? (
+              <Image
+                source={currentTrackImageUrl}
+                contentFit="cover"
+                transition={180}
+                style={styles.artwork}
+              />
+            ) : (
+              <View style={styles.artworkFallback}>
+                <Text style={styles.artworkNote}>♪</Text>
+              </View>
+            )}
 
-          <View
-            style={
-              styles.nowPlayingCopy
-            }
-          >
+          </View>
+
+          <View style={styles.nowPlayingTextRow}>
+          <View style={styles.nowPlayingCopy}>
             <Text
               style={
                 styles.nowPlayingLabel
@@ -2408,6 +2531,17 @@ export default function LiveStageScreen() {
                 : "No tracks"}
             </Text>
           </View>
+          {currentTrack ? (
+            <Pressable
+              accessibilityLabel={`View context for ${currentTrack.title}`}
+              accessibilityRole="button"
+              onPress={() => setContextTrack({ title: currentTrack.title, artist: currentTrack.artist })}
+              style={({ pressed }) => [styles.currentContextButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.currentContextText}>i</Text>
+            </Pressable>
+          ) : null}
+          </View>
 
           {currentTrackSpotifyUrl ? (
             <Pressable
@@ -2424,24 +2558,64 @@ export default function LiveStageScreen() {
                   styles.pressed,
               ]}
             >
-              <Text
-                style={
-                  styles.openTrackText
-                }
-              >
-                ↗
-              </Text>
+              <Ionicons color={canalDynamicColors.text} name="musical-notes-outline" size={20} />
             </Pressable>
           ) : null}
+
         </View>
 
         <View
           style={
-            styles.quickActions
+          styles.quickActions
           }
         >
+          <Pressable
+            accessibilityLabel="Open Stage chat"
+            accessibilityHint="Opens live messages while keeping the current song visible"
+            accessibilityRole="button"
+            onPress={openChat}
+            style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
+          >
+            <Ionicons color={canalDynamicColors.text} name="chatbubble-ellipses-outline" size={20} />
+            {messages.length > 0 ? (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>{Math.min(messages.length, 99)}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+
+          {isHost && !isEnded && stage.tracks.length > 1 ? (
+            <Pressable
+              accessibilityLabel="Play next Stage track"
+              accessibilityHint="Advances the Stage to the next song"
+              accessibilityRole="button"
+              accessibilityState={{
+                busy: updating,
+                disabled: updating || cloudIsOffline,
+              }}
+              disabled={updating || cloudIsOffline}
+              hitSlop={6}
+              onPress={() => void advanceTrack()}
+              style={({ pressed }) => [
+                styles.nextTrackButton,
+                (updating || cloudIsOffline) && styles.disabled,
+                pressed && styles.nextTrackPressed,
+              ]}
+            >
+              {updating ? (
+                <ActivityIndicator color="#F4FFFC" size="small" />
+              ) : (
+                <>
+                  <Text style={styles.nextTrackText}>Play next track</Text>
+                  <Ionicons color="#173F4C" name="play-skip-forward" size={18} />
+                </>
+              )}
+            </Pressable>
+          ) : null}
+
           {!isEnded ? (
             <Pressable
+              accessibilityLabel="Create a Snapshot from this Stage"
               accessibilityRole="button"
               accessibilityState={{
                 busy:
@@ -2453,7 +2627,7 @@ export default function LiveStageScreen() {
                 capturingSnapshot
               }
               onPress={() => {
-                void captureSnapshot();
+                captureSnapshot();
               }}
               style={({
                 pressed,
@@ -2465,28 +2639,17 @@ export default function LiveStageScreen() {
                   styles.pressed,
               ]}
             >
-              <Text
-                style={
-                  styles.quickActionIcon
-                }
-              >
-                ◫
-              </Text>
-
-              <Text
-                style={
-                  styles.quickActionText
-                }
-              >
-                {capturingSnapshot
-                  ? "Capturing…"
-                  : "Snapshot"}
-              </Text>
+              {capturingSnapshot ? (
+                <ActivityIndicator color="#F4FFFC" size="small" />
+              ) : (
+                <Ionicons color={canalDynamicColors.text} name="camera-outline" size={20} />
+              )}
             </Pressable>
           ) : null}
 
           {newSnapshotId ? (
             <Pressable
+              accessibilityLabel="View the new Stage Snapshot"
               accessibilityRole="button"
               onPress={() => {
                 router.push({
@@ -2516,40 +2679,6 @@ export default function LiveStageScreen() {
             </Pressable>
           ) : null}
 
-          {isHost &&
-          !isEnded ? (
-            <Pressable
-              accessibilityRole="button"
-              disabled={
-                updating ||
-                cloudIsOffline
-              }
-              onPress={() => {
-                void advanceTrack();
-              }}
-              style={({
-                pressed,
-              }) => [
-                styles.quickAction,
-                styles.hostAction,
-                (
-                  updating ||
-                  cloudIsOffline
-                ) &&
-                  styles.disabled,
-                pressed &&
-                  styles.pressed,
-              ]}
-            >
-              <Text
-                style={
-                  styles.hostActionText
-                }
-              >
-                Next track →
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
 
         {stage.tracks.length >
@@ -2559,14 +2688,17 @@ export default function LiveStageScreen() {
               styles.queueSection
             }
           >
-            <Text
-              selectable
-              style={
-                styles.sectionEyebrow
-              }
-            >
-              UP NEXT
-            </Text>
+            <View style={styles.queueHeader}>
+              <Text selectable style={styles.sectionEyebrow}>UP NEXT</Text>
+              <Pressable
+                accessibilityLabel={queueExpanded ? "Show fewer queued tracks" : "View full Stage queue"}
+                accessibilityRole="button"
+                onPress={() => setQueueExpanded((expanded) => !expanded)}
+                style={styles.queueExpandButton}
+              >
+                <Text style={styles.queueExpandText}>{queueExpanded ? "Show less" : "See full queue"}</Text>
+              </Pressable>
+            </View>
 
             {stage.tracks
               .slice(
@@ -2575,7 +2707,7 @@ export default function LiveStageScreen() {
                   1,
                 stage
                   .currentTrackIndex +
-                  4,
+                  (queueExpanded ? stage.tracks.length : 4),
               )
               .map(
                 (
@@ -2590,13 +2722,19 @@ export default function LiveStageScreen() {
                       styles.queueRow
                     }
                   >
-                    <Text
-                      style={
-                        styles.queueNumber
-                      }
-                    >
-                      {index + 1}
-                    </Text>
+                    {track.imageUrl ? (
+                      <Image
+                        accessibilityLabel={`${track.title} album artwork`}
+                        contentFit="cover"
+                        source={track.imageUrl}
+                        style={styles.queueArtwork}
+                        transition={140}
+                      />
+                    ) : (
+                      <View style={[styles.queueArtwork, styles.queueArtworkFallback]}>
+                        <Text style={styles.queueArtworkNote}>♪</Text>
+                      </View>
+                    )}
 
                     <View
                       style={
@@ -2631,6 +2769,17 @@ export default function LiveStageScreen() {
                         }
                       </Text>
                     </View>
+                    <Pressable
+                      accessibilityLabel={`View context for ${track.title}`}
+                      accessibilityRole="button"
+                      onPress={() => setContextTrack({
+                        title: track.title,
+                        artist: track.artist,
+                      })}
+                      style={styles.queueContextAction}
+                    >
+                      <Ionicons color={canalDynamicColors.mint} name="document-text-outline" size={18} />
+                    </Pressable>
                   </View>
                 ),
               )}
@@ -2673,6 +2822,7 @@ export default function LiveStageScreen() {
             {!isMember &&
             !isEnded ? (
               <Pressable
+                accessibilityLabel="Join this Stage"
                 accessibilityRole="button"
                 disabled={
                   updating ||
@@ -2960,6 +3110,7 @@ export default function LiveStageScreen() {
 
         {isHost ? (
           <Pressable
+            accessibilityLabel={isEnded ? "Stage ended" : "End this Stage"}
             accessibilityRole="button"
             disabled={
               updating ||
@@ -2994,6 +3145,7 @@ export default function LiveStageScreen() {
           </Pressable>
         ) : isMember ? (
           <Pressable
+            accessibilityLabel="Leave this Stage"
             accessibilityRole="button"
             disabled={
               updating ||
@@ -3025,43 +3177,18 @@ export default function LiveStageScreen() {
           </Pressable>
         ) : null}
 
-        <View
-          style={
-            styles.chatHeader
-          }
-        >
-          <View>
-            <Text
-              selectable
-              style={
-                styles.chatTitle
-              }
-            >
-              Stage chat
-            </Text>
-
-            <Text
-              selectable
-              style={
-                styles.chatSubtitle
-              }
-            >
-              {isEnded
-                ? "Chat is read-only."
-                : isMember
-                  ? "You’re live with the room."
-                  : "Join the room to send messages."}
-            </Text>
-          </View>
-
-          <Text
-            style={
-              styles.chatCount
-            }
+        {isHost && isEnded ? (
+          <Pressable
+            accessibilityLabel="Manage this ended Stage"
+            accessibilityHint="Opens hosted Stage history where this Stage can be restarted or deleted"
+            accessibilityRole="button"
+            onPress={() => router.push("/managed-stages")}
+            style={styles.manageEndedButton}
           >
-            {messages.length}
-          </Text>
-        </View>
+            <Text style={styles.manageEndedButtonText}>Restart, review, or delete this Stage</Text>
+          </Pressable>
+        ) : null}
+
       </View>
     ) : null;
 
@@ -3076,11 +3203,17 @@ export default function LiveStageScreen() {
               "Live Stage",
             headerBackTitle:
               "Live",
+            headerBackVisible:
+              false,
+            headerLeft:
+              stageHeaderLeft,
             headerShadowVisible:
               false,
+            headerTransparent:
+              true,
             headerStyle: {
               backgroundColor:
-                "#100D0B",
+                "transparent",
             },
             headerTintColor:
               "#FFFFFF",
@@ -3120,11 +3253,17 @@ export default function LiveStageScreen() {
               "Live Stage",
             headerBackTitle:
               "Live",
+            headerBackVisible:
+              false,
+            headerLeft:
+              stageHeaderLeft,
             headerShadowVisible:
               false,
+            headerTransparent:
+              true,
             headerStyle: {
               backgroundColor:
-                "#100D0B",
+                "transparent",
             },
             headerTintColor:
               "#FFFFFF",
@@ -3230,6 +3369,35 @@ export default function LiveStageScreen() {
     ) ||
     cloudIsOffline;
 
+  function renderStageMessage({ item }: { item: LiveStageMessage }) {
+      if (!stage) {
+        return null;
+      }
+
+      const messageIsFromHost = stage.hostId
+        ? item.userId === stage.hostId
+        : item.isMine && isHost;
+
+      return (
+        <MessageRow
+          canEdit={item.isMine && !isEnded}
+          canRemove={ isHost && !messageIsFromHost }
+          canReport={ !item.isMine }
+          message={item}
+          removeDisabled={moderationDisabled}
+          moderating={moderatingTarget === `message:${item.id}`}
+          onRemove={confirmRemoveMessage}
+          onReport={openReportMessage}
+          onEdit={beginEditMessage}
+          onDelete={confirmDeleteOwnMessage}
+          onReact={toggleReaction}
+          onOpenReactionPicker={setReactionMessage}
+          onViewReactors={viewReactionMembers}
+          reportDisabled={reportDisabled}
+        />
+      );
+  }
+
   return (
     <>
       <Stack.Screen
@@ -3240,11 +3408,17 @@ export default function LiveStageScreen() {
             stage.name,
           headerBackTitle:
             "Live",
+          headerBackVisible:
+            false,
+          headerLeft:
+            stageHeaderLeft,
           headerShadowVisible:
             false,
+          headerTransparent:
+            true,
           headerStyle: {
             backgroundColor:
-              "#100D0B",
+              "transparent",
           },
           headerTintColor:
             "#FFFFFF",
@@ -3452,81 +3626,16 @@ export default function LiveStageScreen() {
         style={styles.screen}
       >
         <FlatList
-          ref={listRef}
-          data={messages}
+          data={[] as LiveStageMessage[]}
           keyExtractor={
             (message) =>
               message.id
           }
-          renderItem={({
-            item,
-          }) => {
-            const messageIsFromHost =
-              stage.hostId
-                ? item.userId ===
-                  stage.hostId
-                : item.isMine &&
-                  isHost;
-
-            return (
-              <MessageRow
-                canRemove={
-                  isHost &&
-                  !messageIsFromHost
-                }
-                canReport={
-                  !item.isMine
-                }
-                message={item}
-                removeDisabled={
-                  moderationDisabled
-                }
-                moderating={
-                  moderatingTarget ===
-                  `message:${item.id}`
-                }
-                onRemove={
-                  confirmRemoveMessage
-                }
-                onReport={
-                  openReportMessage
-                }
-                reportDisabled={
-                  reportDisabled
-                }
-              />
-            );
-          }}
+          renderItem={renderStageMessage}
           ListHeaderComponent={
             header
           }
-          ListEmptyComponent={
-            <View
-              style={
-                styles.emptyChat
-              }
-            >
-              <Text
-                selectable
-                style={
-                  styles.emptyChatTitle
-                }
-              >
-                Start the conversation
-              </Text>
-
-              <Text
-                selectable
-                style={
-                  styles.emptyChatText
-                }
-              >
-                Reactions, track
-                notes, and room plans
-                will appear here.
-              </Text>
-            </View>
-          }
+          ListEmptyComponent={null}
           contentInsetAdjustmentBehavior="automatic"
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
@@ -3535,148 +3644,185 @@ export default function LiveStageScreen() {
           }
         />
 
-        <View
-          style={[
-            styles.composer,
-            {
-              paddingBottom:
-                Math.max(
-                  insets.bottom,
-                  10,
-                ),
-            },
-          ]}
+        <Modal
+          animationType="none"
+          onRequestClose={closeChat}
+          transparent
+          visible={chatOpen}
         >
-          {canChat ? (
-            <>
-              <View
-                style={
-                  styles.inputWrap
-                }
-              >
-                <TextInput
-                  value={
-                    messageBody
-                  }
-                  onChangeText={
-                    setMessageBody
-                  }
-                  onSubmitEditing={() => {
-                    void sendMessage();
-                  }}
-                  accessibilityLabel="Message Stage chat"
-                  placeholder="Message the Stage…"
-                  placeholderTextColor="#8B7E76"
-                  maxLength={500}
-                  multiline
-                  returnKeyType="send"
-                  blurOnSubmit={
-                    false
-                  }
-                  style={
-                    styles.messageInput
-                  }
-                />
-
-                {messageBody.length >
-                420 ? (
-                  <Text
-                    style={
-                      styles.messageCounter
-                    }
-                  >
-                    {
-                      messageBody.length
-                    }
-                    /500
-                  </Text>
-                ) : null}
-              </View>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Send message"
-                disabled={
-                  sending ||
-                  !messageBody.trim() ||
-                  cloudIsOffline
-                }
-                onPress={() => {
-                  void sendMessage();
-                }}
-                style={({
-                  pressed,
-                }) => [
-                  styles.sendButton,
-                  (
-                    sending ||
-                    !messageBody.trim() ||
-                    cloudIsOffline
-                  ) &&
-                    styles.disabled,
-                  pressed &&
-                    styles.pressed,
-                ]}
-              >
-                {sending ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#FFFFFF"
+          <KeyboardAvoidingView
+            behavior={process.env.EXPO_OS === "ios" ? "padding" : undefined}
+            style={styles.chatModalContainer}
+          >
+          <Animated.View
+            accessibilityViewIsModal
+            style={[
+              styles.chatModal,
+              {
+                opacity: chatReveal,
+                transform: [
+                  {
+                    translateY: chatReveal.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [42, 0],
+                    }),
+                  },
+                  {
+                    scale: chatReveal.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.97, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.chatSheet}>
+              <View style={styles.chatNowPlaying}>
+                {currentTrackImageUrl ? (
+                  <Image
+                    accessibilityLabel={`${currentTrack?.title ?? "Current track"} album artwork`}
+                    contentFit="cover"
+                    source={ currentTrackImageUrl }
+                    style={styles.chatArtwork}
+                    transition={140}
                   />
                 ) : (
-                  <Text
-                    style={
-                      styles.sendText
-                    }
-                  >
-                    ↑
-                  </Text>
+                  <View style={[styles.chatArtwork, styles.queueArtworkFallback]}>
+                    <Ionicons color={canalDynamicColors.mint} name="musical-note" size={20} />
+                  </View>
                 )}
-              </Pressable>
-            </>
-          ) : !isEnded ? (
-            <Pressable
-              accessibilityRole="button"
-              disabled={
-                updating ||
-                cloudIsOffline
-              }
-              onPress={() => {
-                void joinStage();
-              }}
-              style={({
-                pressed,
-              }) => [
-                styles.joinComposerButton,
-                (
-                  updating ||
-                  cloudIsOffline
-                ) &&
-                  styles.disabled,
-                pressed &&
-                  styles.pressed,
-              ]}
-            >
-              <Text
-                style={
-                  styles.joinComposerText
-                }
+
+                <View style={styles.chatNowPlayingCopy}>
+                  <Text numberOfLines={1} style={styles.chatStageName}>{stage.name}</Text>
+                  <Text numberOfLines={1} style={styles.chatTrackName}>
+                    {currentTrack ? `${currentTrack.title} · ${currentTrack.artist}` : "Queue ready"}
+                  </Text>
+                </View>
+
+                <Pressable
+                  accessibilityLabel="Close Stage chat"
+                  accessibilityRole="button"
+                  onPress={closeChat}
+                  style={({ pressed }) => [styles.closeChatButton, pressed && styles.pressed]}
+                >
+                  <Ionicons color={canalDynamicColors.text} name="close" size={22} />
+                </Pressable>
+              </View>
+
+              <View style={styles.chatSheetTitleRow}>
+                <View>
+                  <Text accessibilityRole="header" style={styles.chatTitle}>Stage chat</Text>
+                  <Text style={styles.chatSubtitle}>Live with the room</Text>
+                </View>
+                <Text style={styles.chatCount}>{messages.length}</Text>
+              </View>
+
+              <FlatList
+                ref={listRef}
+                data={messages}
+                keyExtractor={(message) => message.id}
+                renderItem={renderStageMessage}
+                keyboardDismissMode="interactive"
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.chatMessages}
+                ListEmptyComponent={(
+                  <View style={styles.emptyChat}>
+                    <Text style={styles.emptyChatTitle}>The room is listening</Text>
+                    <Text style={styles.emptyChatText}>Start the conversation or react when a message arrives.</Text>
+                  </View>
+                )}
+              />
+
+              <View
+                style={[
+                  styles.composer,
+                  { paddingBottom: Math.max(insets.bottom, 10) },
+                ]}
               >
-                Join Stage to chat
-              </Text>
-            </Pressable>
-          ) : (
-            <Text
-              selectable
-              style={
-                styles.readOnlyText
-              }
-            >
-              This Stage has ended.
-              Chat is read-only.
-            </Text>
-          )}
-        </View>
+                {canChat ? (
+                  <>
+                    <View style={styles.inputWrap}>
+                      <TextInput
+                        accessibilityLabel="Message Stage chat"
+                      autoCapitalize="none"
+                        blurOnSubmit={false}
+                        maxLength={500}
+                        multiline
+                        onChangeText={setMessageBody}
+                        onSubmitEditing={() => void sendMessage()}
+                        placeholder="Message the Stage…"
+                        placeholderTextColor={canalDynamicColors.muted}
+                        returnKeyType="send"
+                        style={styles.messageInput}
+                        value={messageBody}
+                      />
+
+                      {messageBody.length > 420 ? (
+                        <Text style={styles.messageCounter}>{messageBody.length}/500</Text>
+                      ) : null}
+                    </View>
+
+                    <Pressable
+                      accessibilityHint={editingMessageId ? "Saves your edited message." : "Sends your message to the Stage."}
+                      accessibilityLabel="Send message"
+                      accessibilityRole="button"
+                      disabled={sending || !messageBody.trim() || cloudIsOffline}
+                      onPress={() => void sendMessage()}
+                      style={({ pressed }) => [
+                        styles.sendButton,
+                        (sending || !messageBody.trim() || cloudIsOffline) && styles.disabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      {sending ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <Ionicons color={canalDynamicColors.text} name={editingMessageId ? "checkmark" : "arrow-up"} size={20} />
+                      )}
+                    </Pressable>
+                  </>
+                ) : !isEnded ? (
+                  <Pressable
+                    accessibilityLabel="Join Stage to chat"
+                    accessibilityRole="button"
+                    disabled={updating || cloudIsOffline}
+                    onPress={() => void joinStage()}
+                    style={({ pressed }) => [
+                      styles.joinComposerButton,
+                      (updating || cloudIsOffline) && styles.disabled,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.joinComposerText}>Join Stage to chat</Text>
+                  </Pressable>
+                ) : (
+                  <Text selectable style={styles.readOnlyText}>This Stage has ended. Chat is read-only.</Text>
+                )}
+              </View>
+
+              <StageEmojiPicker
+                accountKey={accountKey}
+                messageLabel={reactionMessage?.body ?? "Stage message"}
+                onClose={() => setReactionMessage(null)}
+                onSelect={(emoji) => {
+                  if (reactionMessage) toggleReaction(reactionMessage, emoji);
+                }}
+                visible={Boolean(reactionMessage)}
+              />
+            </View>
+          </Animated.View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        <LinerNotesOverlay
+          context={linerNotes.context}
+          onClose={() => setContextTrack(null)}
+          onRetry={linerNotes.retry}
+          state={linerNotes.state}
+          track={contextTrack}
+          visible={Boolean(contextTrack)}
+        />
       </KeyboardAvoidingView>
     </>
   );
@@ -3684,10 +3830,20 @@ export default function LiveStageScreen() {
 
 const styles =
   StyleSheet.create({
+    headerBack: {
+      alignItems: "center",
+      height: 48,
+      justifyContent: "center",
+      marginLeft: 0,
+      padding: 0,
+      width: 48,
+    },
+    headerBackIcon: {
+      transform: [{ translateX: -1 }],
+    },
     screen: {
       flex: 1,
-      backgroundColor:
-        "#100D0B",
+      backgroundColor: "transparent",
     },
 
     loading: {
@@ -3696,11 +3852,11 @@ const styles =
       justifyContent: "center",
       gap: 14,
       backgroundColor:
-        "#100D0B",
+        "transparent",
     },
 
     loadingText: {
-      color: "#A99C94",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       fontWeight: "700",
     },
@@ -3712,7 +3868,7 @@ const styles =
       gap: 12,
       padding: 28,
       backgroundColor:
-        "#100D0B",
+        "transparent",
     },
 
     notFoundIcon: {
@@ -3727,13 +3883,13 @@ const styles =
     },
 
     notFoundIconText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 36,
       fontWeight: "900",
     },
 
     notFoundTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
       textAlign: "center",
@@ -3741,7 +3897,7 @@ const styles =
 
     notFoundText: {
       maxWidth: 330,
-      color: "#A99C94",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       lineHeight: 22,
       textAlign: "center",
@@ -3766,17 +3922,17 @@ const styles =
 
     listContent: {
       paddingHorizontal: 18,
-      paddingBottom: 28,
+      paddingBottom: 120,
     },
 
     roomHeader: {
-      gap: 18,
-      paddingTop: 12,
-      paddingBottom: 18,
+      gap: 10,
+      paddingTop: 6,
+      paddingBottom: 14,
     },
 
     stageIdentity: {
-      gap: 9,
+      gap: 6,
     },
 
     stageStatusRow: {
@@ -3790,11 +3946,10 @@ const styles =
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
       borderRadius: 999,
-      backgroundColor:
-        "#3B1D14",
+      backgroundColor: "rgba(255, 117, 111, 0.12)",
     },
 
     statusPillEnded: {
@@ -3851,13 +4006,13 @@ const styles =
     },
 
     realtimeText: {
-      color: "#91857D",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "700",
     },
 
     stageName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 32,
       lineHeight: 37,
       fontWeight: "900",
@@ -3865,17 +4020,16 @@ const styles =
     },
 
     stageMeta: {
-      color: "#A99C94",
-      fontSize: 14,
-      lineHeight: 20,
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 17,
     },
 
     provenance: {
       alignSelf:
         "flex-start",
-      gap: 3,
-      paddingHorizontal: 11,
-      paddingVertical: 8,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
       borderWidth: 1,
       borderRadius: 13,
       borderCurve:
@@ -3897,10 +4051,8 @@ const styles =
     },
 
     provenanceCommunity: {
-      borderColor:
-        "#3A302A",
-      backgroundColor:
-        "#1A1512",
+      borderColor: "rgba(209, 255, 247, 0.22)",
+      backgroundColor: "rgba(7, 44, 64, 0.38)",
     },
 
     provenanceLabel: {
@@ -3918,28 +4070,28 @@ const styles =
     },
 
     provenanceLabelCommunity: {
-      color: "#B4A69D",
+      color: canalDynamicColors.muted,
     },
 
     provenanceCopy: {
-      color: "#BDB0A8",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 15,
     },
 
     stageCodeRow: {
-      minHeight: 68,
+      minHeight: 54,
       flexDirection: "row",
       alignItems: "center",
       justifyContent:
         "space-between",
-      padding: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
       borderWidth: 1,
-      borderColor: "#332924",
-      borderRadius: 19,
+      borderColor: "rgba(209, 255, 247, 0.18)",
+      borderRadius: 16,
       borderCurve: "continuous",
-      backgroundColor:
-        "#1A1512",
+      backgroundColor: "rgba(7, 43, 58, 0.30)",
     },
 
     codeLabel: {
@@ -3951,8 +4103,8 @@ const styles =
 
     stageCode: {
       color: "#FFFFFF",
-      fontSize: 23,
-      lineHeight: 28,
+      fontSize: 18,
+      lineHeight: 22,
       fontWeight: "900",
       letterSpacing: 4,
       fontVariant: [
@@ -3961,7 +4113,7 @@ const styles =
     },
 
     shareButton: {
-      minHeight: 42,
+      minHeight: 44,
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
@@ -3972,44 +4124,54 @@ const styles =
     },
 
     shareIcon: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
 
     shareText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },
 
     nowPlayingCard: {
-      minHeight: 130,
-      flexDirection: "row",
+      position: "relative",
+      flexDirection: "column",
       alignItems: "center",
-      gap: 14,
+      gap: 10,
       padding: 14,
-      borderRadius: 24,
+      borderColor: "rgba(235, 255, 251, 0.19)",
       borderCurve: "continuous",
-      backgroundColor:
-        "#F2E7DE",
+      borderRadius: 28,
+      borderWidth: 1,
+      backgroundColor: "rgba(8, 30, 46, 0.36)",
+      boxShadow: "inset 0 1px rgba(255, 255, 255, 0.09), 0 18px 50px rgba(7, 22, 39, 0.13)",
+    },
+
+    artworkFrame: {
+      position: "relative",
+      width: "100%",
+      borderRadius: 26,
+      borderCurve: "continuous",
     },
 
     artwork: {
-      width: 94,
-      height: 94,
-      borderRadius: 18,
+      width: "100%",
+      height: undefined,
+      aspectRatio: 1.55,
+      borderRadius: 26,
       borderCurve: "continuous",
-      backgroundColor:
-        "#DCCBC0",
+      backgroundColor: "rgba(7, 43, 58, 0.35)",
+      boxShadow: "0 18px 34px rgba(7, 32, 48, 0.22)",
     },
 
     artworkFallback: {
-      width: 94,
-      height: 94,
+      width: "100%",
+      aspectRatio: 1.55,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 18,
+      borderRadius: 26,
       borderCurve: "continuous",
       backgroundColor:
         "#F47A24",
@@ -4023,31 +4185,57 @@ const styles =
 
     nowPlayingCopy: {
       flex: 1,
+      alignItems: "flex-start",
       gap: 3,
     },
 
+    nowPlayingTextRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      paddingHorizontal: 2,
+      width: "100%",
+    },
+
+    currentContextButton: {
+      alignItems: "center",
+      backgroundColor: "rgba(222, 255, 246, 0.12)",
+      borderCurve: "continuous",
+      borderRadius: 24,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+
+    currentContextText: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 18,
+      fontWeight: "700",
+    },
+
     nowPlayingLabel: {
-      color: "#B9571A",
+      color: "rgba(239, 255, 251, 0.70)",
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 1.1,
     },
 
     trackTitle: {
-      color: "#241B16",
+      color: canalDynamicColors.text,
       fontSize: 19,
       lineHeight: 23,
       fontWeight: "900",
     },
 
     trackArtist: {
-      color: "#6E625A",
+      color: "rgba(239, 255, 251, 0.76)",
       fontSize: 13,
       lineHeight: 18,
     },
 
     trackProgress: {
-      color: "#9B8576",
+      color: "rgba(239, 255, 251, 0.64)",
       fontSize: 10,
       fontWeight: "800",
       fontVariant: [
@@ -4056,40 +4244,83 @@ const styles =
     },
 
     openTrackButton: {
-      width: 38,
-      height: 38,
+      position: "absolute",
+      right: 2,
+      bottom: 2,
+      width: 44,
+      height: 44,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 13,
-      backgroundColor:
-        "#211711",
+      borderRadius: 24,
+      backgroundColor: "transparent",
     },
 
     openTrackText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 17,
       fontWeight: "900",
     },
 
     quickActions: {
+      alignItems: "center",
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
+      justifyContent: "center",
+      gap: 10,
+      paddingHorizontal: 2,
     },
 
     quickAction: {
-      minHeight: 44,
-      flexDirection: "row",
+      width: 48,
+      height: 48,
       alignItems: "center",
       justifyContent: "center",
-      gap: 7,
-      paddingHorizontal: 13,
-      borderWidth: 1,
-      borderColor: "#39302A",
-      borderRadius: 15,
+      borderWidth: 0,
+      borderRadius: 23,
       borderCurve: "continuous",
-      backgroundColor:
-        "#201A17",
+      backgroundColor: "transparent",
+    },
+
+    chatBadge: {
+      position: "absolute",
+      top: -3,
+      right: -3,
+      minWidth: 17,
+      height: 17,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 4,
+      borderRadius: 9,
+      backgroundColor: "#F1B8EA",
+    },
+
+    chatBadgeText: {
+      color: "#342342",
+      fontSize: 9,
+      fontWeight: "900",
+    },
+
+    nextTrackButton: {
+      minHeight: 50,
+      flex: 1,
+      flexDirection: "row",
+      gap: 9,
+      paddingHorizontal: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      borderCurve: "continuous",
+      borderRadius: 17,
+      backgroundColor: "#DFFFF5",
+    },
+
+    nextTrackText: {
+      color: "#173F4C",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    nextTrackPressed: {
+      opacity: 0.74,
+      transform: [{ scale: 0.94 }],
     },
 
     quickActionIcon: {
@@ -4099,20 +4330,18 @@ const styles =
     },
 
     quickActionText: {
-      color: "#EDE3DC",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "800",
     },
 
     hostAction: {
-      borderColor:
-        "#6F3820",
-      backgroundColor:
-        "#3A2116",
+      borderColor: "rgba(213, 255, 245, 0.52)",
+      backgroundColor: "#D5FFF5",
     },
 
     hostActionText: {
-      color: "#FFAA72",
+      color: "#173D52",
       fontSize: 12,
       fontWeight: "900",
     },
@@ -4122,25 +4351,54 @@ const styles =
       padding: 16,
       borderRadius: 20,
       borderCurve: "continuous",
-      backgroundColor:
-        "#191512",
+      borderWidth: 1,
+      borderColor: "rgba(222, 255, 249, 0.14)",
+      backgroundColor: "rgba(7, 43, 58, 0.30)",
+    },
+
+    queueHeader: {
+      minHeight: 42,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+
+    queueExpandButton: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 44,
+      paddingHorizontal: 8,
+    },
+
+    queueExpandText: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      fontWeight: "700",
     },
 
     sectionEyebrow: {
-      color: "#B57750",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 1.2,
     },
 
     queueRow: {
-      minHeight: 48,
+      minHeight: 58,
       flexDirection: "row",
       alignItems: "center",
       gap: 11,
       borderBottomWidth: 1,
       borderBottomColor:
-        "#2B2420",
+        "rgba(222, 255, 249, 0.12)",
+    },
+
+    queueContextAction: {
+      width: 48,
+      minHeight: 48,
+      paddingHorizontal: 0,
+      borderWidth: 0,
+      backgroundColor: "transparent",
     },
 
     queueNumber: {
@@ -4153,24 +4411,47 @@ const styles =
       ],
     },
 
+    queueArtwork: {
+      width: 42,
+      height: 42,
+      borderRadius: 10,
+      borderCurve: "continuous",
+    },
+
+    queueArtworkFallback: {
+      alignItems: "center",
+      backgroundColor: "rgba(235, 255, 250, 0.15)",
+      justifyContent: "center",
+    },
+
+    queueArtworkNote: {
+      color: canalDynamicColors.onAccent,
+      fontSize: 18,
+    },
+
     queueCopy: {
       flex: 1,
     },
 
     queueTitle: {
-      color: "#EEE5DF",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "800",
     },
 
     queueArtist: {
-      color: "#8F837C",
+      color: "rgba(239, 255, 251, 0.74)",
       fontSize: 11,
     },
 
     peopleSection: {
       gap: 12,
-      paddingVertical: 4,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: "rgba(235, 255, 250, 0.14)",
+      borderRadius: 22,
+      borderCurve: "continuous",
+      backgroundColor: "rgba(7, 43, 58, 0.30)",
     },
 
     sectionTitleRow: {
@@ -4181,13 +4462,13 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
     },
 
     sectionSubtitle: {
-      color: "#8F837C",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontVariant: [
         "tabular-nums",
@@ -4205,7 +4486,7 @@ const styles =
     },
 
     joinRoomText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -4221,11 +4502,10 @@ const styles =
       gap: 8,
       padding: 9,
       borderWidth: 1,
-      borderColor: "#302722",
+      borderColor: "rgba(222, 255, 249, 0.14)",
       borderRadius: 18,
       borderCurve: "continuous",
-      backgroundColor:
-        "#191512",
+      backgroundColor: "rgba(7, 43, 63, 0.34)",
     },
 
     personProfile: {
@@ -4253,8 +4533,7 @@ const styles =
       justifyContent: "center",
       borderRadius: 15,
       borderCurve: "continuous",
-      backgroundColor:
-        "#3A271C",
+      backgroundColor: "rgba(201, 255, 243, 0.16)",
     },
 
     personInitials: {
@@ -4265,7 +4544,7 @@ const styles =
 
     personName: {
       maxWidth: "100%",
-      color: "#F1E8E2",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "800",
     },
@@ -4309,7 +4588,7 @@ const styles =
     },
 
     memberRemoveActionText: {
-      color: "#FF9D87",
+      color: canalDynamicColors.danger,
     },
 
     moderationFeedback: {
@@ -4360,7 +4639,7 @@ const styles =
     },
 
     retryText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 11,
       fontWeight: "900",
     },
@@ -4393,6 +4672,25 @@ const styles =
       borderCurve: "continuous",
     },
 
+    manageEndedButton: {
+      alignItems: "center",
+      backgroundColor: "rgba(223, 255, 245, 0.14)",
+      borderColor: "rgba(239, 255, 251, 0.18)",
+      borderCurve: "continuous",
+      borderRadius: 18,
+      borderWidth: 1,
+      justifyContent: "center",
+      minHeight: 50,
+      paddingHorizontal: 16,
+    },
+
+    manageEndedButtonText: {
+      color: "#F4FFFC",
+      fontSize: 13,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+
     leaveButtonText: {
       color: "#C5B8B0",
       fontSize: 13,
@@ -4407,18 +4705,106 @@ const styles =
         "space-between",
       paddingTop: 8,
       borderTopWidth: 1,
-      borderTopColor:
-        "#2B2420",
+      borderTopColor: "rgba(222, 255, 249, 0.14)",
+      backgroundColor: "transparent",
+    },
+
+    chatModal: {
+      position: "absolute",
+      zIndex: 30,
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      justifyContent: "flex-start",
+      backgroundColor: "rgba(3, 18, 30, 0.46)",
+    },
+
+    chatModalContainer: {
+      flex: 1,
+    },
+
+    chatSheet: {
+      flex: 1,
+      overflow: "hidden",
+      borderColor: "rgba(239, 255, 252, 0.20)",
+      borderCurve: "continuous",
+      borderRadius: 32,
+      borderWidth: 1,
+      backgroundColor: "rgba(9, 29, 45, 0.91)",
+      boxShadow: "0 24px 80px rgba(3, 16, 29, 0.44)",
+      marginHorizontal: 10,
+      marginVertical: 12,
+    },
+
+    chatNowPlaying: {
+      minHeight: 96,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 11,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: "rgba(229, 255, 250, 0.15)",
+      backgroundColor: "rgba(28, 39, 67, 0.28)",
+    },
+
+    chatArtwork: {
+      width: 52,
+      height: 52,
+      borderRadius: 13,
+      borderCurve: "continuous",
+      backgroundColor: "rgba(7, 43, 58, 0.35)",
+    },
+
+    chatNowPlayingCopy: {
+      flex: 1,
+      gap: 3,
+    },
+
+    chatStageName: {
+      color: canalDynamicColors.text,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+
+    chatTrackName: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+    },
+
+    closeChatButton: {
+      width: 44,
+      height: 44,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 22,
+      backgroundColor: "rgba(7, 43, 63, 0.34)",
+    },
+
+    chatSheetTitleRow: {
+      minHeight: 68,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+    },
+
+    chatMessages: {
+      flexGrow: 1,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
     },
 
     chatTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
     },
 
     chatSubtitle: {
-      color: "#8F837C",
+      color: canalDynamicColors.muted,
       fontSize: 12,
     },
 
@@ -4438,14 +4824,14 @@ const styles =
     },
 
     emptyChatTitle: {
-      color: "#CFC3BC",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       fontWeight: "800",
     },
 
     emptyChatText: {
       maxWidth: 280,
-      color: "#7F736C",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
       textAlign: "center",
@@ -4469,8 +4855,7 @@ const styles =
       alignItems: "center",
       justifyContent: "center",
       borderRadius: 11,
-      backgroundColor:
-        "#32231B",
+      backgroundColor: "rgba(201, 255, 243, 0.18)",
     },
 
     messageInitials: {
@@ -4521,8 +4906,7 @@ const styles =
       borderBottomLeftRadius:
         5,
       borderCurve: "continuous",
-      backgroundColor:
-        "#28211D",
+      backgroundColor: "rgba(226, 255, 249, 0.10)",
     },
 
     messageBubbleMine: {
@@ -4535,13 +4919,13 @@ const styles =
     },
 
     messageBody: {
-      color: "#F0E6E0",
+      color: canalDynamicColors.text,
       fontSize: 14,
       lineHeight: 20,
     },
 
     messageBodyMine: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
     },
 
     messageTimeMine: {
@@ -4556,34 +4940,75 @@ const styles =
     messageActions: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 6,
+      flexWrap: "wrap",
+      gap: 5,
       paddingHorizontal: 3,
+      paddingTop: 3,
     },
 
-    messageAction: {
+    reactionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: 5,
+      paddingTop: 3,
+    },
+
+    reactionButton: {
       minHeight: 34,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 4,
+      paddingHorizontal: 9,
+      borderWidth: 1,
+      borderColor: "rgba(229, 255, 250, 0.10)",
+      borderRadius: 17,
+      borderCurve: "continuous",
+      backgroundColor: "rgba(230, 255, 249, 0.07)",
+    },
+
+    reactionButtonActive: {
+      borderColor: "rgba(141, 232, 218, 0.52)",
+      backgroundColor: "rgba(80, 205, 181, 0.14)",
+    },
+
+    reactionIcon: { width: 17, height: 17 },
+    reactionToggleButton: { minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" },
+    reactionMembersButton: { minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" },
+    reactionEmoji: { fontSize: 15 },
+    reactionCount: { color: "rgba(244, 255, 252, 0.78)", fontSize: 11, fontWeight: "800" },
+    addReactionButton: { width: 36, height: 36, flexDirection: "row", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(188, 239, 230, 0.22)", borderRadius: 18, backgroundColor: "rgba(230, 255, 249, 0.08)" },
+    addReactionText: { color: canalDynamicColors.muted, fontSize: 13, fontWeight: "700" },
+
+    messageAction: {
+      minHeight: 38,
+      flexDirection: "row",
+      alignItems: "center",
       justifyContent:
         "center",
+      gap: 5,
       paddingHorizontal: 9,
-      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: "rgba(229, 255, 250, 0.10)",
+      borderRadius: 19,
       borderCurve: "continuous",
-      backgroundColor:
-        "#211B17",
+      backgroundColor: "rgba(7, 43, 63, 0.24)",
     },
 
     messageActionText: {
-      color: "#AFA19A",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "800",
     },
 
     messageRemoveAction: {
-      backgroundColor:
-        "#351B17",
+      borderColor: "rgba(255, 157, 135, 0.22)",
+      backgroundColor: "rgba(53, 27, 23, 0.34)",
     },
 
     messageRemoveActionText: {
-      color: "#FF9D87",
+      color: canalDynamicColors.danger,
     },
 
     reportBackdrop: {
@@ -4607,13 +5032,13 @@ const styles =
     },
 
     reportTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
     },
 
     reportCopy: {
-      color: "#B5A79F",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 19,
     },
@@ -4656,7 +5081,7 @@ const styles =
     },
 
     reportReasonText: {
-      color: "#EFE5DF",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "800",
     },
@@ -4680,7 +5105,7 @@ const styles =
     },
 
     reportCancelText: {
-      color: "#CFC3BC",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "800",
     },
@@ -4697,7 +5122,7 @@ const styles =
     },
 
     reportSubmitText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -4711,9 +5136,8 @@ const styles =
       paddingTop: 10,
       borderTopWidth: 1,
       borderTopColor:
-        "#2A231F",
-      backgroundColor:
-        "#15110F",
+        "transparent",
+      backgroundColor: "rgba(7, 43, 58, 0.20)",
     },
 
     inputWrap: {
@@ -4721,11 +5145,10 @@ const styles =
       minHeight: 48,
       justifyContent: "center",
       borderWidth: 1,
-      borderColor: "#3B312B",
+      borderColor: "rgba(222, 255, 249, 0.18)",
       borderRadius: 18,
       borderCurve: "continuous",
-      backgroundColor:
-        "#211B17",
+      backgroundColor: "rgba(7, 48, 68, 0.38)",
     },
 
     messageInput: {
@@ -4734,7 +5157,7 @@ const styles =
       paddingHorizontal: 14,
       paddingTop: 12,
       paddingBottom: 10,
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 15,
       lineHeight: 20,
     },
@@ -4763,7 +5186,7 @@ const styles =
     },
 
     sendText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 23,
       lineHeight: 25,
       fontWeight: "900",
@@ -4780,17 +5203,36 @@ const styles =
     },
 
     joinComposerText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
 
     readOnlyText: {
       flex: 1,
-      color: "#948880",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       textAlign: "center",
       paddingVertical: 14,
+    },
+
+    collaborationAction: {
+      minHeight: 50,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor:
+        "rgba(114, 216, 196, 0.42)",
+      borderRadius: 17,
+      borderCurve: "continuous",
+      backgroundColor:
+        "rgba(15, 72, 65, 0.38)",
+    },
+
+    collaborationActionText: {
+      color: canalDynamicColors.mint,
+      fontSize: 14,
+      fontWeight: "900",
     },
 
     disabled: {

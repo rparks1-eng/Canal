@@ -50,7 +50,19 @@ describe(
         expect(
           tabSource,
         ).toMatch(
-          /<ActivityScreen\s*\/>/,
+          /import\s*\{\s*useAuth\s*\}\s*from\s*["'][.][.][/][.][.][/]providers[/]auth-provider["']/,
+        );
+
+        expect(
+          tabSource,
+        ).toMatch(
+          /const\s*\{\s*accountEpoch\s*,\s*sessionGeneration\s*,\s*user\s*\}\s*=\s*useAuth\s*\(\s*\)/,
+        );
+
+        expect(
+          tabSource,
+        ).toMatch(
+          /<ActivityScreen\s+key=\{`\$\{user[?][.]id\s*[?][?]\s*"signed-out"\}:\$\{accountEpoch\}:\$\{sessionGeneration\s*[?][?]\s*"session-pending"\}`\}\s*\/>/,
         );
 
         expect(

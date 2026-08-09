@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -9,7 +10,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -20,6 +20,7 @@ import {
   router,
   useLocalSearchParams,
 } from "expo-router";
+import { Image } from "expo-image";
 
 import {
   SafeAreaView,
@@ -28,6 +29,12 @@ import {
 import {
   RecoveryNotice,
 } from "../components/recovery-notice";
+import { SnapshotMediaPreview } from "../components/snapshot-media-preview";
+import { SnapshotComposition } from "../components/snapshot-composition";
+
+import {
+  useCanalReduceTransparency,
+} from "../components/canal-ui";
 
 import {
   classifyAnalyticsFailure,
@@ -47,25 +54,34 @@ import {
   createSnapshotWithStatus,
   syncSnapshotWithStatus,
 } from "../lib/snapshots";
+import type { Snapshot } from "../lib/snapshots";
+import {
+  cleanupSnapshotMediaDraft,
+  isSnapshotMediaDraftOwnedByScope,
+  shareFinishedSnapshot,
+} from "../lib/snapshot-media-production";
 
 import {
-  listOwnSnapshotTemplates,
+  BUILT_IN_SNAPSHOT_STYLES,
 } from "../lib/snapshot-templates";
 
 import type {
-  SnapshotTemplate,
   SnapshotTemplateTheme,
 } from "../lib/snapshot-templates";
 
 import {
   getSceneById,
   sceneDurationMinutes,
-  sceneShareText,
 } from "../lib/scenes";
 
 import type {
+  SceneTrack,
   StoredScene,
 } from "../lib/scenes";
+import { readLiveStage } from "../lib/live-stages";
+import {
+  addSpotifyArtworkToStoredScene,
+} from "../lib/spotify-scene-artwork";
 
 import {
   useAuth,
@@ -74,6 +90,7 @@ import {
 import {
   useConnectivity,
 } from "../providers/connectivity-provider";
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 
 type SnapshotPalette = {
   backgroundColor: string;
@@ -82,6 +99,33 @@ type SnapshotPalette = {
   textColor: string;
   mutedTextColor: string;
 };
+
+type SnapshotFormat =
+  | "living-story"
+  | "receipt"
+  | "ticket";
+
+const SNAPSHOT_FORMATS: readonly {
+  key: SnapshotFormat;
+  label: string;
+  description: string;
+}[] = [
+  {
+    key: "living-story",
+    label: "Living Story",
+    description: "Editorial Scene card",
+  },
+  {
+    key: "receipt",
+    label: "Receipt",
+    description: "A tactile listening record",
+  },
+  {
+    key: "ticket",
+    label: "Ticket",
+    description: "A keepsake for the moment",
+  },
+];
 
 const CLASSIC_PALETTE: SnapshotPalette = {
   backgroundColor:
@@ -110,20 +154,27 @@ function closeSceneSnapshot(): void {
 
 export default function SceneSnapshotScreen() {
   const {
+    accountEpoch,
+    sessionGeneration,
     user,
   } = useAuth();
+  const draftScope = `${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`;
 
   return (
     <SceneSnapshotContent
+      draftScope={draftScope}
       key={
-        user?.id ??
-        "signed-out"
+        user?.id
+          ? `${user.id}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`
+          : "signed-out"
       }
     />
   );
 }
 
-function SceneSnapshotContent() {
+function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
+  const reduceTransparency =
+    useCanalReduceTransparency();
   const {
     refresh:
       refreshConnectivity,
@@ -135,7 +186,28 @@ function SceneSnapshotContent() {
   const params =
     useLocalSearchParams<{
       sceneId?: string;
+      stageId?: string;
+      sceneName?: string;
+      source?: string;
+      trackId?: string;
+      trackTitle?: string;
+      trackArtist?: string;
+      trackImageUrl?: string;
+      spotifyUrl?: string;
+      mood?: string;
+      mediaUri?: string;
+      mediaType?: string;
     }>();
+
+  const requestedMediaUri = typeof params.mediaUri === "string" ? params.mediaUri : "";
+  const mediaUri = requestedMediaUri.startsWith("file:")
+    ? isSnapshotMediaDraftOwnedByScope(requestedMediaUri, draftScope) ? requestedMediaUri : ""
+    : requestedMediaUri;
+  const mediaType = params.mediaType === "video" ? "video" as const : "photo" as const;
+
+  useEffect(() => () => {
+    cleanupSnapshotMediaDraft(mediaUri || undefined, draftScope);
+  }, [draftScope, mediaUri]);
 
   const sceneId =
     typeof params.sceneId ===
@@ -156,6 +228,10 @@ function SceneSnapshotContent() {
     setIsLoadingScene,
   ] = useState(true);
 
+  const [selectedTrackId, setSelectedTrackId] = useState(
+    typeof params.trackId === "string" ? params.trackId : "",
+  );
+
   const [
     sceneLoadError,
     setSceneLoadError,
@@ -169,27 +245,29 @@ function SceneSnapshotContent() {
   ] = useState("");
 
   const [
-    templates,
-    setTemplates,
-  ] =
-    useState<
-      SnapshotTemplate[]
-    >([]);
+    snapshotFormat,
+    setSnapshotFormat,
+  ] = useState<SnapshotFormat>(
+    "living-story",
+  );
+
+  const [isSharing, setIsSharing] =
+    useState(false);
+
+  const [shareError, setShareError] =
+    useState("");
+
+  const shareInFlight =
+    useRef(false);
+  const exportCompositionRef = useRef<View>(null);
+  const exportOverlayRef = useRef<View>(null);
 
   const [
     selectedTemplateId,
     setSelectedTemplateId,
-  ] = useState("");
-
-  const [
-    isLoadingTemplates,
-    setIsLoadingTemplates,
-  ] = useState(true);
-
-  const [
-    templateWarning,
-    setTemplateWarning,
-  ] = useState("");
+  ] = useState(
+    BUILT_IN_SNAPSHOT_STYLES[0]?.id ?? "",
+  );
 
   const [
     published,
@@ -240,10 +318,62 @@ function SceneSnapshotContent() {
         }
 
         try {
-          setScene(
-            await getSceneById(
-              sceneId,
-            ),
+          const storedScene = await getSceneById(sceneId);
+          const stage = !storedScene && params.source === "stage" && typeof params.stageId === "string"
+            ? await readLiveStage(params.stageId)
+            : null;
+          const stageName = typeof params.sceneName === "string" ? params.sceneName.trim() : "";
+          const routeTrackImageUrl = typeof params.trackImageUrl === "string"
+            ? params.trackImageUrl
+            : "";
+          const sceneWithRouteArtwork = storedScene
+            ? {
+                ...storedScene,
+                tracks: storedScene.tracks.map((track) =>
+                  track.id === params.trackId && !track.imageUrl && routeTrackImageUrl
+                    ? { ...track, imageUrl: routeTrackImageUrl }
+                    : track,
+                ),
+              }
+            : null;
+          const artworkReadyScene = sceneWithRouteArtwork
+            ? await addSpotifyArtworkToStoredScene(sceneWithRouteArtwork)
+            : null;
+          const stageScene = stageName ? {
+            id: sceneId,
+            name: stageName,
+            activity: typeof params.source === "string" && params.source === "stage" ? "Live Stage" : "Scene",
+            duration: "Live moment",
+            emotions: typeof params.mood === "string" ? params.mood : "",
+            genres: "",
+            energy: "live",
+            familiarity: "",
+            artists: typeof params.trackArtist === "string" ? params.trackArtist : "",
+            songRequest: "",
+            avoid: "",
+            collaborators: [],
+            tracks: stage?.tracks.length ? stage.tracks : typeof params.trackId === "string" && params.trackId ? [{
+              id: params.trackId,
+              title: typeof params.trackTitle === "string" ? params.trackTitle : "Stage moment",
+              artist: typeof params.trackArtist === "string" ? params.trackArtist : "Canal",
+              imageUrl: routeTrackImageUrl || undefined,
+              spotifyUrl: typeof params.spotifyUrl === "string" ? params.spotifyUrl : undefined,
+            }] : [],
+            visibility: "private",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            libraryType: "created",
+          } satisfies StoredScene : null;
+          const nextScene = artworkReadyScene ?? (
+            stageScene
+              ? await addSpotifyArtworkToStoredScene(stageScene)
+              : null
+          );
+          setScene(nextScene);
+          setSelectedTrackId((current) =>
+            nextScene?.tracks.some((track) => track.id === current)
+              ? current
+              : nextScene?.tracks[0]?.id ?? "",
           );
         } catch (error) {
           console.error(
@@ -273,6 +403,15 @@ function SceneSnapshotContent() {
       },
       [
         sceneId,
+        params.stageId,
+        params.sceneName,
+        params.source,
+        params.mood,
+        params.trackId,
+        params.trackTitle,
+        params.trackArtist,
+        params.trackImageUrl,
+        params.spotifyUrl,
       ],
     );
 
@@ -282,85 +421,39 @@ function SceneSnapshotContent() {
     loadScene,
   ]);
 
-  const loadTemplates =
-    useCallback(
-      async (): Promise<void> => {
-        try {
-          setIsLoadingTemplates(
-            true,
-          );
-          setTemplateWarning(
-            "",
-          );
-
-          const nextTemplates =
-            await listOwnSnapshotTemplates();
-
-          setTemplates(
-            nextTemplates,
-          );
-
-          const defaultTemplate =
-            nextTemplates.find(
-              (template) =>
-                template.isDefault,
-            );
-
-          setSelectedTemplateId(
-            (currentId) =>
-              nextTemplates.some(
-                (template) =>
-                  template.id ===
-                  currentId,
-              )
-                ? currentId
-                : defaultTemplate
-                    ?.id ??
-                  "",
-          );
-        } catch (error) {
-          setTemplates([]);
-          setSelectedTemplateId("");
-          setTemplateWarning(
-            error instanceof Error
-              ? error.message
-              : "Canal could not load your Snapshot templates.",
-          );
-        } finally {
-          setIsLoadingTemplates(
-            false,
-          );
-        }
-      },
-      [],
-    );
-
-  useEffect(
-    () => {
-      void loadTemplates();
-    },
-    [
-      loadTemplates,
-    ],
+  const selectedTrack = useMemo<SceneTrack | undefined>(
+    () => scene?.tracks.find((track) => track.id === selectedTrackId) ?? scene?.tracks[0],
+    [scene, selectedTrackId],
   );
 
   const share =
     async (): Promise<void> => {
-      if (!scene) {
+      if (!scene || shareInFlight.current) {
         return;
       }
 
-      await Share.share({
-        message: [
-          caption.trim(),
+      shareInFlight.current = true;
+      setIsSharing(true);
+      setShareError("");
 
-          sceneShareText(
-            scene,
-          ),
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
-      });
+      try {
+        await shareFinishedSnapshot({
+          mediaUri: mediaUri || undefined,
+          mediaType: mediaUri ? mediaType : undefined,
+          compositionRef: exportCompositionRef,
+          overlayRef: exportOverlayRef,
+          dialogTitle: `Snapshot from ${scene.name}`,
+        });
+      } catch (error) {
+        setShareError(
+          error instanceof Error
+            ? error.message
+            : "Canal could not open the share sheet.",
+        );
+      } finally {
+        shareInFlight.current = false;
+        setIsSharing(false);
+      }
     };
 
   const publish =
@@ -413,11 +506,6 @@ function SceneSnapshotContent() {
           pendingSnapshotId
             ? await syncSnapshotWithStatus(
                 pendingSnapshotId,
-                {
-                  templateId:
-                    selectedTemplateId ||
-                    null,
-                },
               )
             : await createSnapshotWithStatus({
                 sceneId:
@@ -425,6 +513,24 @@ function SceneSnapshotContent() {
 
                 sceneName:
                   scene.name,
+
+                sceneActivity:
+                  scene.activity,
+
+                trackId: selectedTrack?.id,
+                trackTitle: selectedTrack?.title,
+                trackArtist: selectedTrack?.artist,
+                trackImageUrl: selectedTrack?.imageUrl,
+                spotifyUrl: selectedTrack?.spotifyUrl,
+                mediaUri: mediaUri || undefined,
+                mediaType: mediaUri ? mediaType : undefined,
+                mediaMimeType:
+                  mediaUri
+                    ? snapshotMediaMimeType(
+                        mediaUri,
+                        mediaType,
+                      )
+                    : undefined,
 
                 note:
                   caption.trim(),
@@ -436,9 +542,10 @@ function SceneSnapshotContent() {
                 visibility:
                   "public",
 
-                templateId:
-                  selectedTemplateId ||
-                  undefined,
+                templateBrandLabel:
+                  selectedTemplate?.brandLabel,
+                templateTheme:
+                  selectedTemplate?.theme,
               });
 
         if (!result.value) {
@@ -486,6 +593,8 @@ function SceneSnapshotContent() {
 
           return;
         }
+
+        cleanupSnapshotMediaDraft(mediaUri || undefined, draftScope);
 
         setPendingSnapshotId("");
         setPublished(true);
@@ -611,7 +720,7 @@ function SceneSnapshotContent() {
   };
 
   const selectedTemplate =
-    templates.find(
+    BUILT_IN_SNAPSHOT_STYLES.find(
       (template) =>
         template.id ===
         selectedTemplateId,
@@ -623,6 +732,28 @@ function SceneSnapshotContent() {
           selectedTemplate.theme,
         )
       : CLASSIC_PALETTE;
+
+  const exportSnapshot = useMemo<Snapshot | null>(() => scene ? ({
+    id: pendingSnapshotId || "snapshot-export-preview",
+    sceneId: scene.id,
+    sceneName: scene.name,
+    sceneActivity: scene.activity,
+    trackId: selectedTrack?.id,
+    trackTitle: selectedTrack?.title,
+    trackArtist: selectedTrack?.artist,
+    trackImageUrl: selectedTrack?.imageUrl,
+    spotifyUrl: selectedTrack?.spotifyUrl,
+    mediaUri: mediaUri || undefined,
+    mediaType: mediaUri ? mediaType : undefined,
+    positionMs: 0,
+    note: caption.trim(),
+    mood: scene.emotions || `${scene.energy} energy`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    visibility: "private",
+    templateBrandLabel: selectedTemplate?.brandLabel,
+    templateTheme: selectedTemplate?.theme,
+  }) : null, [caption, mediaType, mediaUri, pendingSnapshotId, scene, selectedTemplate, selectedTrack]);
 
   if (isLoadingScene) {
     return (
@@ -667,6 +798,7 @@ function SceneSnapshotContent() {
           </View>
 
           <Pressable
+            accessibilityLabel="Return to Library"
             accessibilityRole="button"
             onPress={
               closeSceneSnapshot
@@ -717,6 +849,7 @@ function SceneSnapshotContent() {
           </Text>
 
           <Pressable
+            accessibilityLabel="Return to Library"
             accessibilityRole="button"
             onPress={
               closeSceneSnapshot
@@ -748,8 +881,19 @@ function SceneSnapshotContent() {
         "bottom",
       ]}
     >
+      {exportSnapshot ? (
+        <View pointerEvents="none" style={styles.exportSurface}>
+          <SnapshotComposition
+            ref={exportCompositionRef}
+            overlayRef={exportOverlayRef}
+            snapshot={exportSnapshot}
+            height={450}
+          />
+        </View>
+      ) : null}
       <View style={styles.header}>
         <Pressable
+          accessibilityLabel="Return from Snapshot composer"
           accessibilityRole="button"
           onPress={
             closeSceneSnapshot
@@ -794,13 +938,21 @@ function SceneSnapshotContent() {
         <View
           style={[
             styles.snapshot,
+            snapshotFormat === "receipt" &&
+              styles.receiptSnapshot,
+            snapshotFormat === "ticket" &&
+              styles.ticketSnapshot,
             {
               backgroundColor:
                 palette.backgroundColor,
             },
           ]}
         >
-          <View
+          {mediaUri ? (
+            <SnapshotMediaPreview uri={mediaUri} type={mediaType} background />
+          ) : null}
+          {mediaUri ? <View style={styles.mediaScrim} /> : null}
+          {!reduceTransparency && snapshotFormat === "living-story" ? <View
             style={[
               styles.waveOne,
               {
@@ -808,8 +960,8 @@ function SceneSnapshotContent() {
                   palette.accentColor,
               },
             ]}
-          />
-          <View
+          /> : null}
+          {!reduceTransparency && snapshotFormat === "living-story" ? <View
             style={[
               styles.waveTwo,
               {
@@ -817,8 +969,8 @@ function SceneSnapshotContent() {
                   palette.accentColor,
               },
             ]}
-          />
-          <View
+          /> : null}
+          {!reduceTransparency && snapshotFormat === "living-story" ? <View
             style={[
               styles.waveThree,
               {
@@ -826,7 +978,7 @@ function SceneSnapshotContent() {
                   palette.secondaryAccentColor,
               },
             ]}
-          />
+          /> : null}
 
           <Text
             style={[
@@ -880,6 +1032,32 @@ function SceneSnapshotContent() {
                 `${scene.energy} energy`}
             </Text>
 
+            {selectedTrack ? (
+              <View style={styles.snapshotTrack}>
+                {selectedTrack.imageUrl ? (
+                  <Image
+                    accessibilityLabel={`${selectedTrack.title} artwork`}
+                    source={{ uri: selectedTrack.imageUrl }}
+                    style={styles.snapshotTrackArtwork}
+                    contentFit="cover"
+                    transition={160}
+                  />
+                ) : (
+                  <View style={styles.snapshotTrackArtworkFallback}>
+                    <Text style={styles.snapshotTrackArtworkNote}>♪</Text>
+                  </View>
+                )}
+                <View style={styles.snapshotTrackCopy}>
+                  <Text numberOfLines={1} style={[styles.snapshotTrackTitle, { color: palette.textColor }]}>
+                    {selectedTrack.title}
+                  </Text>
+                  <Text numberOfLines={1} style={[styles.snapshotTrackArtist, { color: palette.mutedTextColor }]}>
+                    {selectedTrack.artist}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
             <Text
               style={[
                 styles.snapshotMeta,
@@ -918,6 +1096,92 @@ function SceneSnapshotContent() {
           </View>
         </View>
 
+        {mediaUri && scene.tracks.length > 0 ? (
+          <View style={styles.songPickerSection}>
+            <Text accessibilityRole="header" style={styles.formatTitle}>Snapshot song</Text>
+            <Text style={styles.formatDescription}>
+              Choose any song from this {params.source === "stage" ? "Stage" : "Scene"}. The selected song and artwork will be saved with the Snapshot.
+            </Text>
+            <ScrollView
+              horizontal
+              accessibilityRole="radiogroup"
+              contentContainerStyle={styles.songChoices}
+              showsHorizontalScrollIndicator={false}
+            >
+              {scene.tracks.map((track) => {
+                const selected = track.id === selectedTrack?.id;
+                return (
+                  <Pressable
+                    key={track.id}
+                    accessibilityLabel={`Use ${track.title} by ${track.artist} in Snapshot`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    onPress={() => setSelectedTrackId(track.id)}
+                    style={({ pressed }) => [
+                      styles.songChoice,
+                      selected && styles.songChoiceSelected,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    {track.imageUrl ? (
+                      <Image source={{ uri: track.imageUrl }} style={styles.songChoiceArtwork} contentFit="cover" />
+                    ) : (
+                      <View style={[styles.songChoiceArtwork, styles.songChoiceArtworkFallback]}>
+                        <Text style={styles.songChoiceNote}>♪</Text>
+                      </View>
+                    )}
+                    <View style={styles.songChoiceCopy}>
+                      <Text numberOfLines={1} style={styles.songChoiceTitle}>{track.title}</Text>
+                      <Text numberOfLines={1} style={styles.songChoiceArtist}>{track.artist}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        <View style={styles.formatSection}>
+          <Text accessibilityRole="header" style={styles.formatTitle}>
+            Story format
+          </Text>
+          <Text style={styles.formatDescription}>
+            Living Story is the default. Receipt and Ticket keep the same Scene data in a tactile layout.
+          </Text>
+          <View accessibilityRole="radiogroup" style={styles.formatChoices}>
+            {SNAPSHOT_FORMATS.map((format) => (
+              <Pressable
+                key={format.key}
+                accessibilityLabel={`${format.label} Snapshot format`}
+                accessibilityHint={format.description}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: snapshotFormat === format.key }}
+                onPress={() => setSnapshotFormat(format.key)}
+                style={({ pressed }) => [
+                  styles.formatChoice,
+                  snapshotFormat === format.key && styles.formatChoiceSelected,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.formatChoiceLabel}>
+                  {snapshotFormat === format.key ? "✓ " : ""}{format.label}
+                </Text>
+                <Text style={styles.formatChoiceDescription}>{format.description}</Text>
+              </Pressable>
+            ))}
+            <View
+              accessibilityLabel="Signal Film Snapshot format unavailable"
+              accessibilityRole="text"
+              style={[styles.formatChoice, styles.formatChoiceUnavailable]}
+            >
+              <Text style={styles.formatChoiceLabel}>Signal Film</Text>
+              <Text style={styles.formatChoiceDescription}>
+                Available only when a future user-owned or Canal-generated media route is approved. Spotify artwork is never transformed.
+              </Text>
+            </View>
+          </View>
+        </View>
+
         <View
           style={
             styles.templateHeader
@@ -945,67 +1209,19 @@ function SceneSnapshotContent() {
             </Text>
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              router.push(
-                "/snapshot-templates" as never,
-              )
-            }
-            style={({
-              pressed,
-            }) => [
-              styles.manageTemplatesButton,
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Text
-              style={
-                styles.manageTemplatesText
-              }
-            >
-              Manage
-            </Text>
-          </Pressable>
         </View>
 
-        {isLoadingTemplates ? (
-          <ActivityIndicator
-            color="#F47A24"
-            size="small"
-            style={
-              styles.templateLoader
-            }
-          />
-        ) : (
-          <ScrollView
-            horizontal
-            accessibilityRole="radiogroup"
-            contentContainerStyle={
-              styles.templateChoices
-            }
-            showsHorizontalScrollIndicator={
-              false
-            }
-          >
-            <TemplateChoice
-              brandLabel="canal"
-              label="Canal Classic"
-              palette={
-                CLASSIC_PALETTE
-              }
-              selected={
-                !selectedTemplateId
-              }
-              onPress={() =>
-                setSelectedTemplateId(
-                  "",
-                )
-              }
-            />
-
-            {templates.map(
+        <ScrollView
+          horizontal
+          accessibilityRole="radiogroup"
+          contentContainerStyle={
+            styles.templateChoices
+          }
+          showsHorizontalScrollIndicator={
+            false
+          }
+        >
+            {BUILT_IN_SNAPSHOT_STYLES.map(
               (template) => (
                 <TemplateChoice
                   key={
@@ -1032,20 +1248,7 @@ function SceneSnapshotContent() {
                 />
               ),
             )}
-          </ScrollView>
-        )}
-
-        {templateWarning ? (
-          <Text
-            accessibilityRole="alert"
-            selectable
-            style={
-              styles.templateWarning
-            }
-          >
-            {templateWarning} Canal Classic is still available.
-          </Text>
-        ) : null}
+        </ScrollView>
 
         <Text style={styles.captionLabel}>
           Caption
@@ -1055,7 +1258,7 @@ function SceneSnapshotContent() {
           value={caption}
           onChangeText={setCaption}
           placeholder="Say something about this Scene..."
-          placeholderTextColor="#9A938C"
+          placeholderTextColor={canalDynamicColors.muted}
           multiline
           maxLength={280}
           textAlignVertical="top"
@@ -1064,7 +1267,13 @@ function SceneSnapshotContent() {
 
         <View style={styles.actions}>
           <Pressable
+            accessibilityLabel="Share Snapshot"
             accessibilityRole="button"
+            accessibilityState={{
+              busy: isSharing,
+              disabled: isSharing,
+            }}
+            disabled={isSharing}
             onPress={() =>
               void share()
             }
@@ -1080,12 +1289,17 @@ function SceneSnapshotContent() {
                 styles.primaryButtonText
               }
             >
-              Share
+              {isSharing ? "Opening Share Sheet" : "Share"}
             </Text>
           </Pressable>
 
           <Pressable
+            accessibilityLabel={pendingSnapshotId ? "Retry Post" : "Post Snapshot to Canal"}
             accessibilityRole="button"
+            accessibilityState={{
+              busy: isPublishing,
+              disabled: published || isPublishing,
+            }}
             disabled={
               published ||
               isPublishing
@@ -1126,6 +1340,22 @@ function SceneSnapshotContent() {
             )}
           </Pressable>
         </View>
+
+        {shareError ? (
+          <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.shareError}>
+            <Text selectable style={styles.shareErrorText}>{shareError}</Text>
+            <Pressable
+              accessibilityLabel="Retry Share"
+              accessibilityRole="button"
+              accessibilityState={{ busy: isSharing, disabled: isSharing }}
+              disabled={isSharing}
+              onPress={() => void share()}
+              style={styles.retryShareButton}
+            >
+              <Text style={styles.retryShareText}>Retry Share</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {publishIssue ? (
           <View
@@ -1180,14 +1410,40 @@ function SceneSnapshotContent() {
         ) : null}
 
         <Text style={styles.footnote}>
-          The system share sheet sends text
-          from this MVP. Exporting the visual
-          card as an image requires adding a
-          native screenshot-sharing module.
+          Share exports this finished Canal
+          composition as an image or a bounded
+          ten-second video—not a text-only link.
         </Text>
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function snapshotMediaMimeType(
+  mediaUri: string,
+  mediaType: "photo" | "video",
+): string {
+  const normalizedUri =
+    mediaUri
+      .split(/[?#]/u)[0]
+      .toLowerCase();
+
+  if (mediaType === "video") {
+    return normalizedUri.endsWith(".mov")
+      ? "video/quicktime"
+      : "video/mp4";
+  }
+
+  if (
+    normalizedUri.endsWith(".heic") ||
+    normalizedUri.endsWith(".heif")
+  ) {
+    return "image/heic";
+  }
+
+  return normalizedUri.endsWith(".png")
+    ? "image/png"
+    : "image/jpeg";
 }
 
 function TemplateChoice(
@@ -1323,8 +1579,14 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.baseCanvas,
+    },
+    exportSurface: {
+      position: "absolute",
+      left: -10000,
+      top: 0,
+      width: 360,
+      height: 450,
     },
 
     center: {
@@ -1343,14 +1605,14 @@ const styles =
     },
 
     stateTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
       textAlign: "center",
     },
 
     stateText: {
-      color: "#6E6660",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 20,
       textAlign: "center",
@@ -1387,28 +1649,28 @@ const styles =
     },
 
     backButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
       alignItems:
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
     },
 
     headerTitle: {
-      color: "#1B1B1B",
-      fontSize: 16,
-      fontWeight: "900",
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 22,
+      fontWeight: "400",
     },
 
     content: {
@@ -1427,6 +1689,27 @@ const styles =
       padding: 23,
       justifyContent:
         "space-between",
+    },
+
+    mediaScrim: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(5, 8, 12, 0.48)",
+    },
+
+    receiptSnapshot: {
+      aspectRatio: 0.72,
+      borderRadius: 10,
+      borderWidth: 2,
+      borderStyle: "dashed",
+      borderColor: "rgba(255,255,255,0.55)",
+    },
+
+    ticketSnapshot: {
+      aspectRatio: 1.58,
+      maxHeight: 360,
+      borderRadius: 18,
+      borderWidth: 2,
+      borderColor: "rgba(255,255,255,0.5)",
     },
 
     waveOne: {
@@ -1476,8 +1759,55 @@ const styles =
       zIndex: 2,
     },
 
+    snapshotTrack: {
+      minHeight: 58,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginTop: 18,
+      borderRadius: 15,
+      borderCurve: "continuous",
+      backgroundColor: "rgba(5,8,12,0.62)",
+      padding: 8,
+    },
+
+    snapshotTrackArtwork: {
+      width: 42,
+      height: 42,
+      borderRadius: 9,
+    },
+
+    snapshotTrackArtworkFallback: {
+      width: 42,
+      height: 42,
+      borderRadius: 9,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(255,255,255,0.16)",
+    },
+
+    snapshotTrackArtworkNote: {
+      color: "#FFFFFF",
+      fontSize: 18,
+    },
+
+    snapshotTrackCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    snapshotTrackTitle: {
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    snapshotTrackArtist: {
+      fontSize: 11,
+      marginTop: 3,
+    },
+
     snapshotActivity: {
-      color: "#FFB781",
+      color: canalDynamicColors.gold,
       fontSize: 11,
       fontWeight: "900",
       textTransform:
@@ -1486,7 +1816,8 @@ const styles =
     },
 
     snapshotName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
       fontSize: 34,
       lineHeight: 38,
       fontWeight: "900",
@@ -1500,7 +1831,7 @@ const styles =
     },
 
     snapshotMeta: {
-      color: "#BDA89E",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 19,
     },
@@ -1513,11 +1844,131 @@ const styles =
     },
 
     captionLabel: {
-      color: "#5E5752",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "800",
       marginTop: 18,
       marginBottom: 7,
+    },
+
+    formatSection: {
+      gap: 6,
+      marginTop: 20,
+    },
+
+    songPickerSection: {
+      gap: 6,
+      marginTop: 20,
+    },
+
+    songChoices: {
+      gap: 10,
+      paddingTop: 8,
+      paddingRight: 20,
+    },
+
+    songChoice: {
+      width: 230,
+      minHeight: 66,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      borderWidth: 1,
+      borderColor: "rgba(25,26,24,0.14)",
+      borderRadius: 16,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.surface,
+      padding: 8,
+    },
+
+    songChoiceSelected: {
+      borderColor: canalDynamicColors.mint,
+      borderWidth: 2,
+    },
+
+    songChoiceArtwork: {
+      width: 48,
+      height: 48,
+      borderRadius: 11,
+    },
+
+    songChoiceArtworkFallback: {
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: canalDynamicColors.elevated,
+    },
+
+    songChoiceNote: {
+      color: canalDynamicColors.mint,
+      fontSize: 18,
+    },
+
+    songChoiceCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    songChoiceTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    songChoiceArtist: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      marginTop: 3,
+    },
+
+    formatTitle: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 24,
+      lineHeight: 29,
+    },
+
+    formatDescription: {
+      color: canalDynamicColors.muted,
+      fontSize: 14,
+      lineHeight: 21,
+    },
+
+    formatChoices: {
+      gap: 10,
+      marginTop: 6,
+    },
+
+    formatChoice: {
+      minHeight: 64,
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "rgba(25,26,24,0.14)",
+      borderRadius: 16,
+      backgroundColor: canalDynamicColors.surface,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+
+    formatChoiceSelected: {
+      borderColor: "#4C46C8",
+      borderWidth: 2,
+    },
+
+    formatChoiceUnavailable: {
+      opacity: 0.68,
+    },
+
+    formatChoiceLabel: {
+      color: canalDynamicColors.text,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+
+    formatChoiceDescription: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 2,
     },
 
     templateHeader: {
@@ -1537,26 +1988,26 @@ const styles =
     },
 
     templateLabel: {
-      color: "#5E5752",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "900",
     },
 
     templateDescription: {
-      color: "#8B837C",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 16,
     },
 
     manageTemplatesButton: {
-      minHeight: 44,
+      minHeight: 48,
       justifyContent:
         "center",
       paddingHorizontal: 8,
     },
 
     manageTemplatesText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -1573,6 +2024,7 @@ const styles =
 
     templateChoice: {
       width: 116,
+      minHeight: 96,
       gap: 7,
       borderWidth: 1,
       borderColor:
@@ -1580,8 +2032,7 @@ const styles =
       borderRadius: 16,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 8,
     },
 
@@ -1616,13 +2067,13 @@ const styles =
     },
 
     templateChoiceLabel: {
-      color: "#6E6660",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "800",
     },
 
     selectedTemplateChoiceLabel: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
     },
 
     templateWarning: {
@@ -1637,10 +2088,9 @@ const styles =
       borderWidth: 1,
       borderColor:
         "#E5DDD7",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 17,
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 14,
       padding: 13,
     },
@@ -1677,22 +2127,20 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderWidth: 1,
       borderColor:
         "#F47A24",
     },
 
     secondaryButtonText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 14,
       fontWeight: "900",
     },
 
     success: {
-      backgroundColor:
-        "#EAF9EF",
+      backgroundColor: canalDynamicColors.successSurface,
       borderRadius: 17,
       padding: 14,
       marginTop: 14,
@@ -1700,6 +2148,33 @@ const styles =
 
     publishRecovery: {
       marginTop: 14,
+    },
+
+    shareError: {
+      gap: 8,
+      marginTop: 14,
+      borderRadius: 16,
+      backgroundColor: canalDynamicColors.dangerSurface,
+      padding: 14,
+    },
+
+    shareErrorText: {
+      color: "#8D211C",
+      fontSize: 13,
+      lineHeight: 19,
+    },
+
+    retryShareButton: {
+      minHeight: 48,
+      alignSelf: "flex-start",
+      justifyContent: "center",
+      paddingHorizontal: 14,
+    },
+
+    retryShareText: {
+      color: "#8D211C",
+      fontSize: 13,
+      fontWeight: "900",
     },
 
     successText: {
@@ -1711,6 +2186,8 @@ const styles =
     feedButton: {
       alignSelf:
         "flex-start",
+      minHeight: 48,
+      justifyContent: "center",
       paddingVertical: 8,
       paddingRight: 10,
       marginTop: 4,

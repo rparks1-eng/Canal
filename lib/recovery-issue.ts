@@ -184,6 +184,36 @@ export function classifyRecoveryIssue(
           .toUpperCase()
       : "";
 
+  const isSecureStorageConfigurationError =
+    context.service ===
+      "spotify" &&
+    (
+      normalized.includes(
+        "required entitlement",
+      ) ||
+      normalized.includes(
+        "errsecmissingentitlement",
+      ) ||
+      normalized.includes(
+        "getvaluewithkeyasync",
+      )
+    );
+
+  if (
+    isSecureStorageConfigurationError
+  ) {
+    return {
+      kind: "service",
+      title:
+        "Spotify session unavailable",
+      message:
+        "This Canal build cannot securely read the saved Spotify session. Install the current development build, then reconnect once if needed.",
+      action: "retry",
+      actionLabel:
+        "Check again",
+    };
+  }
+
   if (
     context.service ===
       "spotify" &&
