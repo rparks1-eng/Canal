@@ -12,6 +12,34 @@ describe(
   "recovery issue classification",
   () => {
     it(
+      "hides native Keychain entitlement details behind an actionable build recovery",
+      () => {
+        expect(
+          classifyRecoveryIssue(
+            new Error(
+              "Calling the 'getValueWithKeyAsync' function has failed -> Caused by: A required entitlement isn't present.",
+            ),
+            {
+              service:
+                "spotify",
+              connectivityStatus:
+                "online",
+            },
+          ),
+        ).toEqual({
+          kind: "service",
+          title:
+            "Spotify session unavailable",
+          message:
+            "This Canal build cannot securely read the saved Spotify session. Install the current development build, then reconnect once if needed.",
+          action: "retry",
+          actionLabel:
+            "Check again",
+        });
+      },
+    );
+
+    it(
       "uses connectivity evidence for an offline retry",
       () => {
         const issue =

@@ -813,6 +813,10 @@ export default function MusicServicesScreen() {
         let snapshot =
           await readSpotifyLibrarySnapshot();
 
+        let libraryStatusMessage:
+          string | null =
+          null;
+
         if (!canCommit()) {
           return;
         }
@@ -874,6 +878,8 @@ export default function MusicServicesScreen() {
             snapshot;
 
           if (latestLibrary.warning) {
+            libraryStatusMessage =
+              latestLibrary.warning;
             setStatusMessage(
               latestLibrary.warning,
             );
@@ -911,6 +917,11 @@ export default function MusicServicesScreen() {
             setErrorMessage(
               syncErrorMessage,
             );
+            setStatusMessage(
+              "Spotify is connected, but its library is not ready yet.",
+            );
+            libraryStatusMessage =
+              "Spotify is connected, but its library is not ready yet.";
             announce(
               syncErrorMessage,
             );
@@ -924,6 +935,12 @@ export default function MusicServicesScreen() {
         setLibraryReady(
           Boolean(snapshot),
         );
+        if (snapshot) {
+          setStatusMessage(
+            libraryStatusMessage ??
+              "",
+          );
+        }
         setConnectionState(
           "connected",
         );
@@ -953,6 +970,7 @@ export default function MusicServicesScreen() {
         setErrorCause(
           () => error,
         );
+        setStatusMessage("");
         announce(
           loadErrorMessage,
         );
