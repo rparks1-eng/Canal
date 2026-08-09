@@ -119,6 +119,9 @@ import {
 import {
   generateCreativeSceneName,
 } from "../lib/creative-names";
+import {
+  readSceneRecommendationLearning,
+} from "../lib/scene-recommendation-feedback";
 
 import {
   suggestSceneGenres,
@@ -792,6 +795,11 @@ export default function SceneStudioScreen() {
         draft,
         storedSnapshot,
       );
+      const learning = await readSceneRecommendationLearning(
+        operationScope,
+        currentScope,
+        draft,
+      );
       const existingScenes = await readScenes();
       const existingSceneNames = existingScenes.map(
         (scene) => scene.name,
@@ -857,9 +865,12 @@ export default function SceneStudioScreen() {
             existingSceneNames,
             rejectedTrackIds: [
               ...(existing.value.rejectedTrackIds ?? []),
+              ...learning.rejectedTrackIds,
               ...existing.value.trackSignals.map((signal) => signal.track.id),
               ...recentSceneTrackIds,
             ],
+            deprioritizedTrackIds: learning.deprioritizedTrackIds,
+            preferredTrackIds: learning.preferredTrackIds,
           },
         );
         preview = refillGeneratedSceneToDuration(updated, candidates);
@@ -867,7 +878,9 @@ export default function SceneStudioScreen() {
         preview = generateSceneWithSpotifyGenreFallback(activationDraft, snapshot, {
           variationSeed,
           existingSceneNames,
-          rejectedTrackIds: recentSceneTrackIds,
+          rejectedTrackIds: [...recentSceneTrackIds, ...learning.rejectedTrackIds],
+          deprioritizedTrackIds: learning.deprioritizedTrackIds,
+          preferredTrackIds: learning.preferredTrackIds,
         });
         preview.scene.visibility = "private";
       }

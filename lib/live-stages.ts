@@ -1405,6 +1405,7 @@ export async function joinLiveStage(
 export async function joinLiveStageByCode(
   stageCode: string,
   expectedStageId?: string,
+  asCollaborator = false,
 ): Promise<LiveStage | null> {
   const normalizedExpectedStageId =
     expectedStageId ===
@@ -1432,6 +1433,7 @@ export async function joinLiveStageByCode(
       ),
       identity,
       normalizedExpectedStageId,
+      asCollaborator ? "collaborator" : "listener",
     );
   }
 
@@ -1455,7 +1457,9 @@ export async function joinLiveStageByCode(
     error,
   } =
     await supabase.rpc(
-      "join_live_stage_by_code",
+      asCollaborator
+        ? "join_live_stage_as_collaborator_by_code"
+        : "join_live_stage_by_code",
       {
         stage_code_value:
           normalizedCode,
@@ -3103,6 +3107,7 @@ async function joinLocalLiveStage(
   expectedStageId:
     string | null =
       null,
+  role: "listener" | "collaborator" = "listener",
 ): Promise<LiveStage | null> {
   return withLocalMutation(
     async () => {
@@ -3147,8 +3152,7 @@ async function joinLocalLiveStage(
             identity.displayName,
           initials:
             identity.initials,
-          role:
-            "listener",
+          role,
           joinedAt:
             new Date().toISOString(),
         };

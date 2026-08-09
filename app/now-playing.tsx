@@ -67,6 +67,12 @@ import {
 import {
   recordListeningHistory,
 } from "../lib/canal-session";
+import {
+  recordStoredSceneRecommendationFeedback,
+} from "../lib/scene-recommendation-feedback";
+import {
+  captureSceneStudioScope,
+} from "../lib/scene-studio-scope";
 
 
 import {
@@ -159,6 +165,7 @@ function playerIssueMessage(
 export default function NowPlayingScreen() {
   const { setOverride } = use(CanalAtmosphereContext);
   const {
+    accountEpoch,
     user,
     sessionGeneration,
   } = useAuth();
@@ -911,6 +918,17 @@ export default function NowPlayingScreen() {
             scene.id,
           ),
         ]);
+
+        const feedbackScope = captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration });
+        if (feedbackScope) {
+          await recordStoredSceneRecommendationFeedback({
+            scope: feedbackScope,
+            currentScope: () => captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration }),
+            scene,
+            action: "replay",
+            trackIds: scene.tracks.slice(0, session.currentIndex + 1).map((track) => track.id),
+          });
+        }
 
         await clearPlayerSession(
           session.id,

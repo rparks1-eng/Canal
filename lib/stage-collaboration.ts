@@ -41,8 +41,16 @@ export type StageContributionStatus = {
   ready: boolean;
   trackCount: number;
   sharesMusicContext: boolean;
+  moderationStatus: "pending" | "approved" | "rejected";
+  revision: number;
   updatedAt: string | null;
 };
+
+export type StageMixRevision = Readonly<{
+  revision: number;
+  trackCount: number;
+  createdAt: string;
+}>;
 
 type StageContributionStatusRow = {
   user_id: unknown;
@@ -53,6 +61,8 @@ type StageContributionStatusRow = {
   ready: unknown;
   track_count: unknown;
   shares_music_context: unknown;
+  moderation_status: unknown;
+  contribution_revision: unknown;
   updated_at: unknown;
 };
 
@@ -236,8 +246,68 @@ export async function readStageContributionStatuses(
           ? Math.max(0, Math.round(row.track_count))
           : 0,
       sharesMusicContext: row.shares_music_context === true,
+      moderationStatus:
+        text(row.moderation_status) === "approved" || text(row.moderation_status) === "rejected"
+          ? text(row.moderation_status) as "approved" | "rejected"
+          : "pending",
+      revision: typeof row.contribution_revision === "number" && Number.isSafeInteger(row.contribution_revision)
+        ? Math.max(0, row.contribution_revision)
+        : 0,
       updatedAt: text(row.updated_at) || null,
     };
+  });
+}
+
+export async function moderateStageContribution(
+  stageId: string,
+  contributorId: string,
+  action: "approve" | "reject" | "remove",
+  expectedContributionRevision: number,
+): Promise<void> {
+  const userId = await currentUserId();
+  const { error } = await supabase.rpc("moderate_live_stage_contribution", {
+    stage_id_value: stageId,
+    contributor_id_value: contributorId,
+    action_value: action,
+    expected_host_id_value: userId,
+    expected_contribution_revision_value: expectedContributionRevision,
+  });
+  await assertSameUser(userId);
+  if (error) throw new Error(error.message || "Canal could not update this contribution.");
+}
+
+export async function rollbackCollaborativeStageMix(
+  stageId: string,
+  revision: number,
+  expectedStageUpdatedAt: string,
+): Promise<LiveStage> {
+  const userId = await currentUserId();
+  const { error } = await supabase.rpc("rollback_live_stage_mix", {
+    stage_id_value: stageId,
+    revision_value: revision,
+    expected_host_id_value: userId,
+    expected_stage_updated_at_value: expectedStageUpdatedAt,
+  });
+  await assertSameUser(userId);
+  if (error) throw new Error(error.message || "Canal could not roll back this Stage mix.");
+  const stage = await readLiveStage(stageId);
+  if (!stage) throw new Error("This Stage is no longer available.");
+  return stage;
+}
+
+export async function readStageMixRevisions(stageId: string): Promise<StageMixRevision[]> {
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("live_stage_mix_revisions")
+    .select("revision,tracks,created_at")
+    .eq("stage_id", stageId)
+    .order("revision", { ascending: false })
+    .limit(20);
+  await assertSameUser(userId);
+  if (error) throw new Error(error.message || "Canal could not load Stage mix history.");
+  return (data ?? []).flatMap((row): StageMixRevision[] => {
+    if (typeof row.revision !== "number" || !Number.isSafeInteger(row.revision) || !Array.isArray(row.tracks)) return [];
+    return [{ revision: row.revision, trackCount: row.tracks.length, createdAt: text(row.created_at) }];
   });
 }
 

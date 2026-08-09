@@ -1,6 +1,6 @@
 # Living Editorial zero-omission route matrix
 
-Pinned recovery base: `9dde2557a0a1b0e7286424ba239ec8d07f6750f9` (`app/**`, 65 executable route/source files). Recovery validation on 2026-08-09: dependencies PASS, TypeScript PASS with zero diagnostics, lint PASS with zero errors (seven pre-existing warnings), and Jest PASS (131 suites, 940/940 tests). The completed Jest runner retained the previously known post-report timer handle; the result artifact was written before the idle process was stopped. Bounded simulator evidence used iPhone 17 Pro / iOS 26.5, bundle `com.raishawnparks.canal`, normal environment-enabled Metro 8083, and the recovery worktree copied into its established runtime mirror. Home, Scene Studio, Scene Preview, and Library launched without a red screen or Supabase setup warning; Scene Studio retained the five-tab shell, Preview loaded the editable Spotify-backed draft, and Library loaded the filter/layout controls and Scene list. The host had only about 255 MB free and emitted CFNetwork cache `disk I/O error` messages, so broader network/runtime evidence remains pending rather than being overstated. A row is complete only when its route visibly adopts Living Editorial, preserves every interaction, passes automated evidence, and has bounded simulator evidence. `PENDING` means that route's remaining evidence is incomplete.
+Pinned recovery base: `9dde2557a0a1b0e7286424ba239ec8d07f6750f9` (`app/**`, 65 executable route/source files). Recovery validation on 2026-08-09: dependencies PASS, TypeScript PASS with zero diagnostics, lint PASS with zero errors (seven pre-existing warnings), and Jest PASS (134 suites, 951/951 tests). The current feature package adds account-scoped recommendation feedback and evaluation, complete cloud-sync contracts, contribution moderation/CAS, collaborator code joins, mix rollback, and last-contribution baseline restoration. Its two Supabase migrations remain unapplied until reviewed deployment, so live multi-device and two-account Stage evidence is still pending. The completed Jest runner retained the previously known post-report timer handle; the result artifact was written before the idle process was stopped. Bounded simulator evidence used iPhone 17 Pro / iOS 26.5, bundle `com.raishawnparks.canal`, normal environment-enabled Metro 8083, and the recovery worktree copied into its established runtime mirror. Home, Scene Studio, Scene Preview, and Library launched without a red screen or Supabase setup warning; Scene Studio retained the five-tab shell, Preview loaded the editable Spotify-backed draft, and Library loaded the filter/layout controls and Scene list. A row is complete only when its route visibly adopts Living Editorial, preserves every interaction, passes automated evidence, and has bounded simulator evidence. `PENDING` means that route's remaining evidence is incomplete.
 
 | Route file | Owner | Visual | Interaction/state | Automated | Simulator | Integrated SHA |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -17,12 +17,12 @@ Pinned recovery base: `9dde2557a0a1b0e7286424ba239ec8d07f6750f9` (`app/**`, 65 e
 | `app/music-services.tsx` | Shell/auth | PASS | PASS | PASS (shell/auth 16/16) | PENDING | `1537de3` |
 | `app/spotify-callback.tsx` | Shell/auth | PASS | PASS | PASS (shell/auth 16/16) | PENDING | `1537de3` |
 | `app/settings.tsx` | Shell/auth | PASS | PASS | PASS (shell/auth 16/16) | PENDING | `1537de3` |
-| `app/appearance.tsx` | Shell/auth | PASS | PASS | PASS (appearance + adaptive contrast; full baseline 940/940) | PENDING | recovery worktree |
+| `app/appearance.tsx` | Shell/auth | PASS | PASS | PASS (appearance + adaptive contrast; full baseline 951/951) | PENDING | recovery worktree |
 | `app/data-controls.tsx` | Shell/auth | PASS | PASS | PASS (shell/auth 16/16) | PENDING | `1537de3` |
 | `app/help.tsx` | Shell/auth | PASS | PASS | PASS (shell/auth 16/16) | PENDING | `1537de3` |
 | `app/(tabs)/index.tsx` | Core editorial | PASS | PASS | PASS (editorial 7/7) | PASS (launch/render, iPhone 17 Pro / iOS 26.5, 2026-08-09) | recovery worktree |
 | `app/(tabs)/explore.tsx` | Core editorial | PASS | PASS | PASS (editorial 7/7) | PENDING | `5a8fb6d` |
-| `app/(tabs)/library.tsx` | Core editorial | PASS | PASS | PASS (filter/error + cross-device sync; full baseline 940/940) | PASS (launch/render/filter-layout presence, iPhone 17 Pro / iOS 26.5, 2026-08-09) | recovery worktree |
+| `app/(tabs)/library.tsx` | Core editorial | PASS | PASS | PASS (filter/error + cross-device sync; full baseline 951/951) | PASS (launch/render/filter-layout presence, iPhone 17 Pro / iOS 26.5, 2026-08-09) | recovery worktree |
 | `app/(tabs)/profile.tsx` | Core editorial | PASS | PASS | PASS (editorial 7/7) | PENDING | `5a8fb6d` |
 | `app/(tabs)/activity.tsx` | Core editorial | PASS | PASS | PASS (core/social 12/12) | PENDING | `82ae6c0` |
 | `app/(tabs)/create.tsx` | Core editorial | PASS (reviewed existing conformance) | PASS | PASS (core/social 12/12) | PENDING | `82ae6c0` |
@@ -38,8 +38,8 @@ Pinned recovery base: `9dde2557a0a1b0e7286424ba239ec8d07f6750f9` (`app/**`, 65 e
 | `app/blocked-users.tsx` | Core editorial | PASS | PASS | PASS (core/social 12/12) | PENDING | `82ae6c0` |
 | `app/invite-friends.tsx` | Core editorial | PASS | PASS | PASS (core/social 12/12) | PENDING | `82ae6c0` |
 | `app/spotify-library.tsx` | Spotify UI | PENDING | PENDING | PENDING | PENDING | — |
-| `app/scene-studio.tsx` | Scene/strict genre | PASS | PASS | PASS (manual/strict/provider/account focused 20/20; full baseline 940/940) | PASS (launch/render/five-tab shell, iPhone 17 Pro / iOS 26.5, 2026-08-09) | recovery worktree |
-| `app/scene-preview.tsx` | Scene/strict genre then Scene integrator | PASS | PASS (manual activation, edit return, strict return, scoped provider Preview) | PASS (manual/strict/provider/account focused 20/20; full baseline 940/940) | PASS (editable Spotify draft render, iPhone 17 Pro / iOS 26.5, 2026-08-09) | recovery worktree |
+| `app/scene-studio.tsx` | Scene/strict genre | PASS | PASS | PASS (manual/strict/provider/account focused 20/20; full baseline 951/951) | PASS (launch/render/five-tab shell, iPhone 17 Pro / iOS 26.5, 2026-08-09) | recovery worktree |
+| `app/scene-preview.tsx` | Scene/strict genre then Scene integrator | PASS | PASS (manual activation, edit return, strict return, scoped provider Preview) | PASS (manual/strict/provider/account focused 20/20; full baseline 951/951) | PASS (editable Spotify draft render, iPhone 17 Pro / iOS 26.5, 2026-08-09) | recovery worktree |
 | `app/scene-collaboration.tsx` | Scene | PASS | PASS | PASS (Scene/playback 12/12) | PENDING | `93859e9` |
 | `app/scene-feedback.tsx` | Scene | PASS | PASS | PASS (Scene/playback 12/12) | PENDING | `93859e9` |
 | `app/scenes/[sceneId].tsx` | Scene | PASS | PASS | PASS (Scene/playback 12/12) | PENDING | `93859e9` |
@@ -47,7 +47,7 @@ Pinned recovery base: `9dde2557a0a1b0e7286424ba239ec8d07f6750f9` (`app/**`, 65 e
 | `app/now-playing.tsx` | Scene/playback | PASS | PASS | PASS (Scene/playback 12/12) | PENDING | `93859e9` |
 | `app/soundscape.tsx` | Scene/playback | PASS | PASS | PASS (Scene/playback 12/12) | PENDING | `93859e9` |
 | `app/scene-snapshot.tsx` | Snapshot/share | PASS | PASS | PASS (Snapshot 8/8) | PENDING | `8cb658d` |
-| `app/snapshot-camera.tsx` | Snapshot/share | PASS | PASS | PASS (camera/media contract; full baseline 940/940) | PENDING | recovery worktree |
+| `app/snapshot-camera.tsx` | Snapshot/share | PASS | PASS | PASS (camera/media contract; full baseline 951/951) | PENDING | recovery worktree |
 | `app/snapshot-templates.tsx` | Snapshot/share | PASS | PASS | PASS (Snapshot 8/8) | PENDING | `8cb658d` |
 | `app/snapshots/index.tsx` | Snapshot/share | PASS | PASS | PASS (Snapshot 8/8) | PENDING | `8cb658d` |
 | `app/snapshots/[snapshotId].tsx` | Snapshot/share | PASS | PASS | PASS (Snapshot 8/8) | PENDING | `8cb658d` |
@@ -56,10 +56,10 @@ Pinned recovery base: `9dde2557a0a1b0e7286424ba239ec8d07f6750f9` (`app/**`, 65 e
 | `app/(tabs)/live.tsx` | Live/event | PENDING | PENDING | PENDING | PENDING | — |
 | `app/create-stage.tsx` | Live/event | PENDING | PENDING | PENDING | PENDING | — |
 | `app/join-stage.tsx` | Live/event | PENDING | PENDING | PENDING | PENDING | — |
-| `app/managed-stages.tsx` | Live/event | PASS | PASS | PASS (host management; full baseline 940/940) | PENDING | recovery worktree |
-| `app/stage-contribution.tsx` | Live/event | PASS | PASS | PASS (collaborative return/artwork; full baseline 940/940) | PENDING | recovery worktree |
-| `app/stage-invite-collaborators.tsx` | Live/event | PASS | PASS | PASS (collaboration invite contract; full baseline 940/940) | PENDING | recovery worktree |
-| `app/stage-lobby/[stageId].tsx` | Live/event | PASS | PASS | PASS (realtime lobby/host mix; full baseline 940/940) | PENDING | recovery worktree |
+| `app/managed-stages.tsx` | Live/event | PASS | PASS | PASS (host management; full baseline 951/951) | PENDING | recovery worktree |
+| `app/stage-contribution.tsx` | Live/event | PASS | PASS | PASS (collaborative return/artwork; full baseline 951/951) | PENDING | recovery worktree |
+| `app/stage-invite-collaborators.tsx` | Live/event | PASS | PASS | PASS (collaboration invite contract; full baseline 951/951) | PENDING | recovery worktree |
+| `app/stage-lobby/[stageId].tsx` | Live/event | PASS | PASS | PASS (realtime lobby/host mix; full baseline 951/951) | PENDING | recovery worktree |
 | `app/live-stage/[stageId].tsx` | Live/event | PENDING | PENDING | PENDING | PENDING | — |
 | `app/event-run-sheet.tsx` | Live/event | PENDING | PENDING | PENDING | PENDING | — |
 | `app/event-run-sheets/index.tsx` | Live/event | PENDING | PENDING | PENDING | PENDING | — |

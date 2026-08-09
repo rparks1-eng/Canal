@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
+  Switch,
   StyleSheet,
   Text,
   TextInput,
@@ -37,6 +38,8 @@ export default function JoinStageScreen() {
     error,
     setError,
   ] = useState("");
+
+  const [joinAsCollaborator, setJoinAsCollaborator] = useState(false);
 
   function updateCode(
     value: string,
@@ -75,6 +78,8 @@ export default function JoinStageScreen() {
       const stage =
         await joinLiveStageByCode(
           code,
+          undefined,
+          joinAsCollaborator,
         );
 
       if (!stage) {
@@ -212,9 +217,9 @@ export default function JoinStageScreen() {
           >
             A Stage code lets you
             enter both public and
-            private rooms. You’ll join
-            as a listener and can chat
-            right away.
+            private rooms. Choose whether
+            to listen or contribute your
+            own Scene take.
           </Text>
 
           <View
@@ -250,6 +255,18 @@ export default function JoinStageScreen() {
             >
               {code.length}/6
             </Text>
+          </View>
+
+          <View style={styles.roleRow}>
+            <View style={styles.roleCopy}>
+              <Text style={styles.roleTitle}>Join as a collaborator</Text>
+              <Text style={styles.roleDescription}>Contribute an existing Scene or create your own mood, activity, and genre take.</Text>
+            </View>
+            <Switch
+              accessibilityLabel="Join this Stage as a collaborator"
+              value={joinAsCollaborator}
+              onValueChange={setJoinAsCollaborator}
+            />
           </View>
 
           {error ? (
@@ -364,6 +381,22 @@ const styles =
       paddingBottom: 42,
       gap: 12,
     },
+
+    roleRow: {
+      width: "100%",
+      minHeight: 72,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 18,
+      backgroundColor: "rgba(255,255,255,0.06)",
+    },
+
+    roleCopy: { flex: 1, gap: 3 },
+    roleTitle: { color: canalDynamicColors.text, fontSize: 15, fontWeight: "800" },
+    roleDescription: { color: canalDynamicColors.muted, fontSize: 12, lineHeight: 17 },
 
     signal: {
       width: 108,

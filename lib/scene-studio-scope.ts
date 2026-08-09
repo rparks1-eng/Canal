@@ -15,9 +15,14 @@ export type SceneStudioScopeGuard = () => boolean;
 export function captureSceneStudioScope(
   input: SceneStudioScopeInput,
 ): SceneStudioScope | null {
-  const userId = input.userId?.trim();
+  const userId =
+    typeof input.userId === "string"
+      ? input.userId.trim()
+      : "";
   const sessionGeneration =
-    input.sessionGeneration?.trim();
+    typeof input.sessionGeneration === "string"
+      ? input.sessionGeneration.trim()
+      : "";
 
   if (
     !userId ||

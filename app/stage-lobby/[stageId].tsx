@@ -31,9 +31,13 @@ import type {
 } from "../../lib/live-stages";
 import {
   buildCollaborativeStageMix,
+  moderateStageContribution,
+  readStageMixRevisions,
   readStageContributionStatuses,
+  rollbackCollaborativeStageMix,
 } from "../../lib/stage-collaboration";
 import type {
+  StageMixRevision,
   StageContributionStatus,
 } from "../../lib/stage-collaboration";
 import {
@@ -62,6 +66,8 @@ export default function StageLobbyScreen() {
   const [contributions, setContributions] = useState<StageContributionStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [mixing, setMixing] = useState(false);
+  const [moderatingUserId, setModeratingUserId] = useState("");
+  const [mixRevisions, setMixRevisions] = useState<StageMixRevision[]>([]);
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
@@ -75,6 +81,11 @@ export default function StageLobbyScreen() {
       if (accountKeyRef.current !== requestedAccount) return;
       setStage(nextStage);
       setContributions(nextContributions);
+      if (nextStage?.hostId === user.id) {
+        setMixRevisions(await readStageMixRevisions(stageId));
+      } else {
+        setMixRevisions([]);
+      }
       setMessage("");
     } catch (error) {
       if (accountKeyRef.current === requestedAccount) {
@@ -114,6 +125,36 @@ export default function StageLobbyScreen() {
       setMessage(`Balanced mix ready with ${mixed.tracks.length} tracks.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Canal could not build the mix.");
+    } finally {
+      setMixing(false);
+    }
+  }
+
+  async function moderate(userId: string, action: "approve" | "reject" | "remove", revision: number): Promise<void> {
+    if (!isHost || moderatingUserId || status !== "online") return;
+    setModeratingUserId(userId);
+    setMessage("");
+    try {
+      await moderateStageContribution(stageId, userId, action, revision);
+      await load();
+      setMessage(action === "remove" ? "Contribution removed and the Stage mix rebuilt." : `Contribution ${action === "approve" ? "approved" : "rejected"}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Canal could not update this contribution.");
+    } finally {
+      setModeratingUserId("");
+    }
+  }
+
+  async function rollback(): Promise<void> {
+    const latest = mixRevisions[0];
+    if (!isHost || !latest || !stage || mixing || status !== "online") return;
+    setMixing(true);
+    try {
+      setStage(await rollbackCollaborativeStageMix(stageId, latest.revision, stage.updatedAt));
+      await load();
+      setMessage(`Restored the previous ${latest.trackCount}-track Stage mix.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Canal could not restore the previous mix.");
     } finally {
       setMixing(false);
     }
@@ -165,7 +206,16 @@ export default function StageLobbyScreen() {
           <View key={item.userId} style={styles.personRow}>
             <View style={styles.avatar}><Text style={styles.avatarText}>{item.displayName.split(/\s+/u).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</Text></View>
             <View style={styles.grow}><Text style={styles.personName}>{item.displayName}</Text><Text style={styles.personMeta}>{item.ready ? `${item.sceneName ?? "Scene"} · ${item.trackCount} tracks` : "Choosing what to contribute…"}</Text></View>
-            <Text style={[styles.ready, !item.ready && styles.waiting]}>{item.ready ? "READY" : "WAITING"}</Text>
+            <View style={styles.contributionState}>
+              <Text style={[styles.ready, !item.ready && item.revision === 0 && styles.waiting]}>{item.revision > 0 ? item.moderationStatus.toUpperCase() : "WAITING"}</Text>
+              {isHost && item.userId !== user?.id && item.ready ? (
+                <View style={styles.moderationActions}>
+                  {item.moderationStatus !== "approved" ? <Pressable accessibilityLabel={`Approve ${item.displayName} contribution`} accessibilityRole="button" disabled={Boolean(moderatingUserId)} onPress={() => void moderate(item.userId, "approve", item.revision)} style={styles.moderationButton}><Text style={styles.moderationText}>Approve</Text></Pressable> : null}
+                  {item.moderationStatus !== "rejected" ? <Pressable accessibilityLabel={`Reject ${item.displayName} contribution`} accessibilityRole="button" disabled={Boolean(moderatingUserId)} onPress={() => void moderate(item.userId, "reject", item.revision)} style={styles.moderationButton}><Text style={styles.moderationText}>Reject</Text></Pressable> : null}
+                  <Pressable accessibilityLabel={`Remove ${item.displayName} contribution`} accessibilityRole="button" disabled={Boolean(moderatingUserId)} onPress={() => void moderate(item.userId, "remove", item.revision)} style={styles.moderationButton}><Text style={styles.removeText}>Remove</Text></Pressable>
+                </View>
+              ) : null}
+            </View>
           </View>
         ))}
 
@@ -185,6 +235,10 @@ export default function StageLobbyScreen() {
               Invite more collaborators
             </Text>
           </Pressable>
+        ) : null}
+
+        {isHost && mixRevisions.length > 0 ? (
+          <Pressable accessibilityLabel="Restore previous Stage mix" accessibilityRole="button" accessibilityState={{ disabled: mixing || status !== "online" }} disabled={mixing || status !== "online"} onPress={() => void rollback()} style={styles.secondary}><Text style={styles.secondaryText}>Undo last mix change</Text></Pressable>
         ) : null}
 
         <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/stage-contribution", params: { stageId } })} style={styles.secondary}><Text style={styles.secondaryText}>Add or change my contribution</Text></Pressable>
@@ -231,6 +285,11 @@ const styles = StyleSheet.create({
   personMeta: { color: canalDynamicColors.muted, fontSize: 12, marginTop: 3 },
   ready: { color: canalDynamicColors.mint, fontSize: 10, fontWeight: "900" },
   waiting: { color: "#9DA6A1" },
+  contributionState: { alignItems: "flex-end", gap: 5 },
+  moderationActions: { flexDirection: "row", gap: 4 },
+  moderationButton: { minHeight: 48, justifyContent: "center", paddingHorizontal: 5 },
+  moderationText: { color: canalDynamicColors.mint, fontSize: 9, fontWeight: "800" },
+  removeText: { color: canalDynamicColors.danger, fontSize: 9, fontWeight: "800" },
   primary: { minHeight: 54, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "#72D8C4" },
   primaryText: { color: canalDynamicColors.text, fontSize: 15, fontWeight: "900" },
   secondary: { minHeight: 50, borderRadius: 16, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#3A4641" },

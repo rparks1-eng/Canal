@@ -70,6 +70,10 @@ import {
   sameSceneStudioScope,
   sceneStudioScopeIsVisible,
 } from "../lib/scene-studio-scope";
+import {
+  readSceneRecommendationLearning,
+  recordSceneRecommendationFeedback,
+} from "../lib/scene-recommendation-feedback";
 
 import type {
   SceneStudioScope,
@@ -680,6 +684,11 @@ export default function ScenePreviewScreen() {
         current.draft,
         storedSnapshot,
       );
+      const learning = await readSceneRecommendationLearning(
+        operationScope,
+        currentScope,
+        current.draft,
+      );
       const existingSceneNames = (await readScenes()).map(
         (scene) => scene.name,
       );
@@ -700,10 +709,17 @@ export default function ScenePreviewScreen() {
         {
           variationSeed: `${operationScope.userId}:${Date.now()}:${mutationSequenceRef.current}`,
           existingSceneNames,
-          rejectedTrackIds: current.rejectedTrackIds ?? [],
-          deprioritizedTrackIds: current.trackSignals.map(
+          rejectedTrackIds: [
+            ...(current.rejectedTrackIds ?? []),
+            ...learning.rejectedTrackIds,
+          ],
+          deprioritizedTrackIds: [
+            ...learning.deprioritizedTrackIds,
+            ...current.trackSignals.map(
             (signal) => signal.track.id,
-          ),
+            ),
+          ],
+          preferredTrackIds: learning.preferredTrackIds,
         },
       );
 
@@ -753,9 +769,11 @@ export default function ScenePreviewScreen() {
       mismatch: boolean,
     ): Promise<void> => {
       const current = previewRef.current;
+      const operationScope = scope;
 
       if (
         !current ||
+        !operationScope ||
         generationInFlightRef.current ||
         mutationInFlightRef.current ||
         saveInFlightRef.current
@@ -779,6 +797,24 @@ export default function ScenePreviewScreen() {
             ? `${trackName} was rejected and replaced with a better fit.`
             : `${trackName} was removed and replaced with a new track.`,
         );
+        await recordSceneRecommendationFeedback({
+          scope: operationScope,
+          currentScope,
+          draft: current.draft,
+          action: mismatch ? "swap" : "remove",
+          trackId,
+          sceneId: current.scene.id,
+        });
+        if (mismatch) {
+          await recordSceneRecommendationFeedback({
+            scope: operationScope,
+            currentScope,
+            draft: current.draft,
+            action: "doesnt_match",
+            trackId,
+            sceneId: current.scene.id,
+          });
+        }
       } catch (error) {
         setEditorStatus(
           error instanceof Error
@@ -790,7 +826,7 @@ export default function ScenePreviewScreen() {
         setGenerationBusy(false);
       }
     },
-    [generateAlternative, mutatePreview],
+    [currentScope, generateAlternative, mutatePreview, scope],
   );
 
   const controlsBusy = editorBusy || saveBusy || catalogBusy || generationBusy;

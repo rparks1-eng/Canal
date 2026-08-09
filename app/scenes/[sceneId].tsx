@@ -85,6 +85,12 @@ import {
 import {
   syncScenesWithCloud,
 } from "../../lib/scene-sync";
+import {
+  recordStoredSceneRecommendationFeedback,
+} from "../../lib/scene-recommendation-feedback";
+import {
+  captureSceneStudioScope,
+} from "../../lib/scene-studio-scope";
 
 import type {
   StoredScene,
@@ -147,6 +153,8 @@ export default function SceneDetailScreen() {
   } = use(CanalAtmosphereContext);
   const reduceTransparency = useCanalReduceTransparency();
   const {
+    accountEpoch,
+    sessionGeneration,
     user,
   } =
     useAuth();
@@ -325,6 +333,19 @@ export default function SceneDetailScreen() {
               }
             : current,
         );
+        const feedbackScope = captureSceneStudioScope({
+          userId: user?.id,
+          accountEpoch,
+          sessionGeneration,
+        });
+        if (feedbackScope) {
+          void recordStoredSceneRecommendationFeedback({
+            scope: feedbackScope,
+            currentScope: () => captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration }),
+            scene: updated,
+            action: updated.favorite ? "favorite" : "unfavorite",
+          });
+        }
       } catch (error) {
         const persisted =
           await getSceneById(

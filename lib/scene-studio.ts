@@ -1356,6 +1356,7 @@ function scoreCandidate(
   draft: SceneStudioDraft,
   generationSeed: string,
   deprioritizedTrackIds: ReadonlySet<string>,
+  preferredTrackIds: ReadonlySet<string>,
 ): number {
   let score = 0;
   const familiarityLevel =
@@ -1490,6 +1491,10 @@ function scoreCandidate(
     score -= 180;
   }
 
+  if (preferredTrackIds.has(candidate.track.id)) {
+    score += 95 * (1 - novelty * 0.72);
+  }
+
   return score;
 }
 
@@ -1571,6 +1576,7 @@ function buildCandidatePool(
   generationSeed: string,
   rejectedTrackIds: ReadonlySet<string>,
   deprioritizedTrackIds: ReadonlySet<string>,
+  preferredTrackIds: ReadonlySet<string>,
 ): InternalCandidate[] {
   const artistGenreMap =
     buildArtistGenreMap(
@@ -1665,6 +1671,7 @@ function buildCandidatePool(
         draft,
         generationSeed,
         deprioritizedTrackIds,
+        preferredTrackIds,
       );
   }
 
@@ -2492,6 +2499,7 @@ export function generateSceneFromSpotify(
     variationSeed?: string;
     rejectedTrackIds?: readonly string[];
     deprioritizedTrackIds?: readonly string[];
+    preferredTrackIds?: readonly string[];
     existingSceneNames?: readonly string[];
   } = {},
 ): GeneratedSceneResult {
@@ -2505,6 +2513,7 @@ export function generateSceneFromSpotify(
       generationSeed,
       new Set(options.rejectedTrackIds ?? []),
       new Set(options.deprioritizedTrackIds ?? []),
+      new Set(options.preferredTrackIds ?? []),
     );
 
   const selected =
@@ -2714,6 +2723,7 @@ export function generateSceneWithSpotifyGenreFallback(
     variationSeed?: string;
     rejectedTrackIds?: readonly string[];
     deprioritizedTrackIds?: readonly string[];
+    preferredTrackIds?: readonly string[];
     existingSceneNames?: readonly string[];
   } = {},
 ): GeneratedSceneResult {
