@@ -1262,7 +1262,7 @@ export default function SceneStudioScreen() {
         ) : null}
 
       </ScrollView>
-      <BlurView intensity={66} tint="dark" style={styles.actionDock}>
+      <View style={styles.actionDock}>
         <Pressable
           accessibilityHint={studioStep === "review" ? "Commits a private editable Preview." : "Moves to the next Scene creation step."}
           accessibilityLabel={studioStep === "review" ? (shouldResumePreview ? "Update Scene Preview" : "Generate editable preview") : `Continue from ${studioStep}`}
@@ -1277,7 +1277,7 @@ export default function SceneStudioScreen() {
           }}
           style={[styles.dockContinue, studioStep === "review" && (!scopeReady || spotifyConnection !== "connected" || activationBusy) && styles.disabled]}
         ><Text style={styles.dockContinueText}>{activationBusy ? "Preparing Scene…" : studioStep === "moment" ? "Continue to Sound" : studioStep === "sound" ? "Continue to Flow" : studioStep === "flow" ? "Review Scene" : shouldResumePreview ? "Update editable preview" : "Generate editable preview"}</Text></Pressable>
-      </BlurView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -1297,6 +1297,6 @@ const styles = StyleSheet.create({
   inlineNavigation:{alignItems:"center",flexDirection:"row",justifyContent:"space-between",gap:10},inlineButton:{alignItems:"center",justifyContent:"center",minHeight:48,paddingHorizontal:8},inlineButtonText:{color:"#C7FFF2",fontSize:14,fontWeight:"800"},inlineHint:{color:"rgba(255,255,255,.58)",fontSize:11,flex:1},
   reviewHero:{alignItems:"center",gap:8,paddingVertical:18},reviewEyebrow:{color: canalDynamicColors.mint,fontSize:10,fontWeight:"900",letterSpacing:1.5},reviewName:{color:"#FFFFFF",fontFamily:"Georgia",fontSize:30,fontWeight:"700",textAlign:"center"},reviewSubtitle:{color:"rgba(255,255,255,.7)",fontSize:13,textAlign:"center"},miniWave:{alignItems:"center",flexDirection:"row",gap:5,height:48},waveBar:{backgroundColor:"#72D8C4",borderRadius:4,width:5},summaryGrid:{flexDirection:"row",flexWrap:"wrap",gap:8},summaryCard:{backgroundColor:"rgba(255,255,255,.07)",borderRadius:17,gap:4,minHeight:74,padding:12,width:"48%"},summaryLabel:{color:"rgba(255,255,255,.55)",fontSize:10,fontWeight:"800"},summaryValue:{color:"#FFFFFF",fontSize:13,fontWeight:"800"},
   sourceCard:{alignItems:"center",backgroundColor:"rgba(255,255,255,.09)",borderColor:"rgba(255,255,255,.18)",borderRadius:22,borderWidth:1,flexDirection:"row",gap:12,padding:15},sourceDot:{alignItems:"center",backgroundColor:"#1DB954",borderRadius:18,height:36,justifyContent:"center",width:36},sourceDotInactive:{backgroundColor:"rgba(255,255,255,.14)"},sourceDotText:{color:"#FFFFFF",fontSize:15,fontWeight:"900"},sourceCopy:{flex:1},sourceTitle:{color:"#FFFFFF",fontSize:14,fontWeight:"800"},sourceText:{color:"rgba(255,255,255,.65)",fontSize:12,lineHeight:17},sourceAction:{alignItems:"center",justifyContent:"center",minHeight:48,minWidth:48},sourceActionText:{color: canalDynamicColors.mint,fontWeight:"900"},
-  actionDock:{alignItems:"center",backgroundColor:"rgba(7,25,45,.74)",borderTopColor:"rgba(255,255,255,.17)",borderTopWidth:1,bottom:88,flexDirection:"row",left:0,paddingBottom:12,paddingHorizontal:18,paddingTop:12,position:"absolute",right:0},dockContinue:{alignItems:"center",backgroundColor:"#DFFFF7",borderRadius:19,flex:1,justifyContent:"center",minHeight:54,paddingHorizontal:16},dockContinueText:{color:"#153F50",fontSize:15,fontWeight:"900"},
+  actionDock:{alignItems:"center",backgroundColor:"transparent",bottom:112,flexDirection:"row",left:0,paddingHorizontal:42,position:"absolute",right:0},dockContinue:{alignItems:"center",backgroundColor:"#DFFFF7",borderRadius:16,flex:1,justifyContent:"center",minHeight:48,paddingHorizontal:16},dockContinueText:{color:"#153F50",fontSize:14,fontWeight:"900"},
   suggestNameButton:{alignItems:"center",justifyContent:"center",minHeight:48,paddingHorizontal:8},suggestNameText:{color: canalDynamicColors.mint,fontSize:13,fontWeight:"900"},statusText:{color:"#FFFFFF",fontSize:13,lineHeight:19},validationText:{color:"#FFD1C7",fontSize:13,fontWeight:"800"},disabled:{opacity:.45},pressed:{opacity:.72},
 });

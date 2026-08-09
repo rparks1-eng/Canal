@@ -7,7 +7,11 @@ describe("Create Scene Living Glass experience", () => {
   it("keeps one clear Continue action above the persistent navigation", () => {
     expect(source).not.toContain("Preview another Scene atmosphere");
     expect(source).not.toContain("styles.atmosphereButton");
-    expect(source).toContain("bottom:88");
+    expect(source).toContain('<View style={styles.actionDock}>');
+    expect(source).not.toContain('tint="dark" style={styles.actionDock}');
+    expect(source).toContain('backgroundColor:"transparent",bottom:112');
+    expect(source).toContain('paddingHorizontal:42');
+    expect(source).toContain('minHeight:48');
     expect(source).toContain("paddingBottom:250");
   });
 
