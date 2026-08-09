@@ -1,5 +1,22 @@
 begin;
 
+-- Existing ready contributions may already have replaced live_stages.tracks with a
+-- collaborative mix. There is no reliable way to reconstruct the host's original
+-- base from that mixed payload, so fail closed instead of recording a false base.
+do $$
+begin
+  if exists (
+    select 1
+    from public.live_stage_contributions contribution
+    where contribution.ready
+  ) then
+    raise exception
+      'Stage moderation migration requires remediation of existing ready contributions before deployment.'
+      using errcode = '55000';
+  end if;
+end;
+$$;
+
 alter table public.live_stages
 add column if not exists collaboration_base_tracks jsonb;
 
@@ -47,6 +64,114 @@ drop trigger if exists reset_live_stage_contribution_moderation on public.live_s
 create trigger reset_live_stage_contribution_moderation
 before insert or update of tracks on public.live_stage_contributions
 for each row execute function private.reset_live_stage_contribution_moderation();
+
+create or replace function private.refresh_live_stage_mix(stage_id_value uuid)
+returns public.live_stages
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  mixed_tracks jsonb;
+  stage_row public.live_stages%rowtype;
+  current_track_id text;
+  next_track_index integer := 0;
+begin
+  select * into stage_row
+  from public.live_stages as stage
+  where stage.id = stage_id_value
+    and stage.status = 'live'
+  for update;
+
+  if stage_row.id is null then
+    raise exception 'This active Stage is no longer available.' using errcode = '22023';
+  end if;
+
+  current_track_id := stage_row.tracks -> stage_row.current_track_index ->> 'id';
+
+  with expanded as (
+    select
+      contribution.user_id,
+      item.ordinality::integer as source_ordinal,
+      item.track,
+      item.track ->> 'id' as track_id
+    from public.live_stage_contributions as contribution
+    cross join lateral jsonb_array_elements(contribution.tracks)
+      with ordinality as item(track, ordinality)
+    where contribution.stage_id = stage_id_value
+      and contribution.ready
+      and contribution.moderation_status = 'approved'
+  ),
+  counts as (
+    select track_id, count(distinct user_id)::integer as overlap_count
+    from expanded
+    group by track_id
+  ),
+  owned as (
+    select distinct on (expanded.track_id)
+      expanded.user_id,
+      expanded.source_ordinal,
+      expanded.track,
+      expanded.track_id,
+      counts.overlap_count
+    from expanded
+    join counts using (track_id)
+    order by expanded.track_id, expanded.user_id, expanded.source_ordinal
+  ),
+  balanced as (
+    select
+      owned.*,
+      row_number() over (
+        partition by owned.user_id
+        order by owned.source_ordinal, md5(stage_id_value::text || owned.track_id)
+      ) as owner_round
+    from owned
+  ),
+  limited as (
+    select *
+    from balanced
+    order by
+      case when overlap_count > 1 then 0 else 1 end,
+      case when overlap_count > 1 then -overlap_count else owner_round::integer end,
+      md5(stage_id_value::text || track_id),
+      user_id
+    limit 100
+  )
+  select jsonb_agg(track order by
+    case when overlap_count > 1 then 0 else 1 end,
+    case when overlap_count > 1 then -overlap_count else owner_round::integer end,
+    md5(stage_id_value::text || track_id),
+    user_id
+  ) into mixed_tracks
+  from limited;
+
+  if mixed_tracks is null or jsonb_array_length(mixed_tracks) < 1 then
+    raise exception 'At least one approved collaborator must submit a Scene before mixing.'
+      using errcode = '22023';
+  end if;
+
+  if current_track_id is not null then
+    select item.ordinality::integer - 1 into next_track_index
+    from jsonb_array_elements(mixed_tracks) with ordinality as item(track, ordinality)
+    where item.track ->> 'id' = current_track_id
+    limit 1;
+    next_track_index := coalesce(next_track_index, 0);
+  end if;
+
+  update public.live_stages
+  set tracks = mixed_tracks,
+      current_track_index = next_track_index,
+      updated_at = now()
+  where id = stage_id_value
+  returning * into stage_row;
+
+  return stage_row;
+end;
+$$;
+
+revoke all on function private.refresh_live_stage_mix(uuid)
+from public, anon, authenticated, service_role;
 
 create table if not exists public.live_stage_mix_revisions (
   stage_id uuid not null references public.live_stages(id) on delete cascade,
@@ -150,7 +275,7 @@ begin
   end if;
   if not found then raise exception 'This contribution changed. Reload before moderating it.' using errcode = '40001'; end if;
 
-  if exists (select 1 from public.live_stage_contributions where stage_id = stage_id_value and ready and moderation_status <> 'rejected') then
+  if exists (select 1 from public.live_stage_contributions where stage_id = stage_id_value and ready and moderation_status = 'approved') then
     perform private.refresh_live_stage_mix(stage_id_value);
   else
     update public.live_stages
@@ -169,6 +294,7 @@ create function public.join_live_stage_as_collaborator_by_code(
 declare current_user_id uuid := (select auth.uid()); matched_stage_id uuid;
 begin
   if current_user_id is null then raise exception 'Authentication is required to join a Stage.' using errcode = '42501'; end if;
+  if not private.consume_live_stage_join_attempt(current_user_id) then return; end if;
   if coalesce(stage_code_value, '') !~ '^[0-9]{6}$' then return; end if;
   select stage.id into matched_stage_id from public.live_stages stage
   where stage.stage_code = stage_code_value and stage.status = 'live' for share;
