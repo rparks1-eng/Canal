@@ -38,6 +38,13 @@ describe("Create atmosphere and navigation contract", () => {
     expect(navigation).toContain("override.accent");
     expect(navigation).toContain("override?.transitionMs ?? CANAL_ATMOSPHERE_TRANSITION_MS");
     expect(navigation).toContain("glassColor.value = withTiming");
+    expect(navigation).toContain("animatedAccentTarget");
+    expect(navigation).toContain("override ? 0.42 : 0.44");
+    expect(navigation).toContain('intensity={override ? 28 : 46}');
+    expect(navigation).toContain('override ? "light"');
+    expect(navigation).toContain('rgba(248, 255, 255, 0.70)');
+    expect(navigation).toContain('rgba(250, 255, 255, 0.84)');
+    expect(navigation).toMatch(/primarySymbolContainer:[\s\S]*borderWidth:\s*1[\s\S]*boxShadow:\s*"0 3px 10px rgba\(0, 18, 32, 0\.10\)"/u);
   });
 
   it("keeps Home notification-only and centers the Stage back control", () => {

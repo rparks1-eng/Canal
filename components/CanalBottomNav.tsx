@@ -93,6 +93,13 @@ function selectedSymbol(symbol: string): string {
     : symbol;
 }
 
+function colorWithAlpha(color: string, alpha: number): string {
+  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/iu.exec(color);
+  if (!match) return color;
+
+  return `rgba(${Number.parseInt(match[1], 16)}, ${Number.parseInt(match[2], 16)}, ${Number.parseInt(match[3], 16)}, ${alpha})`;
+}
+
 function navigationAtmosphere(pathname: string, isDark: boolean) {
   if (pathname.startsWith("/explore") || pathname.startsWith("/snapshots")) {
     return {
@@ -181,9 +188,16 @@ export default function CanalBottomNav() {
     } : navigationAtmosphere(pathname, isDark),
     [isDark, override, pathname],
   );
+  const animatedAccentTarget = colorWithAlpha(
+    navAtmosphere.accent,
+    override ? 0.42 : 0.44,
+  );
+  const animatedSelectedTarget = override
+    ? "rgba(248, 255, 255, 0.82)"
+    : colorWithAlpha(navAtmosphere.selected, 0.88);
   const glassColor = useSharedValue(navAtmosphere.glass);
-  const accentColor = useSharedValue(navAtmosphere.accent);
-  const selectedColor = useSharedValue(navAtmosphere.selected);
+  const accentColor = useSharedValue(animatedAccentTarget);
+  const selectedColor = useSharedValue(animatedSelectedTarget);
 
   useEffect(() => {
     const timing = {
@@ -193,9 +207,9 @@ export default function CanalBottomNav() {
       easing: Easing.inOut(Easing.sin),
     };
     glassColor.value = withTiming(navAtmosphere.glass, timing);
-    accentColor.value = withTiming(navAtmosphere.accent, timing);
-    selectedColor.value = withTiming(navAtmosphere.selected, timing);
-  }, [accentColor, glassColor, navAtmosphere, override?.transitionMs, reduceMotion, selectedColor]);
+    accentColor.value = withTiming(animatedAccentTarget, timing);
+    selectedColor.value = withTiming(animatedSelectedTarget, timing);
+  }, [accentColor, animatedAccentTarget, animatedSelectedTarget, glassColor, navAtmosphere.glass, override?.transitionMs, reduceMotion, selectedColor]);
 
   useEffect(() => {
     navigationInFlightRef.current = null;
@@ -205,9 +219,16 @@ export default function CanalBottomNav() {
   const createSurfaceStyle = useAnimatedStyle(() => ({ backgroundColor: accentColor.value }));
   const selectedTextStyle = useAnimatedStyle(() => ({ color: selectedColor.value }));
   const selectedMarkerStyle = useAnimatedStyle(() => ({ backgroundColor: selectedColor.value }));
-  const neutralForeground = isDark
-    ? "rgba(232, 250, 247, 0.74)"
-    : "rgba(16, 54, 67, 0.72)";
+  const neutralForeground = override
+    ? "rgba(248, 255, 255, 0.70)"
+    : isDark
+      ? "rgba(232, 250, 247, 0.74)"
+      : "rgba(16, 54, 67, 0.72)";
+  const primaryForeground = override
+    ? "rgba(250, 255, 255, 0.84)"
+    : isDark
+      ? "rgba(238, 255, 252, 0.86)"
+      : "rgba(7, 39, 51, 0.80)";
 
   const navigationItems = (
     <View style={styles.itemsRow}>
@@ -231,9 +252,23 @@ export default function CanalBottomNav() {
             }}
             style={({ pressed }) => [styles.item, item.primary && styles.primaryItem, pressed && styles.pressed]}
           >
-            <Animated.View style={[styles.symbolContainer, item.primary && styles.primarySymbolContainer, item.primary && createSurfaceStyle]}>
+            <Animated.View style={[styles.symbolContainer, item.primary && styles.primarySymbolContainer]}>
+              {item.primary ? (
+                <>
+                  <BlurView
+                    intensity={override ? 28 : 46}
+                    pointerEvents="none"
+                    style={[StyleSheet.absoluteFill, styles.primaryBlur]}
+                    tint={override ? "light" : isDark ? "systemUltraThinMaterialDark" : "systemUltraThinMaterialLight"}
+                  />
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[StyleSheet.absoluteFill, styles.primaryTint, createSurfaceStyle]}
+                  />
+                </>
+              ) : null}
               <Ionicons
-                color={item.primary ? "rgba(7, 39, 51, 0.86)" : selected ? navAtmosphere.selected : neutralForeground}
+                color={item.primary ? primaryForeground : neutralForeground}
                 name={(selected ? selectedSymbol(item.symbol) : item.symbol) as never}
                 size={item.primary ? 26 : 21}
               />
@@ -337,11 +372,22 @@ const styles =
       width: 48,
       height: 48,
       borderRadius: 24,
-      backgroundColor: "#D9FFF6",
+      backgroundColor: "rgba(255, 255, 255, 0.08)",
       top: -18,
-      borderWidth: 2,
-      borderColor: "rgba(217, 255, 246, 0.34)",
-      boxShadow: "0 5px 16px rgba(0, 22, 36, 0.16)",
+      borderWidth: 1,
+      borderColor: "rgba(255, 255, 255, 0.26)",
+      boxShadow: "0 3px 10px rgba(0, 18, 32, 0.10)",
+      overflow: "hidden",
+    },
+
+    primaryBlur: {
+      borderRadius: 24,
+      overflow: "hidden",
+    },
+
+    primaryTint: {
+      borderRadius: 24,
+      opacity: 0.68,
     },
 
     label: {
