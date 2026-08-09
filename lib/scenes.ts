@@ -821,27 +821,14 @@ export async function createScene(
 export async function deleteScene(
   sceneId: string,
 ): Promise<void> {
-  const scenes =
-    await readScenes();
-
-  const remainingScenes =
-    scenes.filter(
-      (scene) =>
-        scene.id !== sceneId,
-    );
-
   const {
-    deleteSceneFromCloud,
+    deleteSceneForCurrentOwner,
   } = await import(
-    "./scene-cloud"
+    "./scene-sync"
   );
 
-  await deleteSceneFromCloud(
+  await deleteSceneForCurrentOwner(
     sceneId,
-  );
-
-  await writeScenes(
-    remainingScenes,
   );
 }
 

@@ -1,4 +1,5 @@
 import {
+  useRef,
   useState,
 } from "react";
 
@@ -128,6 +129,9 @@ export default function LoginScreen() {
     setLoading,
   ] = useState(false);
 
+  const submissionInFlight =
+    useRef(false);
+
   const [
     message,
     setMessage,
@@ -151,10 +155,11 @@ export default function LoginScreen() {
 
   const submitEmail =
     async (): Promise<void> => {
-      if (loading) {
+      if (submissionInFlight.current) {
         return;
       }
 
+      submissionInFlight.current = true;
       setLoading(true);
       setMessage("");
       setErrorMessage("");
@@ -223,6 +228,7 @@ export default function LoginScreen() {
             : "Canal could not authenticate your account.",
         );
       } finally {
+        submissionInFlight.current = false;
         setLoading(false);
       }
     };
@@ -233,10 +239,11 @@ export default function LoginScreen() {
         | "google"
         | "apple",
     ): Promise<void> => {
-      if (loading) {
+      if (submissionInFlight.current) {
         return;
       }
 
+      submissionInFlight.current = true;
       setLoading(true);
       setMessage("");
       setErrorMessage("");
@@ -267,6 +274,7 @@ export default function LoginScreen() {
             : `${provider} sign-in failed.`,
         );
       } finally {
+        submissionInFlight.current = false;
         setLoading(false);
       }
     };
@@ -377,7 +385,9 @@ export default function LoginScreen() {
             }
           >
             <Pressable
+              accessibilityLabel="Sign in mode"
               accessibilityRole="button"
+              accessibilityState={{ selected: mode === "sign-in" }}
               onPress={() =>
                 changeMode(
                   "sign-in",
@@ -405,7 +415,9 @@ export default function LoginScreen() {
             </Pressable>
 
             <Pressable
+              accessibilityLabel="Create account mode"
               accessibilityRole="button"
+              accessibilityState={{ selected: mode === "create-account" }}
               onPress={() =>
                 changeMode(
                   "create-account",
@@ -452,7 +464,7 @@ export default function LoginScreen() {
                   setDisplayName
                 }
                 placeholder="Your name"
-                placeholderTextColor="#9A938C"
+                placeholderTextColor="#6D6B64"
                 autoCapitalize="words"
                 maxLength={60}
                 style={
@@ -476,7 +488,7 @@ export default function LoginScreen() {
                   setHandle
                 }
                 placeholder="@yourhandle"
-                placeholderTextColor="#9A938C"
+                placeholderTextColor="#6D6B64"
                 autoCapitalize="none"
                 autoCorrect={
                   false
@@ -505,7 +517,7 @@ export default function LoginScreen() {
               setEmail
             }
             placeholder="you@example.com"
-            placeholderTextColor="#9A938C"
+            placeholderTextColor="#6D6B64"
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={
@@ -533,7 +545,7 @@ export default function LoginScreen() {
               setPassword
             }
             placeholder="At least 8 characters"
-            placeholderTextColor="#9A938C"
+            placeholderTextColor="#6D6B64"
             secureTextEntry
             textContentType={
               mode ===
@@ -549,6 +561,7 @@ export default function LoginScreen() {
           {mode ===
           "sign-in" ? (
             <Pressable
+              accessibilityLabel="Forgot password"
               accessibilityRole="button"
               onPress={() =>
                 router.push(
@@ -570,7 +583,18 @@ export default function LoginScreen() {
           ) : null}
 
           <Pressable
+            accessibilityLabel={
+              mode === "sign-in"
+                ? "Sign In to Canal"
+                : "Create Canal Account"
+            }
             accessibilityRole="button"
+            accessibilityState={{
+              busy: loading,
+              disabled:
+                loading ||
+                !configured,
+            }}
             disabled={
               loading ||
               !configured
@@ -636,7 +660,14 @@ export default function LoginScreen() {
           </View>
 
           <Pressable
+            accessibilityLabel="Continue with Google"
             accessibilityRole="button"
+            accessibilityState={{
+              busy: loading,
+              disabled:
+                loading ||
+                !configured,
+            }}
             disabled={
               loading ||
               !configured
@@ -669,7 +700,14 @@ export default function LoginScreen() {
           </Pressable>
 
           <Pressable
+            accessibilityLabel="Continue with Apple"
             accessibilityRole="button"
+            accessibilityState={{
+              busy: loading,
+              disabled:
+                loading ||
+                !configured,
+            }}
             disabled={
               loading ||
               !configured
@@ -757,7 +795,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     content: {
@@ -778,7 +816,7 @@ const styles =
       alignSelf:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     logoText: {
@@ -789,7 +827,7 @@ const styles =
     },
 
     brand: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 21,
       fontWeight: "900",
       textAlign: "center",
@@ -797,7 +835,8 @@ const styles =
     },
 
     title: {
-      color: "#181818",
+      fontFamily: "Georgia",
+      color: "#191A18",
       fontSize: 28,
       lineHeight: 34,
       fontWeight: "900",
@@ -806,7 +845,7 @@ const styles =
     },
 
     subtitle: {
-      color: "#6C655F",
+      color: "#6D6B64",
       fontSize: 14,
       lineHeight: 21,
       textAlign: "center",
@@ -846,7 +885,7 @@ const styles =
 
     modeButton: {
       flex: 1,
-      minHeight: 41,
+      minHeight: 48,
       borderRadius: 11,
       alignItems:
         "center",
@@ -866,7 +905,7 @@ const styles =
     },
 
     modeTextSelected: {
-      color: "#F47A24",
+      color: "#4C46C8",
     },
 
     inputLabel: {
@@ -885,7 +924,7 @@ const styles =
       borderRadius: 15,
       backgroundColor:
         "#FFFFFF",
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 15,
       paddingHorizontal: 14,
     },
@@ -893,11 +932,13 @@ const styles =
     forgotButton: {
       alignSelf:
         "flex-end",
+      minHeight: 48,
+      justifyContent: "center",
       paddingVertical: 10,
     },
 
     forgotText: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 12,
       fontWeight: "800",
     },
@@ -910,7 +951,7 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       marginTop: 12,
     },
 
@@ -935,7 +976,7 @@ const styles =
     },
 
     dividerText: {
-      color: "#918981",
+      color: "#6D6B64",
       fontSize: 10,
       fontWeight: "800",
       marginHorizontal: 11,
@@ -1008,7 +1049,7 @@ const styles =
     },
 
     musicNotice: {
-      color: "#918981",
+      color: "#6D6B64",
       fontSize: 10,
       lineHeight: 16,
       textAlign: "center",

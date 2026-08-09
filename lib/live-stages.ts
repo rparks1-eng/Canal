@@ -72,6 +72,7 @@ export type LiveStage = {
   hostIsCanal: boolean;
   sceneId?: string;
   activity: string;
+  atmosphereSignals?: string[];
   visibility: LiveStageVisibility;
   status: LiveStageStatus;
   participants: LiveStageParticipant[];
@@ -80,6 +81,7 @@ export type LiveStage = {
   tracks: LiveStageTrack[];
   currentTrackIndex: number;
   membershipRole: LiveStageRole | null;
+  startedAt?: string;
   createdAt: string;
   updatedAt: string;
   endedAt?: string;
@@ -105,8 +107,28 @@ export type LiveStageMessage = {
   initials: string;
   body: string;
   createdAt: string;
+  editedAt?: string;
   isMine: boolean;
+  reactions: Record<LiveStageMessageReaction, number>;
+  myReactions: LiveStageMessageReaction[];
+  reactionUsers: Record<LiveStageMessageReaction, LiveStageReactionUser[]>;
 };
+
+export type LiveStageMessageReaction = string;
+
+export type LiveStageReactionUser = {
+  userId: string;
+  displayName: string;
+};
+
+const EMOJI_REACTION_PATTERN = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Presentation}|[#*0-9]\uFE0F?\u20E3)(?:[\u200D\uFE0F\uFE0E\p{Emoji_Modifier}\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Presentation}]*)$/u;
+
+export function normalizeLiveStageMessageReaction(value: unknown): LiveStageMessageReaction | null {
+  if (typeof value !== "string") return null;
+  const reaction = value.trim();
+  if (!reaction || Array.from(reaction).length > 16 || reaction.length > 32) return null;
+  return EMOJI_REACTION_PATTERN.test(reaction) ? reaction : null;
+}
 
 export type LiveStageRoom = {
   stage: LiveStage | null;
@@ -130,10 +152,12 @@ export type LiveStageRow = {
   stage_code: string;
   name: string;
   activity: string;
+  atmosphere_signals?: unknown;
   visibility: string;
   status: string;
   tracks: unknown;
   current_track_index: number;
+  started_at?: string;
   created_at: string;
   updated_at: string;
   ended_at: string | null;
@@ -156,6 +180,7 @@ export type LiveStageMessageRow = {
   handle: string;
   body: string;
   created_at: string;
+  edited_at?: string | null;
 };
 
 export const LIVE_STAGE_STORAGE_KEY =
@@ -249,13 +274,13 @@ const SPOTIFY_IMAGE_URL_PATTERN =
   /^https:\/\/i[.]scdn[.]co(\/image\/[A-Za-z0-9]{16,128})$/i;
 
 const LIVE_STAGE_COLUMNS =
-  "id, host_id, host_display_name, host_handle, stage_kind, host_is_verified, host_is_canal, scene_id, stage_code, name, activity, visibility, status, tracks, current_track_index, created_at, updated_at, ended_at";
+  "id, host_id, host_display_name, host_handle, stage_kind, host_is_verified, host_is_canal, scene_id, stage_code, name, activity, atmosphere_signals, visibility, status, tracks, current_track_index, started_at, created_at, updated_at, ended_at";
 
 const LIVE_STAGE_MEMBER_COLUMNS =
   "stage_id, user_id, display_name, handle, role, joined_at";
 
 const LIVE_STAGE_MESSAGE_COLUMNS =
-  "id, stage_id, user_id, display_name, handle, body, created_at";
+  "id, stage_id, user_id, display_name, handle, body, created_at, edited_at";
 
 const DEFAULT_LIVE_STAGES: LiveStage[] = [
   {
@@ -270,6 +295,7 @@ const DEFAULT_LIVE_STAGES: LiveStage[] = [
     hostIsVerified: false,
     hostIsCanal: false,
     activity: "Driving through the city",
+    atmosphereSignals: ["night", "driving", "reflective"],
     visibility: "public",
     status: "live",
     participants: [
@@ -312,6 +338,7 @@ const DEFAULT_LIVE_STAGES: LiveStage[] = [
     ],
     currentTrackIndex: 0,
     membershipRole: null,
+    startedAt: "2026-07-22T20:00:00.000Z",
     createdAt: "2026-07-22T20:00:00.000Z",
     updatedAt: "2026-07-22T20:00:00.000Z",
   },
@@ -478,6 +505,7 @@ export function normalizeLiveStageRows(
             row.activity,
           ) ||
           "Listening together",
+        atmosphereSignals: normalizeAtmosphereSignals(row.atmosphere_signals),
         visibility:
           row.visibility ===
           "private"
@@ -507,6 +535,10 @@ export function normalizeLiveStageRows(
           normalizeRole(
             membership?.role,
           ) ?? null,
+        startedAt:
+          validDate(
+            row.started_at,
+          ),
         createdAt:
           validDate(
             row.created_at,
@@ -569,9 +601,13 @@ export function normalizeLiveStageMessageRows(
           validDate(
             row.created_at,
           ),
+        editedAt: cleanText(row.edited_at) || undefined,
         isMine:
           currentUserId ===
           row.user_id,
+        reactions: {},
+        myReactions: [],
+        reactionUsers: {},
       };
     })
     .filter(
@@ -659,6 +695,51 @@ export async function readLiveStages(): Promise<
     members,
     currentUserId,
   );
+}
+
+export async function readHostedLiveStages(): Promise<LiveStage[]> {
+  if (!isSupabaseConfigured) {
+    const identity = await resolveLocalIdentity();
+    const stages = await readLocalLiveStagesForIdentity(identity);
+    return stages.filter((stage) => stage.hostId === identity.ownerId);
+  }
+
+  const currentUserId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from("live_stages")
+    .select(LIVE_STAGE_COLUMNS)
+    .eq("host_id", currentUserId)
+    .order("started_at", { ascending: false })
+    .limit(100);
+
+  await assertCurrentLiveStageUser(currentUserId);
+
+  if (error) {
+    throw stageError("load your hosted Stages", error.message);
+  }
+
+  const rows = (data ?? []) as unknown as LiveStageRow[];
+  const members = await readCloudMembers(rows.map((row) => row.id));
+  await assertCurrentLiveStageUser(currentUserId);
+
+  return normalizeLiveStageRows(rows, members, currentUserId);
+}
+
+export function formatLiveStageElapsed(
+  stage: Pick<LiveStage, "createdAt" | "endedAt" | "startedAt" | "status">,
+  nowMs = Date.now(),
+): string {
+  const startedMs = new Date(stage.startedAt ?? stage.createdAt).getTime();
+  const endedMs = stage.status === "ended" && stage.endedAt
+    ? new Date(stage.endedAt).getTime()
+    : nowMs;
+  const elapsedMinutes = Math.max(0, Math.floor((endedMs - startedMs) / 60_000));
+  const hours = Math.floor(elapsedMinutes / 60);
+  const minutes = elapsedMinutes % 60;
+
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} hr`;
+  return `${hours} hr ${minutes} min`;
 }
 
 export async function readLiveStage(
@@ -816,7 +897,7 @@ export async function readLiveStageMessages(
     );
   }
 
-  return normalizeLiveStageMessageRows(
+  const messages = normalizeLiveStageMessageRows(
     (
       (data ??
         []) as unknown as
@@ -824,6 +905,75 @@ export async function readLiveStageMessages(
     ).reverse(),
     currentUserId,
   );
+  if (messages.length === 0) return messages;
+  const { data: reactionRows, error: reactionError } = await supabase
+    .from("live_stage_message_reactions")
+    .select("message_id, user_id, reaction")
+    .in("message_id", messages.map((message) => message.id));
+  await assertCurrentLiveStageUser(currentUserId);
+  if (reactionError) throw stageError("load Stage chat reactions", reactionError.message);
+  const byId = new Map(messages.map((message) => [message.id, message]));
+  const normalizedReactionRows = (reactionRows ?? []).flatMap((row) => {
+    const candidate = row as { message_id: string; user_id: string; reaction: string };
+    const reaction = normalizeLiveStageMessageReaction(candidate.reaction);
+    return reaction ? [{ ...candidate, reaction }] : [];
+  });
+  const reactionUserIds = Array.from(new Set(normalizedReactionRows.map((row) => row.user_id)));
+  const reactionDisplayNames = new Map<string, string>();
+  if (reactionUserIds.length > 0) {
+    const { data: profileRows, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, display_name, handle")
+      .in("id", reactionUserIds);
+    await assertCurrentLiveStageUser(currentUserId);
+    if (profileError) throw stageError("load Stage reaction members", profileError.message);
+    for (const profile of (profileRows ?? []) as { id: string; display_name: string | null; handle: string | null }[]) {
+      reactionDisplayNames.set(profile.id, profile.display_name?.trim() || profile.handle?.trim() || "Canal listener");
+    }
+  }
+  for (const row of normalizedReactionRows) {
+    const message = byId.get(row.message_id);
+    if (!message) continue;
+    message.reactions[row.reaction] = (message.reactions[row.reaction] ?? 0) + 1;
+    message.reactionUsers[row.reaction] = [
+      ...(message.reactionUsers[row.reaction] ?? []),
+      { userId: row.user_id, displayName: reactionDisplayNames.get(row.user_id) ?? "Canal listener" },
+    ];
+    if (row.user_id === currentUserId) message.myReactions.push(row.reaction);
+  }
+  return messages;
+}
+
+export async function editLiveStageMessage(messageId: string, body: string): Promise<void> {
+  const userId = await getCurrentUserId();
+  const normalized = body.trim().slice(0, 500);
+  if (!normalized) throw new Error("A Stage message cannot be empty.");
+  const { error } = await supabase.from("live_stage_messages").update({ body: normalized }).eq("id", messageId).eq("user_id", userId);
+  await assertCurrentLiveStageUser(userId);
+  if (error) throw stageError("edit this Stage message", error.message);
+}
+
+export async function deleteLiveStageMessage(messageId: string): Promise<void> {
+  const userId = await getCurrentUserId();
+  const { error } = await supabase.from("live_stage_messages").delete().eq("id", messageId).eq("user_id", userId);
+  await assertCurrentLiveStageUser(userId);
+  if (error) throw stageError("delete this Stage message", error.message);
+}
+
+export async function toggleLiveStageMessageReaction(
+  messageId: string,
+  reaction: LiveStageMessageReaction,
+  active: boolean,
+): Promise<void> {
+  const normalizedReaction = normalizeLiveStageMessageReaction(reaction);
+  if (!normalizedReaction) throw new Error("Choose one emoji for this reaction.");
+  const userId = await getCurrentUserId();
+  const query = supabase.from("live_stage_message_reactions");
+  const result = active
+    ? await query.delete().eq("message_id", messageId).eq("user_id", userId).eq("reaction", normalizedReaction)
+    : await query.insert({ message_id: messageId, user_id: userId, reaction: normalizedReaction });
+  await assertCurrentLiveStageUser(userId);
+  if (result.error) throw stageError("update this Stage reaction", result.error.message);
 }
 
 export async function readLiveStageRoom(
@@ -1544,6 +1694,31 @@ export async function endLiveStage(
   );
 }
 
+export async function restartLiveStage(
+  stageOrCode: string | LiveStage,
+): Promise<LiveStage | null> {
+  if (!isSupabaseConfigured) {
+    const identity = await resolveLocalIdentity();
+    return updateLocalStagePlayback(stageOrCode, identity, () => ({
+      currentTrackIndex: 0,
+      status: "live",
+      startedAt: new Date().toISOString(),
+    }));
+  }
+
+  const stage =
+    typeof stageOrCode === "string"
+      ? await readLiveStage(stageOrCode)
+      : stageOrCode;
+
+  if (!stage) return null;
+
+  return updateStagePlayback(stage, {
+    currentTrackIndex: 0,
+    status: "live",
+  });
+}
+
 export async function deleteLiveStage(
   stageIdOrCode: string,
 ): Promise<void> {
@@ -1668,6 +1843,9 @@ export async function sendLiveStageMessage(
                   new Date().toISOString(),
                 isMine:
                   true,
+                reactions: {},
+                myReactions: [],
+                reactionUsers: {},
               };
 
             messages.push(
@@ -2350,6 +2528,7 @@ async function updateLocalStagePlayback(
   ) => {
     currentTrackIndex?: number;
     status?: LiveStageStatus;
+    startedAt?: string;
   },
 ): Promise<LiveStage | null> {
   return withLocalMutation(
@@ -2389,6 +2568,15 @@ async function updateLocalStagePlayback(
           status:
             update.status ??
             currentStage.status,
+          startedAt:
+            update.startedAt ??
+            currentStage.startedAt,
+          endedAt:
+            update.status === "ended"
+              ? new Date().toISOString()
+              : update.status === "live"
+                ? undefined
+                : currentStage.endedAt,
           updatedAt:
             new Date().toISOString(),
         };
@@ -2882,6 +3070,8 @@ async function createLocalLiveStage(
             0,
           membershipRole:
             "host",
+          startedAt:
+            now,
           createdAt:
             now,
           updatedAt:
@@ -3405,6 +3595,14 @@ function normalizeLocalStage(
       normalizeRole(
         record.membershipRole,
       ) ?? null,
+    startedAt:
+      validDate(
+        record.startedAt,
+        validDate(
+          record.createdAt,
+          now,
+        ),
+      ),
     createdAt:
       validDate(
         record.createdAt,
@@ -3745,6 +3943,15 @@ function cleanText(
     "string"
     ? value.trim()
     : "";
+}
+
+function normalizeAtmosphereSignals(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)))
+    .slice(0, 24);
 }
 
 function boundedText(

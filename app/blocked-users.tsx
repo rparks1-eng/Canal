@@ -54,12 +54,13 @@ type BlockedUserListItem = {
 
 export default function BlockedUsersScreen() {
   const {
+    accountEpoch,
+    sessionGeneration,
     user,
   } = useAuth();
 
   const identityKey =
-    user?.id ??
-    "signed-out";
+    `${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`;
 
   return (
     <BlockedUsersScreenContent
@@ -361,6 +362,7 @@ function BlockedUsersScreenContent(
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -639,7 +641,7 @@ function createFallbackUser(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#F3EFE5",
   },
 
   page: {
@@ -658,7 +660,7 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 90,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
@@ -667,34 +669,35 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: "#6D6B64",
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 16,
     fontWeight: "700",
   },
 
   eyebrow: {
     marginBottom: 8,
-    color: "#ff9a50",
+    color: "#787DFF",
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#ffffff",
+    color: "#191A18",
+    fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "700",
   },
 
   description: {
     marginTop: 10,
-    color: "#aeb6b0",
+    color: "#6D6B64",
     fontSize: 15,
     lineHeight: 22,
   },
@@ -785,7 +788,7 @@ const styles = StyleSheet.create({
 
   unblockButton: {
     minWidth: 78,
-    minHeight: 40,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 12,

@@ -98,7 +98,10 @@ export default function JoinStageScreen() {
 
       router.replace({
         pathname:
-          "/live-stage/[stageId]",
+          stage.membershipRole ===
+          "collaborator"
+            ? "/stage-contribution"
+            : "/live-stage/[stageId]",
         params: {
           stageId:
             stage.id,

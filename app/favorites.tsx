@@ -18,6 +18,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../providers/auth-provider";
+
 import {
   readFavoriteSceneIds,
   removeFavoriteScene,
@@ -28,6 +30,16 @@ import {
 } from "../lib/public-scenes";
 
 export default function FavoritesScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+
+  return (
+    <FavoritesScreenContent
+      key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`}
+    />
+  );
+}
+
+function FavoritesScreenContent() {
   const [
     favoriteScenes,
     setFavoriteScenes,
@@ -121,6 +133,21 @@ export default function FavoritesScreen() {
     }
   }
 
+  function confirmRemoveFavorite(scene: PublicScene) {
+    Alert.alert(
+      `Remove ${scene.name} from Favorites?`,
+      "The Scene stays available in Explore.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => { void removeFavorite(scene.id); },
+        },
+      ],
+    );
+  }
+
   return (
     <SafeAreaView
       style={styles.screen}
@@ -135,6 +162,7 @@ export default function FavoritesScreen() {
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -165,6 +193,7 @@ export default function FavoritesScreen() {
           </Text>
 
           <Pressable
+            accessibilityLabel="Explore Scenes"
             accessibilityRole="button"
             onPress={() =>
               router.push(
@@ -244,6 +273,7 @@ export default function FavoritesScreen() {
             </Text>
 
             <Pressable
+              accessibilityLabel="Explore Scenes"
               accessibilityRole="button"
               onPress={() =>
                 router.push(
@@ -278,6 +308,7 @@ export default function FavoritesScreen() {
                   }
                 >
                   <Pressable
+                    accessibilityLabel={`Open ${scene.name}`}
                     accessibilityRole="button"
                     onPress={() =>
                       router.push({
@@ -357,15 +388,18 @@ export default function FavoritesScreen() {
                   </Pressable>
 
                   <Pressable
+                    accessibilityLabel={`Remove ${scene.name} from Favorites`}
                     accessibilityRole="button"
+                    accessibilityState={{
+                      busy: removingSceneId === scene.id,
+                      disabled: removingSceneId === scene.id,
+                    }}
                     disabled={
                       removingSceneId ===
                       scene.id
                     }
                     onPress={() => {
-                      void removeFavorite(
-                        scene.id,
-                      );
+                      confirmRemoveFavorite(scene);
                     }}
                     style={({ pressed }) => [
                       styles.removeButton,
@@ -431,7 +465,7 @@ function getInitials(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#F3EFE5",
   },
 
   page: {
@@ -450,24 +484,24 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 90,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: "#6D6B64",
     fontSize: 14,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 16,
     fontWeight: "700",
   },
 
   headerAction: {
-    color: "#ff9a50",
+    color: "#787DFF",
     fontSize: 13,
     fontWeight: "700",
     textAlign: "right",
@@ -475,21 +509,22 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginBottom: 8,
-    color: "#ff9a50",
+    color: "#787DFF",
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#ffffff",
+    color: "#191A18",
+    fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "700",
   },
 
   description: {
     marginTop: 10,
-    color: "#aeb6b0",
+    color: "#6D6B64",
     fontSize: 15,
     lineHeight: 22,
   },

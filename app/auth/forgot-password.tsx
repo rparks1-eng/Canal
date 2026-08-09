@@ -1,4 +1,5 @@
 import {
+  useRef,
   useState,
 } from "react";
 
@@ -33,6 +34,9 @@ export default function ForgotPasswordScreen() {
     setEmail,
   ] = useState("");
 
+  const sendingInFlight = useRef(false);
+  const openingInFlight = useRef(false);
+
   const [
     recoveryLink,
     setRecoveryLink,
@@ -60,9 +64,11 @@ export default function ForgotPasswordScreen() {
 
   const submit =
     async (): Promise<void> => {
-      if (sending) {
+      if (sendingInFlight.current) {
         return;
       }
+
+      sendingInFlight.current = true;
 
       setSending(
         true,
@@ -86,6 +92,7 @@ export default function ForgotPasswordScreen() {
             : "Canal could not send the reset email.",
         );
       } finally {
+        sendingInFlight.current = false;
         setSending(
           false,
         );
@@ -94,9 +101,11 @@ export default function ForgotPasswordScreen() {
 
   const openPastedLink =
     async (): Promise<void> => {
-      if (opening) {
+      if (openingInFlight.current) {
         return;
       }
+
+      openingInFlight.current = true;
 
       setOpening(
         true,
@@ -126,6 +135,7 @@ export default function ForgotPasswordScreen() {
             : "Canal could not verify the password-reset link.",
         );
       } finally {
+        openingInFlight.current = false;
         setOpening(
           false,
         );
@@ -170,6 +180,7 @@ export default function ForgotPasswordScreen() {
           }
         >
           <Pressable
+            accessibilityLabel="Back to sign in"
             accessibilityRole="button"
             onPress={
               goBack
@@ -219,7 +230,7 @@ export default function ForgotPasswordScreen() {
               setEmail
             }
             placeholder="you@example.com"
-            placeholderTextColor="#9A938C"
+            placeholderTextColor="#6D6B64"
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={
@@ -233,6 +244,11 @@ export default function ForgotPasswordScreen() {
 
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Send Reset Email"
+            accessibilityState={{
+              busy: sending,
+              disabled: sending,
+            }}
             disabled={
               sending
             }
@@ -290,7 +306,7 @@ export default function ForgotPasswordScreen() {
                 setRecoveryLink
               }
               placeholder="Paste the complete https:// link"
-              placeholderTextColor="#9A938C"
+              placeholderTextColor="#6D6B64"
               autoCapitalize="none"
               autoCorrect={
                 false
@@ -304,6 +320,11 @@ export default function ForgotPasswordScreen() {
 
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Verify Reset Link"
+              accessibilityState={{
+                busy: opening,
+                disabled: opening || !recoveryLink.trim(),
+              }}
               disabled={
                 opening ||
                 !recoveryLink.trim()
@@ -323,7 +344,7 @@ export default function ForgotPasswordScreen() {
             >
               {opening ? (
                 <ActivityIndicator
-                  color="#F47A24"
+                  color="#4C46C8"
                 />
               ) : (
                 <Text
@@ -383,7 +404,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     content: {
@@ -394,8 +415,8 @@ const styles =
     },
 
     backButton: {
-      width: 42,
-      height: 42,
+      width: 48,
+      height: 48,
       borderRadius: 21,
       alignItems:
         "center",
@@ -406,20 +427,21 @@ const styles =
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 34,
       lineHeight: 36,
     },
 
     title: {
-      color: "#181818",
+      fontFamily: "Georgia",
+      color: "#191A18",
       fontSize: 29,
       fontWeight: "900",
       marginTop: 34,
     },
 
     subtitle: {
-      color: "#6C655F",
+      color: "#6D6B64",
       fontSize: 14,
       lineHeight: 21,
       marginTop: 8,
@@ -441,7 +463,7 @@ const styles =
       borderRadius: 15,
       backgroundColor:
         "#FFFFFF",
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 15,
       paddingHorizontal: 14,
       paddingVertical: 12,
@@ -455,7 +477,7 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       marginTop: 14,
     },
 
@@ -474,13 +496,13 @@ const styles =
     },
 
     simulatorTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 16,
       fontWeight: "900",
     },
 
     simulatorText: {
-      color: "#6C655F",
+      color: "#6D6B64",
       fontSize: 12,
       lineHeight: 19,
       marginTop: 7,
@@ -497,7 +519,7 @@ const styles =
       minHeight: 49,
       borderWidth: 1,
       borderColor:
-        "#F47A24",
+        "#4C46C8",
       borderRadius: 15,
       alignItems:
         "center",
@@ -507,7 +529,7 @@ const styles =
     },
 
     secondaryButtonText: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 14,
       fontWeight: "900",
     },

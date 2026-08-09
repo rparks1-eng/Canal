@@ -30,6 +30,11 @@ import {
 import {
   PublicSnapshotGrid,
 } from "../../components/PublicSnapshotCard";
+import { VerifiedAccountBadge } from "../../components/verified-account-badge";
+
+import {
+  CanalHeaderActions,
+} from "../../components/canal-ui/canal-header-actions";
 
 import {
   RecoveryNotice,
@@ -82,14 +87,6 @@ import {
 import type {
   Snapshot,
 } from "../../lib/snapshots";
-
-import {
-  listOwnSnapshotTemplates,
-} from "../../lib/snapshot-templates";
-
-import type {
-  SnapshotTemplate,
-} from "../../lib/snapshot-templates";
 
 import {
   supabase,
@@ -205,6 +202,26 @@ export default function ProfileScreen() {
   );
 }
 
+type ProfileNetworkCacheEntry = Readonly<{
+  summary: ProfileConnectionSummary;
+  exports: ScenePlaylistExport[];
+  cachedAt: number;
+}>;
+
+const PROFILE_NETWORK_CACHE_TTL_MS = 5 * 60 * 1_000;
+const profileNetworkCache = new Map<string, ProfileNetworkCacheEntry>();
+
+function readCachedProfileNetwork(userId: string | undefined): ProfileNetworkCacheEntry | null {
+  if (!userId) return null;
+  const entry = profileNetworkCache.get(userId);
+  if (!entry) return null;
+  if (Date.now() - entry.cachedAt > PROFILE_NETWORK_CACHE_TTL_MS) {
+    profileNetworkCache.delete(userId);
+    return null;
+  }
+  return entry;
+}
+
 function ProfileScreenContent() {
   const {
     user,
@@ -224,6 +241,8 @@ function ProfileScreenContent() {
   const identityKey =
     user?.id ??
     "signed-out";
+
+  const initialNetworkCache = readCachedProfileNetwork(user?.id);
 
   const [
     profile,
@@ -263,7 +282,7 @@ function ProfileScreenContent() {
     useState<
       ProfileConnectionSummary | null
     >(
-      null,
+      initialNetworkCache?.summary ?? null,
     );
 
   const [
@@ -272,7 +291,7 @@ function ProfileScreenContent() {
   ] =
     useState<
       ScenePlaylistExport[]
-    >([]);
+    >(initialNetworkCache?.exports ?? []);
 
   const [
     publicSnapshots,
@@ -280,14 +299,6 @@ function ProfileScreenContent() {
   ] =
     useState<
       Snapshot[]
-    >([]);
-
-  const [
-    snapshotTemplates,
-    setSnapshotTemplates,
-  ] =
-    useState<
-      SnapshotTemplate[]
     >([]);
 
   const [
@@ -301,16 +312,11 @@ function ProfileScreenContent() {
   const [
     sceneDataResolved,
     setSceneDataResolved,
-  ] = useState(false);
+  ] = useState(Boolean(initialNetworkCache));
 
   const [
     snapshotDataResolved,
     setSnapshotDataResolved,
-  ] = useState(false);
-
-  const [
-    templateDataResolved,
-    setTemplateDataResolved,
   ] = useState(false);
 
   const [
@@ -367,14 +373,6 @@ function ProfileScreenContent() {
   const [
     snapshotError,
     setSnapshotError,
-  ] =
-    useState<unknown | null>(
-      null,
-    );
-
-  const [
-    templateError,
-    setTemplateError,
   ] =
     useState<unknown | null>(
       null,
@@ -448,28 +446,19 @@ function ProfileScreenContent() {
 
         const nextLoad =
           (async (): Promise<void> => {
+            const cachedNetwork = readCachedProfileNetwork(user?.id);
             setLoading(
               true,
             );
-            setConnectionSummary(
-              null,
-            );
-            setPlaylistExports(
-              [],
-            );
-            setSnapshotTemplates(
-              [],
-            );
+            setConnectionSummary(cachedNetwork?.summary ?? null);
+            setPlaylistExports(cachedNetwork?.exports ?? []);
             setCollections(
               [],
             );
             setSocialDataResolved(
-              false,
+              Boolean(cachedNetwork),
             );
             setCollectionDataResolved(
-              false,
-            );
-            setTemplateDataResolved(
               false,
             );
 
@@ -690,6 +679,11 @@ function ProfileScreenContent() {
                     setPlaylistExports(
                       nextExports,
                     );
+                    profileNetworkCache.set(identityKey, {
+                      summary: nextSummary,
+                      exports: nextExports,
+                      cachedAt: Date.now(),
+                    });
                     setSocialDataResolved(
                       true,
                     );
@@ -751,57 +745,12 @@ function ProfileScreenContent() {
                   },
                 );
 
-            const templateLoad =
-              (
-                user
-                  ? listOwnSnapshotTemplates()
-                  : Promise.reject(
-                      new Error(
-                        "Sign in to refresh your Snapshot templates.",
-                      ),
-                    )
-              )
-                .then(
-                  (
-                    nextTemplates,
-                  ) => {
-                    if (!isCurrent()) {
-                      return;
-                    }
-
-                    setSnapshotTemplates(
-                      nextTemplates,
-                    );
-                    setTemplateDataResolved(
-                      true,
-                    );
-                    setTemplateError(
-                      null,
-                    );
-                  },
-                )
-                .catch(
-                  (error: unknown) => {
-                    if (!isCurrent()) {
-                      return;
-                    }
-
-                    setTemplateDataResolved(
-                      true,
-                    );
-                    setTemplateError(
-                      error,
-                    );
-                  },
-                );
-
             await Promise.all([
               profileLoad,
               sceneLoad,
               snapshotLoad,
               socialLoad,
               collectionLoad,
-              templateLoad,
             ]);
 
             if (isCurrent()) {
@@ -962,25 +911,6 @@ function ProfileScreenContent() {
       [
         collectionError,
         connectivityStatus,
-      ],
-    );
-
-  const templateIssue =
-    useMemo(
-      () =>
-        templateError
-          ? classifyRecoveryIssue(
-              templateError,
-              {
-                service:
-                  "canal",
-                connectivityStatus,
-              },
-            )
-          : null,
-      [
-        connectivityStatus,
-        templateError,
       ],
     );
 
@@ -1317,25 +1247,7 @@ function ProfileScreenContent() {
             </Text>
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              router.push(
-                "/settings" as never,
-              )
-            }
-            style={
-              styles.settingsButton
-            }
-          >
-            <Text
-              style={
-                styles.settingsText
-              }
-            >
-              Settings
-            </Text>
-          </Pressable>
+          <CanalHeaderActions />
         </View>
 
         {profileIssue ? (
@@ -1370,68 +1282,50 @@ function ProfileScreenContent() {
           />
         ) : null}
 
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open My Stages"
+          onPress={() => router.push("/managed-stages")}
+          style={({ pressed }) => [styles.managedStagesLink, pressed && styles.pressed]}
+        >
+          <View>
+            <Text style={styles.managedStagesTitle}>My Stages</Text>
+            <Text style={styles.managedStagesCopy}>Manage live rooms, collaborators, privacy, and ended Stage history.</Text>
+          </View>
+          <Text accessibilityElementsHidden style={styles.managedStagesArrow}>›</Text>
+        </Pressable>
+
         {displayProfile ? (
           <View
             style={
               styles.identityCard
             }
           >
-            <View
-              style={
-                styles.avatar
-              }
-            >
-              <Text
-                style={
-                  styles.avatarText
-                }
-              >
-                {avatarText}
-              </Text>
-            </View>
+            <View style={styles.identitySummary}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{avatarText}</Text>
+              </View>
 
-            <Text
-              style={
-                styles.profileName
-              }
-            >
-              {
-                displayProfile.displayName
-              }
-            </Text>
-
-            <Text
-              style={
-                styles.handle
-              }
-            >
-              {
-                displayProfile.handle
-              }
-            </Text>
-
-            <View
-              style={
-                styles.visibilityBadge
-              }
-            >
-              <Text
-                style={
-                  styles.visibilityBadgeText
-                }
-              >
-                {displayProfile
-                  .isCanal
-                  ? "Canal profile"
-                  : displayProfile
-                      .isVerified
-                    ? "Verified profile"
-                    : profile
-                      ? profile.isPublic
-                        ? "Public profile"
-                        : "Private profile"
-                      : "Saved profile details"}
-              </Text>
+              <View style={styles.identityCopy}>
+                <View style={styles.profileNameRow}>
+                  <Text style={styles.profileName}>{displayProfile.displayName}</Text>
+                  {displayProfile.isVerified ? <VerifiedAccountBadge size={19} /> : null}
+                </View>
+                <Text style={styles.handle}>{displayProfile.handle}</Text>
+                <View style={styles.visibilityBadge}>
+                  <Text style={styles.visibilityBadgeText}>
+                    {displayProfile.isCanal
+                      ? "Canal profile"
+                      : displayProfile.isVerified
+                        ? "Verified profile"
+                        : profile
+                          ? profile.isPublic
+                            ? "Public profile"
+                            : "Private profile"
+                          : "Saved profile details"}
+                  </Text>
+                </View>
+              </View>
             </View>
 
             {sceneDataResolved ? (
@@ -2066,118 +1960,6 @@ function ProfileScreenContent() {
 
             <View
               style={
-                styles.templateSection
-              }
-            >
-              <View
-                style={
-                  styles.templateSectionCopy
-                }
-              >
-                <View
-                  style={
-                    styles.templateTitleRow
-                  }
-                >
-                  <Text
-                    style={
-                      styles.snapshotSectionTitle
-                    }
-                  >
-                    Snapshot Templates
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.snapshotCount
-                    }
-                  >
-                    {(
-                      !templateDataResolved ||
-                      templateIssue
-                    ) &&
-                    snapshotTemplates.length ===
-                      0
-                      ? "—"
-                      : snapshotTemplates.length}
-                  </Text>
-                </View>
-
-                <Text
-                  style={
-                    styles.snapshotSectionSubtitle
-                  }
-                >
-                  Reusable branded looks for your published moments.
-                </Text>
-
-                {snapshotTemplates.find(
-                  (template) =>
-                    template.isDefault,
-                ) ? (
-                  <Text
-                    numberOfLines={
-                      1
-                    }
-                    style={
-                      styles.defaultTemplateText
-                    }
-                  >
-                    Default ·{" "}
-                    {
-                      snapshotTemplates.find(
-                        (template) =>
-                          template.isDefault,
-                      )?.name
-                    }
-                  </Text>
-                ) : null}
-              </View>
-
-              <Pressable
-                accessibilityLabel="Manage Snapshot templates"
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push(
-                    "/snapshot-templates" as never,
-                  )
-                }
-                style={({
-                  pressed,
-                }) => [
-                  styles.manageTemplateButton,
-                  pressed &&
-                    styles.pressed,
-                ]}
-              >
-                <Text
-                  style={
-                    styles.manageTemplateText
-                  }
-                >
-                  Manage
-                </Text>
-              </Pressable>
-            </View>
-
-            {templateIssue ? (
-              <RecoveryNotice
-                busy={
-                  loading
-                }
-                issue={
-                  templateIssue
-                }
-                onAction={() =>
-                  recoverRead(
-                    templateIssue,
-                  )
-                }
-              />
-            ) : null}
-
-            <View
-              style={
                 styles.snapshotSectionHeader
               }
             >
@@ -2338,7 +2120,7 @@ function ProfileScreenContent() {
                 )
               }
               placeholder="Your name"
-              placeholderTextColor="#9A938C"
+              placeholderTextColor="#5C5A54"
               maxLength={60}
               style={
                 styles.input
@@ -2366,7 +2148,7 @@ function ProfileScreenContent() {
                 )
               }
               placeholder="@yourhandle"
-              placeholderTextColor="#9A938C"
+              placeholderTextColor="#5C5A54"
               autoCapitalize="none"
               autoCorrect={
                 false
@@ -2398,7 +2180,7 @@ function ProfileScreenContent() {
                 )
               }
               placeholder="Tell people about your music taste."
-              placeholderTextColor="#9A938C"
+              placeholderTextColor="#5C5A54"
               multiline
               maxLength={300}
               style={[
@@ -2428,7 +2210,7 @@ function ProfileScreenContent() {
                 )
               }
               placeholder="Driving, studying, working out..."
-              placeholderTextColor="#9A938C"
+              placeholderTextColor="#5C5A54"
               multiline
               maxLength={300}
               style={[
@@ -2523,7 +2305,7 @@ function ProfileScreenContent() {
               >
                 {saving ? (
                   <ActivityIndicator
-                    color="#FFFFFF"
+                    color="#FFFDF8"
                   />
                 ) : (
                   <Text
@@ -2627,7 +2409,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     loading: {
@@ -2654,52 +2436,48 @@ const styles =
     },
 
     title: {
-      color: "#181818",
-      fontSize: 30,
-      fontWeight: "900",
+      fontFamily: "Georgia",
+      color: "#191A18",
+      fontSize: 38,
+      fontWeight: "500",
+      letterSpacing: -1.1,
     },
 
     subtitle: {
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 13,
       marginTop: 3,
     },
 
-    settingsButton: {
-      borderWidth: 1,
-      borderColor:
-        "#E2DAD4",
-      borderRadius: 14,
-      backgroundColor:
-        "#FFFFFF",
-      paddingHorizontal: 13,
-      paddingVertical: 10,
-    },
-
-    settingsText: {
-      color: "#F47A24",
-      fontSize: 12,
-      fontWeight: "900",
-    },
-
     identityCard: {
-      alignItems:
-        "center",
+      alignItems: "stretch",
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 24,
-      padding: 22,
+      padding: 17,
+      gap: 15,
+    },
+
+    identitySummary: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+    },
+
+    identityCopy: {
+      flex: 1,
+      alignItems: "flex-start",
     },
 
     localLibraryTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 19,
       fontWeight: "900",
     },
 
     localLibraryText: {
       maxWidth: 300,
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 12,
       lineHeight: 18,
       textAlign: "center",
@@ -2707,32 +2485,34 @@ const styles =
     },
 
     avatar: {
-      width: 78,
-      height: 78,
-      borderRadius: 39,
+      width: 62,
+      height: 62,
+      borderRadius: 31,
       alignItems:
         "center",
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     avatarText: {
-      color: "#FFFFFF",
-      fontSize: 26,
+      color: "#FFFDF8",
+      fontSize: 22,
       fontWeight: "900",
     },
 
     profileName: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 22,
-      fontWeight: "900",
-      marginTop: 11,
+      fontFamily: "Georgia",
+      fontWeight: "500",
     },
 
+    profileNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+
     handle: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 13,
       marginTop: 3,
     },
@@ -2743,11 +2523,11 @@ const styles =
       borderRadius: 11,
       paddingHorizontal: 10,
       paddingVertical: 6,
-      marginTop: 10,
+      marginTop: 7,
     },
 
     visibilityBadgeText: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 10,
       fontWeight: "900",
     },
@@ -2755,7 +2535,7 @@ const styles =
     stats: {
       width: "100%",
       flexDirection: "row",
-      marginTop: 19,
+      marginTop: 2,
     },
 
     stat: {
@@ -2765,13 +2545,13 @@ const styles =
     },
 
     statValue: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 19,
       fontWeight: "900",
     },
 
     statLabel: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 10,
       marginTop: 3,
     },
@@ -2779,10 +2559,10 @@ const styles =
     connectionCard: {
       borderWidth: 1,
       borderColor:
-        "#ECDDD2",
+        canalDynamicColors.line,
       borderRadius: 22,
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       padding: 17,
       gap: 16,
     },
@@ -2798,19 +2578,19 @@ const styles =
     },
 
     connectionTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 17,
       fontWeight: "900",
     },
 
     connectionSubtitle: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 10,
       marginTop: 3,
     },
 
     discoverText: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -2830,11 +2610,11 @@ const styles =
         "center",
       borderRadius: 15,
       backgroundColor:
-        "#FFF7F1",
+        "rgba(229, 255, 249, 0.1)",
     },
 
     connectionValue: {
-      color: "#241B16",
+      color: "#191A18",
       fontSize: 17,
       fontWeight: "900",
       fontVariant: [
@@ -2843,7 +2623,7 @@ const styles =
     },
 
     connectionLabel: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 9,
       fontWeight: "800",
       marginTop: 4,
@@ -2852,10 +2632,10 @@ const styles =
     playlistCard: {
       borderWidth: 1,
       borderColor:
-        "#DCE9DE",
+        canalDynamicColors.line,
       borderRadius: 22,
       backgroundColor:
-        "#F7FCF7",
+        canalDynamicColors.surface,
       padding: 17,
       gap: 14,
     },
@@ -2903,7 +2683,7 @@ const styles =
       gap: 11,
       borderRadius: 15,
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       padding: 10,
     },
 
@@ -2954,7 +2734,7 @@ const styles =
 
     infoCard: {
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 22,
       padding: 18,
     },
@@ -2981,7 +2761,7 @@ const styles =
     divider: {
       height: 1,
       backgroundColor:
-        "#F0ECE8",
+        canalDynamicColors.line,
       marginVertical: 17,
     },
 
@@ -3001,19 +2781,19 @@ const styles =
     },
 
     collectionCreateButton: {
-      minHeight: 38,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
         "center",
       borderRadius: 13,
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       paddingHorizontal: 16,
     },
 
     collectionCreateText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -3030,10 +2810,10 @@ const styles =
         "center",
       borderWidth: 1,
       borderColor:
-        "#EEE5DE",
+        canalDynamicColors.line,
       borderRadius: 18,
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       paddingHorizontal: 16,
       paddingVertical: 13,
     },
@@ -3043,20 +2823,20 @@ const styles =
     },
 
     collectionTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 14,
       fontWeight: "900",
     },
 
     collectionMeta: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 10,
       lineHeight: 15,
       marginTop: 4,
     },
 
     collectionArrow: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 24,
       marginLeft: 10,
     },
@@ -3081,12 +2861,12 @@ const styles =
       gap: 14,
       borderWidth: 1,
       borderColor:
-        "#EEE5DE",
+        canalDynamicColors.line,
       borderRadius: 20,
       borderCurve:
         "continuous",
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       padding: 16,
     },
 
@@ -3111,7 +2891,7 @@ const styles =
     },
 
     manageTemplateButton: {
-      minHeight: 46,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
@@ -3131,19 +2911,19 @@ const styles =
     },
 
     snapshotSectionTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 19,
       fontWeight: "900",
     },
 
     snapshotSectionSubtitle: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 11,
       marginTop: 3,
     },
 
     snapshotCount: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 13,
       fontWeight: "900",
     },
@@ -3151,21 +2931,21 @@ const styles =
     snapshotEmpty: {
       borderWidth: 1,
       borderColor:
-        "#EEE5DE",
+        canalDynamicColors.line,
       borderRadius: 20,
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       padding: 18,
     },
 
     snapshotEmptyTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 15,
       fontWeight: "900",
     },
 
     snapshotEmptyText: {
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 12,
       lineHeight: 18,
       marginTop: 5,
@@ -3176,14 +2956,14 @@ const styles =
         "flex-start",
       borderRadius: 12,
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       paddingHorizontal: 12,
       paddingVertical: 9,
       marginTop: 12,
     },
 
     snapshotActionText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -3196,24 +2976,24 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     editButtonText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 15,
       fontWeight: "900",
     },
 
     editCard: {
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 22,
       padding: 18,
     },
 
     editTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 19,
       fontWeight: "900",
       marginBottom: 2,
@@ -3231,11 +3011,11 @@ const styles =
       minHeight: 50,
       borderWidth: 1,
       borderColor:
-        "#E2DAD4",
+        canalDynamicColors.line,
       borderRadius: 15,
       backgroundColor:
-        "#FFFDFC",
-      color: "#1B1B1B",
+        canalDynamicColors.elevated,
+      color: "#191A18",
       fontSize: 14,
       paddingHorizontal: 14,
       paddingVertical: 12,
@@ -3253,7 +3033,7 @@ const styles =
         "center",
       borderTopWidth: 1,
       borderTopColor:
-        "#F0ECE8",
+        canalDynamicColors.line,
       marginTop: 18,
       paddingTop: 16,
     },
@@ -3270,7 +3050,7 @@ const styles =
     },
 
     publicDescription: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 11,
       lineHeight: 17,
       marginTop: 4,
@@ -3287,7 +3067,7 @@ const styles =
       minHeight: 51,
       borderWidth: 1,
       borderColor:
-        "#DAD2CC",
+        canalDynamicColors.line,
       borderRadius: 16,
       alignItems:
         "center",
@@ -3310,17 +3090,51 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     saveText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 14,
       fontWeight: "900",
     },
 
     pressed: {
       opacity: 0.7,
+    },
+
+    managedStagesLink: {
+      minHeight: 82,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 16,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      borderRadius: 22,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.surface,
+    },
+
+    managedStagesTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+
+    managedStagesCopy: {
+      maxWidth: 290,
+      paddingTop: 4,
+      color: canalDynamicColors.muted,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+
+    managedStagesArrow: {
+      color: canalDynamicColors.mint,
+      fontSize: 34,
+      fontWeight: "400",
     },
 
     successBox: {

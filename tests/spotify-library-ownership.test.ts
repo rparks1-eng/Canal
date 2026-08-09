@@ -1157,14 +1157,14 @@ describe(
 
                     if (
                       responseResolvers.length ===
-                        4
+                        1
                     ) {
                       signalInitialReads();
                     }
 
                     if (
                       responseResolvers.length ===
-                        5
+                        2
                     ) {
                       signalSuccessorRead();
                     }
@@ -1227,7 +1227,7 @@ describe(
 
         await successorReadStarted;
 
-        responseResolvers[4](
+        responseResolvers[1](
           mockResponse(
             200,
             {
@@ -1262,7 +1262,7 @@ describe(
           const resolve of
           responseResolvers.slice(
             0,
-            4,
+            1,
           )
         ) {
           resolve(
@@ -1304,7 +1304,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledTimes(
-          5,
+          2,
         );
         expect(
           (
@@ -1816,7 +1816,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledTimes(
-          4,
+          1,
         );
 
         const result =
@@ -1846,7 +1846,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledTimes(
-          4,
+          1,
         );
 
         await saveSpotifySession(
@@ -1879,7 +1879,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledTimes(
-          9,
+          6,
         );
       },
     );

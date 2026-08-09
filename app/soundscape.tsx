@@ -6,6 +6,7 @@ import {
 import {
   useCallback,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -22,6 +23,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { canalColors } from "../theme/canal-colors";
+import { canalTypography } from "../theme/canal-typography";
 
 import {
   shareSoundscape,
@@ -59,6 +63,8 @@ export default function SoundscapeScreen() {
 
   const [isSaving, setIsSaving] =
     useState(false);
+  const savingInFlightRef =
+    useRef(false);
 
   const [
     displayName,
@@ -185,7 +191,10 @@ export default function SoundscapeScreen() {
   }
 
   async function saveProfile() {
-    if (!profile) {
+    if (
+      savingInFlightRef.current ||
+      !profile
+    ) {
       return;
     }
 
@@ -216,6 +225,8 @@ export default function SoundscapeScreen() {
     }
 
     try {
+      savingInFlightRef.current =
+        true;
       setIsSaving(true);
 
       const savedProfile =
@@ -267,6 +278,8 @@ export default function SoundscapeScreen() {
         "Canal could not update your Soundscape.",
       );
     } finally {
+      savingInFlightRef.current =
+        false;
       setIsSaving(false);
     }
   }
@@ -437,6 +450,7 @@ export default function SoundscapeScreen() {
           <View style={styles.header}>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={isEditing ? "Cancel Soundscape editing" : "Back to profile"}
               onPress={() =>
                 isEditing
                   ? cancelEditing()
@@ -469,6 +483,8 @@ export default function SoundscapeScreen() {
 
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={isEditing ? "Save Soundscape" : "Edit Soundscape"}
+              accessibilityState={{ disabled: isSaving, busy: isSaving }}
               disabled={isSaving}
               onPress={() => {
                 if (isEditing) {
@@ -689,6 +705,8 @@ export default function SoundscapeScreen() {
                 </View>
 
                 <Switch
+                  accessibilityLabel="Public Soundscape"
+                  accessibilityRole="switch"
                   value={
                     profile.visibility ===
                     "public"
@@ -761,6 +779,7 @@ export default function SoundscapeScreen() {
 
                   <Pressable
                     accessibilityRole="button"
+                    accessibilityLabel="Manage featured Snapshots"
                     onPress={() =>
                       router.push(
                         "/snapshots",
@@ -811,6 +830,7 @@ export default function SoundscapeScreen() {
 
                     <Pressable
                       accessibilityRole="button"
+                      accessibilityLabel="View Snapshots"
                       onPress={() =>
                         router.push(
                           "/snapshots",
@@ -849,6 +869,7 @@ export default function SoundscapeScreen() {
                         >
                           <Pressable
                             accessibilityRole="button"
+                            accessibilityLabel={`Open Snapshot ${snapshot.sceneName}`}
                             onPress={() =>
                               router.push({
                                 pathname:
@@ -940,6 +961,7 @@ export default function SoundscapeScreen() {
 
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Share Soundscape"
                 onPress={() => {
                   void handleShare();
                 }}
@@ -1104,7 +1126,7 @@ function getInitials(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: canalColors.light.page,
   },
 
   layout: {
@@ -1139,20 +1161,19 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 80,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: canalColors.light.ink,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
+    ...canalTypography.chrome,
+    color: canalColors.light.ink,
   },
 
   headerAction: {
@@ -1183,9 +1204,8 @@ const styles = StyleSheet.create({
 
   displayName: {
     marginTop: 15,
-    color: "#ffffff",
-    fontSize: 28,
-    fontWeight: "700",
+    ...canalTypography.title,
+    color: canalColors.light.ink,
     textAlign: "center",
   },
 
@@ -1232,7 +1252,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#303833",
     borderRadius: 21,
-    backgroundColor: "#171c19",
+    backgroundColor: canalColors.light.surface,
   },
 
   field: {
@@ -1240,7 +1260,7 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    color: "#ffffff",
+    color: canalColors.light.ink,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -1251,8 +1271,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#39413c",
     borderRadius: 15,
-    backgroundColor: "#111613",
-    color: "#ffffff",
+    backgroundColor: canalColors.light.elevated,
+    color: canalColors.light.ink,
     fontSize: 14,
   },
 
@@ -1303,13 +1323,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#303833",
     borderRadius: 21,
-    backgroundColor: "#171c19",
+    backgroundColor: canalColors.light.surface,
   },
 
   cardTitle: {
-    color: "#ffffff",
-    fontSize: 19,
-    fontWeight: "700",
+    ...canalTypography.title,
+    color: canalColors.light.ink,
+    fontSize: 22,
+    lineHeight: 27,
   },
 
   chipSection: {
@@ -1357,9 +1378,10 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: "#ffffff",
-    fontSize: 20,
-    fontWeight: "700",
+    ...canalTypography.title,
+    color: canalColors.light.ink,
+    fontSize: 24,
+    lineHeight: 29,
   },
 
   sectionDescription: {
@@ -1445,8 +1467,8 @@ const styles = StyleSheet.create({
   },
 
   removeButton: {
-    width: 39,
-    height: 39,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },

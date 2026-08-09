@@ -48,6 +48,18 @@ function goBack(): void {
 }
 
 export default function SceneCollectionScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+  const params = useLocalSearchParams<{ collectionId?: string }>();
+  const collectionId = typeof params.collectionId === "string" ? params.collectionId : "missing";
+
+  return (
+    <SceneCollectionContent
+      key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}:${collectionId}`}
+    />
+  );
+}
+
+function SceneCollectionContent() {
   const {
     user,
   } =
@@ -443,6 +455,7 @@ export default function SceneCollectionScreen() {
                     }
                   >
                     <Pressable
+                      accessibilityLabel={`Edit ${collection.title} collection`}
                       accessibilityRole="button"
                       onPress={() =>
                         router.push({
@@ -468,7 +481,9 @@ export default function SceneCollectionScreen() {
                     </Pressable>
 
                     <Pressable
+                      accessibilityLabel={`Delete ${collection.title} collection`}
                       accessibilityRole="button"
+                      accessibilityState={{ busy: deleting, disabled: deleting }}
                       disabled={
                         deleting
                       }
@@ -653,7 +668,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
     header: {
       flexDirection: "row",
@@ -665,8 +680,8 @@ const styles =
       paddingVertical: 8,
     },
     backButton: {
-      width: 42,
-      height: 42,
+      width: 48,
+      height: 48,
       alignItems:
         "center",
       justifyContent:
@@ -681,9 +696,10 @@ const styles =
       lineHeight: 36,
     },
     headerTitle: {
-      color: "#1B1B1B",
-      fontSize: 16,
-      fontWeight: "900",
+      color: "#191A18",
+      fontFamily: "Georgia",
+      fontSize: 22,
+      fontWeight: "400",
     },
     headerSpacer: {
       width: 42,
@@ -722,9 +738,10 @@ const styles =
       letterSpacing: 0.5,
     },
     title: {
-      color: "#1B1B1B",
+      color: "#191A18",
+      fontFamily: "Georgia",
       fontSize: 28,
-      fontWeight: "900",
+      fontWeight: "400",
       marginTop: 12,
     },
     description: {
@@ -809,7 +826,7 @@ const styles =
     },
     editButton: {
       flex: 1,
-      minHeight: 46,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
@@ -825,7 +842,7 @@ const styles =
     },
     deleteButton: {
       minWidth: 92,
-      minHeight: 46,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
@@ -908,6 +925,8 @@ const styles =
     retryButton: {
       alignSelf:
         "flex-start",
+      minHeight: 48,
+      justifyContent: "center",
       borderRadius: 11,
       backgroundColor:
         "#A6352B",

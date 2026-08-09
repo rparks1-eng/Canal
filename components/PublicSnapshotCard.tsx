@@ -1,10 +1,8 @@
 import {
-  Ionicons,
-} from "@expo/vector-icons";
-
-import {
   router,
 } from "expo-router";
+
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   Pressable,
@@ -21,9 +19,10 @@ import type {
   Snapshot,
 } from "../lib/snapshots";
 
-import type {
-  SnapshotTemplateTheme,
-} from "../lib/snapshot-templates";
+import { SnapshotComposition } from "./snapshot-composition";
+import { VerifiedAccountBadge } from "./verified-account-badge";
+
+import type { SnapshotSocialSummary } from "../lib/snapshot-social";
 
 export type SnapshotCardItem =
   Snapshot & {
@@ -37,6 +36,10 @@ export function PublicSnapshotCard(
       SnapshotCardItem;
     compact?: boolean;
     showCreator?: boolean;
+    socialSummary?: SnapshotSocialSummary;
+    likeBusy?: boolean;
+    onToggleLike?: () => void;
+    onOpenComments?: () => void;
   },
 ) {
   const {
@@ -56,11 +59,6 @@ export function PublicSnapshotCard(
             " · ",
           )
       : "Scene moment";
-
-  const templateStyle =
-    snapshotTemplateStyle(
-      snapshot.templateTheme,
-    );
 
   return (
     <View
@@ -96,69 +94,13 @@ export function PublicSnapshotCard(
             styles.pressed,
         ]}
       >
-        <View
-          style={[
-            styles.artwork,
-            templateStyle && {
-              backgroundColor:
-                templateStyle.backgroundColor,
-            },
-          ]}
-        >
-          <Ionicons
-            name="camera"
-            size={
-              props.compact
-                ? 26
-                : 32
-            }
-            color={
-              templateStyle
-                ?.accentColor ??
-              "#F47A24"
-            }
-          />
+        <SnapshotComposition
+          snapshot={snapshot}
+          height={props.compact ? 108 : 360}
+          compact={props.compact}
+        />
 
-          {snapshot.templateBrandLabel ? (
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.templateBrand,
-                {
-                  color:
-                    templateStyle
-                      ?.textColor ??
-                    "#6D3315",
-                },
-              ]}
-            >
-              {
-                snapshot.templateBrandLabel
-              }
-            </Text>
-          ) : null}
-
-          {snapshot.mood ? (
-            <View
-              style={
-                styles.moodBadge
-              }
-            >
-              <Text
-                numberOfLines={
-                  1
-                }
-                style={
-                  styles.moodText
-                }
-              >
-                {snapshot.mood}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        <Text
+        {props.compact ? <Text
           numberOfLines={
             1
           }
@@ -167,9 +109,9 @@ export function PublicSnapshotCard(
           }
         >
           {snapshot.sceneName}
-        </Text>
+        </Text> : null}
 
-        <Text
+        {props.compact ? <Text
           numberOfLines={
             2
           }
@@ -178,9 +120,9 @@ export function PublicSnapshotCard(
           }
         >
           {trackLabel}
-        </Text>
+        </Text> : null}
 
-        {snapshot.note ? (
+        {props.compact && snapshot.note ? (
           <Text
             numberOfLines={
               props.compact
@@ -193,7 +135,7 @@ export function PublicSnapshotCard(
           >
             {snapshot.note}
           </Text>
-        ) : (
+        ) : props.compact ? (
           <Text
             style={
               styles.emptyNote
@@ -201,7 +143,7 @@ export function PublicSnapshotCard(
           >
             No note added
           </Text>
-        )}
+        ) : null}
 
         {snapshot.templateBrandLabel ? (
           <Text
@@ -217,6 +159,73 @@ export function PublicSnapshotCard(
           </Text>
         ) : null}
       </Pressable>
+
+      {!props.compact ? (
+        <View style={styles.socialRow}>
+          <Pressable
+            accessibilityLabel={
+              props.socialSummary?.likedByMe
+                ? "Unlike Snapshot"
+                : "Like Snapshot"
+            }
+            accessibilityRole="button"
+            accessibilityState={{
+              selected:
+                props.socialSummary?.likedByMe === true,
+              disabled:
+                props.likeBusy || !props.onToggleLike,
+            }}
+            disabled={props.likeBusy || !props.onToggleLike}
+            onPress={props.onToggleLike}
+            style={({ pressed }) => [
+              styles.socialButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name={
+                props.socialSummary?.likedByMe
+                  ? "heart"
+                  : "heart-outline"
+              }
+              size={20}
+              color={
+                props.socialSummary?.likedByMe
+                  ? "#FF6F68"
+                  : canalDynamicColors.text
+              }
+            />
+            <Text style={styles.socialCount}>
+              {props.socialSummary?.likeCount ?? 0}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityLabel="View Snapshot comments"
+            accessibilityRole="button"
+            onPress={props.onOpenComments}
+            style={({ pressed }) => [
+              styles.socialButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="chatbubble-outline"
+              size={19}
+              color={canalDynamicColors.text}
+            />
+            <Text style={styles.socialCount}>
+              {props.socialSummary?.commentCount ?? 0}
+            </Text>
+          </Pressable>
+
+          {snapshot.note ? (
+            <Text numberOfLines={2} style={styles.feedCaption}>
+              {snapshot.note}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       {props.showCreator &&
       snapshot.creator ? (
@@ -292,16 +301,9 @@ export function PublicSnapshotCard(
                 .isCanal ||
               snapshot.creator
                 .isVerified ? (
-                <Text
-                  style={
-                    styles.creatorBadge
-                  }
-                >
-                  {snapshot.creator
-                    .isCanal
-                    ? "CANAL"
-                    : "VERIFIED"}
-                </Text>
+                <VerifiedAccountBadge
+                  size={14}
+                />
               ) : null}
             </View>
 
@@ -321,51 +323,6 @@ export function PublicSnapshotCard(
       ) : null}
     </View>
   );
-}
-
-function snapshotTemplateStyle(
-  theme:
-    SnapshotTemplateTheme
-    | undefined,
-): {
-  backgroundColor: string;
-  accentColor: string;
-  textColor: string;
-} | null {
-  switch (theme) {
-    case "sunset":
-      return {
-        backgroundColor:
-          "#3E1734",
-        accentColor:
-          "#FF9A50",
-        textColor:
-          "#FFF8F2",
-      };
-
-    case "midnight":
-      return {
-        backgroundColor:
-          "#101B34",
-        accentColor:
-          "#79A7FF",
-        textColor:
-          "#F6F8FF",
-      };
-
-    case "paper":
-      return {
-        backgroundColor:
-          "#FFF4E8",
-        accentColor:
-          "#C64B2D",
-        textColor:
-          "#2B2520",
-      };
-
-    default:
-      return null;
-  }
 }
 
 export function PublicSnapshotGrid(
@@ -430,6 +387,38 @@ const styles =
 
     pressed: {
       opacity: 0.72,
+    },
+
+    socialRow: {
+      minHeight: 56,
+      paddingHorizontal: 13,
+      paddingVertical: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+    },
+
+    socialButton: {
+      minWidth: 48,
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+    },
+
+    socialCount: {
+      color: canalDynamicColors.text,
+      fontSize: 12,
+      fontWeight: "700",
+      fontVariant: ["tabular-nums"],
+    },
+
+    feedCaption: {
+      flex: 1,
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 17,
     },
 
     artwork: {

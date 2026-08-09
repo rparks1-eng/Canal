@@ -1,4 +1,5 @@
 import {
+  use,
   useCallback,
   useMemo,
   useRef,
@@ -28,8 +29,28 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  Image,
+} from "expo-image";
+
+import {
+  Ionicons,
+} from "@expo/vector-icons";
+
+import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
+
+import {
+  useCanalReduceTransparency,
+} from "../../components/canal-ui/canal-primitives";
+
+import {
+  LivingCover,
+} from "../../components/living-cover";
+
+import {
+  useCanalReduceTransparency,
+} from "../../components/canal-ui/canal-primitives";
 
 import {
   classifyAnalyticsFailure,
@@ -55,6 +76,10 @@ import {
 } from "../../lib/scene-music-export";
 
 import {
+  addSpotifyArtworkToStoredScene,
+} from "../../lib/spotify-scene-artwork";
+
+import {
   deleteScene,
   duplicateScene,
   getSceneById,
@@ -62,6 +87,10 @@ import {
   sceneShareText,
   toggleSceneFavorite,
 } from "../../lib/scenes";
+
+import {
+  syncScenesWithCloud,
+} from "../../lib/scene-sync";
 
 import type {
   StoredScene,
@@ -82,6 +111,17 @@ import {
 import {
   useConnectivity,
 } from "../../providers/connectivity-provider";
+
+import { canalTypography } from "../../theme/canal-typography";
+
+import {
+  CanalAtmosphereContext,
+} from "../../theme/canal-atmosphere-context";
+
+import {
+  sceneAtmosphere,
+  scenePresentation,
+} from "../../components/canal-ui/scene-signature";
 
 async function openTrack(
   url?: string,
@@ -111,6 +151,12 @@ async function openTrack(
 
 export default function SceneDetailScreen() {
   const {
+    setOverride,
+  } = use(CanalAtmosphereContext);
+  const reduceTransparency = useCanalReduceTransparency();
+  const reduceTransparency =
+    useCanalReduceTransparency();
+  const {
     user,
   } =
     useAuth();
@@ -133,6 +179,18 @@ export default function SceneDetailScreen() {
       "string"
       ? params.sceneId
       : "";
+
+  useFocusEffect(
+    useCallback(() => {
+      if (scene) {
+        setOverride(sceneAtmosphere(scene));
+      }
+
+      return () => {
+        setOverride(null);
+      };
+    }, [scene, setOverride]),
+  );
 
   const [
     scene,
@@ -172,22 +230,69 @@ export default function SceneDetailScreen() {
 
   const exportInFlight =
     useRef(false);
+  const favoriteInFlight =
+    useRef(false);
+  const [favoriteBusy, setFavoriteBusy] =
+    useState(false);
+  const artworkLoadRef =
+    useRef(0);
 
   const load =
     useCallback(() => {
       const run =
         async (): Promise<void> => {
+          const artworkLoad = artworkLoadRef.current + 1;
+          artworkLoadRef.current = artworkLoad;
           setLoading(true);
 
-          setScene(
-            sceneId
-              ? await getSceneById(
-                  sceneId,
-                )
-              : null,
-          );
+          let storedScene = sceneId
+            ? await getSceneById(sceneId)
+            : null;
+
+          if (artworkLoadRef.current !== artworkLoad) {
+            return;
+          }
+
+          if (storedScene) {
+            setScene(storedScene);
+            setLoading(false);
+          }
+
+          try {
+            await syncScenesWithCloud();
+
+            storedScene = sceneId
+              ? await getSceneById(sceneId)
+              : null;
+          } catch (syncError) {
+            console.warn(
+              "Canal could not refresh this Scene from another device; showing the latest local copy instead:",
+              syncError,
+            );
+          }
+
+          if (artworkLoadRef.current !== artworkLoad) {
+            return;
+          }
+
+          setScene(storedScene);
 
           setLoading(false);
+
+          if (storedScene) {
+            const enriched = await addSpotifyArtworkToStoredScene(storedScene);
+
+            if (artworkLoadRef.current === artworkLoad) {
+              setScene((current) =>
+                current?.id === enriched.id
+                  ? {
+                      ...current,
+                      tracks: enriched.tracks,
+                    }
+                  : current,
+              );
+            }
+          }
         };
 
       void run();
@@ -197,16 +302,74 @@ export default function SceneDetailScreen() {
 
   const favorite =
     async (): Promise<void> => {
-      if (!scene) {
+      if (!scene || favoriteInFlight.current) {
         return;
       }
 
-      const updated =
-        await toggleSceneFavorite(
-          scene.id,
-        );
+      favoriteInFlight.current = true;
+      setFavoriteBusy(true);
+      setMessage("");
 
-      setScene(updated);
+      const expectedSceneId = scene.id;
+      const optimisticFavorite = !scene.favorite;
+      setScene((current) =>
+        current?.id === expectedSceneId
+          ? {
+              ...current,
+              favorite: optimisticFavorite,
+            }
+          : current,
+      );
+
+      try {
+        const updated =
+          await toggleSceneFavorite(
+            expectedSceneId,
+          );
+
+        setScene((current) =>
+          current?.id === expectedSceneId
+            ? {
+                ...updated,
+                tracks: current.tracks,
+              }
+            : current,
+        );
+      } catch (error) {
+        const persisted =
+          await getSceneById(
+            expectedSceneId,
+          ).catch(() => null);
+
+        if (persisted) {
+          setScene((current) =>
+            current?.id === expectedSceneId
+              ? {
+                  ...persisted,
+                  tracks: current.tracks,
+                }
+              : current,
+          );
+        } else {
+          setScene((current) =>
+            current?.id === expectedSceneId
+              ? {
+                  ...current,
+                  favorite: !optimisticFavorite,
+                }
+              : current,
+          );
+        }
+
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not update this favorite.",
+        );
+      } finally {
+        favoriteInFlight.current = false;
+        setFavoriteBusy(false);
+      }
     };
 
   const start =
@@ -613,6 +776,9 @@ export default function SceneDetailScreen() {
     );
   }
 
+  const presentation =
+    scenePresentation(scene);
+
   return (
     <SafeAreaView
       style={styles.safeArea}
@@ -621,8 +787,10 @@ export default function SceneDetailScreen() {
         "bottom",
       ]}
     >
+
       <View style={styles.header}>
         <Pressable
+          accessibilityLabel="Go back"
           accessibilityRole="button"
           onPress={() => {
             if (router.canGoBack()) {
@@ -633,6 +801,13 @@ export default function SceneDetailScreen() {
           }}
           style={({ pressed }) => [
             styles.backButton,
+            reduceTransparency
+              ? styles.solidSurface
+              : styles.glassSurface,
+            {
+              borderColor:
+                `${presentation.accent}55`,
+            },
 
             pressed &&
               styles.pressed,
@@ -648,29 +823,39 @@ export default function SceneDetailScreen() {
         </Pressable>
 
         <Pressable
+          accessibilityLabel={
+            scene.favorite
+              ? "Remove Scene from favorites"
+              : "Add Scene to favorites"
+          }
           accessibilityRole="button"
+          accessibilityState={{
+            busy: favoriteBusy,
+            selected: scene.favorite,
+          }}
+          disabled={favoriteBusy}
           onPress={() =>
             void favorite()
           }
           style={({ pressed }) => [
             styles.favoriteButton,
-
             pressed &&
               styles.pressed,
           ]}
         >
-          <Text
-            style={[
-              styles.favoriteText,
-
-              scene.favorite &&
-                styles.favoriteTextActive,
-            ]}
-          >
-            {scene.favorite
-              ? "★"
-              : "☆"}
-          </Text>
+          <Ionicons
+            color={
+              scene.favorite
+                ? presentation.accent
+                : "rgba(244, 255, 252, 0.88)"
+            }
+            name={
+              scene.favorite
+                ? "star"
+                : "star-outline"
+            }
+            size={22}
+          />
         </Pressable>
       </View>
 
@@ -682,7 +867,12 @@ export default function SceneDetailScreen() {
           false
         }
       >
-        <View style={styles.hero}>
+        <View style={[
+          styles.hero,
+          reduceTransparency
+            ? styles.solidSurface
+            : styles.heroGlass,
+        ]}>
           <Text
             style={
               styles.heroActivity
@@ -754,21 +944,30 @@ export default function SceneDetailScreen() {
           </View>
 
           <Pressable
+            accessibilityLabel="Start Scene"
             accessibilityRole="button"
             onPress={() =>
               void start()
             }
             style={({ pressed }) => [
               styles.startButton,
+              {
+                backgroundColor:
+                  presentation.accent,
+              },
 
               pressed &&
                 styles.pressed,
             ]}
           >
             <Text
-              style={
-                styles.startButtonText
-              }
+              style={[
+                styles.startButtonText,
+                {
+                  color:
+                    presentation.accentText,
+                },
+              ]}
             >
               Start Scene
             </Text>
@@ -777,40 +976,46 @@ export default function SceneDetailScreen() {
 
         <View style={styles.actionGrid}>
           <Pressable
+            accessibilityLabel="Create Snapshot"
             accessibilityRole="button"
             onPress={() =>
               router.push({
                 pathname:
-                  "/scene-snapshot",
+                  "/snapshot-camera",
 
                 params: {
                   sceneId:
                     scene.id,
+                  sceneName:
+                    scene.name,
+                  source:
+                    "scene",
+                  trackId:
+                    scene.tracks[0]?.id ?? "",
+                  trackTitle:
+                    scene.tracks[0]?.title ?? "",
+                  trackArtist:
+                    scene.tracks[0]?.artist ?? "",
+                  trackImageUrl:
+                    scene.tracks[0]?.imageUrl ?? "",
+                  spotifyUrl:
+                    scene.tracks[0]?.spotifyUrl ?? "",
+                  mood:
+                    scene.emotions,
                 },
               })
             }
             style={({ pressed }) => [
               styles.actionButton,
-
               pressed &&
                 styles.pressed,
             ]}
           >
-            <Text
-              style={
-                styles.actionTitle
-              }
-            >
-              Snapshot
-            </Text>
-
-            <Text
-              style={
-                styles.actionText
-              }
-            >
-              Share the Scene
-            </Text>
+            <Ionicons
+              color={presentation.accent}
+              name="camera-outline"
+              size={23}
+            />
           </Pressable>
 
           {scene.libraryType ===
@@ -834,88 +1039,62 @@ export default function SceneDetailScreen() {
               }
               style={({ pressed }) => [
                 styles.actionButton,
-
                 pressed &&
                   styles.pressed,
               ]}
             >
-              <Text
-                style={
-                  styles.actionTitle
-                }
-              >
-                Collaborate
-              </Text>
-
-              <Text
-                style={
-                  styles.actionText
-                }
-              >
-                Invite an editor
-              </Text>
+              <Ionicons
+                color={presentation.accent}
+                name="people-outline"
+                size={23}
+              />
             </Pressable>
           ) : null}
 
           <Pressable
+            accessibilityLabel="Share Scene"
             accessibilityRole="button"
             onPress={() =>
               void share()
             }
             style={({ pressed }) => [
               styles.actionButton,
-
               pressed &&
                 styles.pressed,
             ]}
           >
-            <Text
-              style={
-                styles.actionTitle
-              }
-            >
-              Share
-            </Text>
-
-            <Text
-              style={
-                styles.actionText
-              }
-            >
-              Open share sheet
-            </Text>
+            <Ionicons
+              color={presentation.accent}
+              name="share-outline"
+              size={23}
+            />
           </Pressable>
 
           <Pressable
+            accessibilityLabel="Duplicate Scene"
             accessibilityRole="button"
             onPress={() =>
               void duplicate()
             }
             style={({ pressed }) => [
               styles.actionButton,
-
               pressed &&
                 styles.pressed,
             ]}
           >
-            <Text
-              style={
-                styles.actionTitle
-              }
-            >
-              Duplicate
-            </Text>
-
-            <Text
-              style={
-                styles.actionText
-              }
-            >
-              Make a copy
-            </Text>
+            <Ionicons
+              color={presentation.accent}
+              name="copy-outline"
+              size={22}
+            />
           </Pressable>
 
           <Pressable
+            accessibilityLabel={
+              exporting
+                ? "Exporting Scene to Spotify"
+                : "Export Scene to Spotify"
+            }
             accessibilityRole="button"
             accessibilityState={{
               busy:
@@ -938,7 +1117,6 @@ export default function SceneDetailScreen() {
             }
             style={({ pressed }) => [
               styles.actionButton,
-
               (
                 exporting ||
                 checkingConnection ||
@@ -951,27 +1129,77 @@ export default function SceneDetailScreen() {
                 styles.pressed,
             ]}
           >
-            <Text
-              style={
-                styles.actionTitle
-              }
-            >
-              {exporting
-                ? "Exporting"
-                : checkingConnection
-                  ? "Checking"
-                : "Spotify"}
-            </Text>
-
-            <Text
-              style={
-                styles.actionText
-              }
-            >
-              Create playlist
-            </Text>
+            {exporting || checkingConnection ? (
+              <ActivityIndicator
+                color={presentation.accent}
+                size="small"
+              />
+            ) : (
+              <Ionicons
+                color={presentation.accent}
+                name="musical-notes-outline"
+                size={23}
+              />
+            )}
           </Pressable>
         </View>
+
+        {scene.tracks[0] ? (
+          <Pressable
+            accessibilityLabel={`Start Scene with ${scene.tracks[0].title}`}
+            accessibilityRole="button"
+            onPress={() => void start()}
+            style={({ pressed }) => [
+              styles.firstUp,
+              reduceTransparency
+                ? styles.solidSurface
+                : styles.glassSurface,
+              pressed && styles.pressed,
+            ]}
+          >
+            {scene.tracks[0].imageUrl ? (
+              <Image
+                accessibilityLabel={`${scene.tracks[0].title} album artwork from Spotify`}
+                contentFit="cover"
+                source={{ uri: scene.tracks[0].imageUrl }}
+                style={styles.firstUpArtwork}
+                transition={120}
+              />
+            ) : (
+              <View style={[styles.firstUpArtwork, styles.trackImagePlaceholder]} />
+            )}
+
+            <View style={styles.firstUpCopy}>
+              <Text style={styles.firstUpKicker}>FIRST UP</Text>
+              <Text numberOfLines={1} style={styles.firstUpTitle}>
+                {scene.tracks[0].title}
+              </Text>
+              <Text numberOfLines={1} style={styles.firstUpArtist}>
+                {scene.tracks[0].artist}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.firstUpPlay,
+                {
+                  backgroundColor: presentation.accent,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.firstUpPlayText,
+                  {
+                    color: presentation.accentText,
+                  },
+                ]}
+              >
+                Play
+              </Text>
+            </View>
+          </Pressable>
+        ) : null}
 
         {exportRecoveryIssue ? (
           <RecoveryNotice
@@ -1000,7 +1228,12 @@ export default function SceneDetailScreen() {
           </View>
         ) : null}
 
-        <View style={styles.sectionCard}>
+        <View style={[
+          styles.sectionCard,
+          reduceTransparency
+            ? styles.solidSurface
+            : styles.glassSurface,
+        ]}>
           <Text
             style={
               styles.sectionTitle
@@ -1060,7 +1293,12 @@ export default function SceneDetailScreen() {
           )}
         </View>
 
-        <View style={styles.sectionCard}>
+        <View style={[
+          styles.sectionCard,
+          reduceTransparency
+            ? styles.solidSurface
+            : styles.glassSurface,
+        ]}>
           <Text
             style={
               styles.sectionTitle
@@ -1096,20 +1334,24 @@ export default function SceneDetailScreen() {
                       styles.pressed,
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.trackImage,
-                      styles.trackImagePlaceholder,
-                    ]}
-                  >
-                    <Text
-                      style={
-                        styles.trackNumber
-                      }
+                  {track.imageUrl ? (
+                    <Image
+                      accessibilityLabel={`${track.title} album artwork from Spotify`}
+                      contentFit="cover"
+                      source={{ uri: track.imageUrl }}
+                      style={styles.trackImage}
+                      transition={120}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.trackImage,
+                        styles.trackImagePlaceholder,
+                      ]}
                     >
-                      {index + 1}
-                    </Text>
-                  </View>
+                      <Text style={styles.trackNumber}>{index + 1}</Text>
+                    </View>
+                  )}
 
                   <View
                     style={
@@ -1160,6 +1402,17 @@ export default function SceneDetailScreen() {
               styles.pressed,
           ]}
         >
+          <View
+            style={[
+              styles.heroAccentLine,
+              {
+                backgroundColor:
+                  presentation.accent,
+                boxShadow: `0 0 18px ${presentation.accent}88`,
+              },
+            ]}
+          />
+
           <Text
             style={
               styles.deleteText
@@ -1177,8 +1430,32 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: "#286F9A",
+    },
+
+    pageCover: {
+      ...StyleSheet.absoluteFillObject,
+      aspectRatio: undefined,
+      borderRadius: 0,
+      minHeight: 0,
+    },
+
+    glassSurface: {
+      backgroundColor: "rgba(10, 55, 78, 0.68)",
+      borderColor: "rgba(218, 255, 248, 0.24)",
+      borderWidth: 1,
+    },
+
+    heroGlass: {
+      backgroundColor: "rgba(8, 44, 73, 0.48)",
+      borderColor: "rgba(218, 255, 248, 0.28)",
+      borderWidth: 1,
+    },
+
+    solidSurface: {
+      backgroundColor: "#123F5D",
+      borderColor: "#7EC8C3",
+      borderWidth: 1,
     },
 
     center: {
@@ -1208,8 +1485,8 @@ const styles =
     },
 
     backButton: {
-      width: 42,
-      height: 42,
+      width: 48,
+      height: 48,
       borderRadius: 21,
       alignItems:
         "center",
@@ -1227,9 +1504,8 @@ const styles =
     },
 
     favoriteButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: 48,
+      height: 48,
       alignItems:
         "center",
       justifyContent:
@@ -1249,21 +1525,26 @@ const styles =
 
     content: {
       paddingHorizontal: 20,
-      paddingBottom: 45,
+      paddingBottom: 110,
       gap: 15,
     },
 
     hero: {
       alignItems: "center",
-      backgroundColor:
-        "#2B1710",
       borderRadius: 27,
       paddingHorizontal: 20,
       paddingVertical: 27,
     },
 
+    heroAccentLine: {
+      width: 42,
+      height: 3,
+      borderRadius: 999,
+      marginBottom: 13,
+    },
+
     heroActivity: {
-      color: "#FFB781",
+      color: "#D8FFF8",
       fontSize: 11,
       fontWeight: "900",
       textTransform:
@@ -1273,28 +1554,41 @@ const styles =
 
     heroName: {
       color: "#FFFFFF",
-      fontSize: 29,
-      fontWeight: "900",
+      fontFamily: "Georgia",
+      fontSize: 38,
+      fontWeight: "400",
       textAlign: "center",
-      marginTop: 6,
+      letterSpacing: -1.1,
+      marginTop: 7,
     },
 
     heroMood: {
       color: "#DEC7BC",
-      fontSize: 14,
+      fontSize: 13,
+      lineHeight: 19,
       textAlign: "center",
-      marginTop: 6,
+      marginTop: 7,
+      paddingHorizontal: 28,
     },
 
     heroMeta: {
       flexDirection: "row",
       alignItems: "center",
-      marginTop: 16,
+      marginTop: 14,
+      minHeight: 34,
+      borderRadius: 999,
+      backgroundColor: "rgba(5, 29, 60, 0.20)",
+      borderWidth: 1,
+      borderColor: "rgba(224, 255, 249, 0.12)",
+      paddingHorizontal: 13,
+      paddingVertical: 7,
     },
 
     heroMetaText: {
       color: "#BFA99F",
-      fontSize: 10,
+      fontSize: 9,
+      fontWeight: "800",
+      letterSpacing: 0.25,
       textTransform:
         "capitalize",
     },
@@ -1306,21 +1600,23 @@ const styles =
     },
 
     startButton: {
-      minHeight: 50,
-      minWidth: 190,
-      borderRadius: 17,
+      minHeight: 54,
+      width: "100%",
+      borderRadius: 19,
+      borderCurve: "continuous",
       alignItems:
         "center",
       justifyContent:
         "center",
       backgroundColor:
         "#F47A24",
-      marginTop: 20,
+      marginTop: 16,
       paddingHorizontal: 22,
+      boxShadow: "0 14px 30px rgba(3, 27, 58, 0.18)",
     },
 
     startButtonText: {
-      color: "#FFFFFF",
+      color: "#103835",
       fontSize: 16,
       fontWeight: "900",
     },
@@ -1328,24 +1624,31 @@ const styles =
     actionGrid: {
       flexDirection: "row",
       flexWrap: "wrap",
+      justifyContent: "center",
+      alignItems: "center",
       gap: 10,
+      paddingVertical: 2,
     },
 
     actionButton: {
-      width: "48%",
-      minHeight: 77,
+      width: "48.7%",
+      minHeight: 70,
       justifyContent:
         "center",
       backgroundColor:
         "#FFFFFF",
       borderRadius: 18,
+      borderCurve: "continuous",
       paddingHorizontal: 14,
+      paddingVertical: 10,
+      boxShadow: "0 10px 24px rgba(2, 22, 51, 0.12)",
     },
 
     actionTitle: {
       color: "#25211F",
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: "900",
+      letterSpacing: -0.15,
     },
 
     actionText: {
@@ -1379,9 +1682,10 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#1B1B1B",
-      fontSize: 19,
-      fontWeight: "900",
+      ...canalTypography.title,
+      color: "#FFFFFF",
+      fontSize: 22,
+      lineHeight: 27,
       marginBottom: 8,
     },
 
@@ -1393,7 +1697,7 @@ const styles =
         "space-between",
       borderTopWidth: 1,
       borderTopColor:
-        "#F0ECE8",
+        "rgba(218, 255, 248, 0.24)",
       paddingVertical: 12,
     },
 
@@ -1419,7 +1723,7 @@ const styles =
       alignItems: "center",
       borderTopWidth: 1,
       borderTopColor:
-        "#F0ECE8",
+        "rgba(218, 255, 248, 0.24)",
       paddingVertical: 12,
     },
 
@@ -1437,7 +1741,7 @@ const styles =
       borderCurve:
         "continuous",
       backgroundColor:
-        "#F1E7DF",
+        "#1E6682",
       marginRight: 10,
     },
 
@@ -1487,13 +1791,13 @@ const styles =
         "center",
       borderWidth: 1,
       borderColor:
-        "#DBAAA5",
+        "rgba(255, 171, 176, 0.52)",
       backgroundColor:
-        "#FFF8F7",
+        "rgba(92, 25, 38, 0.68)",
     },
 
     deleteText: {
-      color: "#A62E27",
+      color: "#FFD8DB",
       fontSize: 14,
       fontWeight: "800",
     },
@@ -1518,5 +1822,15 @@ const styles =
 
     pressed: {
       opacity: 0.7,
+    },
+
+    glassSurface: {
+      backgroundColor: "rgba(5, 42, 66, 0.62)",
+      borderColor: "rgba(220, 255, 249, 0.22)",
+    },
+
+    solidSurface: {
+      backgroundColor: "#123F5D",
+      borderColor: "#6B9CB0",
     },
   });

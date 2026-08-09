@@ -42,6 +42,12 @@ import type {
   StoredScene,
 } from "../lib/scenes";
 import {
+  submitSceneToStage,
+} from "../lib/stage-collaboration";
+import {
+  generateCreativeStageName,
+} from "../lib/creative-names";
+import {
   classifyRecoveryIssue,
 } from "../lib/recovery-issue";
 import {
@@ -489,10 +495,18 @@ export default function CreateStageScreen() {
       scene.id,
     );
     setName(
-      `${scene.name} Live`.slice(
-        0,
-        80,
-      ),
+      generateCreativeStageName(
+        {
+          sceneName: scene.name,
+          activity: scene.activity,
+          moods: scene.emotions.split(",").map((mood) => mood.trim()).filter(Boolean),
+          genres: scene.genres.split(",").map((genre) => genre.trim()).filter(Boolean),
+        },
+        {
+          seed: `${scene.id}:${Date.now()}`,
+          existingNames: visibleScenes.map((item) => item.name),
+        },
+      ).slice(0, 80),
     );
     setActivity(
       scene.activity,
@@ -571,8 +585,11 @@ export default function CreateStageScreen() {
 
       const stage =
         await createLiveStage({
-          sceneId:
-            selectedScene.id,
+          // Scene Studio currently stores generated Scenes locally. Passing
+          // that local identifier as a cloud foreign key makes Supabase RLS
+          // correctly reject the Stage insert. The Stage already carries its
+          // own bounded queue snapshot, so leave the optional cloud Scene
+          // reference unset until the selected Scene has cloud provenance.
           name:
             name.trim(),
           activity:
@@ -588,6 +605,11 @@ export default function CreateStageScreen() {
           hostUsername:
             profile?.handle,
         });
+
+      await submitSceneToStage(
+        stage.id,
+        selectedScene,
+      );
 
       if (
         operationId !==
@@ -616,7 +638,7 @@ export default function CreateStageScreen() {
 
       router.replace({
         pathname:
-          "/live-stage/[stageId]",
+          "/stage-invite-collaborators",
         params: {
           stageId:
             stage.id,

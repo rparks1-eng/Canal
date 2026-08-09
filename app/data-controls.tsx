@@ -457,7 +457,7 @@ export default function DataControlsScreen() {
             <Ionicons
               name="phone-portrait-outline"
               size={28}
-              color="#ff9a50"
+              color="#4C46C8"
             />
           </View>
 
@@ -556,9 +556,9 @@ export default function DataControlsScreen() {
                   false:
                     "#434a45",
                   true:
-                    "#ff7a1a",
+                    "#4C46C8",
                 }}
-                thumbColor="#ffffff"
+                thumbColor="#191A18"
                 value={
                   analyticsEnabled
                 }
@@ -590,8 +590,17 @@ export default function DataControlsScreen() {
             ) : null}
 
             <Pressable
+              accessibilityLabel="Delete Analytics History"
               accessibilityRole="button"
               accessibilityHint="Deletes queued events on this device and your existing Canal analytics rows."
+              accessibilityState={{
+                busy:
+                  activeAction ===
+                  "delete-analytics",
+                disabled:
+                  analyticsLoading ||
+                  activeAction !== "",
+              }}
               disabled={
                 analyticsLoading ||
                 activeAction !== ""
@@ -613,7 +622,7 @@ export default function DataControlsScreen() {
               {activeAction ===
               "delete-analytics" ? (
                 <ActivityIndicator
-                  color="#ff9a50"
+                  color="#4C46C8"
                 />
               ) : (
                 <Text
@@ -647,7 +656,7 @@ export default function DataControlsScreen() {
                 <Ionicons
                   name="download-outline"
                   size={24}
-                  color="#ff9a50"
+                  color="#4C46C8"
                 />
               </View>
 
@@ -672,7 +681,15 @@ export default function DataControlsScreen() {
             </View>
 
             <Pressable
+              accessibilityLabel="Export Canal Data"
               accessibilityRole="button"
+              accessibilityState={{
+                busy:
+                  activeAction ===
+                  "export",
+                disabled:
+                  activeAction !== "",
+              }}
               disabled={
                 activeAction !== ""
               }
@@ -690,14 +707,14 @@ export default function DataControlsScreen() {
               {activeAction ===
               "export" ? (
                 <ActivityIndicator
-                  color="#17110c"
+                  color="#191A18"
                 />
               ) : (
                 <>
                   <Ionicons
                     name="share-outline"
                     size={20}
-                    color="#17110c"
+                    color="#191A18"
                   />
 
                   <Text
@@ -765,7 +782,15 @@ export default function DataControlsScreen() {
             </View>
 
             <Pressable
+              accessibilityLabel="Clear This Device"
               accessibilityRole="button"
+              accessibilityState={{
+                busy:
+                  activeAction ===
+                  "reset",
+                disabled:
+                  activeAction !== "",
+              }}
               disabled={
                 activeAction !== ""
               }
@@ -802,7 +827,7 @@ export default function DataControlsScreen() {
           <Ionicons
             name="information-circle-outline"
             size={22}
-            color="#ff9a50"
+            color="#4C46C8"
           />
 
           <Text style={styles.noteText}>
@@ -847,7 +872,7 @@ function formatStorageSize(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#F3EFE5",
   },
 
   page: {
@@ -866,7 +891,7 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 90,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
@@ -881,28 +906,29 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 16,
     fontWeight: "700",
   },
 
   eyebrow: {
     marginBottom: 8,
-    color: "#ff9a50",
+    color: "#4C46C8",
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#ffffff",
+      fontFamily: "Georgia",
+    color: "#191A18",
     fontSize: 30,
     fontWeight: "700",
   },
 
   description: {
     marginTop: 10,
-    color: "#aeb6b0",
+    color: "#6D6B64",
     fontSize: 15,
     lineHeight: 22,
   },
@@ -911,9 +937,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 22,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: "#D9D3C8",
     borderRadius: 22,
-    backgroundColor: "#171c19",
+    backgroundColor: "#FFFDF8",
   },
 
   summaryIcon: {
@@ -922,19 +948,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 21,
-    backgroundColor: "#2b1d14",
+    backgroundColor: "#FFFDF8",
   },
 
   summaryTitle: {
     marginTop: 13,
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 17,
     fontWeight: "700",
   },
 
   summaryText: {
     marginTop: 6,
-    color: "#8f9891",
+    color: "#6D6B64",
     fontSize: 12,
   },
 
@@ -943,7 +969,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 19,
     fontWeight: "700",
   },
@@ -952,14 +978,14 @@ const styles = StyleSheet.create({
     gap: 17,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: "#D9D3C8",
     borderRadius: 21,
-    backgroundColor: "#171c19",
+    backgroundColor: "#FFFDF8",
   },
 
   dangerCard: {
-    borderColor: "#4f302d",
-    backgroundColor: "#1d1514",
+    borderColor: "#D8AAA6",
+    backgroundColor: "#FFF0EF",
   },
 
   actionHeader: {
@@ -974,7 +1000,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
     borderRadius: 17,
-    backgroundColor: "#2b1d14",
+    backgroundColor: "#FFFDF8",
   },
 
   dangerIcon: {
@@ -984,7 +1010,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
     borderRadius: 17,
-    backgroundColor: "#271716",
+    backgroundColor: "#FFFDF8",
   },
 
   actionCopy: {
@@ -998,14 +1024,14 @@ const styles = StyleSheet.create({
   },
 
   actionTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 16,
     fontWeight: "700",
   },
 
   actionText: {
     marginTop: 5,
-    color: "#8f9891",
+    color: "#6D6B64",
     fontSize: 12,
     lineHeight: 18,
   },
@@ -1017,11 +1043,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     borderRadius: 16,
-    backgroundColor: "#ff7a1a",
+    backgroundColor: "#4C46C8",
   },
 
   primaryButtonText: {
-    color: "#17110c",
+    color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "800",
   },
@@ -1033,23 +1059,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#5d3b24",
     borderRadius: 16,
-    backgroundColor: "#211810",
+    backgroundColor: "#FFFDF8",
   },
 
   secondaryButtonText: {
-    color: "#ffb078",
+    color: "#6B3B22",
     fontSize: 13,
     fontWeight: "800",
   },
 
   analyticsStatus: {
-    color: "#b7c0ba",
+    color: "#52605A",
     fontSize: 12,
     lineHeight: 18,
   },
 
   analyticsMessage: {
-    color: "#ffb078",
+    color: "#6B3B22",
     fontSize: 12,
     lineHeight: 18,
   },
@@ -1061,11 +1087,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#6e3833",
     borderRadius: 16,
-    backgroundColor: "#271716",
+    backgroundColor: "#FFFDF8",
   },
 
   dangerButtonText: {
-    color: "#ff9187",
+    color: "#A62E27",
     fontSize: 14,
     fontWeight: "800",
   },
@@ -1077,12 +1103,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#5d3b24",
     borderRadius: 17,
-    backgroundColor: "#211810",
+    backgroundColor: "#FFFDF8",
   },
 
   noteText: {
     flex: 1,
-    color: "#bca99b",
+    color: "#6D6B64",
     fontSize: 11,
     lineHeight: 17,
   },

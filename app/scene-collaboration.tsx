@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -54,6 +55,9 @@ import {
 import {
   useAuth,
 } from "../providers/auth-provider";
+
+import { canalColors } from "../theme/canal-colors";
+import { canalTypography } from "../theme/canal-typography";
 
 function parameter(
   value:
@@ -125,9 +129,30 @@ async function cacheOwnedCollaborativeScene(
 
 export default function SceneCollaborationScreen() {
   const {
+    accountEpoch,
+    sessionGeneration,
     user,
   } =
     useAuth();
+  const accountKey =
+    user?.id
+      ? `${user.id}:${accountEpoch}:${sessionGeneration}`
+      : "";
+  const accountKeyRef =
+    useRef(accountKey);
+  const mountedRef =
+    useRef(true);
+
+  accountKeyRef.current =
+    accountKey;
+
+  useEffect(
+    () => () => {
+      mountedRef.current =
+        false;
+    },
+    [],
+  );
 
   const params =
     useLocalSearchParams<{
@@ -197,6 +222,8 @@ export default function SceneCollaborationScreen() {
     busyKey,
     setBusyKey,
   ] = useState("");
+  const saveInFlightRef =
+    useRef(false);
 
   const [
     message,
@@ -614,10 +641,16 @@ export default function SceneCollaborationScreen() {
   const save =
     async (): Promise<void> => {
       if (
+        saveInFlightRef.current ||
         !collaborativeScene
       ) {
         return;
       }
+
+      saveInFlightRef.current =
+        true;
+      const saveAccountKey =
+        accountKeyRef.current;
 
       setBusyKey(
         "save",
@@ -653,6 +686,14 @@ export default function SceneCollaborationScreen() {
                 sceneActivity,
             },
           );
+
+        if (
+          !mountedRef.current ||
+          accountKeyRef.current !==
+            saveAccountKey
+        ) {
+          return;
+        }
 
         setCollaborativeScene(
           saved,
@@ -692,6 +733,9 @@ export default function SceneCollaborationScreen() {
           );
         }
       } finally {
+        saveInFlightRef.current =
+          false;
+
         setBusyKey(
           "",
         );
@@ -1330,6 +1374,8 @@ function PrimaryButton(
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={props.label}
+      accessibilityState={{ disabled: Boolean(props.disabled), busy: Boolean(props.busy) }}
       disabled={
         props.disabled
       }
@@ -1373,6 +1419,8 @@ function SecondaryButton(
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={props.label}
+      accessibilityState={{ disabled: Boolean(props.disabled) }}
       disabled={
         props.disabled
       }
@@ -1402,8 +1450,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalColors.light.page,
     },
 
     header: {
@@ -1427,8 +1474,8 @@ const styles =
     },
 
     backButton: {
-      width: 42,
-      height: 42,
+      width: 48,
+      height: 48,
       alignItems:
         "center",
       justifyContent:
@@ -1447,11 +1494,8 @@ const styles =
     },
 
     title: {
-      color:
-        "#29231F",
-      fontSize: 24,
-      fontWeight:
-        "900",
+      ...canalTypography.title,
+      color: canalColors.light.ink,
     },
 
     subtitle: {
@@ -1588,7 +1632,7 @@ const styles =
     },
 
     secondaryButton: {
-      minHeight: 46,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:

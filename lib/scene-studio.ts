@@ -19,6 +19,10 @@ import {
   upsertScene,
 } from "./scenes";
 
+import {
+  generateCreativeSceneName,
+} from "./creative-names";
+
 import type {
   SceneTrack,
   StoredScene,
@@ -83,8 +87,20 @@ export const SCENE_ACTIVITY_OPTIONS = [
 
 export const SCENE_MOOD_OPTIONS = [
   {
+    value: "warm",
+    label: "Warm",
+  },
+  {
+    value: "social",
+    label: "Social",
+  },
+  {
     value: "calm",
     label: "Calm",
+  },
+  {
+    value: "clear",
+    label: "Clear",
   },
   {
     value: "energized",
@@ -113,6 +129,34 @@ export const SCENE_MOOD_OPTIONS = [
   {
     value: "adventurous",
     label: "Adventurous",
+  },
+  {
+    value: "euphoric",
+    label: "Euphoric",
+  },
+  {
+    value: "dreamy",
+    label: "Dreamy",
+  },
+  {
+    value: "intimate",
+    label: "Intimate",
+  },
+  {
+    value: "nostalgic",
+    label: "Nostalgic",
+  },
+  {
+    value: "grounded",
+    label: "Grounded",
+  },
+  {
+    value: "playful",
+    label: "Playful",
+  },
+  {
+    value: "restless",
+    label: "Restless",
   },
 ] as const;
 
@@ -181,17 +225,75 @@ export const SCENE_ARC_OPTIONS = [
 
 export const SCENE_GENRE_OPTIONS = [
   "Pop",
+  "Indie pop",
+  "Dream pop",
+  "Synth-pop",
+  "Art pop",
   "Hip hop",
+  "Alternative hip hop",
+  "Trap",
+  "Lo-fi hip hop",
   "R&B",
+  "Alternative R&B",
+  "Neo-soul",
+  "Quiet storm",
   "Rock",
+  "Alternative rock",
+  "Indie rock",
+  "Classic rock",
+  "Psychedelic rock",
+  "Post-punk",
+  "Punk",
+  "Emo",
+  "Metal",
   "Indie",
+  "Folk",
+  "Singer-songwriter",
+  "Americana",
   "Electronic",
+  "Electronica",
+  "House",
+  "Deep house",
+  "Techno",
+  "Drum and bass",
+  "UK garage",
   "Dance",
+  "Disco",
   "Afrobeats",
+  "Afropop",
+  "Amapiano",
   "Latin",
+  "Reggaeton",
+  "Salsa",
+  "Bachata",
+  "Bossa nova",
   "Jazz",
+  "Vocal jazz",
+  "Jazz fusion",
   "Classical",
+  "Modern classical",
+  "Chamber music",
   "Ambient",
+  "Drone",
+  "New age",
+  "Chillout",
+  "Soul",
+  "Psychedelic soul",
+  "Gospel",
+  "Funk",
+  "Country",
+  "Bluegrass",
+  "Reggae",
+  "Dancehall",
+  "Dub",
+  "Ska",
+  "Grime",
+  "Shoegaze",
+  "Trip hop",
+  "Downtempo",
+  "Industrial",
+  "Soundtrack",
+  "Musical theatre",
 ] as const;
 
 export type SceneActivity =
@@ -214,6 +316,7 @@ export type SceneStudioDraft = {
   activity: SceneActivity;
   moods: SceneMood[];
   preferredGenres: string[];
+  allowAdjacentGenres: boolean;
   durationMinutes: number;
   energy: SceneEnergy;
   familiarity: SceneFamiliarity;
@@ -221,6 +324,8 @@ export type SceneStudioDraft = {
   arc: SceneArc;
   includeRecent: boolean;
   allowExplicit: boolean;
+  avoidRecentSceneTracks?: boolean;
+  smoothTransitions?: boolean;
   notes: string;
 };
 
@@ -237,6 +342,38 @@ export type GeneratedTrackSignal = {
   score: number;
   intensity: number;
   genres: string[];
+  genreMatch?: GeneratedTrackGenreMatch;
+};
+
+export type SceneGenreFamily =
+  | "pop"
+  | "hip-hop"
+  | "r&b"
+  | "rock"
+  | "indie"
+  | "electronic"
+  | "dance"
+  | "afrobeats"
+  | "latin"
+  | "jazz"
+  | "classical"
+  | "ambient"
+  | "country"
+  | "reggae";
+
+export type GeneratedTrackGenreMatch = {
+  confidence: "high" | "low" | "unscoped";
+  detectedFamilies: SceneGenreFamily[];
+  matchedFamilies: SceneGenreFamily[];
+  whyMatched: string;
+};
+
+export type GeneratedSceneSelectionStatus = {
+  underfilled: boolean;
+  requestedDurationMinutes: number;
+  selectedDurationMinutes: number;
+  action: "none" | "shorten-duration" | "broaden-genres-or-shorten-duration";
+  message: string;
 };
 
 export type GeneratedSceneSourceBreakdown = {
@@ -255,6 +392,8 @@ export type GeneratedSceneResult = {
   rationale: string[];
   sourceBreakdown: GeneratedSceneSourceBreakdown;
   estimatedDurationMinutes: number;
+  selectionStatus?: GeneratedSceneSelectionStatus;
+  rejectedTrackIds?: string[];
   createdAt: string;
 };
 
@@ -277,8 +416,9 @@ type InternalCandidate = {
 export const DEFAULT_SCENE_STUDIO_DRAFT: SceneStudioDraft = {
   name: "",
   activity: "focus",
-  moods: ["calm"],
+  moods: [],
   preferredGenres: [],
+  allowAdjacentGenres: false,
   durationMinutes: 35,
   energy: "medium",
   familiarity: "balanced",
@@ -286,8 +426,26 @@ export const DEFAULT_SCENE_STUDIO_DRAFT: SceneStudioDraft = {
   arc: "build",
   includeRecent: true,
   allowExplicit: false,
+  avoidRecentSceneTracks: true,
+  smoothTransitions: true,
   notes: "",
 };
+
+/**
+ * Creates a detached default value for the scoped Studio repository. The
+ * repository deliberately does not read or migrate the former singleton keys.
+ */
+export function createSceneStudioDraft(): SceneStudioDraft {
+  return {
+    ...DEFAULT_SCENE_STUDIO_DRAFT,
+    moods: [
+      ...DEFAULT_SCENE_STUDIO_DRAFT.moods,
+    ],
+    preferredGenres: [
+      ...DEFAULT_SCENE_STUDIO_DRAFT.preferredGenres,
+    ],
+  };
+}
 
 const ACTIVITY_GENRE_KEYWORDS: Record<
   SceneActivity,
@@ -398,6 +556,23 @@ const MOOD_GENRE_KEYWORDS: Record<
   SceneMood,
   string[]
 > = {
+  warm: [
+    "soul",
+    "r&b",
+    "acoustic",
+    "jazz",
+    "folk",
+    "neo soul",
+  ],
+
+  social: [
+    "pop",
+    "funk",
+    "disco",
+    "r&b",
+    "afrobeats",
+    "dance",
+  ],
   calm: [
     "ambient",
     "chill",
@@ -405,6 +580,15 @@ const MOOD_GENRE_KEYWORDS: Record<
     "classical",
     "jazz",
     "soul",
+    "piano",
+    "folk",
+  ],
+
+  clear: [
+    "ambient",
+    "acoustic",
+    "classical",
+    "indie pop",
     "piano",
     "folk",
   ],
@@ -482,6 +666,69 @@ const MOOD_GENRE_KEYWORDS: Record<
     "fusion",
     "indie",
     "psychedelic",
+  ],
+
+  euphoric: [
+    "dance",
+    "house",
+    "electronic",
+    "pop",
+    "trance",
+    "disco",
+  ],
+
+  dreamy: [
+    "dream pop",
+    "ambient",
+    "shoegaze",
+    "indie",
+    "psychedelic",
+    "chill",
+  ],
+
+  intimate: [
+    "acoustic",
+    "soul",
+    "r&b",
+    "singer-songwriter",
+    "jazz",
+    "folk",
+  ],
+
+  nostalgic: [
+    "soul",
+    "old school",
+    "classic rock",
+    "disco",
+    "retro",
+    "synthwave",
+  ],
+
+  grounded: [
+    "folk",
+    "acoustic",
+    "soul",
+    "jazz",
+    "ambient",
+    "roots",
+  ],
+
+  playful: [
+    "pop",
+    "funk",
+    "dance",
+    "indie pop",
+    "disco",
+    "afrobeats",
+  ],
+
+  restless: [
+    "punk",
+    "electronic",
+    "rock",
+    "drum and bass",
+    "industrial",
+    "alternative",
   ],
 };
 
@@ -596,7 +843,156 @@ function normalizeText(
 ): string {
   return value
     .trim()
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/&/gu, " and ")
+    .replace(/[^a-z0-9]+/gu, " ")
+    .trim();
+}
+
+const SCENE_DIRECTION_STOP_WORDS = new Set([
+  "and", "for", "from", "have", "leave", "music", "that", "the",
+  "this", "to", "with", "without",
+]);
+
+/** Uses the optional Direct Canal note as a bounded candidate-ranking signal. */
+export function scoreSceneDirectionText(
+  notes: string,
+  searchableTrackText: string,
+): number {
+  const normalizedTrack = ` ${normalizeText(searchableTrackText)} `;
+  if (!notes.trim() || normalizedTrack.trim().length === 0) return 0;
+
+  let score = 0;
+  for (const clause of notes.split(/[,.;\n]+/u)) {
+    const normalizedClause = normalizeText(clause);
+    if (!normalizedClause) continue;
+
+    const excluded = /^(?:no|avoid|without)\s+/u.test(normalizedClause);
+    const words = normalizedClause
+      .replace(/^(?:no|avoid|without)\s+/u, "")
+      .split(" ")
+      .filter((word) => word.length >= 3 && !SCENE_DIRECTION_STOP_WORDS.has(word))
+      .slice(0, 8);
+    const matches = words.filter((word) => normalizedTrack.includes(` ${word} `)).length;
+    score += excluded ? matches * -48 : Math.min(matches * 9, 27);
+  }
+
+  return score;
+}
+
+const GENRE_FAMILY_PATTERNS: readonly (
+  readonly [SceneGenreFamily, readonly string[]]
+)[] = [
+  ["hip-hop", ["hip hop", "rap", "trap", "grime"]],
+  ["r&b", ["r and b", "rnb", "rhythm and blues", "neo soul", "soul", "quiet storm", "gospel"]],
+  ["rock", ["rock", "metal", "punk", "emo", "shoegaze", "industrial"]],
+  ["pop", ["pop", "musical theatre"]],
+  ["indie", ["indie", "alternative", "folk", "singer songwriter", "shoegaze"]],
+  ["electronic", ["electronic", "electronica", "edm", "house", "techno", "drum and bass", "uk garage", "trip hop"]],
+  ["dance", ["dance", "disco", "funk"]],
+  ["afrobeats", ["afrobeats", "afrobeat", "afropop", "amapiano"]],
+  ["latin", ["latin", "reggaeton", "salsa", "bachata", "bossa nova"]],
+  ["jazz", ["jazz"]],
+  ["classical", ["classical", "orchestra", "chamber", "soundtrack"]],
+  ["ambient", ["ambient", "chill", "lo fi", "lofi", "sleep", "meditation", "drone", "new age", "downtempo"]],
+  ["country", ["country", "americana", "bluegrass", "honky tonk"]],
+  ["reggae", ["reggae", "dancehall", "dub", "ska"]],
+];
+
+export function normalizeSceneGenreFamilies(
+  genres: readonly string[],
+): SceneGenreFamily[] {
+  const families = new Set<SceneGenreFamily>();
+
+  for (const genre of genres) {
+    const normalizedGenre = normalizeText(genre);
+    const detectedInGenre = new Set<SceneGenreFamily>();
+
+    for (const [family, patterns] of GENRE_FAMILY_PATTERNS) {
+      if (
+        patterns.some((pattern) =>
+          (` ${normalizedGenre} `).includes(` ${pattern} `),
+        )
+      ) {
+        detectedInGenre.add(family);
+      }
+    }
+
+    // Indie/alternative-rock variants are members of the canonical Rock
+    // family, not Indie/Rock hybrids. True multi-family labels (for example
+    // rap rock) retain every family.
+    if (
+      detectedInGenre.has("rock") &&
+      detectedInGenre.has("indie") &&
+      (
+        normalizedGenre.includes("alternative rock") ||
+        normalizedGenre.includes("indie rock")
+      )
+    ) {
+      detectedInGenre.delete("indie");
+    }
+
+    detectedInGenre.forEach((family) => families.add(family));
+  }
+
+  return Array.from(families);
+}
+
+function selectedGenreFamilies(
+  draft: Pick<SceneStudioDraft, "preferredGenres">,
+): SceneGenreFamily[] {
+  return normalizeSceneGenreFamilies(draft.preferredGenres);
+}
+
+export function getSceneTrackGenreMatch(
+  genres: readonly string[],
+  draft: Pick<
+    SceneStudioDraft,
+    "preferredGenres" | "allowAdjacentGenres"
+  >,
+): GeneratedTrackGenreMatch {
+  const selected = selectedGenreFamilies(draft);
+  const detected = normalizeSceneGenreFamilies(genres);
+
+  if (selected.length === 0) {
+    return {
+      confidence: "unscoped",
+      detectedFamilies: detected,
+      matchedFamilies: [],
+      whyMatched: "No genre filter was requested.",
+    };
+  }
+
+  const matched = detected.filter((family) => selected.includes(family));
+  const hasAdjacent = detected.some((family) => !selected.includes(family));
+  const accepted = detected.length > 0 && matched.length > 0 &&
+    (draft.allowAdjacentGenres || !hasAdjacent);
+
+  return {
+    confidence: accepted && !hasAdjacent ? "high" : "low",
+    detectedFamilies: detected,
+    matchedFamilies: matched,
+    whyMatched: detected.length === 0
+      ? "Excluded because genre metadata is missing."
+      : accepted && hasAdjacent
+        ? `Matched ${matched.join(", ")}; adjacent genre metadata was allowed.`
+        : accepted
+          ? `Strict match: ${matched.join(", ")}.`
+          : `Excluded by strict genre selection (${selected.join(", ")}).`,
+  };
+}
+
+function candidateMatchesGenreSelection(
+  candidate: InternalCandidate,
+  draft: SceneStudioDraft,
+): boolean {
+  if (draft.preferredGenres.length === 0) {
+    return true;
+  }
+
+  const match = getSceneTrackGenreMatch(candidate.genres, draft);
+  return match.matchedFamilies.length > 0 &&
+    (draft.allowAdjacentGenres || match.confidence === "high");
 }
 
 function seededUnitInterval(
@@ -836,11 +1232,11 @@ function getSourceMultiplier(
   familiarityLevel: number,
 ): number {
   const familiar: Record<SceneTrackSource, number> = {
-    top: 1.45,
-    saved: 1.2,
-    recent: 0.9,
+    top: 2.5,
+    saved: 1.45,
+    recent: 1.8,
     playlist: 1.15,
-    discovery: 0.35,
+    discovery: 0.1,
   };
   const balanced: Record<SceneTrackSource, number> = {
     top: 1.1,
@@ -959,6 +1355,7 @@ function scoreCandidate(
   candidate: InternalCandidate,
   draft: SceneStudioDraft,
   generationSeed: string,
+  deprioritizedTrackIds: ReadonlySet<string>,
 ): number {
   let score = 0;
   const familiarityLevel =
@@ -1007,6 +1404,16 @@ function scoreCandidate(
     draft,
   );
 
+  score += scoreSceneDirectionText(
+    draft.notes,
+    [
+      candidate.track.name,
+      candidate.track.album?.name,
+      ...(candidate.track.artists ?? []).map((artist) => artist.name),
+      ...candidate.genres,
+    ].filter(Boolean).join(" "),
+  );
+
   const lessObviousRank = Math.max(
     candidate.sourceRanks.saved ?? 0,
     candidate.sourceRanks.playlist ?? 0,
@@ -1025,11 +1432,21 @@ function scoreCandidate(
     (novelty * 28 - (1 - novelty) * 7);
 
   if (candidate.sources.has("top")) {
+    score += (1 - novelty) * 80;
     score -= novelty * 55;
   }
 
   if (candidate.sources.has("recent")) {
+    score += (1 - novelty) * 35;
     score -= novelty * 18;
+  }
+
+  if (candidate.sources.has("saved")) {
+    score += (1 - novelty) * 15;
+  }
+
+  if (candidate.sources.has("discovery")) {
+    score -= (1 - novelty) * 80;
   }
 
   if (
@@ -1068,6 +1485,10 @@ function scoreCandidate(
       `${generationSeed}:${candidate.track.id}`,
     ) *
     (3 + novelty * 24);
+
+  if (deprioritizedTrackIds.has(candidate.track.id)) {
+    score -= 180;
+  }
 
   return score;
 }
@@ -1148,6 +1569,8 @@ function buildCandidatePool(
   draft: SceneStudioDraft,
   snapshot: SpotifyLibrarySnapshot,
   generationSeed: string,
+  rejectedTrackIds: ReadonlySet<string>,
+  deprioritizedTrackIds: ReadonlySet<string>,
 ): InternalCandidate[] {
   const artistGenreMap =
     buildArtistGenreMap(
@@ -1241,6 +1664,7 @@ function buildCandidatePool(
         candidate,
         draft,
         generationSeed,
+        deprioritizedTrackIds,
       );
   }
 
@@ -1248,7 +1672,9 @@ function buildCandidatePool(
     .filter(
       (candidate) =>
         candidate.score >
-        -500,
+          -500 &&
+        !rejectedTrackIds.has(candidate.track.id) &&
+        candidateMatchesGenreSelection(candidate, draft),
     )
     .sort(
       (first, second) =>
@@ -1498,6 +1924,10 @@ function sequenceCandidates(
   tracks: InternalCandidate[],
   draft: SceneStudioDraft,
 ): InternalCandidate[] {
+  if (draft.smoothTransitions === false) {
+    return [...tracks];
+  }
+
   if (
     draft.activity ===
       "sleep" ||
@@ -1695,34 +2125,61 @@ function estimateDurationMinutes(
       0,
     );
 
-  return Math.max(
-    1,
-    Math.round(
-      durationMs / 60_000,
-    ),
+  return Math.round(
+    durationMs / 60_000,
   );
+}
+
+function buildSelectionStatus(
+  draft: SceneStudioDraft,
+  signals: GeneratedTrackSignal[],
+): GeneratedSceneSelectionStatus {
+  const selectedDurationMinutes = estimateDurationMinutes(signals);
+  const underfilled = selectedDurationMinutes < draft.durationMinutes;
+  const strictGenres = draft.preferredGenres.length > 0 &&
+    !draft.allowAdjacentGenres;
+
+  if (!underfilled) {
+    return {
+      underfilled: false,
+      requestedDurationMinutes: draft.durationMinutes,
+      selectedDurationMinutes,
+      action: "none",
+      message: "The requested duration was filled.",
+    };
+  }
+
+  return {
+    underfilled: true,
+    requestedDurationMinutes: draft.durationMinutes,
+    selectedDurationMinutes,
+    action: strictGenres
+      ? "broaden-genres-or-shorten-duration"
+      : "shorten-duration",
+    message: strictGenres
+      ? `Only ${selectedDurationMinutes} of ${draft.durationMinutes} minutes matched strictly. Turn on adjacent genres, broaden genres, or shorten the Scene.`
+      : `Only ${selectedDurationMinutes} of ${draft.durationMinutes} minutes were available. Shorten the Scene to match.`,
+  };
 }
 
 function buildDefaultSceneName(
   draft: SceneStudioDraft,
+  existingNames: readonly string[] = [],
+  variationSeed = "",
 ): string {
-  const activity =
-    getActivityLabel(
-      draft.activity,
-    );
-
-  const mood =
-    draft.moods.length > 0
-      ? getMoodLabel(
-          draft.moods[0],
-        )
-      : "";
-
-  if (mood) {
-    return `${mood} ${activity}`;
-  }
-
-  return `${activity} Scene`;
+  return generateCreativeSceneName(
+    {
+      activity: draft.activity,
+      moods: draft.moods,
+      energy: draft.energy,
+      arc: draft.arc,
+      genres: draft.preferredGenres,
+    },
+    {
+      seed: variationSeed,
+      existingNames,
+    },
+  );
 }
 
 function buildRationale(
@@ -2033,6 +2490,9 @@ export function generateSceneFromSpotify(
   snapshot: SpotifyLibrarySnapshot,
   options: {
     variationSeed?: string;
+    rejectedTrackIds?: readonly string[];
+    deprioritizedTrackIds?: readonly string[];
+    existingSceneNames?: readonly string[];
   } = {},
 ): GeneratedSceneResult {
   const id = createSceneId();
@@ -2043,15 +2503,9 @@ export function generateSceneFromSpotify(
       draft,
       snapshot,
       generationSeed,
+      new Set(options.rejectedTrackIds ?? []),
+      new Set(options.deprioritizedTrackIds ?? []),
     );
-
-  if (
-    candidatePool.length === 0
-  ) {
-    throw new Error(
-      "Canal could not find usable Spotify tracks. Sync Spotify again or allow explicit tracks.",
-    );
-  }
 
   const selected =
     selectTracksForDuration(
@@ -2059,9 +2513,7 @@ export function generateSceneFromSpotify(
       draft,
     );
 
-  if (
-    selected.length === 0
-  ) {
+  if (selected.length === 0 && draft.preferredGenres.length === 0) {
     throw new Error(
       "Canal could not select tracks for this Scene.",
     );
@@ -2098,6 +2550,12 @@ export function generateSceneFromSpotify(
 
         genres:
           candidate.genres,
+
+        genreMatch:
+          getSceneTrackGenreMatch(
+            candidate.genres,
+            draft,
+          ),
       }),
     );
 
@@ -2127,6 +2585,8 @@ export function generateSceneFromSpotify(
     draft.name.trim() ||
     buildDefaultSceneName(
       draft,
+      options.existingSceneNames,
+      generationSeed,
     );
 
   const scene: StoredScene = {
@@ -2146,7 +2606,7 @@ export function generateSceneFromSpotify(
     emotions:
       draft.moods
         .map(getMoodLabel)
-        .join(", "),
+        .join(", ") || "Open",
 
     genres:
       selectedGenres.join(
@@ -2236,8 +2696,50 @@ export function generateSceneFromSpotify(
         signals,
       ),
 
+    selectionStatus:
+      buildSelectionStatus(
+        draft,
+        signals,
+      ),
+
     createdAt:
       now,
+  };
+}
+
+export function generateSceneWithSpotifyGenreFallback(
+  draft: SceneStudioDraft,
+  snapshot: SpotifyLibrarySnapshot,
+  options: {
+    variationSeed?: string;
+    rejectedTrackIds?: readonly string[];
+    deprioritizedTrackIds?: readonly string[];
+    existingSceneNames?: readonly string[];
+  } = {},
+): GeneratedSceneResult {
+  const generated = generateSceneFromSpotify(draft, snapshot, options);
+  const hasGenreSignals =
+    snapshot.topGenres.length > 0 ||
+    Object.values(snapshot.trackGenres).some((genres) => genres.length > 0);
+
+  if (
+    generated.scene.tracks.length > 0 ||
+    draft.preferredGenres.length === 0 ||
+    hasGenreSignals
+  ) {
+    return generated;
+  }
+
+  return {
+    ...generated,
+    scene: {
+      ...generated.scene,
+      genres: draft.preferredGenres.join(", "),
+    },
+    rationale: [
+      `Spotify supplied no verifiable ${draft.preferredGenres.join(", ")} matches, so Canal kept the genre filter instead of adding unrelated tracks.`,
+      ...generated.rationale,
+    ],
   };
 }
 
@@ -2291,6 +2793,12 @@ export function removeTrackFromGeneratedScene(
 
     estimatedDurationMinutes:
       estimateDurationMinutes(
+        remainingSignals,
+      ),
+
+    selectionStatus:
+      buildSelectionStatus(
+        result.draft,
         remainingSignals,
       ),
 

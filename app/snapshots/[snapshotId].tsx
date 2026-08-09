@@ -23,9 +23,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../../providers/auth-provider";
+
 import {
     RecoveryNotice,
 } from "../../components/recovery-notice";
+import { SnapshotComposition } from "../../components/snapshot-composition";
 import {
     useReconnectReload,
 } from "../../hooks/use-reconnect-reload";
@@ -53,13 +56,20 @@ import {
   useConnectivity,
 } from "../../providers/connectivity-provider";
 
+import { canonicalSpotifyTrackUrl } from "../../lib/spotify-track-links";
+
 import {
-  canonicalSpotifyTrackUrl,
-} from "../../lib/spotify-track-links";
+  addSnapshotComment,
+  loadSnapshotSocial,
+  setSnapshotCommentLike,
+  setSnapshotLike,
+  subscribeSnapshotSocial,
+} from "../../lib/snapshot-social";
 
 import type {
-  SnapshotTemplateTheme,
-} from "../../lib/snapshot-templates";
+  SnapshotComment,
+  SnapshotSocialState,
+} from "../../lib/snapshot-social";
 
 function closeSnapshot(): void {
   const action =
@@ -79,6 +89,19 @@ function closeSnapshot(): void {
 }
 
 export default function SnapshotDetailScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+  const params = useLocalSearchParams();
+  const snapshotId = firstParam(params.snapshotId);
+
+  return (
+    <SnapshotDetailContent
+      key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}:${snapshotId}`}
+    />
+  );
+}
+
+function SnapshotDetailContent() {
+  const { user } = useAuth();
   const {
     refresh:
       refreshConnectivity,
@@ -152,6 +175,16 @@ export default function SnapshotDetailScreen() {
   ] = useState<unknown>(
     null,
   );
+
+  const [social, setSocial] = useState<SnapshotSocialState>({
+    summary: { likeCount: 0, commentCount: 0, likedByMe: false },
+    comments: [],
+  });
+  const [socialLoading, setSocialLoading] = useState(true);
+  const [socialAction, setSocialAction] = useState("");
+  const [commentText, setCommentText] = useState("");
+  const [replyingTo, setReplyingTo] = useState<SnapshotComment | null>(null);
+  const [showManagement, setShowManagement] = useState(false);
 
   const loadSnapshot =
     useCallback(async () => {
@@ -286,15 +319,41 @@ export default function SnapshotDetailScreen() {
       }
     }, [snapshotId]);
 
+  const loadSocial = useCallback(async () => {
+    if (!snapshotId || !user?.id) {
+      setSocialLoading(false);
+      return;
+    }
+
+    try {
+      setSocialLoading(true);
+      setSocial(await loadSnapshotSocial(snapshotId, user.id));
+    } catch (error) {
+      console.warn("Unable to load Snapshot conversation:", error);
+    } finally {
+      setSocialLoading(false);
+    }
+  }, [snapshotId, user?.id]);
+
   useFocusEffect(
     useCallback(() => {
       void loadSnapshot();
+      void loadSocial();
 
       return () => {
         loadRequestId.current +=
           1;
       };
-    }, [loadSnapshot]),
+    }, [loadSnapshot, loadSocial]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!snapshotId || !user?.id) return;
+      return subscribeSnapshotSocial(snapshotId, () => {
+        void loadSocial();
+      });
+    }, [loadSocial, snapshotId, user?.id]),
   );
 
   useReconnectReload(
@@ -387,6 +446,67 @@ export default function SnapshotDetailScreen() {
       );
     } finally {
       setActiveAction("");
+    }
+  }
+
+  async function toggleLike() {
+    if (!user?.id || socialAction) {
+      return;
+    }
+
+    const nextLiked = !social.summary.likedByMe;
+    setSocialAction("snapshot-like");
+    setSocial((current) => ({
+      ...current,
+      summary: {
+        ...current.summary,
+        likedByMe: nextLiked,
+        likeCount: Math.max(0, current.summary.likeCount + (nextLiked ? 1 : -1)),
+      },
+    }));
+
+    try {
+      await setSnapshotLike(snapshotId, nextLiked, user.id);
+    } catch (error) {
+      await loadSocial();
+      Alert.alert("Unable to update like", error instanceof Error ? error.message : "Try again shortly.");
+    } finally {
+      setSocialAction("");
+    }
+  }
+
+  async function submitComment() {
+    const body = commentText.trim();
+    if (!user?.id || !body || socialAction) {
+      return;
+    }
+
+    try {
+      setSocialAction("comment");
+      await addSnapshotComment(snapshotId, body, user.id, replyingTo?.id);
+      setCommentText("");
+      setReplyingTo(null);
+      await loadSocial();
+    } catch (error) {
+      Alert.alert("Unable to post comment", error instanceof Error ? error.message : "Try again shortly.");
+    } finally {
+      setSocialAction("");
+    }
+  }
+
+  async function toggleCommentLike(comment: SnapshotComment) {
+    if (!user?.id || socialAction) {
+      return;
+    }
+
+    try {
+      setSocialAction(`comment-like:${comment.id}`);
+      await setSnapshotCommentLike(snapshotId, comment.id, !comment.likedByMe, user.id);
+      await loadSocial();
+    } catch (error) {
+      Alert.alert("Unable to update comment", error instanceof Error ? error.message : "Try again shortly.");
+    } finally {
+      setSocialAction("");
     }
   }
 
@@ -540,29 +660,13 @@ export default function SnapshotDetailScreen() {
   }
 
   async function openSpotify() {
-    const spotifyUrl =
-      canonicalSpotifyTrackUrl(
-        snapshot?.spotifyUrl,
-      );
-
-    if (!spotifyUrl) {
-      return;
-    }
+    const spotifyUrl = canonicalSpotifyTrackUrl(snapshot?.spotifyUrl);
+    if (!spotifyUrl) return;
 
     try {
-      await Linking.openURL(
-        spotifyUrl,
-      );
-    } catch (error) {
-      console.error(
-        "Unable to open Spotify:",
-        error,
-      );
-
-      Alert.alert(
-        "Unable to open Spotify",
-        "Canal could not open this track.",
-      );
+      await Linking.openURL(spotifyUrl);
+    } catch {
+      Alert.alert("Unable to open Spotify", "Canal could not open this track.");
     }
   }
 
@@ -741,6 +845,7 @@ export default function SnapshotDetailScreen() {
           </Text>
 
           <Pressable
+            accessibilityLabel="Share Snapshot"
             accessibilityRole="button"
             onPress={
               closeSnapshot
@@ -778,11 +883,6 @@ export default function SnapshotDetailScreen() {
       snapshot.note ||
     mood.trim() !==
       (snapshot.mood ?? "");
-
-  const templateStyle =
-    snapshotTemplateStyle(
-      snapshot.templateTheme,
-    );
 
   return (
     <SafeAreaView
@@ -847,141 +947,59 @@ export default function SnapshotDetailScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.hero}>
-          <View
-            style={[
-              styles.snapshotArtwork,
-              templateStyle && {
-                backgroundColor:
-                  templateStyle.backgroundColor,
-              },
-            ]}
+        <SnapshotComposition snapshot={snapshot} height={500} />
+
+        <View style={styles.socialBar}>
+          <Pressable
+            accessibilityLabel={social.summary.likedByMe ? "Unlike Snapshot" : "Like Snapshot"}
+            accessibilityRole="button"
+            accessibilityState={{ selected: social.summary.likedByMe, busy: socialAction === "snapshot-like" }}
+            onPress={() => { void toggleLike(); }}
+            style={({ pressed }) => [styles.socialActionButton, pressed && styles.pressed]}
           >
             <Ionicons
-              name="camera"
-              size={45}
-              color={
-                templateStyle
-                  ?.accentColor ??
-                "#ff9a50"
-              }
+              name={social.summary.likedByMe ? "heart" : "heart-outline"}
+              size={24}
+              color={social.summary.likedByMe ? "#ff667a" : canalDynamicColors.text}
             />
+            <Text style={styles.socialActionCount}>{social.summary.likeCount}</Text>
+          </Pressable>
 
-            {snapshot.templateBrandLabel ? (
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.artworkBrand,
-                  {
-                    color:
-                      templateStyle
-                        ?.textColor ??
-                      "#FFFFFF",
-                  },
-                ]}
-              >
-                {
-                  snapshot.templateBrandLabel
-                }
-              </Text>
-            ) : null}
+          <View accessibilityLabel={`${social.summary.commentCount} comments`} style={styles.socialActionButton}>
+            <Ionicons name="chatbubble-outline" size={22} color={canalDynamicColors.text} />
+            <Text style={styles.socialActionCount}>{social.summary.commentCount}</Text>
           </View>
 
-          <View
-            style={[
-              styles.visibilityBadge,
-              snapshot.visibility ===
-                "public" &&
-                styles.publicBadge,
-            ]}
-          >
-            <Ionicons
-              name={
-                snapshot.visibility ===
-                "public"
-                  ? "globe-outline"
-                  : "lock-closed-outline"
-              }
-              size={12}
-              color={
-                snapshot.visibility ===
-                "public"
-                  ? "#9ff3b5"
-                  : "#c5cbc6"
-              }
-            />
-
-            <Text
-              style={
-                styles.visibilityBadgeText
-              }
+          {canonicalSpotifyTrackUrl(snapshot.spotifyUrl) ? (
+            <Pressable
+              accessibilityLabel="Open captured track in Spotify"
+              accessibilityRole="link"
+              onPress={() => { void openSpotify(); }}
+              style={({ pressed }) => [styles.socialActionButton, pressed && styles.pressed]}
             >
-              {snapshot.pendingCloudSync
-                ? "pending sync"
-                : snapshot.visibility}
-            </Text>
-          </View>
+              <Ionicons name="musical-notes-outline" size={22} color={canalDynamicColors.text} />
+            </Pressable>
+          ) : null}
 
-          <Text
-            style={styles.heading}
+          <Pressable
+            accessibilityLabel="Share Snapshot"
+            accessibilityRole="button"
+            onPress={() => { void handleShare(); }}
+            style={({ pressed }) => [styles.socialActionButton, styles.shareSocialAction, pressed && styles.pressed]}
           >
-            {snapshot.sceneName}
-          </Text>
-
-          <Text
-            style={styles.dateText}
-          >
-            {formatSnapshotDate(
-              snapshot.createdAt,
-            )}
-          </Text>
+            <Ionicons name="paper-plane-outline" size={22} color={canalDynamicColors.text} />
+          </Pressable>
         </View>
 
-        {snapshot.templateBrandLabel ? (
-          <View
-            accessibilityLabel={`Creator template ${snapshot.templateBrandLabel}`}
-            style={
-              styles.templateProvenance
-            }
-          >
-            <View
-              style={[
-                styles.templateProvenanceMark,
-                {
-                  backgroundColor:
-                    templateStyle
-                      ?.accentColor ??
-                    "#ff9a50",
-                },
-              ]}
-            />
-
-            <View
-              style={
-                styles.templateProvenanceCopy
-              }
-            >
-              <Text
-                style={
-                  styles.templateProvenanceLabel
-                }
-              >
-                CREATOR TEMPLATE
-              </Text>
-
-              <Text
-                selectable
-                style={
-                  styles.templateProvenanceName
-                }
-              >
-                {
-                  snapshot.templateBrandLabel
-                }
-              </Text>
-            </View>
-          </View>
-        ) : null}
+        <View style={styles.captionBlock}>
+          <Text style={styles.captionText}>
+            <Text style={styles.captionAuthor}>{snapshot.isMine === false ? "Canal creator" : "You"} </Text>
+            {snapshot.note || snapshot.sceneName}
+          </Text>
+          <Text style={styles.captionMeta}>
+            {[snapshot.mood, formatSnapshotDate(snapshot.createdAt)].filter(Boolean).join(" · ")}
+          </Text>
+        </View>
 
         {cloudWarning ? (
           <View
@@ -1012,90 +1030,92 @@ export default function SnapshotDetailScreen() {
           </View>
         ) : null}
 
-        {!canEdit ? (
-          <View
-            style={styles.readOnlyCard}
-          >
-            <Ionicons
-              name="eye-outline"
-              size={20}
-              color="#9ff3b5"
-            />
+        <View style={styles.commentsSection}>
+          <Text style={styles.commentsTitle}>Conversation</Text>
+          {socialLoading ? <ActivityIndicator color="#ff7a1a" /> : null}
+          {!socialLoading && social.comments.length === 0 ? (
+            <Text style={styles.emptyComments}>Start the conversation around this moment.</Text>
+          ) : null}
+          {social.comments.map((comment) => (
+            <View key={comment.id} style={[styles.commentRow, comment.parentCommentId && styles.replyRow]}>
+              <View style={styles.commentAvatar}>
+                <Text style={styles.commentAvatarText}>{(comment.displayName || comment.handle || "C").slice(0, 1).toUpperCase()}</Text>
+              </View>
+              <View style={styles.commentContent}>
+                <Text style={styles.commentName}>{comment.displayName || comment.handle || "Canal listener"}</Text>
+                <Text style={styles.commentBody}>{comment.body}</Text>
+                <View style={styles.commentActions}>
+                  <Pressable
+                    accessibilityLabel={comment.likedByMe ? "Unlike comment" : "Like comment"}
+                    accessibilityRole="button"
+                    onPress={() => { void toggleCommentLike(comment); }}
+                    style={({ pressed }) => [styles.commentAction, pressed && styles.pressed]}
+                  >
+                    <Ionicons name={comment.likedByMe ? "heart" : "heart-outline"} size={16} color={comment.likedByMe ? "#ff667a" : canalDynamicColors.muted} />
+                    <Text style={styles.commentActionText}>{comment.likeCount || "Like"}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel={`Reply to ${comment.displayName || comment.handle || "comment"}`}
+                    accessibilityRole="button"
+                    onPress={() => setReplyingTo(comment)}
+                    style={({ pressed }) => [styles.commentAction, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.commentActionText}>Reply</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          ))}
 
-            <Text
-              style={styles.readOnlyText}
+          {replyingTo ? (
+            <View style={styles.replyTarget}>
+              <Text style={styles.replyTargetText}>Replying to {replyingTo.displayName || replyingTo.handle || "comment"}</Text>
+              <Pressable accessibilityLabel="Cancel reply" accessibilityRole="button" onPress={() => setReplyingTo(null)} style={styles.replyCancel}>
+                <Ionicons name="close" size={18} color={canalDynamicColors.text} />
+              </Pressable>
+            </View>
+          ) : null}
+
+          <View style={styles.commentComposer}>
+            <TextInput
+              accessibilityLabel={replyingTo ? "Write a reply" : "Write a comment"}
+              value={commentText}
+              onChangeText={setCommentText}
+              placeholder={replyingTo ? "Write a reply…" : "Add a comment…"}
+              placeholderTextColor={canalDynamicColors.muted}
+              maxLength={500}
+              multiline
+              style={styles.commentInput}
+            />
+            <Pressable
+              accessibilityLabel={replyingTo ? "Post reply" : "Post comment"}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !commentText.trim() || socialAction === "comment", busy: socialAction === "comment" }}
+              disabled={!commentText.trim() || socialAction === "comment"}
+              onPress={() => { void submitComment(); }}
+              style={({ pressed }) => [styles.postCommentButton, (!commentText.trim() || socialAction === "comment") && styles.disabled, pressed && styles.pressed]}
             >
-              This is a public Snapshot.
-              Only its creator can edit or
-              delete it.
-            </Text>
+              {socialAction === "comment" ? <ActivityIndicator color="#17110c" /> : <Ionicons name="arrow-up" size={20} color="#17110c" />}
+            </Pressable>
           </View>
+        </View>
+
+        {canEdit ? (
+          <Pressable
+            accessibilityLabel={showManagement ? "Hide Snapshot management" : "Manage Snapshot"}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showManagement }}
+            onPress={() => setShowManagement((value) => !value)}
+            style={({ pressed }) => [styles.manageButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="options-outline" size={20} color={canalDynamicColors.text} />
+            <Text style={styles.manageButtonText}>Manage Snapshot</Text>
+            <Ionicons name={showManagement ? "chevron-up" : "chevron-down"} size={18} color={canalDynamicColors.muted} />
+          </Pressable>
         ) : null}
 
-        <View
-          style={styles.trackCard}
-        >
-          <View
-            style={styles.trackIcon}
-          >
-            <Ionicons
-              name="musical-note"
-              size={27}
-              color="#ff9a50"
-            />
-          </View>
-
-          <View
-            style={styles.trackCopy}
-          >
-            <Text
-              style={styles.trackLabel}
-            >
-              CAPTURED TRACK
-            </Text>
-
-            <Text
-              style={styles.trackTitle}
-            >
-              {snapshot.trackTitle ||
-                "Scene moment"}
-            </Text>
-
-            {snapshot.trackArtist ? (
-              <Text
-                style={
-                  styles.trackArtist
-                }
-              >
-                {
-                  snapshot.trackArtist
-                }
-              </Text>
-            ) : null}
-          </View>
-
-          {snapshot.spotifyUrl ? (
-            <Pressable
-              accessibilityRole="link"
-              onPress={() => {
-                void openSpotify();
-              }}
-              style={({ pressed }) => [
-                styles.spotifyButton,
-                pressed &&
-                  styles.pressed,
-              ]}
-            >
-              <Text
-                style={
-                  styles.spotifyButtonText
-                }
-              >
-                SP
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
+        {canEdit && showManagement ? (
+          <>
 
         <View
           style={
@@ -1201,7 +1221,12 @@ export default function SnapshotDetailScreen() {
           </View>
 
           <Pressable
+            accessibilityLabel="Save Snapshot changes"
             accessibilityRole="button"
+            accessibilityState={{
+              busy: activeAction === "save",
+              disabled: !hasUnsavedChanges || !canEdit || activeAction === "save",
+            }}
             disabled={
               !hasUnsavedChanges ||
               !canEdit ||
@@ -1240,7 +1265,12 @@ export default function SnapshotDetailScreen() {
         </View>
 
         <Pressable
+          accessibilityLabel={isOnSoundscape ? "Remove Snapshot from Soundscape" : "Add Snapshot to Soundscape"}
           accessibilityRole="button"
+          accessibilityState={{
+            busy: activeAction === "soundscape",
+            disabled: activeAction === "soundscape",
+          }}
           disabled={
             activeAction ===
             "soundscape"
@@ -1293,9 +1323,10 @@ export default function SnapshotDetailScreen() {
               </Text>
             </>
           )}
-        </Pressable>
+          </Pressable>
 
-        <Pressable
+          <Pressable
+          accessibilityLabel="Share Snapshot"
           accessibilityRole="button"
           onPress={() => {
             void handleShare();
@@ -1323,7 +1354,12 @@ export default function SnapshotDetailScreen() {
 
         {canEdit ? (
           <Pressable
+            accessibilityLabel="Delete Snapshot"
             accessibilityRole="button"
+            accessibilityState={{
+              busy: activeAction === "delete",
+              disabled: activeAction === "delete",
+            }}
             disabled={
               activeAction ===
               "delete"
@@ -1355,6 +1391,8 @@ export default function SnapshotDetailScreen() {
               </Text>
             )}
           </Pressable>
+        ) : null}
+          </>
         ) : null}
       </ScrollView>
     </SafeAreaView>
@@ -1400,55 +1438,10 @@ function formatSnapshotDate(
   );
 }
 
-function snapshotTemplateStyle(
-  theme:
-    SnapshotTemplateTheme
-    | undefined,
-): {
-  backgroundColor: string;
-  accentColor: string;
-  textColor: string;
-} | null {
-  switch (theme) {
-    case "sunset":
-      return {
-        backgroundColor:
-          "#3E1734",
-        accentColor:
-          "#FF9A50",
-        textColor:
-          "#FFF8F2",
-      };
-
-    case "midnight":
-      return {
-        backgroundColor:
-          "#101B34",
-        accentColor:
-          "#79A7FF",
-        textColor:
-          "#F6F8FF",
-      };
-
-    case "paper":
-      return {
-        backgroundColor:
-          "#FFF4E8",
-        accentColor:
-          "#C64B2D",
-        textColor:
-          "#2B2520",
-      };
-
-    default:
-      return null;
-  }
-}
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#161513",
   },
 
   centered: {
@@ -1497,7 +1490,7 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 91,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
@@ -1508,9 +1501,10 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
+    color: "#F6F1E7",
+    fontFamily: "Georgia",
+    fontSize: 22,
+    fontWeight: "400",
   },
 
   headerAction: {
@@ -1518,6 +1512,210 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     textAlign: "right",
+  },
+
+  socialBar: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  socialActionButton: {
+    minWidth: 48,
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  socialActionCount: {
+    color: canalDynamicColors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  shareSocialAction: {
+    marginLeft: "auto",
+  },
+
+  captionBlock: {
+    gap: 5,
+    marginTop: -14,
+  },
+
+  captionText: {
+    color: canalDynamicColors.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  captionAuthor: {
+    fontWeight: "800",
+  },
+
+  captionMeta: {
+    color: canalDynamicColors.muted,
+    fontSize: 11,
+  },
+
+  commentsSection: {
+    gap: 12,
+    marginTop: 4,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: canalDynamicColors.line,
+    borderRadius: 22,
+    backgroundColor: "rgba(7, 43, 63, 0.34)",
+  },
+
+  commentsTitle: {
+    color: canalDynamicColors.text,
+    fontFamily: "Georgia",
+    fontSize: 21,
+  },
+
+  emptyComments: {
+    color: canalDynamicColors.muted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  commentRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: canalDynamicColors.line,
+  },
+
+  replyRow: {
+    marginLeft: 34,
+    paddingLeft: 10,
+    borderLeftWidth: 2,
+    borderLeftColor: canalDynamicColors.line,
+  },
+
+  commentAvatar: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 17,
+    backgroundColor: canalDynamicColors.elevated,
+  },
+
+  commentAvatarText: {
+    color: canalDynamicColors.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  commentContent: {
+    flex: 1,
+    gap: 3,
+  },
+
+  commentName: {
+    color: canalDynamicColors.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  commentBody: {
+    color: canalDynamicColors.text,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  commentActions: {
+    flexDirection: "row",
+    gap: 6,
+  },
+
+  commentAction: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 6,
+  },
+
+  commentActionText: {
+    color: canalDynamicColors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  replyTarget: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 12,
+    borderRadius: 12,
+    backgroundColor: canalDynamicColors.elevated,
+  },
+
+  replyTargetText: {
+    flex: 1,
+    color: canalDynamicColors.muted,
+    fontSize: 11,
+  },
+
+  replyCancel: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  commentComposer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+  },
+
+  commentInput: {
+    flex: 1,
+    minHeight: 48,
+    maxHeight: 110,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: canalDynamicColors.line,
+    borderRadius: 18,
+    backgroundColor: canalDynamicColors.elevated,
+    color: canalDynamicColors.text,
+    fontSize: 13,
+  },
+
+  postCommentButton: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 24,
+    backgroundColor: canalDynamicColors.mint,
+  },
+
+  manageButton: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: canalDynamicColors.line,
+    borderRadius: 16,
+    backgroundColor: canalDynamicColors.elevated,
+  },
+
+  manageButtonText: {
+    flex: 1,
+    color: canalDynamicColors.text,
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   hero: {
@@ -1711,8 +1909,8 @@ const styles = StyleSheet.create({
   },
 
   spotifyButton: {
-    width: 43,
-    height: 43,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 22,

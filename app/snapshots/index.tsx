@@ -20,6 +20,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../../providers/auth-provider";
+
 import {
   shareSnapshot,
 } from "../../lib/canal-share";
@@ -53,6 +55,16 @@ const FILTERS: {
 ];
 
 export default function SnapshotsScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+
+  return (
+    <SnapshotsContent
+      key={user?.id ? `${user.id}:${accountEpoch}:${sessionGeneration ?? "session-pending"}` : "signed-out"}
+    />
+  );
+}
+
+function SnapshotsContent() {
   const [
     snapshots,
     setSnapshots,
@@ -271,6 +283,7 @@ export default function SnapshotsScreen() {
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back from Snapshots"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -301,6 +314,7 @@ export default function SnapshotsScreen() {
           </Text>
 
           <Pressable
+            accessibilityLabel="Open Soundscape"
             accessibilityRole="button"
             onPress={() =>
               router.push(
@@ -388,6 +402,7 @@ export default function SnapshotsScreen() {
 
           {query ? (
             <Pressable
+              accessibilityLabel="Clear Snapshot search"
               accessibilityRole="button"
               onPress={() =>
                 setQuery("")
@@ -423,6 +438,7 @@ export default function SnapshotsScreen() {
               return (
                 <Pressable
                   key={filter.key}
+                  accessibilityLabel={`${filter.label} Snapshots`}
                   accessibilityRole="button"
                   accessibilityState={{
                     selected,
@@ -511,6 +527,7 @@ export default function SnapshotsScreen() {
                   }
                 >
                   <Pressable
+                    accessibilityLabel={`Open ${snapshot.sceneName} Snapshot`}
                     accessibilityRole="button"
                     onPress={() =>
                       router.push({
@@ -624,6 +641,7 @@ export default function SnapshotsScreen() {
                     }
                   >
                     <Pressable
+                      accessibilityLabel={`Share ${snapshot.sceneName} Snapshot`}
                       accessibilityRole="button"
                       onPress={() => {
                         void handleShare(
@@ -658,7 +676,12 @@ export default function SnapshotsScreen() {
                     />
 
                     <Pressable
+                      accessibilityLabel={`Delete ${snapshot.sceneName} Snapshot`}
                       accessibilityRole="button"
+                      accessibilityState={{
+                        busy: deletingSnapshotId === snapshot.id,
+                        disabled: deletingSnapshotId === snapshot.id,
+                      }}
                       disabled={
                         deletingSnapshotId ===
                         snapshot.id
@@ -739,7 +762,7 @@ function formatDate(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#161513",
   },
 
   page: {
@@ -758,7 +781,7 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 91,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
@@ -769,9 +792,10 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
+    color: "#F6F1E7",
+    fontFamily: "Georgia",
+    fontSize: 22,
+    fontWeight: "400",
   },
 
   headerAction: {
@@ -790,9 +814,10 @@ const styles = StyleSheet.create({
   },
 
   heading: {
-    color: "#ffffff",
+    color: "#F6F1E7",
+    fontFamily: "Georgia",
     fontSize: 30,
-    fontWeight: "700",
+    fontWeight: "400",
   },
 
   description: {
@@ -854,7 +879,7 @@ const styles = StyleSheet.create({
   },
 
   filterButton: {
-    minHeight: 42,
+    minHeight: 48,
     flex: 1,
     flexDirection: "row",
     alignItems: "center",

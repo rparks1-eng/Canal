@@ -34,46 +34,23 @@ describe(
   "explicit recovery states",
   () => {
     it(
-      "mounts one app-wide offline and reconnect banner",
+      "keeps app-wide connectivity recovery silent",
       () => {
         const layout =
           readSource(
             "app/_layout.tsx",
           );
 
-        const banner =
-          readSource(
-            "components/connectivity-banner.tsx",
-          );
-
         expect(
           layout,
         ).toMatch(
-          /<ConnectivityProvider>[\s\S]*<ConnectivityBanner\s*\/>/,
+          /<ConnectivityProvider>[\s\S]*<AuthProvider>/,
         );
 
         expect(
-          banner,
-        ).toMatch(
-          /\bshouldShowConnectivityBanner\s*\(/,
-        );
-
-        expect(
-          banner,
-        ).toMatch(
-          /\bvisibleReconnectEpoch,\s*reconnectEpoch/,
-        );
-
-        expect(
-          banner,
-        ).toMatch(
-          /\bawait\s+refresh\s*\(\s*\)/,
-        );
-
-        expect(
-          banner,
-        ).toContain(
-          'accessibilityLiveRegion="polite"',
+          layout,
+        ).not.toContain(
+          "ConnectivityBanner",
         );
       },
     );

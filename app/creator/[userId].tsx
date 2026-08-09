@@ -1722,7 +1722,7 @@ function CreatorProfileScreenContent(
                         >
                           <ActivityIndicator
                             size="small"
-                            color="#F47A24"
+                            color="#4C46C8"
                           />
 
                           <Text
@@ -1807,7 +1807,7 @@ function CreatorProfileScreenContent(
                         >
                           {followBusy ? (
                             <ActivityIndicator
-                              color="#FFFFFF"
+                              color="#FFFDF8"
                             />
                           ) : (
                             <Text
@@ -2409,7 +2409,7 @@ function CreatorProfileScreenContent(
                         key ? (
                           <ActivityIndicator
                             size="small"
-                            color="#FFFFFF"
+                            color="#FFFDF8"
                           />
                         ) : (
                           <Text
@@ -2459,7 +2459,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     header: {
@@ -2474,25 +2474,26 @@ const styles =
     },
 
     backButton: {
-      width: 42,
-      height: 42,
+      width: 48,
+      height: 48,
       borderRadius: 21,
       alignItems:
         "center",
       justifyContent:
         "center",
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 34,
       lineHeight: 36,
     },
 
     headerTitle: {
-      color: "#1B1B1B",
+      fontFamily: "Georgia",
+      color: "#191A18",
       fontSize: 16,
       fontWeight: "900",
     },
@@ -2518,7 +2519,7 @@ const styles =
       alignItems:
         "center",
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 24,
       padding: 22,
     },
@@ -2527,7 +2528,7 @@ const styles =
       alignItems:
         "center",
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 24,
       padding: 22,
       marginTop: 14,
@@ -2542,24 +2543,24 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     avatarText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 27,
       fontWeight: "900",
     },
 
     name: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 22,
       fontWeight: "900",
       marginTop: 12,
     },
 
     handle: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 13,
       marginTop: 3,
     },
@@ -2599,7 +2600,7 @@ const styles =
     activitiesBox: {
       width: "100%",
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
       borderRadius: 16,
       padding: 14,
       marginTop: 15,
@@ -2635,12 +2636,13 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 15,
-      backgroundColor:
-        "#FFF7F1",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: "rgba(226, 255, 249, 0.10)",
     },
 
     connectionValue: {
-      color: "#241B16",
+      color: "#191A18",
       fontSize: 18,
       fontWeight: "900",
       fontVariant: [
@@ -2649,7 +2651,7 @@ const styles =
     },
 
     connectionLabel: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 9,
       fontWeight: "800",
       marginTop: 4,
@@ -2669,7 +2671,7 @@ const styles =
     },
 
     relationshipStatusText: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 12,
       fontWeight: "700",
     },
@@ -2688,24 +2690,25 @@ const styles =
         "center",
       borderRadius: 15,
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       marginTop: 12,
     },
 
     followButtonActive: {
-      backgroundColor:
-        "#51463E",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: "rgba(7, 43, 63, 0.42)",
     },
 
     followButtonText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 12,
       fontWeight: "900",
     },
 
     blockButton: {
       width: "100%",
-      minHeight: 46,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:
@@ -2761,13 +2764,13 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 19,
       fontWeight: "900",
     },
 
     sceneCount: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 13,
       fontWeight: "900",
     },
@@ -2787,7 +2790,7 @@ const styles =
         "#EEE5DE",
       borderRadius: 19,
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       paddingHorizontal: 16,
       paddingVertical: 14,
     },
@@ -2797,7 +2800,7 @@ const styles =
     },
 
     collectionTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 15,
       fontWeight: "900",
     },
@@ -2810,14 +2813,14 @@ const styles =
     },
 
     collectionMeta: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 9,
       fontWeight: "900",
       marginTop: 7,
     },
 
     collectionArrow: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 26,
       marginLeft: 12,
     },
@@ -2831,7 +2834,7 @@ const styles =
       alignItems:
         "center",
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 19,
       padding: 13,
     },
@@ -2857,7 +2860,7 @@ const styles =
     },
 
     sceneArtworkText: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 21,
       fontWeight: "900",
     },
@@ -2867,27 +2870,27 @@ const styles =
     },
 
     sceneName: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 15,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#817972",
+      color: "#6D6B64",
       fontSize: 10,
       marginTop: 4,
     },
 
     saveButton: {
       minWidth: 65,
-      minHeight: 38,
+      minHeight: 48,
       borderRadius: 13,
       alignItems:
         "center",
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       marginLeft: 10,
       paddingHorizontal: 10,
     },
@@ -2898,20 +2901,20 @@ const styles =
     },
 
     saveButtonText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 10,
       fontWeight: "900",
     },
 
     emptyCard: {
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 19,
       padding: 18,
     },
 
     emptyText: {
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 13,
       lineHeight: 19,
     },

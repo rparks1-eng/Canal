@@ -37,6 +37,7 @@ export type MusicCatalogTrack = {
   album?: {
     albumId?: string;
     name?: string;
+    imageUrl?: string;
   };
 };
 

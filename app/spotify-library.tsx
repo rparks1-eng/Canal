@@ -2341,7 +2341,9 @@ const styles = StyleSheet.create({
   sceneButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2B1710",
+    backgroundColor: canalDynamicColors.surface,
+    borderWidth: 1,
+    borderColor: canalDynamicColors.line,
     borderRadius: 22,
     padding: 17,
   },
@@ -2501,7 +2503,7 @@ const styles = StyleSheet.create({
   },
 
   sectionSubtitle: {
-    color: "#746D67",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     marginTop: 3,
   },
@@ -2524,7 +2526,7 @@ const styles = StyleSheet.create({
   },
 
   genreText: {
-    color: "#4E4945",
+    color: canalDynamicColors.text,
     fontSize: 13,
     fontWeight: "700",
     textTransform: "capitalize",
@@ -2549,7 +2551,7 @@ const styles = StyleSheet.create({
 
   rankText: {
     width: 25,
-    color: "#8A827B",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     fontWeight: "700",
     textAlign: "center",
@@ -2598,7 +2600,7 @@ const styles = StyleSheet.create({
   },
 
   rowTitle: {
-    color: "#1C1C1C",
+    color: canalDynamicColors.text,
     fontSize: 15,
     fontWeight: "800",
   },
@@ -2611,13 +2613,13 @@ const styles = StyleSheet.create({
   },
 
   arrow: {
-    color: "#A29A93",
+    color: canalDynamicColors.muted,
     fontSize: 25,
     marginLeft: 8,
   },
 
   spotifyLinkText: {
-    color: "#9A3F00",
+    color: canalDynamicColors.mint,
     flexShrink: 1,
     fontSize: 12,
     fontWeight: "800",
@@ -2632,7 +2634,7 @@ const styles = StyleSheet.create({
   },
 
   successText: {
-    color: "#1D7138",
+    color: canalDynamicColors.mint,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -2644,13 +2646,13 @@ const styles = StyleSheet.create({
   },
 
   errorTitle: {
-    color: "#A62E27",
+    color: canalDynamicColors.danger,
     fontSize: 14,
     fontWeight: "800",
   },
 
   errorText: {
-    color: "#7E3833",
+    color: canalDynamicColors.danger,
     fontSize: 13,
     marginTop: 4,
   },
@@ -2662,14 +2664,14 @@ const styles = StyleSheet.create({
   },
 
   warningTitle: {
-    color: "#8C4A12",
+    color: canalDynamicColors.gold,
     fontSize: 14,
     fontWeight: "800",
     marginBottom: 6,
   },
 
   warningText: {
-    color: "#714B2B",
+    color: canalDynamicColors.muted,
     fontSize: 12,
     marginTop: 2,
   },
@@ -2696,18 +2698,18 @@ const styles = StyleSheet.create({
   },
 
   importStatusSummaryText: {
-    color: "#714B2B",
+    color: canalDynamicColors.gold,
     fontSize: 14,
     fontWeight: "700",
   },
 
   importText: {
-    color: "#4E4945",
+    color: canalDynamicColors.muted,
     fontSize: 13,
   },
 
   importWarning: {
-    color: "#8C4A12",
+    color: canalDynamicColors.gold,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -2746,7 +2748,7 @@ const styles = StyleSheet.create({
   },
 
   importPauseText: {
-    color: "#4E4945",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -2758,7 +2760,7 @@ const styles = StyleSheet.create({
   },
 
   recoveryStatusSummaryText: {
-    color: "#7E3833",
+    color: canalDynamicColors.danger,
     fontSize: 14,
     fontWeight: "700",
   },

@@ -1121,7 +1121,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     screen: {
@@ -1140,14 +1140,14 @@ const styles =
     },
 
     brand: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 24,
       fontWeight: "900",
       letterSpacing: -1,
     },
 
     stepCount: {
-      color: "#8A827B",
+      color: "#6D6B64",
       fontSize: 12,
       fontWeight: "800",
       letterSpacing: 0.6,
@@ -1174,7 +1174,7 @@ const styles =
 
     progressLineActive: {
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     progressLabel: {
@@ -1203,7 +1203,7 @@ const styles =
     },
 
     eyebrow: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 1.8,
@@ -1211,6 +1211,7 @@ const styles =
     },
 
     title: {
+      fontFamily: "Georgia",
       color: "#1A1816",
       fontSize: 33,
       lineHeight: 39,
@@ -1220,7 +1221,7 @@ const styles =
     },
 
     description: {
-      color: "#6C655F",
+      color: "#6D6B64",
       fontSize: 15,
       lineHeight: 23,
       marginTop: 12,
@@ -1251,7 +1252,7 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     canalDiscText: {
@@ -1322,7 +1323,7 @@ const styles =
       minHeight: 218,
       borderRadius: 28,
       backgroundColor:
-        "#191714",
+        "#191A18",
       padding: 22,
     },
 
@@ -1421,7 +1422,7 @@ const styles =
       height: 7,
       borderRadius: 4,
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     detailRow: {
@@ -1444,7 +1445,7 @@ const styles =
     },
 
     detailNumber: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 10,
       fontWeight: "900",
     },
@@ -1477,11 +1478,11 @@ const styles =
         "center",
       borderRadius: 28,
       backgroundColor:
-        "#191714",
+        "#191A18",
     },
 
     exploreVisualMark: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 82,
       fontWeight: "900",
       lineHeight: 90,
@@ -1567,7 +1568,7 @@ const styles =
       borderTopColor:
         "#EEE3DB",
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
       paddingHorizontal: 24,
       paddingTop: 14,
       paddingBottom: 8,
@@ -1581,7 +1582,7 @@ const styles =
         "center",
       borderRadius: 18,
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     primaryButtonText: {
@@ -1615,11 +1616,11 @@ const styles =
         "center",
       justifyContent:
         "center",
-      minHeight: 34,
+      minHeight: 48,
     },
 
     backLinkText: {
-      color: "#8A827B",
+      color: "#6D6B64",
       fontSize: 12,
       fontWeight: "700",
     },

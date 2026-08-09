@@ -24,6 +24,8 @@ import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
+import { useAuth } from "../../providers/auth-provider";
+
 import {
   loadSceneCollection,
   saveSceneCollection,
@@ -49,6 +51,18 @@ function goBack(): void {
 }
 
 export default function NewSceneCollectionScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+  const params = useLocalSearchParams<{ collectionId?: string }>();
+  const collectionId = typeof params.collectionId === "string" ? params.collectionId : "new";
+
+  return (
+    <NewSceneCollectionContent
+      key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}:${collectionId}`}
+    />
+  );
+}
+
+function NewSceneCollectionContent() {
   const params =
     useLocalSearchParams<{
       collectionId?: string;
@@ -443,8 +457,16 @@ export default function NewSceneCollectionScreen() {
 
               <Switch
                 accessibilityLabel="Public collection"
+                accessibilityRole="switch"
+                accessibilityState={{
+                  checked:
+                    isPublic,
+                }}
                 onValueChange={
                   setIsPublic
+                }
+                style={
+                  styles.switchControl
                 }
                 value={
                   isPublic
@@ -641,7 +663,12 @@ export default function NewSceneCollectionScreen() {
           ) : null}
 
           <Pressable
+            accessibilityLabel={collectionId ? "Save collection changes" : "Publish collection"}
             accessibilityRole="button"
+            accessibilityState={{
+              busy: saving,
+              disabled: saving || (!collectionId && scenes.length === 0),
+            }}
             disabled={
               saving ||
               (
@@ -695,7 +722,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
     header: {
       flexDirection: "row",
@@ -707,8 +734,8 @@ const styles =
       paddingVertical: 8,
     },
     backButton: {
-      width: 42,
-      height: 42,
+      width: 48,
+      height: 48,
       alignItems:
         "center",
       justifyContent:
@@ -723,9 +750,10 @@ const styles =
       lineHeight: 36,
     },
     headerTitle: {
-      color: "#1B1B1B",
-      fontSize: 16,
-      fontWeight: "900",
+      color: "#191A18",
+      fontFamily: "Georgia",
+      fontSize: 22,
+      fontWeight: "400",
     },
     headerSpacer: {
       width: 42,
@@ -749,9 +777,10 @@ const styles =
       padding: 18,
     },
     title: {
-      color: "#1B1B1B",
+      color: "#191A18",
+      fontFamily: "Georgia",
       fontSize: 24,
-      fontWeight: "900",
+      fontWeight: "400",
     },
     subtitle: {
       color: "#746D67",
@@ -793,6 +822,10 @@ const styles =
       backgroundColor:
         "#FFFFFF",
       padding: 15,
+    },
+    switchControl: {
+      minWidth: 48,
+      minHeight: 48,
     },
     visibilityCopy: {
       flex: 1,

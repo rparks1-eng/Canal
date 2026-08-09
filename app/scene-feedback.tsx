@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -38,6 +39,9 @@ import {
 import type {
   StoredScene,
 } from "../lib/scenes";
+
+import { canalColors } from "../theme/canal-colors";
+import { canalTypography } from "../theme/canal-typography";
 
 const OPTIONS: {
   value: SceneFeedbackRating;
@@ -131,6 +135,7 @@ export default function SceneFeedbackScreen() {
     submitting,
     setSubmitting,
   ] = useState(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     const load =
@@ -150,15 +155,18 @@ export default function SceneFeedbackScreen() {
   const submit =
     async (): Promise<void> => {
       if (
+        submittingRef.current ||
         !scene ||
         !rating
       ) {
         return;
       }
 
+      submittingRef.current = true;
       setSubmitting(true);
 
-      await Promise.all([
+      try {
+        await Promise.all([
         addFeedbackEntry({
           sceneId:
             scene.id,
@@ -177,11 +185,9 @@ export default function SceneFeedbackScreen() {
           rating,
           note.trim(),
         ),
-      ]);
+        ]);
 
-      setSubmitting(false);
-
-      router.replace({
+        router.replace({
         pathname:
           "/scene-snapshot",
 
@@ -189,7 +195,11 @@ export default function SceneFeedbackScreen() {
           sceneId:
             scene.id,
         },
-      });
+        });
+      } finally {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
     };
 
   if (!scene) {
@@ -266,14 +276,18 @@ export default function SceneFeedbackScreen() {
           </Text>
         </View>
 
-        <View style={styles.options}>
+        <View
+          accessibilityRole="radiogroup"
+          style={styles.options}
+        >
           {OPTIONS.map(
             (option) => (
               <Pressable
                 key={option.value}
-                accessibilityRole="button"
+                accessibilityLabel={`${option.label}. ${option.description}`}
+                accessibilityRole="radio"
                 accessibilityState={{
-                  selected:
+                  checked:
                     rating ===
                     option.value,
                 }}
@@ -347,6 +361,7 @@ export default function SceneFeedbackScreen() {
         </Text>
 
         <TextInput
+          accessibilityLabel="Optional Scene feedback note"
           value={note}
           onChangeText={setNote}
           placeholder="What worked or did not work?"
@@ -359,6 +374,8 @@ export default function SceneFeedbackScreen() {
 
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Save feedback and continue"
+          accessibilityState={{ disabled: !rating || submitting, busy: submitting }}
           disabled={
             !rating ||
             submitting
@@ -394,6 +411,7 @@ export default function SceneFeedbackScreen() {
 
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Skip feedback"
           onPress={() =>
             router.replace(
               "/(tabs)",
@@ -423,8 +441,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalColors.light.page,
     },
 
     center: {
@@ -442,7 +459,7 @@ const styles =
     },
 
     eyebrow: {
-      color: "#F47A24",
+      color: canalColors.light.accent,
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 1,
@@ -450,15 +467,14 @@ const styles =
     },
 
     title: {
-      color: "#181818",
-      fontSize: 29,
-      fontWeight: "900",
+      ...canalTypography.title,
+      color: canalColors.light.ink,
       textAlign: "center",
       marginTop: 6,
     },
 
     subtitle: {
-      color: "#746D67",
+      color: canalColors.light.muted,
       fontSize: 14,
       lineHeight: 20,
       textAlign: "center",
@@ -503,6 +519,7 @@ const styles =
     },
 
     option: {
+      minHeight: 72,
       flexDirection: "row",
       alignItems: "center",
       borderWidth: 1,
@@ -609,7 +626,7 @@ const styles =
     },
 
     skipButton: {
-      minHeight: 46,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:

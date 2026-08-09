@@ -4,9 +4,12 @@ import {
   useState,
 } from "react";
 
+import { Image } from "expo-image";
+
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,15 +20,23 @@ import {
 import {
   router,
   useFocusEffect,
+  useLocalSearchParams,
 } from "expo-router";
 
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
+import Animated, {
+  FadeInUp,
+} from "react-native-reanimated";
+
 import {
   PublicSnapshotCard,
 } from "../../components/PublicSnapshotCard";
+import {
+  scenePresentation,
+} from "../../components/canal-ui/scene-signature";
 
 import {
   RecoveryNotice,
@@ -38,6 +49,11 @@ import {
 import {
   classifyRecoveryIssue,
 } from "../../lib/recovery-issue";
+
+import {
+  filterExploreScenes,
+  filterExploreStages,
+} from "../../lib/explore-search";
 
 import type {
   RecoveryIssue,
@@ -64,9 +80,89 @@ import {
   useConnectivity,
 } from "../../providers/connectivity-provider";
 
+import { useAuth } from "../../providers/auth-provider";
+
+import {
+  loadSnapshotSocialSummaries,
+  setSnapshotLike,
+} from "../../lib/snapshot-social";
+
+import type { SnapshotSocialSummary } from "../../lib/snapshot-social";
+
+import {
+  getCurrentLiveStageTrack,
+  readLiveStages,
+} from "../../lib/live-stages";
+
+import type {
+  LiveStage,
+  LiveStageKind,
+} from "../../lib/live-stages";
+
 type ExploreContent =
   | "snapshots"
-  | "scenes";
+  | "scenes"
+  | "stages";
+
+type StageFilter = "all" | LiveStageKind;
+
+function PublicStageCard({ stage }: { stage: LiveStage }) {
+  const track = getCurrentLiveStageTrack(stage);
+  const provenance = stage.stageKind === "canal"
+    ? "CANAL"
+    : stage.stageKind === "verified"
+      ? "VERIFIED"
+      : "COMMUNITY";
+
+  return (
+    <Pressable
+      accessibilityLabel={`Play ${stage.name}, live Stage hosted by ${stage.hostName}`}
+      accessibilityRole="button"
+      onPress={() => router.push({
+        pathname: "/live-stage/[stageId]",
+        params: { stageId: stage.id },
+      })}
+      style={({ pressed }) => [styles.stageResult, pressed && styles.pressed]}
+    >
+      <View style={styles.stageResultGlow} />
+      <View style={styles.stageResultTop}>
+        <View style={styles.liveBadge}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveBadgeText}>LIVE</Text>
+        </View>
+        <Text style={styles.stageProvenance}>{provenance}</Text>
+        <Text style={styles.stageAudience}>{stage.participantCount} in room</Text>
+      </View>
+      <Text numberOfLines={2} style={styles.stageResultName}>{stage.name}</Text>
+      <Text numberOfLines={1} style={styles.stageResultMeta}>
+        @{stage.hostUsername} · {stage.activity || "Live music"} · {stage.tracks.length} tracks
+      </Text>
+      <View style={styles.stageNowPlaying}>
+        {track?.imageUrl ? (
+          <Image
+            accessibilityLabel={`${track.title} album artwork`}
+            contentFit="cover"
+            source={track.imageUrl}
+            style={styles.stageArtwork}
+            transition={160}
+          />
+        ) : (
+          <View style={styles.stageArtworkFallback} />
+        )}
+        <View style={styles.stageTrackCopy}>
+          <Text style={styles.stageTrackKicker}>NOW PLAYING</Text>
+          <Text numberOfLines={1} style={styles.stageTrackTitle}>
+            {track?.title ?? "The Stage queue is ready"}
+          </Text>
+          <Text numberOfLines={1} style={styles.stageTrackArtist}>
+            {track?.artist ?? "Open to listen"}
+          </Text>
+        </View>
+        <Text style={styles.stagePlay}>›</Text>
+      </View>
+    </Pressable>
+  );
+}
 
 function PublicSceneCard(
   props: {
@@ -78,6 +174,7 @@ function PublicSceneCard(
   const {
     item,
   } = props;
+  const presentation = scenePresentation(item.scene);
 
   const artistPreview =
     item.scene.tracks
@@ -98,9 +195,13 @@ function PublicSceneCard(
 
   return (
     <View
-      style={
-        styles.card
-      }
+      style={[
+        styles.card,
+        {
+          backgroundColor: presentation.colors[2],
+          borderColor: `${presentation.accent}40`,
+        },
+      ]}
     >
       <Pressable
         accessibilityRole="button"
@@ -132,24 +233,6 @@ function PublicSceneCard(
             styles.cardTop
           }
         >
-          <View
-            style={
-              styles.artwork
-            }
-          >
-            <Text
-              style={
-                styles.artworkText
-              }
-            >
-              {item.scene.name
-                .charAt(
-                  0,
-                )
-                .toUpperCase()}
-            </Text>
-          </View>
-
           <View
             style={
               styles.cardText
@@ -203,6 +286,7 @@ function PublicSceneCard(
         }
       >
         <Pressable
+          accessibilityLabel={`Open creator ${item.creator.displayName}`}
           accessibilityRole="button"
           onPress={() =>
             router.push({
@@ -294,7 +378,7 @@ function PublicSceneCard(
         >
           {props.saving ? (
             <ActivityIndicator
-              color="#FFFFFF"
+              color="#FFFDF8"
               size="small"
             />
           ) : (
@@ -317,6 +401,8 @@ function PublicSceneCard(
 }
 
 export default function ExploreScreen() {
+  const params = useLocalSearchParams<{ content?: string }>();
+  const { user } = useAuth();
   const {
     refresh:
       refreshConnectivity,
@@ -341,12 +427,20 @@ export default function ExploreScreen() {
       PublicCanalSnapshot[]
     >([]);
 
+  const [snapshotSocial, setSnapshotSocial] =
+    useState<Record<string, SnapshotSocialSummary>>({});
+
+  const [stages, setStages] = useState<LiveStage[]>([]);
+  const [stageFilter, setStageFilter] = useState<StageFilter>("all");
+
+  const [socialActionKey, setSocialActionKey] = useState("");
+
   const [
     activeContent,
     setActiveContent,
   ] =
     useState<ExploreContent>(
-      "snapshots",
+      params.content === "stages" ? "stages" : "snapshots",
     );
 
   const [
@@ -358,6 +452,11 @@ export default function ExploreScreen() {
     loading,
     setLoading,
   ] = useState(true);
+
+  const [
+    refreshing,
+    setRefreshing,
+  ] = useState(false);
 
   const [
     savingKey,
@@ -382,30 +481,40 @@ export default function ExploreScreen() {
       RecoveryIssue | null;
     scenes:
       RecoveryIssue | null;
+    stages:
+      RecoveryIssue | null;
   }>({
     snapshots: null,
     scenes: null,
+    stages: null,
   });
 
   const load =
     useCallback(
-      async (): Promise<void> => {
-        setLoading(
-          true,
-        );
+      async (mode: "initial" | "refresh" = "initial"): Promise<void> => {
+        const isPullRefresh = mode === "refresh";
+
+        setRefreshing(isPullRefresh);
+
+        if (!isPullRefresh) {
+          setLoading(true);
+        }
 
         setLoadErrors({
           snapshots: null,
           scenes: null,
+          stages: null,
         });
 
         const [
           snapshotResult,
           sceneResult,
+          stageResult,
         ] =
           await Promise.allSettled([
             loadPublicSnapshotFeed(),
             loadExploreScenes(),
+            readLiveStages(),
           ]);
 
         if (
@@ -415,6 +524,24 @@ export default function ExploreScreen() {
           setSnapshots(
             snapshotResult.value,
           );
+
+          if (user?.id) {
+            try {
+              setSnapshotSocial(
+                await loadSnapshotSocialSummaries(
+                  snapshotResult.value.map(
+                    (snapshot) => snapshot.id,
+                  ),
+                  user.id,
+                ),
+              );
+            } catch (error) {
+              console.warn(
+                "Snapshot social counts are temporarily unavailable:",
+                error,
+              );
+            }
+          }
         } else {
           setLoadErrors(
             (current) => ({
@@ -458,14 +585,79 @@ export default function ExploreScreen() {
           );
         }
 
+        if (stageResult.status === "fulfilled") {
+          setStages(stageResult.value.filter((stage) =>
+            stage.status === "live" && stage.visibility === "public",
+          ));
+        } else {
+          setLoadErrors((current) => ({
+            ...current,
+            stages: classifyRecoveryIssue(stageResult.reason, {
+              service: "canal",
+              connectivityStatus,
+            }),
+          }));
+        }
+
         setLoading(
+          false,
+        );
+
+        setRefreshing(
           false,
         );
       },
       [
         connectivityStatus,
+        user?.id,
       ],
     );
+
+  const toggleSnapshotLike = async (
+    snapshot: PublicCanalSnapshot,
+  ): Promise<void> => {
+    if (!user?.id || socialActionKey) return;
+
+    const current = snapshotSocial[snapshot.id] ?? {
+      likeCount: 0,
+      commentCount: 0,
+      likedByMe: false,
+    };
+    const nextLiked = !current.likedByMe;
+
+    setSocialActionKey(`like:${snapshot.id}`);
+    setSnapshotSocial((state) => ({
+      ...state,
+      [snapshot.id]: {
+        ...current,
+        likedByMe: nextLiked,
+        likeCount: Math.max(
+          0,
+          current.likeCount + (nextLiked ? 1 : -1),
+        ),
+      },
+    }));
+
+    try {
+      await setSnapshotLike(
+        snapshot.id,
+        nextLiked,
+        user.id,
+      );
+    } catch (error) {
+      setSnapshotSocial((state) => ({
+        ...state,
+        [snapshot.id]: current,
+      }));
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Canal could not update this Snapshot reaction.",
+      );
+    } finally {
+      setSocialActionKey("");
+    }
+  };
 
   useFocusEffect(
     useCallback(
@@ -484,39 +676,11 @@ export default function ExploreScreen() {
 
   const filteredScenes =
     useMemo(
-      () => {
-        const needle =
-          query
-            .trim()
-            .toLowerCase();
-
-        if (!needle) {
-          return scenes;
-        }
-
-        return scenes.filter(
-          (item) =>
-            [
-              item.scene.name,
-              item.scene.activity,
-              item.scene.emotions,
-              item.scene.genres,
-              item.creator.displayName,
-              item.creator.handle,
-              ...item.scene.tracks.map(
-                (track) =>
-                  `${track.title} ${track.artist}`,
-              ),
-            ]
-              .join(
-                " ",
-              )
-              .toLowerCase()
-              .includes(
-                needle,
-              ),
-        );
-      },
+      () =>
+        filterExploreScenes(
+          scenes,
+          query,
+        ),
       [
         query,
         scenes,
@@ -565,6 +729,10 @@ export default function ExploreScreen() {
         snapshots,
       ],
     );
+
+  const filteredStages = useMemo(() => {
+    return filterExploreStages(stages, query, stageFilter);
+  }, [query, stageFilter, stages]);
 
   const activeError =
     loadErrors[
@@ -661,17 +829,28 @@ export default function ExploreScreen() {
         contentContainerStyle={
           styles.content
         }
+        refreshControl={
+          <RefreshControl
+            onRefresh={() => {
+              void load("refresh");
+            }}
+            refreshing={refreshing}
+            tintColor={canalDynamicColors.mint}
+          />
+        }
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={
           false
         }
       >
-        <View
+        <Animated.View
+          entering={FadeInUp.duration(260)}
           style={
             styles.header
           }
         >
           <View>
+            <Text style={styles.eyebrow}>CANAL DISCOVERY</Text>
             <Text
               style={
                 styles.title
@@ -685,29 +864,33 @@ export default function ExploreScreen() {
                 styles.subtitle
               }
             >
-              Public moments and Scenes from Canal creators.
+              Live Stages, public Scenes, and visual moments moving through Canal.
             </Text>
           </View>
 
+        </Animated.View>
+
+        <Animated.View
+          entering={FadeInUp.duration(260).delay(45)}
+          style={styles.liveFeature}
+        >
+          <View style={styles.liveFeatureGlow} />
+          <Text style={styles.featureKicker}>LIVE ON CANAL</Text>
+          <Text style={styles.featureTitle}>Step into the room.</Text>
+          <Text style={styles.featureText}>
+            Browse public Stages shaped by artists, creators, and listeners right now.
+          </Text>
           <Pressable
             accessibilityRole="button"
-            onPress={() =>
-              void load()
-            }
-            style={
-              styles.refreshButton
-            }
+            accessibilityLabel="Browse Live Stages"
+            onPress={() => setActiveContent("stages")}
+            style={({ pressed }) => [styles.featureButton, pressed && styles.pressed]}
           >
-            <Text
-              style={
-                styles.refreshText
-              }
-            >
-              Refresh
-            </Text>
+            <Text style={styles.featureButtonText}>Browse Live Stages</Text>
           </Pressable>
-        </View>
+        </Animated.View>
 
+        <Animated.View entering={FadeInUp.duration(260).delay(80)}>
         <TextInput
           value={
             query
@@ -715,8 +898,10 @@ export default function ExploreScreen() {
           onChangeText={
             setQuery
           }
-          placeholder="Search moments, Scenes, creators, moods, or artists"
-          placeholderTextColor="#9A938C"
+          placeholder={activeContent === "stages"
+            ? "Search Stages, hosts, activities, songs, or artists"
+            : "Search moments, Scenes, creators, moods, or artists"}
+          placeholderTextColor="#5C5A54"
           autoCapitalize="none"
           autoCorrect={
             false
@@ -725,8 +910,10 @@ export default function ExploreScreen() {
             styles.searchInput
           }
         />
+        </Animated.View>
 
-        <View
+        <Animated.View
+          entering={FadeInUp.duration(260).delay(110)}
           accessibilityRole="tablist"
           style={
             styles.segmentedControl
@@ -754,7 +941,7 @@ export default function ExploreScreen() {
               "scenes"
             }
             count={
-              scenes.length
+              filteredScenes.length
             }
             label="Scenes"
             onPress={() =>
@@ -763,7 +950,42 @@ export default function ExploreScreen() {
               )
             }
           />
-        </View>
+
+          <ExploreTab
+            active={activeContent === "stages"}
+            count={stages.length}
+            label="Stages"
+            onPress={() => setActiveContent("stages")}
+          />
+        </Animated.View>
+
+        {activeContent === "stages" ? (
+          <Animated.View
+            entering={FadeInUp.duration(220)}
+            style={styles.stageFilters}
+          >
+            {(["all", "canal", "verified", "community"] as StageFilter[]).map((value) => (
+              <Pressable
+                key={value}
+                accessibilityLabel={`Filter public Stages by ${value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: stageFilter === value }}
+                onPress={() => setStageFilter(value)}
+                style={[
+                  styles.stageFilterButton,
+                  stageFilter === value && styles.stageFilterSelected,
+                ]}
+              >
+                <Text style={[
+                  styles.stageFilterText,
+                  stageFilter === value && styles.stageFilterTextSelected,
+                ]}>
+                  {value === "all" ? "All" : value.charAt(0).toUpperCase() + value.slice(1)}
+                </Text>
+              </Pressable>
+            ))}
+          </Animated.View>
+        ) : null}
 
         {message ? (
           <View
@@ -836,8 +1058,9 @@ export default function ExploreScreen() {
               "snapshots"
               ? filteredSnapshots.length ===
                 0
-              : filteredScenes.length ===
-                0
+              : activeContent === "scenes"
+                ? filteredScenes.length === 0
+                : filteredStages.length === 0
           ) ? null : activeContent ===
           "snapshots" &&
           filteredSnapshots.length ===
@@ -867,6 +1090,30 @@ export default function ExploreScreen() {
                 : "Publish a Snapshot from one of your Scenes. Your public moment will appear here for other listeners to discover."}
             </Text>
           </View>
+        ) : activeContent === "stages" && filteredStages.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>
+              {query.trim() || stageFilter !== "all"
+                ? "No matching live Stages"
+                : "No public Stages are live"}
+            </Text>
+            <Text style={styles.emptyText}>
+              {query.trim() || stageFilter !== "all"
+                ? "Try another host, activity, song, artist, or Stage type."
+                : "Pull down to refresh. Public Stages will appear here as soon as they go live."}
+            </Text>
+          </View>
+        ) : activeContent === "stages" ? (
+          <View style={styles.list}>
+            {filteredStages.map((stage, index) => (
+              <Animated.View
+                entering={FadeInUp.duration(240).delay(Math.min(index, 5) * 35)}
+                key={stage.id}
+              >
+                <PublicStageCard stage={stage} />
+              </Animated.View>
+            ))}
+          </View>
         ) : activeContent ===
           "snapshots" ? (
           <View
@@ -875,16 +1122,47 @@ export default function ExploreScreen() {
             }
           >
             {filteredSnapshots.map(
-              (snapshot) => (
-                <PublicSnapshotCard
+              (snapshot, index) => (
+                <Animated.View
                   key={
                     snapshot.id
                   }
+                  entering={FadeInUp.duration(240).delay(Math.min(index, 5) * 35)}
+                  style={index === 0 ? styles.editorialFeature : undefined}
+                >
+                <PublicSnapshotCard
                   showCreator
                   snapshot={
                     snapshot
                   }
+                  socialSummary={
+                    snapshotSocial[
+                      snapshot.id
+                    ]
+                  }
+                  likeBusy={
+                    socialActionKey ===
+                    `like:${snapshot.id}`
+                  }
+                  onToggleLike={() =>
+                    void toggleSnapshotLike(
+                      snapshot,
+                    )
+                  }
+                  onOpenComments={() =>
+                    router.push({
+                      pathname:
+                        "/snapshots/[snapshotId]",
+                      params: {
+                        snapshotId:
+                          snapshot.id,
+                        comments:
+                          "1",
+                      },
+                    } as never)
+                  }
                 />
+                </Animated.View>
               ),
             )}
           </View>
@@ -959,13 +1237,14 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     content: {
       paddingHorizontal: 20,
       paddingTop: 10,
       paddingBottom: 120,
+      gap: 11,
     },
 
     header: {
@@ -974,34 +1253,111 @@ const styles =
         "center",
       justifyContent:
         "space-between",
-      marginBottom: 16,
+      marginBottom: 2,
+    },
+
+    eyebrow: {
+      color: "rgba(222, 255, 249, 0.82)",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 2.1,
+      marginBottom: 8,
     },
 
     title: {
-      color: "#181818",
-      fontSize: 30,
-      fontWeight: "900",
+      fontFamily: "Georgia",
+      color: "#191A18",
+      fontSize: 38,
+      fontWeight: "500",
+      letterSpacing: -1.1,
     },
 
     subtitle: {
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 13,
       marginTop: 3,
+      lineHeight: 19,
+      maxWidth: 325,
+    },
+
+    liveFeature: {
+      minHeight: 168,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: "rgba(255, 225, 220, 0.27)",
+      borderRadius: 27,
+      borderCurve: "continuous",
+      backgroundColor: "rgba(79, 47, 102, 0.62)",
+      padding: 18,
+      justifyContent: "flex-end",
+      boxShadow: "0 18px 42px rgba(35, 15, 55, 0.22)",
+    },
+
+    liveFeatureGlow: {
+      position: "absolute",
+      left: -30,
+      right: -30,
+      height: 76,
+      top: 10,
+      transform: [{ rotate: "-6deg" }],
+      backgroundColor: "rgba(255, 188, 177, 0.18)",
+    },
+
+    featureKicker: {
+      color: "#D7FFF6",
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.7,
+    },
+
+    featureTitle: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 29,
+      fontWeight: "500",
+      letterSpacing: -0.6,
+      marginTop: 7,
+    },
+
+    featureText: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      maxWidth: 290,
+      marginTop: 6,
+    },
+
+    featureButton: {
+      minHeight: 48,
+      alignSelf: "flex-start",
+      justifyContent: "center",
+      borderRadius: 15,
+      backgroundColor: "rgba(244, 255, 252, 0.92)",
+      paddingHorizontal: 16,
+      marginTop: 15,
+    },
+
+    featureButtonText: {
+      color: "#3D3457",
+      fontSize: 11,
+      fontWeight: "900",
     },
 
     refreshButton: {
+      minHeight: 48,
+      justifyContent: "center",
       borderWidth: 1,
       borderColor:
         "#E2DAD4",
       borderRadius: 14,
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       paddingHorizontal: 13,
       paddingVertical: 10,
     },
 
     refreshText: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 12,
       fontWeight: "900",
     },
@@ -1010,28 +1366,32 @@ const styles =
       minHeight: 49,
       borderWidth: 1,
       borderColor:
-        "#E2DAD4",
-      borderRadius: 16,
+        canalDynamicColors.line,
+      borderRadius: 18,
       backgroundColor:
-        "#FFFFFF",
-      color: "#1B1B1B",
-      fontSize: 13,
-      paddingHorizontal: 14,
-      marginBottom: 14,
+        "#FFFDF8",
+      color: "#191A18",
+      fontSize: 15,
+      fontWeight: "500",
+      letterSpacing: -0.2,
+      lineHeight: 20,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      marginBottom: 0,
     },
 
     segmentedControl: {
       flexDirection: "row",
       borderRadius: 16,
       backgroundColor:
-        "#EEE7E1",
+        "rgba(5, 37, 58, 0.42)",
       padding: 4,
-      marginBottom: 14,
+      marginBottom: 0,
       gap: 4,
     },
 
     segmentButton: {
-      minHeight: 42,
+      minHeight: 48,
       flex: 1,
       flexDirection: "row",
       alignItems:
@@ -1039,29 +1399,29 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 13,
-      gap: 7,
+      gap: 4,
     },
 
     segmentButtonActive: {
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
     },
 
     segmentText: {
-      color: "#817972",
-      fontSize: 12,
+      color: "#6D6B64",
+      fontSize: 11,
       fontWeight: "800",
     },
 
     segmentTextActive: {
-      color: "#1B1B1B",
+      color: "#191A18",
     },
 
     segmentCount: {
-      minWidth: 22,
+      minWidth: 19,
       borderRadius: 99,
       backgroundColor:
-        "#DCD3CC",
+        "rgba(219, 255, 248, 0.16)",
       color: "#625B55",
       fontSize: 9,
       fontWeight: "900",
@@ -1074,16 +1434,192 @@ const styles =
     segmentCountActive: {
       backgroundColor:
         "#FFF0E5",
-      color: "#B65413",
+      color: "#123F54",
     },
 
     list: {
       gap: 14,
     },
 
+    editorialFeature: {
+      overflow: "hidden",
+      borderRadius: 27,
+      borderCurve: "continuous",
+      boxShadow: "0 18px 42px rgba(32, 15, 52, 0.2)",
+    },
+
+    stageFilters: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+
+    stageFilterButton: {
+      minHeight: 44,
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "rgba(255, 226, 220, 0.22)",
+      borderRadius: 18,
+      backgroundColor: "rgba(45, 29, 65, 0.4)",
+      paddingHorizontal: 13,
+    },
+
+    stageFilterSelected: {
+      backgroundColor: "rgba(244, 255, 252, 0.92)",
+    },
+
+    stageFilterText: {
+      color: canalDynamicColors.muted,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+
+    stageFilterTextSelected: {
+      color: "#3D3457",
+    },
+
+    stageResult: {
+      position: "relative",
+      overflow: "hidden",
+      minHeight: 260,
+      borderWidth: 1,
+      borderColor: "rgba(255, 226, 220, 0.25)",
+      borderRadius: 27,
+      borderCurve: "continuous",
+      backgroundColor: "rgba(71, 46, 100, 0.62)",
+      padding: 18,
+      boxShadow: "0 18px 42px rgba(35, 15, 55, 0.2)",
+    },
+
+    stageResultGlow: {
+      position: "absolute",
+      width: 210,
+      height: 210,
+      borderRadius: 105,
+      top: -80,
+      right: -58,
+      backgroundColor: "rgba(255, 184, 169, 0.28)",
+    },
+
+    stageResultTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+
+    liveBadge: {
+      minHeight: 28,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      borderRadius: 14,
+      backgroundColor: "rgba(102, 22, 47, 0.64)",
+      paddingHorizontal: 9,
+    },
+
+    liveDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: "#FF8A83",
+    },
+
+    liveBadgeText: {
+      color: "#FFE8E5",
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+
+    stageProvenance: {
+      color: "#D4FFF5",
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+
+    stageAudience: {
+      flex: 1,
+      color: canalDynamicColors.muted,
+      fontSize: 9,
+      textAlign: "right",
+    },
+
+    stageResultName: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 29,
+      fontWeight: "500",
+      letterSpacing: -0.6,
+      marginTop: 18,
+    },
+
+    stageResultMeta: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      marginTop: 5,
+    },
+
+    stageNowPlaying: {
+      minHeight: 78,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 11,
+      borderWidth: 1,
+      borderColor: "rgba(228, 255, 250, 0.16)",
+      borderRadius: 18,
+      backgroundColor: "rgba(10, 34, 59, 0.42)",
+      padding: 10,
+      marginTop: 18,
+    },
+
+    stageArtwork: {
+      width: 55,
+      height: 55,
+      borderRadius: 13,
+    },
+
+    stageArtworkFallback: {
+      width: 55,
+      height: 55,
+      borderRadius: 13,
+      backgroundColor: "rgba(202, 255, 244, 0.18)",
+    },
+
+    stageTrackCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    stageTrackKicker: {
+      color: "#C8FFF3",
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 1.3,
+    },
+
+    stageTrackTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 13,
+      fontWeight: "800",
+      marginTop: 4,
+    },
+
+    stageTrackArtist: {
+      color: canalDynamicColors.muted,
+      fontSize: 10,
+      marginTop: 2,
+    },
+
+    stagePlay: {
+      color: "#E8FFF9",
+      fontSize: 29,
+      paddingHorizontal: 5,
+    },
+
     card: {
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 22,
       padding: 15,
     },
@@ -1112,7 +1648,7 @@ const styles =
     },
 
     artworkText: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 25,
       fontWeight: "900",
     },
@@ -1122,19 +1658,19 @@ const styles =
     },
 
     sceneName: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 17,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 11,
       marginTop: 4,
     },
 
     artistText: {
-      color: "#9A938C",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
     },
@@ -1145,12 +1681,13 @@ const styles =
         "center",
       borderTopWidth: 1,
       borderTopColor:
-        "#F0ECE8",
+        canalDynamicColors.line,
       marginTop: 14,
       paddingTop: 12,
     },
 
     creatorButton: {
+      minHeight: 48,
       flex: 1,
       flexDirection: "row",
       alignItems:
@@ -1166,12 +1703,12 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#EEE7E1",
+        canalDynamicColors.elevated,
       marginRight: 9,
     },
 
     creatorAvatarText: {
-      color: "#4F4944",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -1187,32 +1724,32 @@ const styles =
     },
 
     creatorHandle: {
-      color: "#8B837C",
+      color: "#5C5A54",
       fontSize: 10,
       marginTop: 2,
     },
 
     saveButton: {
       minWidth: 68,
-      minHeight: 38,
+      minHeight: 48,
       borderRadius: 13,
       alignItems:
         "center",
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       paddingHorizontal: 12,
       marginLeft: 10,
     },
 
     saveButtonDisabled: {
       backgroundColor:
-        "#CFC7C0",
+        canalDynamicColors.elevated,
     },
 
     saveButtonText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1224,31 +1761,35 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 22,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
     },
 
     loadingText: {
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 13,
       marginTop: 12,
     },
 
     emptyCard: {
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 22,
       padding: 22,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
     },
 
     emptyTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 18,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 13,
       lineHeight: 20,
       marginTop: 7,
@@ -1290,6 +1831,8 @@ const styles =
     },
 
     recoveryButton: {
+      minHeight: 48,
+      justifyContent: "center",
       alignSelf:
         "flex-start",
       borderRadius: 12,
@@ -1301,7 +1844,7 @@ const styles =
     },
 
     recoveryButtonText: {
-      color: "#FFFFFF",
+      color: "#FFFDF8",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1321,6 +1864,7 @@ function ExploreTab(
 ) {
   return (
     <Pressable
+      accessibilityLabel={`Show ${props.label}`}
       accessibilityRole="tab"
       accessibilityState={{
         selected:

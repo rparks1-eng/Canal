@@ -3281,7 +3281,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     header: {
@@ -3307,7 +3307,7 @@ const styles =
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
@@ -3318,13 +3318,14 @@ const styles =
     },
 
     title: {
-      color: "#181818",
+      fontFamily: "Georgia",
+      color: "#191A18",
       fontSize: 28,
       fontWeight: "900",
     },
 
     subtitle: {
-      color: "#6C655F",
+      color: "#6D6B64",
       fontSize: 14,
       lineHeight: 20,
       marginTop: 4,
@@ -3370,7 +3371,7 @@ const styles =
     },
 
     serviceName: {
-      color: "#181818",
+      color: "#191A18",
       fontSize: 18,
       fontWeight: "900",
     },
@@ -3441,7 +3442,7 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       paddingHorizontal: 17,
     },
 
@@ -3512,14 +3513,14 @@ const styles =
     },
 
     explanationTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 16,
       fontWeight: "900",
       marginBottom: 8,
     },
 
     explanationText: {
-      color: "#6C655F",
+      color: "#6D6B64",
       fontSize: 12,
       lineHeight: 19,
       marginTop: 3,
@@ -3546,7 +3547,7 @@ const styles =
     },
 
     redirectText: {
-      color: "#968E87",
+      color: "#6D6B64",
       fontSize: 9,
       lineHeight: 14,
       textAlign: "center",

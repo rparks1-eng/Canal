@@ -72,7 +72,7 @@ export default function HelpScreen() {
             <Ionicons
               name="help-circle-outline"
               size={43}
-              color="#ff9a50"
+              color="#4C46C8"
             />
           </View>
 
@@ -252,7 +252,7 @@ export default function HelpScreen() {
             <Ionicons
               name="search-outline"
               size={20}
-              color="#17110c"
+              color="#191A18"
             />
 
             <Text
@@ -291,7 +291,7 @@ export default function HelpScreen() {
           <Ionicons
             name="information-circle-outline"
             size={22}
-            color="#ff9a50"
+            color="#4C46C8"
           />
 
           <Text style={styles.noteText}>
@@ -347,7 +347,7 @@ function HelpRow({
           <Ionicons
             name={icon}
             size={20}
-            color="#ff9a50"
+            color="#4C46C8"
           />
 
           <Text
@@ -383,7 +383,7 @@ function HelpRow({
           <Ionicons
             name="arrow-forward"
             size={15}
-            color="#ff9a50"
+            color="#4C46C8"
           />
         </Pressable>
       </View>
@@ -408,7 +408,7 @@ function SimpleHelpRow({
         <Ionicons
           name={icon}
           size={21}
-          color="#ff9a50"
+          color="#4C46C8"
         />
       </View>
 
@@ -442,7 +442,7 @@ function Divider() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#F3EFE5",
   },
 
   page: {
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 80,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
@@ -470,13 +470,13 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: "#5B5751",
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 16,
     fontWeight: "700",
   },
@@ -491,20 +491,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 35,
-    backgroundColor: "#2b1d14",
+    backgroundColor: "#FFFDF8",
   },
 
   eyebrow: {
     marginTop: 17,
-    color: "#ff9a50",
+    color: "#4C46C8",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
   },
 
   heading: {
+      fontFamily: "Georgia",
     marginTop: 8,
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 29,
     fontWeight: "700",
     textAlign: "center",
@@ -513,7 +514,7 @@ const styles = StyleSheet.create({
   description: {
     maxWidth: 345,
     marginTop: 10,
-    color: "#aeb6b0",
+    color: "#6D6B64",
     fontSize: 15,
     lineHeight: 22,
     textAlign: "center",
@@ -524,7 +525,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 19,
     fontWeight: "700",
   },
@@ -532,9 +533,9 @@ const styles = StyleSheet.create({
   helpCard: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: "#D9D3C8",
     borderRadius: 21,
-    backgroundColor: "#171c19",
+    backgroundColor: "#FFFDF8",
   },
 
   helpRow: {
@@ -549,11 +550,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
     borderRadius: 13,
-    backgroundColor: "#2b1d14",
+    backgroundColor: "#FFFDF8",
   },
 
   numberText: {
-    color: "#ff9a50",
+    color: "#4C46C8",
     fontSize: 10,
     fontWeight: "900",
   },
@@ -569,14 +570,14 @@ const styles = StyleSheet.create({
   },
 
   helpTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 14,
     fontWeight: "700",
   },
 
   helpText: {
     marginTop: 6,
-    color: "#8f9891",
+    color: "#6D6B64",
     fontSize: 11,
     lineHeight: 17,
   },
@@ -587,10 +588,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     marginTop: 10,
+    minHeight: 48,
+    paddingHorizontal: 4,
   },
 
   inlineActionText: {
-    color: "#ff9a50",
+    color: "#4C46C8",
     fontSize: 11,
     fontWeight: "800",
   },
@@ -608,13 +611,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
     borderRadius: 14,
-    backgroundColor: "#2b1d14",
+    backgroundColor: "#FFFDF8",
   },
 
   divider: {
     height: 1,
     marginLeft: 16,
-    backgroundColor: "#292f2b",
+    backgroundColor: "#D9D3C8",
   },
 
   buttonStack: {
@@ -628,11 +631,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     borderRadius: 17,
-    backgroundColor: "#ff7a1a",
+    backgroundColor: "#4C46C8",
   },
 
   primaryButtonText: {
-    color: "#17110c",
+    color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "800",
   },
@@ -644,11 +647,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#39413c",
     borderRadius: 16,
-    backgroundColor: "#171c19",
+    backgroundColor: "#FFFDF8",
   },
 
   secondaryButtonText: {
-    color: "#ff9a50",
+    color: "#4C46C8",
     fontSize: 13,
     fontWeight: "700",
   },
@@ -660,12 +663,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#5d3b24",
     borderRadius: 17,
-    backgroundColor: "#211810",
+    backgroundColor: "#FFFDF8",
   },
 
   noteText: {
     flex: 1,
-    color: "#bca99b",
+    color: "#6D6B64",
     fontSize: 11,
     lineHeight: 17,
   },

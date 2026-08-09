@@ -1,12 +1,14 @@
 import {
   useCallback,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
   ActivityIndicator,
   Alert,
+  Animated as NativeAnimated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,9 +26,23 @@ import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
+import Animated, {
+  FadeInUp,
+} from "react-native-reanimated";
+
+import { Ionicons } from "@expo/vector-icons";
+
 import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
+
+import {
+  CanalHeaderActions,
+} from "../../components/canal-ui/canal-header-actions";
+
+import {
+  scenePresentation,
+} from "../../components/canal-ui/scene-signature";
 
 import {
   useReconnectReload,
@@ -52,6 +68,10 @@ import type {
 } from "../../lib/scenes";
 
 import {
+  syncScenesWithCloud,
+} from "../../lib/scene-sync";
+
+import {
   removeSavedSceneCompletely,
 } from "../../lib/saved-scene-management";
 
@@ -68,6 +88,10 @@ type LibraryFilter =
   | "created"
   | "saved"
   | "favorites";
+
+type LibraryLayout =
+  | "list"
+  | "grid";
 
 export default function LibraryScreen() {
   const {
@@ -100,6 +124,18 @@ export default function LibraryScreen() {
     );
 
   const [
+    layout,
+    setLayout,
+  ] = useState<LibraryLayout>(
+    "list",
+  );
+
+  const [
+    animationRevision,
+    setAnimationRevision,
+  ] = useState(0);
+
+  const [
     loading,
     setLoading,
   ] = useState(true);
@@ -127,6 +163,44 @@ export default function LibraryScreen() {
       null,
     );
 
+  const cardMotion = useRef(
+    new Map<string, NativeAnimated.Value>(),
+  ).current;
+
+  const motionForScene = useCallback(
+    (sceneId: string): NativeAnimated.Value => {
+      const existing = cardMotion.get(sceneId);
+
+      if (existing) {
+        return existing;
+      }
+
+      const value = new NativeAnimated.Value(0);
+      cardMotion.set(sceneId, value);
+      return value;
+    },
+    [cardMotion],
+  );
+
+  const animateSceneCard = useCallback(
+    (
+      sceneId: string,
+      target: number,
+    ): void => {
+      NativeAnimated.spring(
+        motionForScene(sceneId),
+        {
+          toValue: target,
+          damping: 18,
+          stiffness: 190,
+          mass: 0.7,
+          useNativeDriver: true,
+        },
+      ).start();
+    },
+    [motionForScene],
+  );
+
   const load =
     useCallback(
       async (): Promise<void> => {
@@ -139,9 +213,25 @@ export default function LibraryScreen() {
         );
 
         try {
-          setScenes(
-            await readScenes(),
-          );
+          const localScenes =
+            await readScenes();
+
+          setScenes(localScenes);
+          setLoading(false);
+
+          void syncScenesWithCloud()
+            .then(async () => {
+              const syncedScenes =
+                await readScenes();
+
+              setScenes(syncedScenes);
+            })
+            .catch((syncError) => {
+              console.warn(
+                "Canal could not refresh cross-device Scenes; showing the latest local Library instead:",
+                syncError,
+              );
+            });
         } catch (error) {
           setLoadIssue(
             classifyRecoveryIssue(
@@ -425,6 +515,34 @@ export default function LibraryScreen() {
       );
     };
 
+  const openSceneActions = (scene: StoredScene): void => {
+    const options = [
+      {
+        text: "Open Scene",
+        onPress: () => router.push({
+          pathname: "/scenes/[sceneId]",
+          params: { sceneId: scene.id },
+        } as never),
+      },
+      ...(scene.libraryType === "saved"
+        ? []
+        : [{
+            text: scene.visibility === "public" ? "Make Private" : "Make Public",
+            onPress: () => void changeVisibility(
+              scene,
+              scene.visibility === "public" ? "private" : "public",
+            ),
+          }]),
+      {
+        text: scene.libraryType === "saved" ? "Remove from Library" : "Delete Scene",
+        style: "destructive" as const,
+        onPress: () => confirmDelete(scene),
+      },
+      { text: "Cancel", style: "cancel" as const },
+    ];
+    Alert.alert(scene.name, "Manage this Scene.", options);
+  };
+
   return (
     <SafeAreaView
       style={
@@ -443,18 +561,20 @@ export default function LibraryScreen() {
           false
         }
       >
-        <View
+        <Animated.View
+          entering={FadeInUp.duration(260)}
           style={
             styles.header
           }
         >
-          <View>
+          <View style={styles.headerCopy}>
+            <Text style={styles.eyebrow}>YOUR COLLECTION</Text>
             <Text
               style={
                 styles.title
               }
             >
-              Library
+              Your Library
             </Text>
 
             <Text
@@ -462,30 +582,14 @@ export default function LibraryScreen() {
                 styles.subtitle
               }
             >
-              Your created and saved Scenes.
+              Scenes you made, saved, and returned to—kept in one living collection.
             </Text>
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              router.push(
-                "/scene-studio" as never,
-              )
-            }
-            style={
-              styles.createButton
-            }
-          >
-            <Text
-              style={
-                styles.createButtonText
-              }
-            >
-              + Create
-            </Text>
-          </Pressable>
-        </View>
+          <View style={styles.headerActions}>
+            <CanalHeaderActions />
+          </View>
+        </Animated.View>
 
         <Pressable
           accessibilityRole="button"
@@ -530,6 +634,7 @@ export default function LibraryScreen() {
         </Pressable>
 
         <TextInput
+          accessibilityLabel="Search your Library"
           value={
             query
           }
@@ -537,7 +642,7 @@ export default function LibraryScreen() {
             setQuery
           }
           placeholder="Search your Library"
-          placeholderTextColor="#9A938C"
+          placeholderTextColor="#5C5A54"
           autoCapitalize="none"
           autoCorrect={
             false
@@ -565,12 +670,22 @@ export default function LibraryScreen() {
                 key={
                   value
                 }
+                accessibilityLabel={`Filter Library by ${value}`}
                 accessibilityRole="button"
-                onPress={() =>
+                accessibilityState={{
+                  selected:
+                    filter ===
+                    value,
+                }}
+                onPress={() => {
                   setFilter(
                     value,
-                  )
-                }
+                  );
+                  setAnimationRevision(
+                    (current) =>
+                      current + 1,
+                  );
+                }}
                 style={[
                   styles.filterButton,
 
@@ -600,6 +715,38 @@ export default function LibraryScreen() {
               </Pressable>
             ),
           )}
+
+          <View style={styles.filterSpacer} />
+
+          <View
+            accessibilityRole="tablist"
+            style={styles.layoutToggle}
+          >
+            {(
+              [
+                ["list", "list-outline"],
+                ["grid", "grid-outline"],
+              ] as const
+            ).map(([value, icon]) => (
+              <Pressable
+                key={value}
+                accessibilityLabel={`${value} view`}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: layout === value }}
+                onPress={() => setLayout(value)}
+                style={[
+                  styles.layoutButton,
+                  layout === value && styles.layoutButtonSelected,
+                ]}
+              >
+                <Ionicons
+                  color={layout === value ? "#123F54" : canalDynamicColors.muted}
+                  name={icon}
+                  size={17}
+                />
+              </Pressable>
+            ))}
+          </View>
         </View>
 
         {message ? (
@@ -678,15 +825,19 @@ export default function LibraryScreen() {
           </View>
         ) : (
           <View
-            style={
-              styles.list
-            }
+            style={[
+              styles.list,
+              layout === "grid" && styles.grid,
+            ]}
           >
             {filteredScenes.map(
-              (scene) => {
+              (scene, index) => {
                 const busy =
                   busySceneId ===
                   scene.id;
+
+                const presentation =
+                  scenePresentation(scene);
 
                 const sourceHandle =
                   typeof scene
@@ -696,17 +847,96 @@ export default function LibraryScreen() {
                         .sourceCreatorHandle
                     : "";
 
+                const motion =
+                  motionForScene(
+                    scene.id,
+                  );
+
                 return (
-                  <View
-                    key={
-                      scene.id
-                    }
-                    style={
-                      styles.sceneCard
-                    }
+                  <Animated.View
+                    key={`${animationRevision}:${scene.id}`}
+                    entering={FadeInUp.duration(300).delay(Math.min(index, 7) * 42)}
+                    style={[
+                      styles.sceneWrapper,
+                      layout === "grid" && styles.sceneWrapperGrid,
+                    ]}
                   >
+                    <NativeAnimated.View
+                      style={[
+                        styles.sceneCard,
+                        layout === "grid" && styles.sceneCardGrid,
+                      {
+                        backgroundColor:
+                          presentation.colors[2],
+                        borderColor:
+                          `${presentation.accent}44`,
+                      },
+                        {
+                          transform: [
+                            {
+                              translateY:
+                                motion.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0, -3],
+                                }),
+                            },
+                            {
+                              scale:
+                                motion.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [1, 1.018],
+                                }),
+                            },
+                          ],
+                        },
+                      ]}
+                    >
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.sceneGlowOne,
+                        {
+                          backgroundColor: presentation.colors[0],
+                        },
+                      ]}
+                    />
+
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.sceneGlowTwo,
+                        {
+                          backgroundColor: presentation.colors[1],
+                        },
+                      ]}
+                    />
+
                     <Pressable
                       accessibilityRole="button"
+                      onHoverIn={() =>
+                        animateSceneCard(
+                          scene.id,
+                          1,
+                        )
+                      }
+                      onHoverOut={() =>
+                        animateSceneCard(
+                          scene.id,
+                          0,
+                        )
+                      }
+                      onPressIn={() =>
+                        animateSceneCard(
+                          scene.id,
+                          0.6,
+                        )
+                      }
+                      onPressOut={() =>
+                        animateSceneCard(
+                          scene.id,
+                          0,
+                        )
+                      }
                       onPress={() =>
                         router.push({
                           pathname:
@@ -718,40 +948,28 @@ export default function LibraryScreen() {
                           },
                         } as never)
                       }
-                      style={
-                        styles.sceneMain
-                      }
+                      style={[
+                        styles.sceneMain,
+                        layout === "grid" && styles.sceneMainGrid,
+                      ]}
                     >
                       <View
-                        style={
-                          styles.artwork
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.artworkText
-                          }
-                        >
-                          {scene.name
-                            .charAt(
-                              0,
-                            )
-                            .toUpperCase()}
-                        </Text>
-                      </View>
-
-                      <View
-                        style={
-                          styles.sceneText
-                        }
+                        style={[
+                          styles.sceneText,
+                          layout === "grid" && styles.sceneTextGrid,
+                        ]}
                       >
                         <Text
                           numberOfLines={
                             1
                           }
-                          style={
-                            styles.sceneName
-                          }
+                          style={[
+                            styles.sceneName,
+                            {
+                              color:
+                                "#FFFFFF",
+                            },
+                          ]}
                         >
                           {scene.name}
                         </Text>
@@ -760,9 +978,7 @@ export default function LibraryScreen() {
                           numberOfLines={
                             1
                           }
-                          style={
-                            styles.sceneMeta
-                          }
+                          style={[styles.sceneMeta, { color: `${presentation.accent}CC` }]}
                         >
                           {scene.activity ||
                             "Any activity"}{" "}
@@ -779,9 +995,7 @@ export default function LibraryScreen() {
                           numberOfLines={
                             1
                           }
-                          style={
-                            styles.sourceText
-                          }
+                          style={[styles.sourceText, { color: "rgba(255,255,255,0.64)" }]}
                         >
                           {scene.libraryType ===
                           "saved"
@@ -790,112 +1004,25 @@ export default function LibraryScreen() {
                         </Text>
                       </View>
 
-                      <Text
-                        style={
-                          styles.arrow
-                        }
-                      >
-                        ›
-                      </Text>
-                    </Pressable>
-
-                    <View
-                      style={
-                        styles.actionRow
-                      }
-                    >
-                      {scene.libraryType ===
-                      "saved" ? (
-                        <View
-                          style={
-                            styles.privateBadge
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.privateBadgeText
-                            }
-                          >
-                            Private saved copy
-                          </Text>
-                        </View>
-                      ) : (
-                        <View
-                          style={
-                            styles.visibilityButtons
-                          }
-                        >
-                          <VisibilityButton
-                            label="Private"
-                            selected={
-                              scene.visibility ===
-                              "private"
-                            }
-                            disabled={
-                              busy
-                            }
-                            onPress={() =>
-                              void changeVisibility(
-                                scene,
-                                "private",
-                              )
-                            }
-                          />
-
-                          <VisibilityButton
-                            label="Public"
-                            publicButton
-                            selected={
-                              scene.visibility ===
-                              "public"
-                            }
-                            disabled={
-                              busy
-                            }
-                            onPress={() =>
-                              void changeVisibility(
-                                scene,
-                                "public",
-                              )
-                            }
-                          />
-                        </View>
-                      )}
-
                       <Pressable
+                        accessibilityLabel={`Manage ${scene.name}`}
                         accessibilityRole="button"
-                        disabled={
-                          busy
-                        }
-                        onPress={() =>
-                          confirmDelete(
-                            scene,
-                          )
-                        }
-                        style={
-                          styles.deleteButton
-                        }
+                        disabled={busy}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          openSceneActions(scene);
+                        }}
+                        style={({ pressed }) => [
+                          styles.manageButton,
+                          layout === "grid" && styles.manageButtonGrid,
+                          pressed && styles.pressed,
+                        ]}
                       >
-                        {busy ? (
-                          <ActivityIndicator
-                            size="small"
-                            color="#A62E27"
-                          />
-                        ) : (
-                          <Text
-                            style={
-                              styles.deleteText
-                            }
-                          >
-                            {scene.libraryType ===
-                            "saved"
-                              ? "Remove"
-                              : "Delete"}
-                          </Text>
-                        )}
+                        <Ionicons color="#E3FFF8" name="ellipsis-horizontal" size={18} />
                       </Pressable>
-                    </View>
-                  </View>
+                    </Pressable>
+                    </NativeAnimated.View>
+                  </Animated.View>
                 );
               },
             )}
@@ -935,96 +1062,65 @@ function Notice(
   );
 }
 
-function VisibilityButton(
-  props: {
-    label: string;
-    selected: boolean;
-    publicButton?: boolean;
-    disabled: boolean;
-    onPress: () => void;
-  },
-) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={
-        props.disabled
-      }
-      onPress={
-        props.onPress
-      }
-      style={[
-        styles.visibilityButton,
-
-        props.selected &&
-          (
-            props.publicButton
-              ? styles.publicSelected
-              : styles.privateSelected
-          ),
-      ]}
-    >
-      <Text
-        style={[
-          styles.visibilityText,
-
-          props.selected &&
-            styles.visibilityTextSelected,
-        ]}
-      >
-        {props.label}
-      </Text>
-    </Pressable>
-  );
-}
-
 const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     content: {
       paddingHorizontal: 20,
       paddingTop: 10,
       paddingBottom: 120,
+      gap: 11,
     },
 
     header: {
+      position: "relative",
       flexDirection: "row",
       alignItems:
         "center",
       justifyContent:
         "space-between",
-      marginBottom: 16,
+      marginBottom: 2,
+    },
+
+    headerCopy: {
+      flex: 1,
+      minWidth: 0,
+      paddingRight: 104,
+    },
+
+    headerActions: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+    },
+
+    eyebrow: {
+      color: "rgba(215, 255, 246, 0.82)",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 2.1,
+      marginBottom: 8,
     },
 
     title: {
-      color: "#181818",
-      fontSize: 30,
-      fontWeight: "900",
+      fontFamily: "Georgia",
+      color: "#191A18",
+      fontSize: 34,
+      fontWeight: "500",
+      letterSpacing: -1.1,
     },
 
     subtitle: {
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 13,
       marginTop: 3,
-    },
-
-    createButton: {
-      borderRadius: 14,
-      backgroundColor:
-        "#F47A24",
-      paddingHorizontal: 14,
-      paddingVertical: 11,
-    },
-
-    createButtonText: {
-      color: "#FFFFFF",
-      fontSize: 12,
-      fontWeight: "900",
+      lineHeight: 19,
+      maxWidth: 325,
     },
 
     collaborationButton: {
@@ -1042,16 +1138,17 @@ const styles =
         14,
       borderWidth: 1,
       borderColor:
-        "#E7B88F",
+        "rgba(216, 255, 247, 0.22)",
       borderRadius:
         20,
       backgroundColor:
-        "#FFF1E5",
+        "rgba(5, 46, 64, 0.48)",
+      boxShadow: "0 14px 34px rgba(2, 31, 46, 0.14)",
     },
 
     collaborationTitle: {
       color:
-        "#7D3A10",
+        canalDynamicColors.text,
       fontSize: 15,
       fontWeight:
         "900",
@@ -1060,7 +1157,7 @@ const styles =
     collaborationText: {
       marginTop: 3,
       color:
-        "#7D6656",
+        canalDynamicColors.muted,
       fontSize: 12,
     },
 
@@ -1069,74 +1166,191 @@ const styles =
     },
 
     searchInput: {
-      minHeight: 49,
+      minHeight: 48,
       borderWidth: 1,
       borderColor:
-        "#E2DAD4",
-      borderRadius: 16,
+        canalDynamicColors.line,
+      borderRadius: 18,
       backgroundColor:
-        "#FFFFFF",
-      color: "#1B1B1B",
+        "#FFFDF8",
+      color: "#191A18",
       paddingHorizontal: 14,
     },
 
     filters: {
       flexDirection: "row",
-      flexWrap: "wrap",
+      alignItems: "center",
       gap: 8,
-      marginTop: 12,
-      marginBottom: 14,
+      marginTop: 0,
+      marginBottom: 0,
     },
 
     filterButton: {
+      minHeight: 38,
+      justifyContent: "center",
       borderWidth: 1,
       borderColor:
         "#E2DAD4",
       borderRadius: 13,
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       paddingHorizontal: 11,
       paddingVertical: 8,
     },
 
+    filterSpacer: {
+      flex: 1,
+    },
+
+    layoutToggle: {
+      flexDirection: "row",
+      borderRadius: 13,
+      backgroundColor: "rgba(5, 37, 58, 0.36)",
+      padding: 3,
+    },
+
+    layoutButton: {
+      width: 34,
+      height: 32,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    layoutButtonSelected: {
+      backgroundColor: "rgba(222, 255, 248, 0.92)",
+    },
+
     filterSelected: {
       borderColor:
-        "#F47A24",
+        "#4C46C8",
       backgroundColor:
         "#FFF0E5",
     },
 
     filterText: {
-      color: "#756E68",
+      color: "#A5AEA9",
       fontSize: 11,
       fontWeight: "800",
     },
 
     filterTextSelected: {
-      color: "#F47A24",
+      color: "#4C46C8",
     },
 
     list: {
-      gap: 13,
+      gap: 7,
+    },
+
+    sceneWrapper: {
+      width: "100%",
+    },
+
+    sceneWrapperGrid: {
+      width: "48.6%",
     },
 
     sceneCard: {
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 21,
       padding: 14,
+      boxShadow: "0 14px 34px rgba(2, 30, 45, 0.13)",
+    },
+
+    sceneCardGrid: {
+      width: "100%",
+      minHeight: 164,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+    },
+
+    sceneGlowOne: {
+      position: "absolute",
+      width: 150,
+      height: 150,
+      borderRadius: 75,
+      right: -58,
+      top: -94,
+      opacity: 0.5,
+    },
+
+    sceneGlowTwo: {
+      position: "absolute",
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      left: -62,
+      bottom: -88,
+      opacity: 0.3,
+    },
+
+    featuredSceneCard: {
+      minHeight: 230,
+      justifyContent: "flex-end",
+      overflow: "hidden",
+      backgroundColor: "rgba(44, 93, 137, 0.68)",
+      borderRadius: 27,
+      padding: 18,
+      boxShadow: "0 19px 45px rgba(2, 28, 47, 0.22)",
+    },
+
+    featuredManageButton: {
+      position: "absolute",
+      zIndex: 3,
+      top: 12,
+      right: 12,
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 24,
+      backgroundColor: "rgba(5, 38, 61, 0.34)",
+    },
+
+    featuredSceneMain: {
+      minHeight: 190,
+      alignItems: "flex-start",
+      justifyContent: "flex-end",
+    },
+
+    featuredSceneText: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+
+    featuredSceneName: {
+      fontFamily: "Georgia",
+      fontSize: 30,
+      fontWeight: "500",
+      letterSpacing: -0.6,
     },
 
     sceneMain: {
       flexDirection: "row",
       alignItems:
         "center",
+      minHeight: 58,
+      zIndex: 1,
+    },
+
+    sceneMainGrid: {
+      flex: 1,
+      alignItems: "flex-end",
+    },
+
+    sceneTextGrid: {
+      alignSelf: "flex-end",
+      paddingBottom: 2,
+      paddingRight: 0,
     },
 
     artwork: {
-      width: 58,
-      height: 58,
-      borderRadius: 17,
+      width: 76,
+      height: 50,
+      borderRadius: 12,
       alignItems:
         "center",
       justifyContent:
@@ -1146,8 +1360,19 @@ const styles =
       marginRight: 12,
     },
 
+    featuredArtwork: {
+      position: "absolute",
+      width: 210,
+      height: 210,
+      borderRadius: 105,
+      right: -64,
+      top: -74,
+      backgroundColor: "rgba(206, 255, 245, 0.2)",
+      marginRight: 0,
+    },
+
     artworkText: {
-      color: "#F47A24",
+      color: "#4C46C8",
       fontSize: 23,
       fontWeight: "900",
     },
@@ -1157,19 +1382,19 @@ const styles =
     },
 
     sceneName: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 16,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 10,
       marginTop: 4,
     },
 
     sourceText: {
-      color: "#9A938C",
+      color: "#A5AEA9",
       fontSize: 10,
       marginTop: 4,
     },
@@ -1180,6 +1405,23 @@ const styles =
       marginLeft: 8,
     },
 
+    manageButton: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 24,
+    },
+
+    manageButtonGrid: {
+      position: "absolute",
+      top: -3,
+      right: -3,
+      width: 40,
+      height: 40,
+      backgroundColor: "rgba(4, 25, 49, 0.18)",
+    },
+
     actionRow: {
       flexDirection: "row",
       alignItems:
@@ -1188,7 +1430,7 @@ const styles =
         "space-between",
       borderTopWidth: 1,
       borderTopColor:
-        "#F0ECE8",
+        "#29332F",
       marginTop: 13,
       paddingTop: 11,
     },
@@ -1197,13 +1439,13 @@ const styles =
       flexDirection: "row",
       borderRadius: 12,
       backgroundColor:
-        "#EEE7E1",
+        "#151D1B",
       padding: 3,
     },
 
     visibilityButton: {
       minWidth: 66,
-      minHeight: 33,
+      minHeight: 48,
       borderRadius: 9,
       alignItems:
         "center",
@@ -1213,41 +1455,41 @@ const styles =
 
     privateSelected: {
       backgroundColor:
-        "#7C746D",
+        "#A991E8",
     },
 
     publicSelected: {
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
     },
 
     visibilityText: {
-      color: "#756E68",
+      color: "#A5AEA9",
       fontSize: 10,
       fontWeight: "900",
     },
 
     visibilityTextSelected: {
-      color: "#FFFFFF",
+      color: "#10201C",
     },
 
     privateBadge: {
       borderRadius: 11,
       backgroundColor:
-        "#F2EEEA",
+        "#151D1B",
       paddingHorizontal: 10,
       paddingVertical: 8,
     },
 
     privateBadgeText: {
-      color: "#756E68",
+      color: "#A5AEA9",
       fontSize: 10,
       fontWeight: "800",
     },
 
     deleteButton: {
       minWidth: 70,
-      minHeight: 36,
+      minHeight: 48,
       borderWidth: 1,
       borderColor:
         "#E4B8B4",
@@ -1260,7 +1502,7 @@ const styles =
     },
 
     deleteText: {
-      color: "#A62E27",
+      color: "#FF9289",
       fontSize: 10,
       fontWeight: "900",
     },
@@ -1273,22 +1515,22 @@ const styles =
 
     successNotice: {
       backgroundColor:
-        "#EAF9EF",
+        "#10241E",
     },
 
     errorNotice: {
       backgroundColor:
-        "#FFF0EF",
+        "#261716",
     },
 
     successText: {
-      color: "#1D7138",
+      color: "#72D8C4",
       fontSize: 12,
       lineHeight: 18,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: "#FF9289",
       fontSize: 12,
       lineHeight: 18,
     },
@@ -1300,25 +1542,29 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 22,
+      borderWidth: 1,
+      borderColor: "rgba(216, 255, 247, 0.22)",
     },
 
     emptyCard: {
       backgroundColor:
-        "#FFFFFF",
+        "#FFFDF8",
       borderRadius: 22,
       padding: 22,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
     },
 
     emptyTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 18,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#746D67",
+      color: "#6D6B64",
       fontSize: 13,
       lineHeight: 20,
       marginTop: 7,

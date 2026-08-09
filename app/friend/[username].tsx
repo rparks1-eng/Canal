@@ -6,6 +6,7 @@ import {
 } from "expo-router";
 import {
   useCallback,
+  useRef,
   useState,
 } from "react";
 import {
@@ -18,6 +19,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { useAuth } from "../../providers/auth-provider";
 
 import {
   shareSoundscape,
@@ -35,6 +38,24 @@ import {
 } from "../../lib/user-directory";
 
 export default function FriendProfileScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+  const params =
+    useLocalSearchParams();
+
+  const username =
+    firstParam(params.username)
+      .trim()
+      .toLowerCase()
+      .replace(/^@+/, "");
+
+  return (
+    <FriendProfileContent
+      key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}:${username}`}
+    />
+  );
+}
+
+function FriendProfileContent() {
   const params =
     useLocalSearchParams();
 
@@ -61,6 +82,9 @@ export default function FriendProfileScreen() {
 
   const [isLoading, setIsLoading] =
     useState(true);
+  const [isSharing, setIsSharing] =
+    useState(false);
+  const shareInFlight = useRef(false);
 
   const [
     isUpdating,
@@ -264,7 +288,7 @@ export default function FriendProfileScreen() {
   }
 
   async function handleShare() {
-    if (!user) {
+    if (!user || shareInFlight.current) {
       return;
     }
 
@@ -281,6 +305,8 @@ export default function FriendProfileScreen() {
     }
 
     try {
+      shareInFlight.current = true;
+      setIsSharing(true);
       const result =
         await shareSoundscape({
           username:
@@ -314,6 +340,9 @@ export default function FriendProfileScreen() {
           ? error.message
           : "Canal could not share this Soundscape.",
       );
+    } finally {
+      shareInFlight.current = false;
+      setIsSharing(false);
     }
   }
 
@@ -357,6 +386,7 @@ export default function FriendProfileScreen() {
           </Text>
 
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -391,6 +421,7 @@ export default function FriendProfileScreen() {
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -456,7 +487,9 @@ export default function FriendProfileScreen() {
           </Text>
 
           <Pressable
+            accessibilityLabel={`Unblock ${user.displayName}`}
             accessibilityRole="button"
+            accessibilityState={{ busy: isUpdating, disabled: isUpdating }}
             disabled={isUpdating}
             onPress={() => {
               void handleUnblock();
@@ -485,6 +518,7 @@ export default function FriendProfileScreen() {
           </Pressable>
 
           <Pressable
+            accessibilityLabel="View blocked users"
             accessibilityRole="button"
             onPress={() =>
               router.push(
@@ -520,6 +554,7 @@ export default function FriendProfileScreen() {
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -586,7 +621,9 @@ export default function FriendProfileScreen() {
           </Text>
 
           <Pressable
+            accessibilityLabel={`Follow ${user.displayName}`}
             accessibilityRole="button"
+            accessibilityState={{ busy: isUpdating, disabled: isUpdating }}
             disabled={isUpdating}
             onPress={() => {
               void toggleFollowing();
@@ -628,6 +665,7 @@ export default function FriendProfileScreen() {
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -658,7 +696,10 @@ export default function FriendProfileScreen() {
           </Text>
 
           <Pressable
+            accessibilityLabel={`Share ${user.displayName} Soundscape`}
             accessibilityRole="button"
+            accessibilityState={{ busy: isSharing, disabled: isSharing }}
+            disabled={isSharing}
             onPress={() => {
               void handleShare();
             }}
@@ -728,7 +769,9 @@ export default function FriendProfileScreen() {
 
         <View style={styles.buttonRow}>
           <Pressable
+            accessibilityLabel={`${isFollowing ? "Unfollow" : "Follow"} ${user.displayName}`}
             accessibilityRole="button"
+            accessibilityState={{ busy: isUpdating, disabled: isUpdating }}
             disabled={isUpdating}
             onPress={() => {
               void toggleFollowing();
@@ -767,7 +810,10 @@ export default function FriendProfileScreen() {
           </Pressable>
 
           <Pressable
+            accessibilityLabel={`Share ${user.displayName} Soundscape`}
             accessibilityRole="button"
+            accessibilityState={{ busy: isSharing, disabled: isSharing }}
+            disabled={isSharing}
             onPress={() => {
               void handleShare();
             }}
@@ -891,7 +937,10 @@ export default function FriendProfileScreen() {
         </View>
 
         <Pressable
+          accessibilityLabel={`Share ${user.displayName} Soundscape`}
           accessibilityRole="button"
+          accessibilityState={{ busy: isSharing, disabled: isSharing }}
+          disabled={isSharing}
           onPress={() => {
             void handleShare();
           }}
@@ -917,7 +966,9 @@ export default function FriendProfileScreen() {
         </Pressable>
 
         <Pressable
+          accessibilityLabel={`Block ${user.displayName}`}
           accessibilityRole="button"
+          accessibilityState={{ busy: isUpdating, disabled: isUpdating }}
           disabled={isUpdating}
           onPress={
             confirmBlock
@@ -1046,7 +1097,7 @@ function getInitials(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#F3EFE5",
   },
 
   page: {
@@ -1066,7 +1117,7 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 80,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
@@ -1075,13 +1126,14 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: "#6D6B64",
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: "#191A18",
+    fontFamily: "Georgia",
     fontSize: 16,
     fontWeight: "700",
   },
@@ -1323,7 +1375,7 @@ const styles = StyleSheet.create({
 
   sceneArtwork: {
     width: 45,
-    height: 45,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 11,

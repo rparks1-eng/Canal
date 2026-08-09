@@ -25,11 +25,37 @@ const migration =
       " ",
     );
 
+const hostReturningPolicy =
+  readFileSync(
+    resolve(
+      process.cwd(),
+      "supabase/migrations/20260808044250_live_stage_host_returning_policy.sql",
+    ),
+    "utf8",
+  )
+    .toLowerCase()
+    .replace(
+      /\s+/g,
+      " ",
+    );
+
 const stageDetail =
   readFileSync(
     resolve(
       process.cwd(),
       "app/live-stage/[stageId].tsx",
+    ),
+    "utf8",
+  ).replace(
+    /\s+/g,
+    " ",
+  );
+
+const createStage =
+  readFileSync(
+    resolve(
+      process.cwd(),
+      "app/create-stage.tsx",
     ),
     "utf8",
   ).replace(
@@ -215,6 +241,43 @@ describe(
           stageDetail,
         ).not.toContain(
           '"Produced and hosted by Canal."',
+        );
+      },
+    );
+
+    it(
+      "does not submit a local Scene identifier as a cloud foreign key",
+      () => {
+        expect(
+          createStage,
+        ).toContain(
+          "tracks: sceneTracks( selectedScene, )",
+        );
+        expect(
+          createStage,
+        ).not.toContain(
+          "sceneId: selectedScene.id",
+        );
+      },
+    );
+
+    it(
+      "lets a host read the Stage returned by its own insert",
+      () => {
+        expect(
+          hostReturningPolicy,
+        ).toContain(
+          'create policy "members can read accessible live stages" on public.live_stages for select to authenticated',
+        );
+        expect(
+          hostReturningPolicy,
+        ).toContain(
+          "(select auth.uid()) = host_id",
+        );
+        expect(
+          hostReturningPolicy,
+        ).toContain(
+          "or (select private.can_access_live_stage(id))",
         );
       },
     );

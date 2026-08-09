@@ -30,6 +30,14 @@ import {
   classifyRecoveryIssue,
 } from "../lib/recovery-issue";
 
+import {
+  resolvePublicProfileIdByHandle,
+} from "../lib/social";
+
+import {
+  respondToStageCollaborationInvite,
+} from "../lib/stage-collaboration-invites";
+
 import type {
   RecoveryIssue,
 } from "../lib/recovery-issue";
@@ -46,10 +54,17 @@ import {
   useConnectivity,
 } from "../providers/connectivity-provider";
 
+import {
+  useNotificationCenter,
+} from "../providers/notification-center-provider";
+
 type IoniconName =
   keyof typeof Ionicons.glyphMap;
 
 export default function ActivityScreen() {
+  const {
+    clearUnreadCount,
+  } = useNotificationCenter();
   const {
     refresh:
       refreshConnectivity,
@@ -92,6 +107,7 @@ export default function ActivityScreen() {
         );
 
         await markAllActivityRead();
+        clearUnreadCount();
       } catch (error) {
         console.error(
           "Unable to load activity:",
@@ -112,6 +128,7 @@ export default function ActivityScreen() {
         setIsLoading(false);
       }
     }, [
+      clearUnreadCount,
       connectivityStatus,
     ]);
 
@@ -187,21 +204,114 @@ export default function ActivityScreen() {
     }
   }
 
-  function openActivityItem(
+  async function openActivityItem(
     item: CanalActivityItem,
-  ) {
+  ): Promise<void> {
+    if (
+      item.stageId &&
+      item.stageInviteId
+    ) {
+      Alert.alert(
+        "Join as a collaborator?",
+        item.description,
+        [
+          {
+            text: "Not now",
+            style: "cancel",
+          },
+          {
+            text: "Decline",
+            style: "destructive",
+            onPress: () => {
+              void respondToStageCollaborationInvite(
+                item.stageInviteId!,
+                false,
+              ).then(loadActivity);
+            },
+          },
+          {
+            text: "Join and contribute",
+            onPress: () => {
+              void respondToStageCollaborationInvite(
+                item.stageInviteId!,
+                true,
+              ).then(
+                (stageId) =>
+                  router.push({
+                    pathname:
+                      "/stage-contribution",
+                    params: {
+                      stageId,
+                    },
+                  }),
+              );
+            },
+          },
+        ],
+      );
+
+      return;
+    }
+
+    if (item.stageId) {
+      router.push({
+        pathname:
+          "/stage-contribution",
+        params: {
+          stageId:
+            item.stageId,
+        },
+      });
+
+      return;
+    }
+
+    if (item.snapshotId) {
+      router.push({
+        pathname: "/snapshots/[snapshotId]",
+        params: {
+          snapshotId: item.snapshotId,
+          ...(item.commentId
+            ? { commentId: item.commentId }
+            : {}),
+        },
+      } as never);
+
+      return;
+    }
+
     if (!item.username) {
       return;
     }
 
-    router.push({
-      pathname:
-        "/friend/[username]",
-      params: {
-        username:
+    try {
+      const profileId =
+        await resolvePublicProfileIdByHandle(
           item.username,
-      },
-    });
+        );
+
+      if (!profileId) {
+        Alert.alert(
+          "Profile unavailable",
+          "This Canal profile is no longer public or available.",
+        );
+
+        return;
+      }
+
+      router.push({
+        pathname:
+          "/creator/[userId]",
+        params: {
+          userId: profileId,
+        },
+      });
+    } catch {
+      Alert.alert(
+        "Unable to open profile",
+        "Canal could not load this profile right now. Try again.",
+      );
+    }
   }
 
   return (
@@ -217,11 +327,26 @@ export default function ActivityScreen() {
         }
       >
         <View style={styles.header}>
-          <View
-            style={
-              styles.headerSpacer
+          <Pressable
+            accessibilityHint="Returns to your profile."
+            accessibilityLabel="Back to Profile"
+            accessibilityRole="button"
+            onPress={() =>
+              router.replace(
+                "/(tabs)/profile",
+              )
             }
-          />
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              color="#191A18"
+              name="chevron-back"
+              size={24}
+            />
+          </Pressable>
 
           <Text
             style={
@@ -334,6 +459,7 @@ export default function ActivityScreen() {
             </Text>
 
             <Pressable
+              accessibilityLabel="Find friends"
               accessibilityRole="button"
               onPress={() =>
                 router.push(
@@ -371,17 +497,19 @@ export default function ActivityScreen() {
                   accessibilityLabel={`${item.title}. ${item.description}`}
                   accessibilityRole="button"
                   disabled={
-                    !item.username
+                    !item.username &&
+                    !item.snapshotId
                   }
                   onPress={() =>
-                    openActivityItem(
+                    void openActivityItem(
                       item,
                     )
                   }
                   style={({ pressed }) => [
                     styles.activityCard,
                     pressed &&
-                      item.username &&
+                      (item.username ||
+                        item.snapshotId) &&
                       styles.pressed,
                   ]}
                 >
@@ -450,7 +578,8 @@ export default function ActivityScreen() {
                     ) : null}
                   </View>
 
-                  {item.username ? (
+                  {item.username ||
+                  item.snapshotId ? (
                     <Ionicons
                       name="chevron-forward"
                       size={19}
@@ -621,7 +750,7 @@ function formatActivityDate(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#F3EFE5",
   },
 
   page: {
@@ -640,7 +769,14 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 80,
-    minHeight: 44,
+    minHeight: 48,
+    justifyContent: "center",
+  },
+
+  backButton: {
+    width: 80,
+    minHeight: 48,
+    alignItems: "flex-start",
     justifyContent: "center",
   },
 
@@ -649,7 +785,7 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 16,
     fontWeight: "700",
   },
@@ -663,21 +799,22 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginBottom: 8,
-    color: "#ff9a50",
+    color: "#787DFF",
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#ffffff",
+    color: "#191A18",
+    fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "700",
   },
 
   description: {
     marginTop: 10,
-    color: "#aeb6b0",
+    color: "#6D6B64",
     fontSize: 15,
     lineHeight: 22,
   },
@@ -760,7 +897,7 @@ const styles = StyleSheet.create({
 
   activityIcon: {
     width: 47,
-    height: 47,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,

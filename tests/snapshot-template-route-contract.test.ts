@@ -47,6 +47,11 @@ describe(
         "app/snapshots/[snapshotId].tsx",
       );
 
+    const composition =
+      source(
+        "components/snapshot-composition.tsx",
+      );
+
     const profileRoute =
       source(
         "app/(tabs)/profile.tsx",
@@ -134,22 +139,22 @@ describe(
     );
 
     it(
-      "applies an owner template to Scene publication with a classic fallback",
+      "applies an automatic built-in style to Scene publication",
       () => {
         expect(
           composer,
         ).toContain(
+          "BUILT_IN_SNAPSHOT_STYLES",
+        );
+        expect(
+          composer,
+        ).not.toContain(
           "listOwnSnapshotTemplates",
         );
         expect(
           composer,
-        ).toMatch(
-          /nextTemplates[.]find[\s\S]*template[.]isDefault/,
-        );
-        expect(
-          composer,
         ).toContain(
-          'brandLabel="canal"',
+          'accessibilityRole="radiogroup"',
         );
         expect(
           composer,
@@ -159,12 +164,12 @@ describe(
         expect(
           composer,
         ).toMatch(
-          /createSnapshotWithStatus\(\{[\s\S]*templateId:[\s\S]*selectedTemplateId/,
+          /createSnapshotWithStatus\(\{[\s\S]*templateBrandLabel:[\s\S]*selectedTemplate[?][.]brandLabel[\s\S]*templateTheme:[\s\S]*selectedTemplate[?][.]theme/,
         );
         expect(
           composer,
-        ).toMatch(
-          /syncSnapshotWithStatus\([\s\S]*pendingSnapshotId,[\s\S]*templateId:[\s\S]*selectedTemplateId/,
+        ).not.toContain(
+          '"/snapshot-templates" as never',
         );
       },
     );
@@ -172,22 +177,11 @@ describe(
     it(
       "renders only server-hydrated immutable provenance on public surfaces",
       () => {
-        for (
-          const renderedSource of
-          [
-            publicCard,
-            detailRoute,
-          ]
-        ) {
+        for (const renderedSource of [publicCard, detailRoute]) {
           expect(
             renderedSource,
           ).toContain(
-            "snapshot.templateBrandLabel",
-          );
-          expect(
-            renderedSource,
-          ).toContain(
-            "snapshot.templateTheme",
+            "SnapshotComposition",
           );
           expect(
             renderedSource,
@@ -196,35 +190,34 @@ describe(
           );
         }
 
-        expect(
-          detailRoute,
-        ).toContain(
-          "CREATOR TEMPLATE",
-        );
+        expect(composition).toContain("snapshot.templateBrandLabel");
+        expect(composition).toContain("snapshot.templateTheme");
+
+        expect(composition).toContain('{snapshot.templateBrandLabel || "canal"}');
       },
     );
 
     it(
-      "exposes template management from the owner profile",
+      "removes user-owned template management from the owner profile",
       () => {
         expect(
           profileRoute,
-        ).toContain(
+        ).not.toContain(
           "listOwnSnapshotTemplates",
         );
         expect(
           profileRoute,
-        ).toContain(
+        ).not.toContain(
           "Snapshot Templates",
         );
         expect(
           profileRoute,
-        ).toContain(
+        ).not.toContain(
           '"/snapshot-templates" as never',
         );
         expect(
           profileRoute,
-        ).toContain(
+        ).not.toContain(
           'accessibilityLabel="Manage Snapshot templates"',
         );
       },

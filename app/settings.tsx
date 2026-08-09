@@ -24,6 +24,10 @@ import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
+import Animated, {
+  FadeInUp,
+} from "react-native-reanimated";
+
 import {
   isCanalAccountChangedError,
   isCanalLogoutIncompleteError,
@@ -464,7 +468,7 @@ export default function SettingsScreen() {
         "bottom",
       ]}
     >
-      <View style={styles.header}>
+      <Animated.View entering={FadeInUp.duration(240)} style={styles.header}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back"
@@ -506,10 +510,10 @@ export default function SettingsScreen() {
               styles.subtitle
             }
           >
-            Account and music connections.
+            Shape how Canal looks, connects, and remembers.
           </Text>
         </View>
-      </View>
+      </Animated.View>
 
       <ScrollView
         contentContainerStyle={
@@ -519,7 +523,44 @@ export default function SettingsScreen() {
           false
         }
       >
-        <View style={styles.sectionCard}>
+        <Animated.View
+          entering={FadeInUp.duration(260).delay(45)}
+          style={[styles.sectionCard, styles.appearanceCard]}
+        >
+          <Text style={styles.sectionTitle}>Appearance</Text>
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={styles.appearancePreview}
+          >
+            <View style={styles.previewOrbOne} />
+            <View style={styles.previewOrbTwo} />
+            <View style={styles.previewGlass}>
+              <View style={styles.previewLineWide} />
+              <View style={styles.previewLineShort} />
+            </View>
+          </View>
+          <Pressable
+            accessibilityLabel="Open Appearance settings"
+            accessibilityRole="button"
+            onPress={() => router.push("/appearance")}
+            style={({ pressed }) => [styles.serviceRow, pressed && styles.pressed]}
+          >
+            <View style={styles.appearanceMark}>
+              <Text style={styles.appearanceMarkText}>Aa</Text>
+            </View>
+            <View style={styles.serviceText}>
+              <Text style={styles.serviceName}>Light, Dark or System</Text>
+              <Text style={styles.serviceStatus}>Choose how Canal looks on this device.</Text>
+            </View>
+            <Text style={styles.arrow}>›</Text>
+          </Pressable>
+        </Animated.View>
+
+        <Animated.View
+          entering={FadeInUp.duration(260).delay(80)}
+          style={styles.sectionCard}
+        >
           <Text
             style={
               styles.sectionTitle
@@ -639,7 +680,7 @@ export default function SettingsScreen() {
               )}
             </Pressable>
           ) : null}
-        </View>
+        </Animated.View>
 
         {message ? (
           <View
@@ -656,7 +697,10 @@ export default function SettingsScreen() {
           </View>
         ) : null}
 
-        <View style={styles.sectionCard}>
+        <Animated.View
+          entering={FadeInUp.duration(260).delay(115)}
+          style={styles.sectionCard}
+        >
           <Text
             style={
               styles.sectionTitle
@@ -676,9 +720,12 @@ export default function SettingsScreen() {
             Scene Studio only reads the saved
             snapshot.
           </Text>
-        </View>
+        </Animated.View>
 
-        <View style={styles.sectionCard}>
+        <Animated.View
+          entering={FadeInUp.duration(260).delay(145)}
+          style={styles.sectionCard}
+        >
           <Text
             style={
               styles.sectionTitle
@@ -748,7 +795,7 @@ export default function SettingsScreen() {
               ›
             </Text>
           </Pressable>
-        </View>
+        </Animated.View>
 
         <View style={styles.logoutCard}>
           <Text
@@ -820,16 +867,16 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     header: {
       flexDirection: "row",
       alignItems:
-        "flex-start",
+        "center",
       paddingHorizontal: 20,
       paddingTop: 10,
-      paddingBottom: 17,
+      paddingBottom: 20,
     },
 
     backButton: {
@@ -846,7 +893,7 @@ const styles =
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
@@ -854,23 +901,29 @@ const styles =
 
     headerText: {
       flex: 1,
+      alignItems: "center",
+      paddingRight: 60,
     },
 
     title: {
-      color: "#181818",
-      fontSize: 28,
-      fontWeight: "900",
+      fontFamily: "Georgia",
+      color: "#191A18",
+      fontSize: 27,
+      fontWeight: "500",
+      letterSpacing: -0.7,
     },
 
     subtitle: {
       color: "#746D67",
-      fontSize: 14,
+      fontSize: 12,
+      lineHeight: 18,
       marginTop: 4,
+      textAlign: "center",
     },
 
     content: {
       paddingHorizontal: 20,
-      paddingBottom: 45,
+      paddingBottom: 110,
       gap: 14,
     },
 
@@ -879,10 +932,73 @@ const styles =
         "#FFFFFF",
       borderRadius: 22,
       padding: 18,
+      boxShadow: "0 16px 38px rgba(19, 24, 62, 0.16)",
+    },
+
+    appearanceCard: {
+      padding: 16,
+    },
+
+    appearancePreview: {
+      height: 88,
+      overflow: "hidden",
+      borderRadius: 19,
+      borderCurve: "continuous",
+      backgroundColor: "#526DAA",
+      marginBottom: 13,
+    },
+
+    previewOrbOne: {
+      position: "absolute",
+      width: "115%",
+      height: 42,
+      top: 4,
+      left: -18,
+      transform: [{ rotate: "-7deg" }],
+      backgroundColor: "rgba(209, 255, 245, 0.42)",
+    },
+
+    previewOrbTwo: {
+      position: "absolute",
+      width: "115%",
+      height: 38,
+      right: -20,
+      bottom: 2,
+      transform: [{ rotate: "8deg" }],
+      backgroundColor: "rgba(177, 157, 237, 0.38)",
+    },
+
+    previewGlass: {
+      position: "absolute",
+      left: 16,
+      right: 16,
+      bottom: 14,
+      height: 42,
+      justifyContent: "center",
+      gap: 7,
+      borderWidth: 1,
+      borderColor: "rgba(255, 255, 255, 0.32)",
+      borderRadius: 15,
+      backgroundColor: "rgba(23, 47, 82, 0.36)",
+      paddingHorizontal: 13,
+    },
+
+    previewLineWide: {
+      width: "58%",
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: "rgba(255, 255, 255, 0.88)",
+    },
+
+    previewLineShort: {
+      width: "34%",
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: "rgba(230, 255, 250, 0.52)",
     },
 
     sectionTitle: {
-      color: "#1B1B1B",
+      color: "#191A18",
       fontSize: 18,
       fontWeight: "900",
       marginBottom: 12,
@@ -894,7 +1010,7 @@ const styles =
         "center",
       borderTopWidth: 1,
       borderTopColor:
-        "#F0ECE8",
+        canalDynamicColors.line,
       paddingVertical: 13,
     },
 
@@ -909,6 +1025,22 @@ const styles =
       backgroundColor:
         "#1DB954",
       marginRight: 12,
+    },
+
+    appearanceMark: {
+      width: 46,
+      height: 46,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 15,
+      backgroundColor: "#A991E8",
+    },
+
+    appearanceMarkText: {
+      color: "#10201C",
+      fontFamily: "Georgia",
+      fontSize: 19,
+      fontWeight: "900",
     },
 
     spotifyMarkText: {
@@ -926,11 +1058,11 @@ const styles =
         "center",
       borderRadius: 14,
       backgroundColor:
-        "#FFF0E4",
+        canalDynamicColors.elevated,
     },
 
     privacyMarkText: {
-      color: "#D85E0D",
+      color: "#4C46C8",
       fontSize: 20,
       fontWeight: "900",
     },
@@ -940,7 +1072,7 @@ const styles =
     },
 
     serviceName: {
-      color: "#272320",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
@@ -952,7 +1084,7 @@ const styles =
     },
 
     arrow: {
-      color: "#AAA19A",
+      color: "#6D6B64",
       fontSize: 26,
       marginLeft: 8,
     },
@@ -977,38 +1109,42 @@ const styles =
 
     messageBox: {
       backgroundColor:
-        "#EFF5FF",
+        canalDynamicColors.surface,
+      borderWidth: 1,
+      borderColor: "rgba(226, 222, 255, 0.22)",
       borderRadius: 16,
       padding: 14,
     },
 
     messageText: {
-      color: "#36567C",
+      color: canalDynamicColors.text,
       fontSize: 12,
       lineHeight: 18,
     },
 
     explanationText: {
-      color: "#6C655F",
+      color: "#6D6B64",
       fontSize: 13,
       lineHeight: 20,
     },
 
     logoutCard: {
       backgroundColor:
-        "#FFF4F2",
+        "rgba(92, 25, 38, 0.52)",
+      borderWidth: 1,
+      borderColor: "rgba(255, 171, 176, 0.42)",
       borderRadius: 22,
       padding: 18,
     },
 
     logoutTitle: {
-      color: "#A62E27",
+      color: "#FFD8DB",
       fontSize: 18,
       fontWeight: "900",
     },
 
     logoutDescription: {
-      color: "#7E514D",
+      color: "#F5C3C7",
       fontSize: 12,
       lineHeight: 18,
       marginTop: 6,

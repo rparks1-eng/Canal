@@ -189,8 +189,14 @@ export type SpotifyLibraryOperationOptions = {
   ) => void;
 };
 
+/**
+ * A completed Spotify library import is the durable source for Scene
+ * generation. Keep it warm for a week so normal app launches and Scene edits
+ * do not repeatedly walk a large personal library. Explicit Sync actions still
+ * call syncSpotifyLibrary directly and therefore bypass this freshness window.
+ */
 const DEFAULT_LIBRARY_MAX_AGE_MS =
-  24 * 60 * 60 * 1000;
+  7 * 24 * 60 * 60 * 1000;
 
 let libraryRefreshPromise:
   Promise<SpotifyLibrarySnapshot> | null =
@@ -692,6 +698,38 @@ function projectSpotifyTrack(
     readStoredText(
       albumCandidate?.name,
     );
+  const albumArtworkCandidate =
+    readStoredText(
+      albumCandidate?.imageUrl,
+      2_048,
+    ) ??
+    readStoredText(
+      asRecord(
+        Array.isArray(albumCandidate?.images)
+          ? albumCandidate.images[0]
+          : null,
+      )?.url,
+      2_048,
+    );
+  let albumImageUrl: string | undefined;
+
+  if (albumArtworkCandidate) {
+    try {
+      const parsedArtworkUrl = new URL(albumArtworkCandidate);
+
+      if (
+        parsedArtworkUrl.protocol === "https:" &&
+        !parsedArtworkUrl.username &&
+        !parsedArtworkUrl.password &&
+        (parsedArtworkUrl.hostname === "i.scdn.co" ||
+          parsedArtworkUrl.hostname === "mosaic.scdn.co")
+      ) {
+        albumImageUrl = parsedArtworkUrl.toString();
+      }
+    } catch {
+      albumImageUrl = undefined;
+    }
+  }
   const duration =
     candidate?.duration_ms;
 
@@ -726,6 +764,9 @@ function projectSpotifyTrack(
                 "album",
                 albumId,
               ),
+            ...(albumImageUrl
+              ? { imageUrl: albumImageUrl }
+              : {}),
           },
         }
       : {}),
@@ -2666,34 +2707,6 @@ async function performSpotifyLibraryFullSync(
     checkpoint,
   );
 
-  const metadataResults =
-    Promise.allSettled([
-    getSpotifyTopArtists(
-      20,
-      {
-        connectionGuard,
-        operationCommitGuard:
-          options.operationCommitGuard,
-      },
-    ),
-    getSpotifyTopTracks(
-      20,
-      {
-        connectionGuard,
-        operationCommitGuard:
-          options.operationCommitGuard,
-      },
-    ),
-    getSpotifyRecentlyPlayed(
-      20,
-      {
-        connectionGuard,
-        operationCommitGuard:
-          options.operationCommitGuard,
-      },
-    ),
-    ]);
-
   await assertLibraryImportCurrent(
     connectionGuard,
     cacheScope,
@@ -3121,6 +3134,37 @@ async function performSpotifyLibraryFullSync(
     cacheScope,
     options,
   );
+
+  // Refresh the small, time-sensitive metadata only after the resumable bulk
+  // import is complete. A paused large-library import can therefore resume
+  // page-by-page without spending three extra Spotify requests on every retry.
+  const metadataResults =
+    await Promise.allSettled([
+      getSpotifyTopArtists(
+        20,
+        {
+          connectionGuard,
+          operationCommitGuard:
+            options.operationCommitGuard,
+        },
+      ),
+      getSpotifyTopTracks(
+        20,
+        {
+          connectionGuard,
+          operationCommitGuard:
+            options.operationCommitGuard,
+        },
+      ),
+      getSpotifyRecentlyPlayed(
+        20,
+        {
+          connectionGuard,
+          operationCommitGuard:
+            options.operationCommitGuard,
+        },
+      ),
+    ]);
 
   const [
     topArtistsResult,

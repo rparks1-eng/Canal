@@ -13,7 +13,11 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.raishawnparks.canal"
+      "bundleIdentifier": "com.raishawnparks.canal",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow Canal to take photos and videos for Snapshots.",
+        "NSMicrophoneUsageDescription": "Allow Canal to record audio with Snapshot videos."
+      }
     },
     "android": {
       "adaptiveIcon": {

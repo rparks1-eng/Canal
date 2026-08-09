@@ -36,6 +36,19 @@ import {
   syncScenesWithCloud,
 } from "../lib/scene-sync";
 
+import {
+  invalidateSceneStudio,
+} from "../lib/scene-studio-lifecycle";
+
+import {
+  captureSceneStudioScope,
+  sameSceneStudioScope,
+} from "../lib/scene-studio-scope";
+
+import type {
+  SceneStudioScope,
+} from "../lib/scene-studio-scope";
+
 import type {
   SceneSyncResult,
 } from "../lib/scene-sync";
@@ -49,6 +62,7 @@ type AuthContextValue = {
   session: Session | null;
   user: User | null;
   accountEpoch: number;
+  sessionGeneration: string | null;
   profile: LocalProfile | null;
   loading: boolean;
   configured: boolean;
@@ -113,6 +127,20 @@ export function AuthProvider(
   const preparedUserId =
     useRef<string | null>(
       null,
+    );
+
+  const previousSceneStudioScope =
+    useRef<SceneStudioScope | null>(
+      null,
+    );
+
+  const sessionGeneration =
+    useMemo(
+      () =>
+        session
+          ? readCanalAccountSessionGeneration(session)
+          : null,
+      [session],
     );
 
   const syncScenesNow =
@@ -375,6 +403,36 @@ export function AuthProvider(
     hydrateSession,
   ]);
 
+  useEffect(() => {
+    const nextScope = captureSceneStudioScope({
+      userId: session?.user.id,
+      accountEpoch,
+      sessionGeneration,
+    });
+    const previousScope =
+      previousSceneStudioScope.current;
+
+    if (
+      previousScope &&
+      !sameSceneStudioScope(
+        previousScope,
+        nextScope,
+      )
+    ) {
+      void invalidateSceneStudio({
+        reason: "account-switch",
+        scope: previousScope,
+      });
+    }
+
+    previousSceneStudioScope.current =
+      nextScope;
+  }, [
+    accountEpoch,
+    session?.user.id,
+    sessionGeneration,
+  ]);
+
   const value =
     useMemo<AuthContextValue>(
       () => ({
@@ -385,6 +443,7 @@ export function AuthProvider(
           null,
 
         accountEpoch,
+        sessionGeneration,
         profile,
         loading,
 
@@ -399,6 +458,7 @@ export function AuthProvider(
       [
         session,
         accountEpoch,
+        sessionGeneration,
         profile,
         loading,
         syncingScenes,

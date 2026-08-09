@@ -20,7 +20,7 @@ export default function NotFoundScreen() {
           <Ionicons
             name="map-outline"
             size={43}
-            color="#ff9a50"
+            color="#4C46C8"
           />
         </View>
 
@@ -92,7 +92,7 @@ export default function NotFoundScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#F3EFE5",
   },
 
   content: {
@@ -108,21 +108,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 34,
-    backgroundColor: "#2b1d14",
+    backgroundColor: "#FFFDF8",
   },
 
   eyebrow: {
     marginTop: 20,
-    color: "#ff9a50",
+    color: "#4C46C8",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
   },
 
   heading: {
+      fontFamily: "Georgia",
     maxWidth: 340,
     marginTop: 9,
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 27,
     fontWeight: "700",
     lineHeight: 34,
@@ -132,7 +133,7 @@ const styles = StyleSheet.create({
   description: {
     maxWidth: 330,
     marginTop: 10,
-    color: "#8f9891",
+    color: "#6D6B64",
     fontSize: 14,
     lineHeight: 21,
     textAlign: "center",
@@ -145,11 +146,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 27,
     borderRadius: 17,
-    backgroundColor: "#ff7a1a",
+    backgroundColor: "#4C46C8",
   },
 
   primaryButtonText: {
-    color: "#17110c",
+    color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "800",
   },
@@ -163,11 +164,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#39413c",
     borderRadius: 16,
-    backgroundColor: "#171c19",
+    backgroundColor: "#FFFDF8",
   },
 
   secondaryButtonText: {
-    color: "#ff9a50",
+    color: "#4C46C8",
     fontSize: 13,
     fontWeight: "700",
   },

@@ -107,14 +107,17 @@ function closeTemplates(): void {
 
 export default function SnapshotTemplatesScreen() {
   const {
+    accountEpoch,
+    sessionGeneration,
     user,
   } = useAuth();
 
   return (
     <SnapshotTemplatesContent
       key={
-        user?.id ??
-        "signed-out"
+        user?.id
+          ? `${user.id}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`
+          : "signed-out"
       }
     />
   );
@@ -814,11 +817,19 @@ function SnapshotTemplatesContent() {
 
             <Switch
               accessibilityLabel="Use this template by default"
+              accessibilityRole="switch"
+              accessibilityState={{
+                checked:
+                  isDefault,
+              }}
               value={
                 isDefault
               }
               onValueChange={
                 setIsDefault
+              }
+              style={
+                styles.switchControl
               }
               trackColor={{
                 false:
@@ -865,7 +876,18 @@ function SnapshotTemplatesContent() {
             ) : null}
 
             <Pressable
+              accessibilityLabel={
+                editingId
+                  ? "Save Snapshot template changes"
+                  : "Create Snapshot template"
+              }
               accessibilityRole="button"
+              accessibilityState={{
+                disabled:
+                  Boolean(
+                    busyId,
+                  ),
+              }}
               disabled={
                 Boolean(
                   busyId,
@@ -1153,7 +1175,7 @@ const styles =
     screen: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     page: {
@@ -1179,7 +1201,7 @@ const styles =
 
     headerButton: {
       minWidth: 68,
-      minHeight: 44,
+      minHeight: 48,
       justifyContent:
         "center",
     },
@@ -1192,9 +1214,10 @@ const styles =
 
     headerTitle: {
       flex: 1,
-      color: "#211C19",
-      fontSize: 16,
-      fontWeight: "900",
+      color: "#191A18",
+      fontFamily: "Georgia",
+      fontSize: 22,
+      fontWeight: "400",
       textAlign: "center",
     },
 
@@ -1414,6 +1437,10 @@ const styles =
       flex: 1,
       gap: 3,
     },
+    switchControl: {
+      minWidth: 48,
+      minHeight: 48,
+    },
 
     defaultTitle: {
       color: "#2B2520",
@@ -1446,7 +1473,7 @@ const styles =
       borderCurve:
         "continuous",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       paddingHorizontal: 18,
     },
 
@@ -1603,7 +1630,7 @@ const styles =
 
     smallButton: {
       minWidth: 62,
-      minHeight: 44,
+      minHeight: 48,
       alignItems:
         "center",
       justifyContent:

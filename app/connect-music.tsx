@@ -257,7 +257,7 @@ export default function ConnectMusicScreen() {
             >
               <ActivityIndicator
                 size="large"
-                color="#ff7a1a"
+                color="#4C46C8"
               />
 
               <Text
@@ -462,7 +462,7 @@ export default function ConnectMusicScreen() {
                 >
                   {isConnecting ? (
                     <ActivityIndicator
-                      color="#07130b"
+                      color="#191A18"
                     />
                   ) : (
                     <Text
@@ -504,7 +504,7 @@ export default function ConnectMusicScreen() {
               >
                 {isConnecting ? (
                   <ActivityIndicator
-                    color="#07130b"
+                    color="#191A18"
                   />
                 ) : (
                   <Text
@@ -635,7 +635,7 @@ function getInitials(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#F3EFE5",
   },
 
   layout: {
@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    color: "#ff7a1a",
+    color: "#4C46C8",
     fontSize: 44,
     fontWeight: "800",
     letterSpacing: -2,
@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
 
   tagline: {
     marginTop: 7,
-    color: "#8f9891",
+    color: "#6D6B64",
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1.2,
@@ -674,7 +674,8 @@ const styles = StyleSheet.create({
   },
 
   heading: {
-    color: "#ffffff",
+      fontFamily: "Georgia",
+    color: "#191A18",
     fontSize: 33,
     fontWeight: "700",
     textAlign: "center",
@@ -683,7 +684,7 @@ const styles = StyleSheet.create({
   description: {
     maxWidth: 360,
     marginTop: 11,
-    color: "#aeb6b0",
+    color: "#6D6B64",
     fontSize: 15,
     lineHeight: 22,
     textAlign: "center",
@@ -709,14 +710,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: "#D9D3C8",
     borderRadius: 23,
-    backgroundColor: "#171c19",
+    backgroundColor: "#FFFDF8",
   },
 
   loadingText: {
     marginTop: 12,
-    color: "#aeb6b0",
+    color: "#6D6B64",
     fontSize: 14,
   },
 
@@ -726,7 +727,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#245c37",
     borderRadius: 24,
-    backgroundColor: "#121e16",
+    backgroundColor: "#FFFDF8",
   },
 
   serviceHeader: {
@@ -745,7 +746,7 @@ const styles = StyleSheet.create({
   },
 
   spotifyLogoText: {
-    color: "#07130b",
+    color: "#191A18",
     fontSize: 15,
     fontWeight: "900",
   },
@@ -763,7 +764,7 @@ const styles = StyleSheet.create({
 
   connectedHeading: {
     marginTop: 5,
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 18,
     fontWeight: "700",
   },
@@ -794,7 +795,7 @@ const styles = StyleSheet.create({
   },
 
   profilePlaceholderText: {
-    color: "#07130b",
+    color: "#191A18",
     fontSize: 14,
     fontWeight: "900",
   },
@@ -804,14 +805,14 @@ const styles = StyleSheet.create({
   },
 
   profileName: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 16,
     fontWeight: "700",
   },
 
   profileDetail: {
     marginTop: 4,
-    color: "#9eb5a4",
+    color: "#6D6B64",
     fontSize: 12,
   },
 
@@ -825,7 +826,7 @@ const styles = StyleSheet.create({
   },
 
   changeButtonText: {
-    color: "#9fd9ae",
+    color: "#365F46",
     fontSize: 13,
     fontWeight: "700",
   },
@@ -837,7 +838,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#245c37",
     borderRadius: 24,
-    backgroundColor: "#121e16",
+    backgroundColor: "#FFFDF8",
   },
 
   spotifyLogoLarge: {
@@ -850,19 +851,19 @@ const styles = StyleSheet.create({
   },
 
   spotifyLogoLargeText: {
-    color: "#07130b",
+    color: "#191A18",
     fontSize: 20,
     fontWeight: "900",
   },
 
   connectCardTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 21,
     fontWeight: "700",
   },
 
   connectCardText: {
-    color: "#9eb5a4",
+    color: "#6D6B64",
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -879,7 +880,7 @@ const styles = StyleSheet.create({
   },
 
   spotifyButtonText: {
-    color: "#07130b",
+    color: "#191A18",
     fontSize: 16,
     fontWeight: "800",
   },
@@ -888,13 +889,13 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: "#D9D3C8",
     borderRadius: 21,
-    backgroundColor: "#171c19",
+    backgroundColor: "#FFFDF8",
   },
 
   explanationTitle: {
-    color: "#ffffff",
+    color: "#191A18",
     fontSize: 17,
     fontWeight: "700",
   },
@@ -911,18 +912,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 11,
     borderRadius: 12,
-    backgroundColor: "#2b1d14",
+    backgroundColor: "#FFFDF8",
   },
 
   benefitNumberText: {
-    color: "#ff9a50",
+    color: "#4C46C8",
     fontSize: 10,
     fontWeight: "800",
   },
 
   benefitText: {
     flex: 1,
-    color: "#aeb6b0",
+    color: "#6D6B64",
     fontSize: 12,
     lineHeight: 18,
   },
@@ -934,7 +935,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     borderTopWidth: 1,
     borderTopColor: "#262d29",
-    backgroundColor: "#0d100e",
+    backgroundColor: "#F3EFE5",
   },
 
   continueButton: {
@@ -942,11 +943,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 18,
-    backgroundColor: "#ff7a1a",
+    backgroundColor: "#4C46C8",
   },
 
   continueButtonText: {
-    color: "#17110c",
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "800",
   },

@@ -3,6 +3,7 @@ import {
   router,
 } from "expo-router";
 import {
+  useRef,
   useState,
 } from "react";
 import {
@@ -19,14 +20,33 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   shareCanalInvite,
 } from "../lib/canal-invites";
+import { useAuth } from "../providers/auth-provider";
 
 export default function InviteFriendsScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+
+  return (
+    <InviteFriendsContent
+      key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`}
+    />
+  );
+}
+
+function InviteFriendsContent() {
   const [isSharing, setIsSharing] =
     useState(false);
+  const shareInFlight = useRef(false);
+  const [shareError, setShareError] = useState("");
 
   async function shareInvite() {
+    if (shareInFlight.current) {
+      return;
+    }
+
     try {
+      shareInFlight.current = true;
       setIsSharing(true);
+      setShareError("");
 
       const result =
         await shareCanalInvite();
@@ -41,13 +61,17 @@ export default function InviteFriendsScreen() {
         );
       }
     } catch (error) {
-      Alert.alert(
-        "Unable to share",
+      const message =
         error instanceof Error
           ? error.message
-          : "Canal could not share this invite.",
+          : "Canal could not share this invite.";
+      setShareError(message);
+      Alert.alert(
+        "Unable to share",
+        message,
       );
     } finally {
+      shareInFlight.current = false;
       setIsSharing(false);
     }
   }
@@ -66,6 +90,7 @@ export default function InviteFriendsScreen() {
       >
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={() => {
             if (router.canGoBack()) {
@@ -132,7 +157,9 @@ export default function InviteFriendsScreen() {
         </View>
 
         <Pressable
+          accessibilityLabel="Share Canal invite"
           accessibilityRole="button"
+          accessibilityState={{ busy: isSharing, disabled: isSharing }}
           disabled={isSharing}
           onPress={() => {
             void shareInvite();
@@ -167,6 +194,22 @@ export default function InviteFriendsScreen() {
             </>
           )}
         </Pressable>
+
+        {shareError ? (
+          <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.shareError}>
+            <Text selectable style={styles.shareErrorText}>{shareError}</Text>
+            <Pressable
+              accessibilityLabel="Retry sharing Canal invite"
+              accessibilityRole="button"
+              accessibilityState={{ busy: isSharing, disabled: isSharing }}
+              disabled={isSharing}
+              onPress={() => { void shareInvite(); }}
+              style={styles.retryButton}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View
           style={styles.optionsCard}
@@ -295,7 +338,7 @@ function OptionRow({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0d100e",
+    backgroundColor: "#F3EFE5",
   },
 
   page: {
@@ -314,7 +357,7 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 90,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: "center",
   },
 
@@ -323,13 +366,14 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: "#6D6B64",
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#ffffff",
+    color: "#191A18",
+    fontFamily: "Georgia",
     fontSize: 16,
     fontWeight: "700",
   },
@@ -349,7 +393,7 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginTop: 18,
-    color: "#ff9a50",
+    color: "#787DFF",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
@@ -357,7 +401,8 @@ const styles = StyleSheet.create({
 
   heading: {
     marginTop: 8,
-    color: "#ffffff",
+    color: "#191A18",
+    fontFamily: "Georgia",
     fontSize: 28,
     fontWeight: "700",
     textAlign: "center",
@@ -366,7 +411,7 @@ const styles = StyleSheet.create({
   description: {
     maxWidth: 350,
     marginTop: 10,
-    color: "#aeb6b0",
+    color: "#6D6B64",
     fontSize: 15,
     lineHeight: 22,
     textAlign: "center",
@@ -388,6 +433,32 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  shareError: {
+    gap: 8,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "#FFF0EF",
+  },
+
+  shareErrorText: {
+    color: "#8D211C",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  retryButton: {
+    minHeight: 48,
+    alignSelf: "flex-start",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+
+  retryButtonText: {
+    color: "#8D211C",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
   optionsCard: {
     overflow: "hidden",
     borderWidth: 1,
@@ -405,7 +476,7 @@ const styles = StyleSheet.create({
 
   optionIcon: {
     width: 45,
-    height: 45,
+    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,

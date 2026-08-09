@@ -73,7 +73,7 @@ export default function SpotifyCallbackScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#FFF9F4",
+    backgroundColor: "#F3EFE5",
   },
 
   content: {
@@ -84,7 +84,8 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    color: "#181818",
+      fontFamily: "Georgia",
+    color: "#191A18",
     fontSize: 23,
     fontWeight: "800",
     marginTop: 18,
@@ -92,7 +93,7 @@ const styles = StyleSheet.create({
   },
 
   message: {
-    color: "#6C655F",
+    color: "#6D6B64",
     fontSize: 15,
     lineHeight: 22,
     marginTop: 8,

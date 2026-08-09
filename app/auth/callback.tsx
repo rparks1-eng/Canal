@@ -105,6 +105,11 @@ export default function AuthCallbackScreen() {
             </Text>
 
             <Pressable
+              accessibilityLabel="Return to Login"
+              accessibilityRole="button"
+              accessibilityState={{
+                disabled: false,
+              }}
               onPress={() =>
                 router.replace(
                   "/login" as never,
@@ -148,7 +153,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#F3EFE5",
     },
 
     content: {
@@ -161,7 +166,7 @@ const styles =
     },
 
     loadingText: {
-      color: "#6C655F",
+      color: "#6D6B64",
       fontSize: 14,
       marginTop: 14,
     },
@@ -188,7 +193,7 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        "#4C46C8",
       marginTop: 18,
       paddingHorizontal: 22,
     },

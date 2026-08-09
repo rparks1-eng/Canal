@@ -5,6 +5,7 @@ import {
 } from "react";
 
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   StyleSheet,
   View,
@@ -31,8 +32,26 @@ import {
 } from "../providers/analytics-provider";
 
 import {
-  ConnectivityBanner,
-} from "../components/connectivity-banner";
+  NotificationCenterProvider,
+} from "../providers/notification-center-provider";
+
+import CanalBottomNav from "../components/CanalBottomNav";
+
+import {
+  CanalAmbientBackground,
+} from "../components/canal-ui/canal-ambient-background";
+
+import {
+  CanalAmbientBackground,
+} from "../components/canal-ui/canal-ambient-background";
+
+import {
+  CanalAppearanceProvider,
+} from "../theme/canal-appearance";
+
+import {
+  CanalAtmosphereProvider,
+} from "../theme/canal-atmosphere-context";
 
 import {
   isOnboardingRequired,
@@ -56,6 +75,36 @@ type OnboardingState =
   | "complete";
 
 function CanalNavigator() {
+  const [
+    reducedMotion,
+    setReducedMotion,
+  ] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    void AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => {
+        if (active) {
+          setReducedMotion(enabled);
+        }
+      })
+      .catch(() => {
+        // Fail closed: motion remains disabled when the preference is unavailable.
+      });
+
+    const subscription =
+      AccessibilityInfo.addEventListener(
+        "reduceMotionChanged",
+        setReducedMotion,
+      );
+
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
   const segments =
     useSegments();
 
@@ -478,25 +527,43 @@ function CanalNavigator() {
     );
   }
 
+  const rootSegment =
+    segments[0];
+
+  const showPersistentNavigation =
+    Boolean(session) &&
+    onboardingState === "complete" &&
+    rootSegment !== "(tabs)" &&
+    rootSegment !== "login" &&
+    rootSegment !== "auth" &&
+    rootSegment !== "onboarding" &&
+    rootSegment !== "connect-music" &&
+    rootSegment !== "scene-studio" &&
+    rootSegment !== "spotify-callback";
+
   return (
-    <Stack
-      key={
-        userId ??
-        "signed-out"
-      }
-      screenOptions={{
-        headerShown:
-          false,
+    <View style={styles.navigatorShell}>
+      <CanalAmbientBackground />
+      <Stack
+        key={
+          userId ??
+          "signed-out"
+        }
+        screenOptions={{
+          headerShown:
+            false,
 
-        animation:
-          "slide_from_right",
+          animation:
+            reducedMotion
+              ? "none"
+              : "slide_from_right",
 
-        contentStyle: {
-          backgroundColor:
-            "#FFF9F4",
-        },
-      }}
-    >
+          contentStyle: {
+            backgroundColor:
+              "transparent",
+          },
+        }}
+      >
       <Stack.Screen
         name="login"
       />
@@ -530,6 +597,14 @@ function CanalNavigator() {
       />
 
       <Stack.Screen
+        name="managed-stages"
+      />
+
+      <Stack.Screen
+        name="appearance"
+      />
+
+      <Stack.Screen
         name="music-services"
       />
 
@@ -543,6 +618,20 @@ function CanalNavigator() {
 
       <Stack.Screen
         name="scene-studio"
+      />
+
+      <Stack.Screen
+        name="stage-contribution"
+      />
+      <Stack.Screen
+        name="stage-invite-collaborators"
+        options={{
+          headerShown: false,
+        }}
+      />
+
+      <Stack.Screen
+        name="stage-lobby/[stageId]"
       />
 
       <Stack.Screen
@@ -606,29 +695,42 @@ function CanalNavigator() {
       />
 
       <Stack.Screen
+        name="snapshot-camera"
+      />
+
+      <Stack.Screen
         name="snapshot-templates"
       />
-    </Stack>
+      </Stack>
+
+      {showPersistentNavigation ? (
+        <CanalBottomNav />
+      ) : null}
+    </View>
   );
 }
 
 export default function RootLayout() {
   return (
-    <ConnectivityProvider>
-      <View
-        style={
-          styles.root
-        }
-      >
-        <ConnectivityBanner />
-
-        <AuthProvider>
-          <AnalyticsProvider>
-            <CanalNavigator />
-          </AnalyticsProvider>
-        </AuthProvider>
-      </View>
-    </ConnectivityProvider>
+    <CanalAppearanceProvider>
+      <CanalAtmosphereProvider>
+        <ConnectivityProvider>
+          <View
+            style={
+              styles.root
+            }
+          >
+            <AuthProvider>
+              <NotificationCenterProvider>
+                <AnalyticsProvider>
+                  <CanalNavigator />
+                </AnalyticsProvider>
+              </NotificationCenterProvider>
+            </AuthProvider>
+          </View>
+        </ConnectivityProvider>
+      </CanalAtmosphereProvider>
+    </CanalAppearanceProvider>
   );
 }
 
@@ -637,7 +739,11 @@ const styles =
     root: {
       flex: 1,
       backgroundColor:
-        "#FFF9F4",
+        "#080B0C",
+    },
+
+    navigatorShell: {
+      flex: 1,
     },
 
     loading: {
@@ -647,6 +753,6 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#FFF9F4",
+        "#080B0C",
     },
   });

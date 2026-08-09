@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import {
   router,
   useFocusEffect,
@@ -17,6 +18,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import {
@@ -26,17 +28,22 @@ import {
 import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
+import { VerifiedAccountBadge } from "../../components/verified-account-badge";
 import {
   useReconnectReload,
 } from "../../hooks/use-reconnect-reload";
 import {
   getCurrentLiveStageTrack,
   LiveStage,
+  readHostedLiveStages,
   readLiveStages,
 } from "../../lib/live-stages";
 import {
   classifyRecoveryIssue,
 } from "../../lib/recovery-issue";
+import {
+  addSpotifyArtworkToLiveStage,
+} from "../../lib/spotify-scene-artwork";
 import {
   useAuth,
 } from "../../providers/auth-provider";
@@ -181,35 +188,29 @@ function StageCard(
         {props.stage.name}
       </Text>
 
-      <Text
-        numberOfLines={1}
-        style={
-          styles.stageHost
-        }
-      >
-        @{props.stage
-          .hostUsername} ·{" "}
-        {props.stage.activity}
-      </Text>
+          <View style={styles.stageHostRow}>
+            <Text numberOfLines={1} style={styles.stageHost}>@{props.stage.hostUsername} · {props.stage.activity}</Text>
+            {props.stage.hostIsVerified ? <VerifiedAccountBadge size={16} /> : null}
+          </View>
 
       <View
         style={
           styles.nowPlaying
         }
       >
-        <View
-          style={
-            styles.albumTile
-          }
-        >
-          <Text
-            style={
-              styles.albumTileText
-            }
-          >
-            ♪
-          </Text>
-        </View>
+        {currentTrack?.imageUrl ? (
+          <Image
+            accessibilityLabel={`${currentTrack.title} album artwork`}
+            contentFit="cover"
+            source={currentTrack.imageUrl}
+            style={styles.albumTile}
+            transition={160}
+          />
+        ) : (
+          <View style={styles.albumTile}>
+            <Text style={styles.albumTileText}>♪</Text>
+          </View>
+        )}
 
         <View
           style={
@@ -273,6 +274,8 @@ function StageCard(
 }
 
 export default function LiveHubScreen() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [browseFilter, setBrowseFilter] = useState<"all" | "canal" | "verified" | "community">("all");
   const {
     configured,
     profile,
@@ -323,6 +326,7 @@ export default function LiveHubScreen() {
     setError,
   ] = useState("");
 
+
   const accountKeyRef =
     useRef(
       accountKey,
@@ -342,6 +346,7 @@ export default function LiveHubScreen() {
 
   accountKeyRef.current =
     accountKey;
+
 
   const load =
     useCallback(
@@ -379,8 +384,24 @@ export default function LiveHubScreen() {
         }
 
         try {
-          const nextStages =
-            await readLiveStages();
+          const [publicLiveStages, hostedStages] = await Promise.all([
+            readLiveStages(),
+            readHostedLiveStages(),
+          ]);
+          const loadedStages = Array.from(new Map([
+            ...hostedStages.filter((stage) => stage.status === "live"),
+            ...publicLiveStages,
+          ].map((stage) => [stage.id, stage])).values());
+          const nextStages: LiveStage[] = [];
+          for (let offset = 0; offset < loadedStages.length; offset += 4) {
+            const batch = loadedStages.slice(offset, offset + 4);
+            nextStages.push(...await Promise.all(
+              batch.map((stage) => addSpotifyArtworkToLiveStage(
+                stage,
+                [stage.currentTrackIndex],
+              )),
+            ));
+          }
 
           if (
             requestId !==
@@ -513,6 +534,7 @@ export default function LiveHubScreen() {
         ),
     );
 
+
   const discoverStages =
     liveStages.filter(
       (stage) =>
@@ -522,8 +544,19 @@ export default function LiveHubScreen() {
           "public",
     );
 
+  const filteredDiscoverStages = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return discoverStages.filter((stage) => {
+      const kindMatches = browseFilter === "all" || getStageKind(stage) === browseFilter;
+      if (!kindMatches) return false;
+      if (!query) return true;
+      return [stage.name, stage.hostName, stage.hostUsername, stage.activity, ...stage.tracks.flatMap((track) => [track.title, track.artist])]
+        .some((value) => value.toLocaleLowerCase().includes(query));
+    }).sort((a, b) => b.listenerCount - a.listenerCount || new Date(b.startedAt ?? b.createdAt).getTime() - new Date(a.startedAt ?? a.createdAt).getTime());
+  }, [browseFilter, discoverStages, searchQuery]);
+
   const canalStages =
-    discoverStages.filter(
+    filteredDiscoverStages.filter(
       (stage) =>
         getStageKind(
           stage,
@@ -532,7 +565,7 @@ export default function LiveHubScreen() {
     );
 
   const verifiedStages =
-    discoverStages.filter(
+    filteredDiscoverStages.filter(
       (stage) =>
         getStageKind(
           stage,
@@ -541,7 +574,7 @@ export default function LiveHubScreen() {
     );
 
   const communityStages =
-    discoverStages.filter(
+    filteredDiscoverStages.filter(
       (stage) =>
         getStageKind(
           stage,
@@ -829,6 +862,36 @@ export default function LiveHubScreen() {
           />
         ) : null}
 
+        <View style={styles.discoveryTools}>
+          <TextInput
+            accessibilityLabel="Search public live Stages"
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+            onChangeText={setSearchQuery}
+            placeholder="Search Stages, hosts, songs, or artists"
+            placeholderTextColor={canalDynamicColors.muted}
+            returnKeyType="search"
+            style={styles.searchInput}
+            value={searchQuery}
+          />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            {(["all", "canal", "verified", "community"] as const).map((filter) => (
+              <Pressable
+                key={filter}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: browseFilter === filter }}
+                onPress={() => setBrowseFilter(filter)}
+                style={[styles.filterChip, browseFilter === filter && styles.filterChipSelected]}
+              >
+                <Text style={[styles.filterText, browseFilter === filter && styles.filterTextSelected]}>
+                  {filter === "all" ? "All live" : filter === "canal" ? "Canal" : filter === "verified" ? "Verified" : "Community"}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
         {loading &&
         liveStages.length ===
           0 &&
@@ -852,8 +915,7 @@ export default function LiveHubScreen() {
               Live…
             </Text>
           </View>
-        ) : liveStages.length ===
-          0 ? (
+        ) : liveStages.length === 0 || (filteredDiscoverStages.length === 0 && myStages.length === 0) ? (
           recoveryIssue ? null : (
             <View
               style={
@@ -880,7 +942,7 @@ export default function LiveHubScreen() {
                   styles.emptyTitle
                 }
               >
-                The room is quiet.
+                {searchQuery.trim() || browseFilter !== "all" ? "No matching Stages." : "The room is quiet."}
               </Text>
 
               <Text
@@ -889,10 +951,9 @@ export default function LiveHubScreen() {
                   styles.emptyText
                 }
               >
-                Start the first Stage
-                from one of your saved
-                Scenes, then invite
-                people with its code.
+                {searchQuery.trim() || browseFilter !== "all"
+                  ? "Try another host, song, artist, or Stage category."
+                  : "Start the first Stage from one of your saved Scenes, then invite people with its code."}
               </Text>
             </View>
           )
@@ -916,7 +977,7 @@ export default function LiveHubScreen() {
                       styles.sectionTitle
                     }
                   >
-                    Your rooms
+                    Your live rooms
                   </Text>
 
                   <Text
@@ -1020,6 +1081,32 @@ const styles =
       paddingBottom: 40,
       gap: 18,
     },
+
+    discoveryTools: { gap: 10 },
+    searchInput: {
+      minHeight: 52,
+      paddingHorizontal: 17,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      borderRadius: 18,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
+      fontSize: 15,
+    },
+    filterRow: { gap: 8, paddingRight: 20 },
+    filterChip: {
+      minHeight: 48,
+      justifyContent: "center",
+      paddingHorizontal: 16,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      borderRadius: 999,
+      backgroundColor: canalDynamicColors.surface,
+    },
+    filterChipSelected: { borderColor: canalDynamicColors.mint, backgroundColor: canalDynamicColors.successSurface },
+    filterText: { color: canalDynamicColors.muted, fontSize: 13, fontWeight: "800" },
+    filterTextSelected: { color: canalDynamicColors.mint },
 
     headerRow: {
       minHeight: 64,
@@ -1191,6 +1278,123 @@ const styles =
       gap: 12,
     },
 
+    sectionSubtitle: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 3,
+      maxWidth: 280,
+    },
+
+    hostedCard: {
+      backgroundColor: canalDynamicColors.elevated,
+      borderColor: canalDynamicColors.line,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      overflow: "hidden",
+    },
+
+    hostedCardBody: {
+      minHeight: 160,
+      padding: 18,
+    },
+
+    hostedTopRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+
+    hostedStatus: {
+      backgroundColor: canalDynamicColors.successSurface,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+
+    hostedStatusEnded: {
+      backgroundColor: canalDynamicColors.surface,
+    },
+
+    hostedStatusText: {
+      color: canalDynamicColors.mint,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1,
+    },
+
+    hostedStatusTextEnded: {
+      color: canalDynamicColors.muted,
+    },
+
+    hostedVisibility: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    hostedName: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 24,
+      fontWeight: "800",
+      marginTop: 14,
+    },
+
+    hostedMeta: {
+      color: canalDynamicColors.text,
+      fontSize: 13,
+      fontWeight: "700",
+      marginTop: 8,
+    },
+
+    hostedElapsed: {
+      color: canalDynamicColors.mint,
+      fontSize: 13,
+      fontWeight: "800",
+      marginTop: 5,
+    },
+
+    hostedManageHint: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      marginTop: 8,
+    },
+
+    hostedAction: {
+      alignItems: "center",
+      borderTopColor: canalDynamicColors.line,
+      borderTopWidth: 1,
+      justifyContent: "center",
+      minHeight: 52,
+      paddingHorizontal: 18,
+    },
+
+    hostedEndAction: {
+      backgroundColor: canalDynamicColors.dangerSurface,
+    },
+
+    hostedRestartAction: {
+      backgroundColor: canalDynamicColors.successSurface,
+    },
+
+    hostedEndText: {
+      color: canalDynamicColors.danger,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    hostedRestartText: {
+      color: canalDynamicColors.mint,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    disabled: {
+      opacity: 0.55,
+    },
+
     sectionHeader: {
       minHeight: 34,
       flexDirection: "row",
@@ -1321,6 +1525,7 @@ const styles =
       fontSize: 13,
       lineHeight: 18,
     },
+    stageHostRow: { flexDirection: "row", alignItems: "center", gap: 5 },
 
     nowPlaying: {
       minHeight: 68,
