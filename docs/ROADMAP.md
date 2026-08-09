@@ -88,6 +88,22 @@ moderation evidence, chat abuse limits and reporting, host moderation controls, 
 track payloads, associated native/universal invite links, and disabled public Realtime
 channel access.
 
+### Current collaboration and recommendation checkpoint
+
+- [x] Persist account-scoped Swap, Remove, mismatch, favorite, unfavorite, skip,
+  and replay feedback with latest-event precedence.
+- [x] Enforce strict requested genres and measurably vary familiarity and regenerated
+  playlists in the deterministic quality harness.
+- [x] Add Stage contribution approval/rejection/removal, stale-revision protection,
+  host mix rollback, collaborator code joins, private member status reads, and
+  restoration of the host baseline after the final accepted contribution is removed.
+- [ ] Reconcile and deploy `20260809170000_scene_recommendation_feedback.sql` and
+  `20260809173000_live_stage_contribution_moderation.sql` after authenticating the
+  Supabase CLI and confirming remote migration history.
+- [ ] Complete one two-account/two-device acceptance pass for invitation delivery,
+  unread state, contribution approval, mix refresh/rollback, deletion tombstones,
+  and account isolation.
+
 ## Phase 4: creator and event products
 
 - [x] Creator-branded Snapshot templates
