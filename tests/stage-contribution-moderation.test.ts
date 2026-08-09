@@ -22,13 +22,22 @@ describe("collaborative Stage contribution moderation", () => {
     expect(migration).toContain("new.moderation_status := 'pending'");
     expect(migration).toContain("new.ready := false");
     expect(migration).toContain("perform private.refresh_live_stage_mix(stage_id_value)");
-    expect(migration).toContain("moderation_status <> 'rejected'");
+    expect(migration).toContain("contribution.moderation_status = 'approved'");
+    expect(migration).toContain("moderation_status = 'approved'");
     expect(migration).toContain("set tracks = collaboration_base_tracks");
+  });
+
+  it("fails closed when an existing collaborative mix cannot be separated from its base", () => {
+    expect(migration).toContain("if exists (\n    select 1\n    from public.live_stage_contributions contribution\n    where contribution.ready");
+    expect(migration).toContain("requires remediation of existing ready contributions before deployment");
+    expect(migration.indexOf("requires remediation of existing ready contributions"))
+      .toBeLessThan(migration.indexOf("set collaboration_base_tracks = tracks"));
   });
 
   it("prevents public enumeration and supports collaborator code joins", () => {
     expect(migration).toContain("member.user_id = (select auth.uid())");
     expect(migration).toContain("join_live_stage_as_collaborator_by_code");
+    expect(migration).toContain("private.consume_live_stage_join_attempt(current_user_id)");
     expect(migration).toContain("values (matched_stage_id, current_user_id, 'collaborator')");
   });
 
