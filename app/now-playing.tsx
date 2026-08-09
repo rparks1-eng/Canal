@@ -585,6 +585,103 @@ export default function NowPlayingScreen() {
 
   useEffect(() => {
     if (
+      !scene ||
+      scene.tracks.every(
+        (track) =>
+          Boolean(
+            track.imageUrl,
+          ),
+      )
+    ) {
+      return;
+    }
+
+    const loadGeneration =
+      playerLoadGenerationRef.current;
+
+    const requestKey = [
+      accountKey,
+      scene.id,
+      scene.tracks
+        .filter(
+          (track) =>
+            !track.imageUrl,
+        )
+        .map(
+          (track) =>
+            track.id,
+        )
+        .join(","),
+    ].join(":");
+
+    if (
+      artworkWindowInFlightRef.current ===
+      requestKey
+    ) {
+      return;
+    }
+
+    artworkWindowInFlightRef.current =
+      requestKey;
+
+    void addSpotifyArtworkToStoredScene(
+      scene,
+    )
+      .then((enriched) => {
+        if (
+          !isCurrentPlayerLoad(
+            loadGeneration,
+          )
+        ) {
+          return;
+        }
+
+        setScene((current) => {
+          if (
+            !current ||
+            current.id !==
+              enriched.id
+          ) {
+            return current;
+          }
+
+          const artworkChanged =
+            enriched.tracks.some(
+              (track, index) =>
+                track.imageUrl !==
+                current.tracks[index]
+                  ?.imageUrl,
+            );
+
+          return artworkChanged
+            ? {
+                ...current,
+                tracks:
+                  enriched.tracks,
+              }
+            : current;
+        });
+      })
+      .catch(() => {
+        // Artwork is optional; playback remains usable when Spotify oEmbed is unavailable.
+      })
+      .finally(() => {
+        if (
+          artworkWindowInFlightRef.current ===
+          requestKey
+        ) {
+          artworkWindowInFlightRef.current =
+            null;
+        }
+      });
+  }, [
+    accountKey,
+    isCurrentPlayerLoad,
+    scene,
+  ]);
+
+  useEffect(() => {
+    if (
       !session?.isPlaying ||
       !scene
     ) {

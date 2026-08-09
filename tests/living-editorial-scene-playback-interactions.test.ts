@@ -79,6 +79,15 @@ jest.mock("../lib/playlist-exports", () => ({ captureScenePlaylistExportAccount:
 jest.mock("../lib/saved-scene-management", () => ({ removeSavedSceneCompletely: jest.fn(async () => {}) }));
 jest.mock("../lib/scene-music-export", () => ({ exportSceneToMusicProvider: (...args: unknown[]) => mockExport(...args) }));
 jest.mock("../lib/spotify-track-links", () => ({ canonicalSpotifyTrackUrl: jest.fn(() => "https://open.spotify.com/track/track-1") }));
+jest.mock("../lib/spotify-scene-artwork", () => ({
+  addSpotifyArtworkToStoredScene: jest.fn(async (value: typeof scene) => ({
+    ...value,
+    tracks: value.tracks.map((track) => ({
+      ...track,
+      imageUrl: `https://i.scdn.co/image/${track.id}`,
+    })),
+  })),
+}));
 jest.mock("../lib/social", () => ({
   loadPublicScene: jest.fn(async () => ({ creator: { displayName: "Creator", handle: "@creator", isCanal: false, isVerified: true }, isMine: false, isSaved: false, ownerId: "creator-a", sceneId: "scene-a", scene })),
   savePublicSceneToLibrary: (...args: unknown[]) => mockSavePublic(...args),
@@ -313,6 +322,32 @@ describe("Living Editorial Scene playback interactions", () => {
     await act(async () => play.props.onPress());
     expect(mockWritePlayer).toHaveBeenCalled();
     expect(mockBack).toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+  });
+
+  it("hydrates missing artwork for the current track and Up Next without blocking playback", async () => {
+    const renderer = await render(React.createElement(NowPlayingScreen));
+
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    expect(
+      renderer.root.findByProps({
+        accessibilityLabel: "First Light album artwork from Spotify",
+      }).props.source,
+    ).toEqual({
+      uri: "https://i.scdn.co/image/track-1",
+    });
+
+    expect(
+      renderer.root.findByProps({
+        accessibilityLabel: "Second Light album artwork from Spotify",
+      }).props.source,
+    ).toEqual({
+      uri: "https://i.scdn.co/image/track-2",
+    });
+
     await act(async () => renderer.unmount());
   });
 
