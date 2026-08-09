@@ -38,6 +38,7 @@ jest.mock("expo-router", () => {
   router: { push: (...args: unknown[]) => mockPush(...args), replace: (...args: unknown[]) => mockReplace(...args), back: () => mockBack(), canGoBack: jest.fn(() => true) },
   useFocusEffect: (callback: () => void) => ReactModule.useEffect(callback, [callback]),
   useLocalSearchParams: () => mockParams,
+  usePathname: () => "/scenes/scene-a",
   };
 });
 
@@ -71,7 +72,7 @@ jest.mock("../lib/scene-collaboration", () => ({
   respondToSceneCollaboration: jest.fn(async () => {}), revokeSceneCollaborator: jest.fn(async () => {}),
   saveCollaborativeScene: (...args: unknown[]) => mockSaveCollaborative(...args),
 }));
-jest.mock("../lib/scene-sync", () => ({ assertSceneCacheOwner: jest.fn(async () => {}), capturePreparedSceneCacheOwner: jest.fn(async () => ({ userId: mockAuth.user.id })), writeScenesForSceneCacheOwner: (...args: unknown[]) => mockWriteScenes(...args) }));
+jest.mock("../lib/scene-sync", () => ({ assertSceneCacheOwner: jest.fn(async () => {}), capturePreparedSceneCacheOwner: jest.fn(async () => ({ userId: mockAuth.user.id })), syncScenesWithCloud: jest.fn(async () => null), writeScenesForSceneCacheOwner: (...args: unknown[]) => mockWriteScenes(...args) }));
 jest.mock("../lib/analytics", () => ({ classifyAnalyticsFailure: jest.fn(() => "recoverable"), recordAnalyticsEvent: jest.fn(async () => {}), recordAnalyticsFailure: jest.fn(async () => {}) }));
 jest.mock("../lib/recovery-issue", () => ({ classifyRecoveryIssue: jest.fn(() => mockRecoveryIssue) }));
 jest.mock("../lib/playlist-exports", () => ({ captureScenePlaylistExportAccount: jest.fn(async () => ({ userId: mockAuth.user.id })), recordScenePlaylistExport: jest.fn(async () => "saved") }));

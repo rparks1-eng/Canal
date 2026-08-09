@@ -27,6 +27,7 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
+import { CanalAmbientBackground } from "../../components/canal-ui/canal-ambient-background";
 
 import {
   Image,
@@ -43,10 +44,6 @@ import {
 import {
   useCanalReduceTransparency,
 } from "../../components/canal-ui/canal-primitives";
-
-import {
-  LivingCover,
-} from "../../components/living-cover";
 
 import {
   classifyAnalyticsFailure,
@@ -107,8 +104,6 @@ import {
 import {
   useConnectivity,
 } from "../../providers/connectivity-provider";
-
-import { canalTypography } from "../../theme/canal-typography";
 
 import {
   CanalAtmosphereContext,
@@ -174,6 +169,14 @@ export default function SceneDetailScreen() {
       ? params.sceneId
       : "";
 
+  const [
+    scene,
+    setScene,
+  ] =
+    useState<StoredScene | null>(
+      null,
+    );
+
   useFocusEffect(
     useCallback(() => {
       if (scene) {
@@ -185,14 +188,6 @@ export default function SceneDetailScreen() {
       };
     }, [scene, setOverride]),
   );
-
-  const [
-    scene,
-    setScene,
-  ] =
-    useState<StoredScene | null>(
-      null,
-    );
 
   const [
     loading,
@@ -781,7 +776,7 @@ export default function SceneDetailScreen() {
         "bottom",
       ]}
     >
-
+      <CanalAmbientBackground />
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Go back"
@@ -807,13 +802,7 @@ export default function SceneDetailScreen() {
               styles.pressed,
           ]}
         >
-          <Text
-            style={
-              styles.backText
-            }
-          >
-            ‹
-          </Text>
+          <Ionicons color="#F7FFFC" name="chevron-back" size={24} />
         </Pressable>
 
         <Pressable
@@ -838,16 +827,8 @@ export default function SceneDetailScreen() {
           ]}
         >
           <Ionicons
-            color={
-              scene.favorite
-                ? presentation.accent
-                : "rgba(244, 255, 252, 0.88)"
-            }
-            name={
-              scene.favorite
-                ? "star"
-                : "star-outline"
-            }
+            color={scene.favorite ? presentation.accent : "#F7FFFC"}
+            name={scene.favorite ? "star" : "star-outline"}
             size={22}
           />
         </Pressable>
@@ -867,6 +848,16 @@ export default function SceneDetailScreen() {
             ? styles.solidSurface
             : styles.heroGlass,
         ]}>
+          <View
+            style={[
+              styles.heroAccentLine,
+              {
+                backgroundColor: presentation.accent,
+                boxShadow: `0 0 18px ${presentation.accent}88`,
+              },
+            ]}
+          />
+
           <Text
             style={
               styles.heroActivity
@@ -1396,17 +1387,6 @@ export default function SceneDetailScreen() {
               styles.pressed,
           ]}
         >
-          <View
-            style={[
-              styles.heroAccentLine,
-              {
-                backgroundColor:
-                  presentation.accent,
-                boxShadow: `0 0 18px ${presentation.accent}88`,
-              },
-            ]}
-          />
-
           <Text
             style={
               styles.deleteText
@@ -1424,32 +1404,8 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor: "#286F9A",
-    },
-
-    pageCover: {
-      ...StyleSheet.absoluteFillObject,
-      aspectRatio: undefined,
-      borderRadius: 0,
-      minHeight: 0,
-    },
-
-    glassSurface: {
-      backgroundColor: "rgba(10, 55, 78, 0.68)",
-      borderColor: "rgba(218, 255, 248, 0.24)",
-      borderWidth: 1,
-    },
-
-    heroGlass: {
-      backgroundColor: "rgba(8, 44, 73, 0.48)",
-      borderColor: "rgba(218, 255, 248, 0.28)",
-      borderWidth: 1,
-    },
-
-    solidSurface: {
-      backgroundColor: "#123F5D",
-      borderColor: "#7EC8C3",
-      borderWidth: 1,
+      backgroundColor:
+        "transparent",
     },
 
     center: {
@@ -1481,40 +1437,23 @@ const styles =
     backButton: {
       width: 48,
       height: 48,
-      borderRadius: 21,
+      borderRadius: 24,
       alignItems:
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
-    },
-
-    backText: {
-      color: "#1B1B1B",
-      fontSize: 34,
-      lineHeight: 36,
-      marginTop: -2,
+      backgroundColor: "rgba(5, 42, 66, 0.42)",
     },
 
     favoriteButton: {
       width: 48,
       height: 48,
+      borderRadius: 24,
       alignItems:
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
-    },
-
-    favoriteText: {
-      color: "#8A827B",
-      fontSize: 23,
-    },
-
-    favoriteTextActive: {
-      color: "#F47A24",
+      backgroundColor: "rgba(5, 42, 66, 0.42)",
     },
 
     content: {
@@ -1528,6 +1467,68 @@ const styles =
       borderRadius: 27,
       paddingHorizontal: 20,
       paddingVertical: 27,
+    },
+
+    heroGlass: {
+      backgroundColor: "rgba(5,42,66,0.58)",
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: "rgba(220,255,249,0.22)",
+    },
+
+    firstUp: {
+      minHeight: 76,
+      flexDirection: "row",
+      alignItems: "center",
+      borderRadius: 22,
+      borderWidth: StyleSheet.hairlineWidth,
+      padding: 12,
+    },
+
+    firstUpArtwork: {
+      width: 52,
+      height: 52,
+      borderRadius: 11,
+      backgroundColor: "rgba(255,255,255,0.12)",
+    },
+
+    firstUpCopy: {
+      flex: 1,
+      minWidth: 0,
+      paddingHorizontal: 12,
+    },
+
+    firstUpKicker: {
+      color: "#72D8C4",
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+
+    firstUpTitle: {
+      color: "#F7FFFC",
+      fontSize: 14,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+
+    firstUpArtist: {
+      color: "rgba(231,250,245,0.65)",
+      fontSize: 11,
+      marginTop: 2,
+    },
+
+    firstUpPlay: {
+      minWidth: 58,
+      minHeight: 44,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 12,
+    },
+
+    firstUpPlayText: {
+      fontSize: 12,
+      fontWeight: "900",
     },
 
     heroAccentLine: {
@@ -1547,13 +1548,13 @@ const styles =
     },
 
     heroName: {
-      color: "#FFFFFF",
+      color: "#F7FFFC",
       fontFamily: "Georgia",
-      fontSize: 38,
-      fontWeight: "400",
+      fontSize: 36,
+      fontWeight: "500",
       textAlign: "center",
-      letterSpacing: -1.1,
-      marginTop: 7,
+      letterSpacing: -0.8,
+      marginTop: 6,
     },
 
     heroMood: {
@@ -1617,25 +1618,21 @@ const styles =
 
     actionGrid: {
       flexDirection: "row",
-      flexWrap: "wrap",
       justifyContent: "center",
       alignItems: "center",
       gap: 10,
-      paddingVertical: 2,
+      paddingVertical: 4,
     },
 
     actionButton: {
-      width: "48.7%",
-      minHeight: 70,
-      justifyContent:
-        "center",
-      backgroundColor:
-        "#FFFFFF",
-      borderRadius: 18,
+      width: 52,
+      height: 52,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(5, 42, 66, 0.44)",
+      borderRadius: 26,
       borderCurve: "continuous",
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      boxShadow: "0 10px 24px rgba(2, 22, 51, 0.12)",
+      boxShadow: "0 8px 20px rgba(2, 22, 51, 0.14)",
     },
 
     actionTitle: {
@@ -1669,17 +1666,17 @@ const styles =
     },
 
     sectionCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: "rgba(5, 42, 66, 0.56)",
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: "rgba(220, 255, 249, 0.20)",
       borderRadius: 22,
       padding: 18,
     },
 
     sectionTitle: {
-      ...canalTypography.title,
-      color: "#FFFFFF",
-      fontSize: 22,
-      lineHeight: 27,
+      color: "#F7FFFC",
+      fontSize: 19,
+      fontWeight: "900",
       marginBottom: 8,
     },
 
@@ -1697,14 +1694,14 @@ const styles =
 
     detailLabel: {
       width: 95,
-      color: "#77706A",
+      color: "rgba(231, 250, 245, 0.62)",
       fontSize: 12,
       fontWeight: "700",
     },
 
     detailValue: {
       flex: 1,
-      color: "#2D2926",
+      color: "rgba(247, 255, 252, 0.90)",
       fontSize: 12,
       lineHeight: 18,
       textAlign: "right",
@@ -1722,7 +1719,7 @@ const styles =
     },
 
     trackNumber: {
-      color: "#918981",
+      color: "rgba(231, 250, 245, 0.56)",
       fontSize: 11,
       fontWeight: "800",
       textAlign: "center",
@@ -1752,25 +1749,25 @@ const styles =
     },
 
     trackTitle: {
-      color: "#25211F",
+      color: "#F7FFFC",
       fontSize: 14,
       fontWeight: "800",
     },
 
     trackArtist: {
-      color: "#77706A",
+      color: "rgba(231, 250, 245, 0.62)",
       fontSize: 11,
       marginTop: 3,
     },
 
     trackArrow: {
-      color: "#AAA19A",
+      color: "rgba(231, 250, 245, 0.52)",
       fontSize: 25,
       marginLeft: 8,
     },
 
     emptyTracks: {
-      color: "#77706A",
+      color: "rgba(231, 250, 245, 0.62)",
       fontSize: 13,
       lineHeight: 19,
       paddingTop: 8,
