@@ -20,6 +20,7 @@ import type {
 } from "../lib/snapshots";
 
 import { SnapshotComposition } from "./snapshot-composition";
+import { ProfileAvatar } from "./profile-avatar";
 import { VerifiedAccountBadge } from "./verified-account-badge";
 
 import type { SnapshotSocialSummary } from "../lib/snapshot-social";
@@ -255,24 +256,11 @@ export function PublicSnapshotCard(
               styles.pressed,
           ]}
         >
-          <View
-            style={
-              styles.creatorAvatar
-            }
-          >
-            <Text
-              style={
-                styles.creatorAvatarText
-              }
-            >
-              {snapshot.creator
-                .displayName
-                .charAt(
-                  0,
-                )
-                .toUpperCase()}
-            </Text>
-          </View>
+          <ProfileAvatar
+            avatarUrl={snapshot.creator.avatarUrl}
+            displayName={snapshot.creator.displayName}
+            size={34}
+          />
 
           <View
             style={
@@ -517,30 +505,12 @@ const styles =
       flexDirection: "row",
       alignItems:
         "center",
+      gap: 8,
       borderTopWidth: 1,
       borderTopColor:
         "#F3ECE6",
       paddingHorizontal: 13,
       paddingVertical: 9,
-    },
-
-    creatorAvatar: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
-      backgroundColor:
-        "#F47A24",
-      marginRight: 8,
-    },
-
-    creatorAvatarText: {
-      color: "#FFFFFF",
-      fontSize: 11,
-      fontWeight: "900",
     },
 
     creatorCopy: {

@@ -37,6 +37,7 @@ import Animated, {
 import {
   PublicSnapshotCard,
 } from "../../components/PublicSnapshotCard";
+import { ProfileAvatar } from "../../components/profile-avatar";
 import {
   scenePresentation,
   stagePresentation,
@@ -337,23 +338,11 @@ function PublicSceneCard(
               styles.pressed,
           ]}
         >
-          <View
-            style={
-              styles.creatorAvatar
-            }
-          >
-            <Text
-              style={
-                styles.creatorAvatarText
-              }
-            >
-              {item.creator.displayName
-                .charAt(
-                  0,
-                )
-                .toUpperCase()}
-            </Text>
-          </View>
+          <ProfileAvatar
+            avatarUrl={item.creator.avatarUrl}
+            displayName={item.creator.displayName}
+            size={34}
+          />
 
           <View
             style={
@@ -1750,25 +1739,7 @@ const styles =
       flexDirection: "row",
       alignItems:
         "center",
-    },
-
-    creatorAvatar: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
-      backgroundColor:
-        canalDynamicColors.elevated,
-      marginRight: 9,
-    },
-
-    creatorAvatarText: {
-      color: canalDynamicColors.text,
-      fontSize: 12,
-      fontWeight: "900",
+      gap: 9,
     },
 
     creatorText: {

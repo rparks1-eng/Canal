@@ -17,6 +17,8 @@ describe("app-wide profile avatar contract", () => {
 
     for (const route of [
       "../app/(tabs)/profile",
+      "../app/(tabs)/explore",
+      "../components/PublicSnapshotCard",
       "../app/friends",
       "../app/following",
       "../app/creator/[userId]",
@@ -28,5 +30,12 @@ describe("app-wide profile avatar contract", () => {
       expect(routeSource).toContain("avatarUrl={");
       expect(routeSource).toContain("displayName={");
     }
+
+    const profileRoute = source("../app/(tabs)/profile");
+    expect(profileRoute).not.toContain("styles.avatarFrame");
+
+    const publicSnapshots = source("../lib/public-snapshots");
+    expect(publicSnapshots).toContain("avatar_url");
+    expect(publicSnapshots).toContain("avatarUrl:");
   });
 });
