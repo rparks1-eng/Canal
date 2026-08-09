@@ -23,6 +23,12 @@ describe("app-wide profile avatar contract", () => {
       "../app/following",
       "../app/creator/[userId]",
       "../app/stage-invite-collaborators",
+      "../app/live-stage/[stageId]",
+      "../app/stage-lobby/[stageId]",
+      "../app/(tabs)/live",
+      "../app/public-scene",
+      "../app/snapshots/[snapshotId]",
+      "../components/activity-screen",
       "../app/releases/[releaseId]",
     ]) {
       const routeSource = source(route);
@@ -37,5 +43,19 @@ describe("app-wide profile avatar contract", () => {
     const publicSnapshots = source("../lib/public-snapshots");
     expect(publicSnapshots).toContain("avatar_url");
     expect(publicSnapshots).toContain("avatarUrl:");
+
+    const liveStages = source("../lib/live-stages");
+    expect(liveStages).toContain('select("id, avatar_url")');
+    expect(liveStages).toContain("hostAvatarUrl:");
+    expect(liveStages).toContain("message.avatarUrl =");
+
+    const snapshotSocial = source("../lib/snapshot-social");
+    expect(snapshotSocial).toContain("is_verified, avatar_url");
+
+    const activity = source("../lib/relationships");
+    expect(activity).toContain("hydrateActivityAvatars");
+
+    const stageCollaboration = source("../lib/stage-collaboration");
+    expect(stageCollaboration).toContain('.select("id, avatar_url")');
   });
 });

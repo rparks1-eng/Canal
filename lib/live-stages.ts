@@ -55,6 +55,7 @@ export type LiveStageParticipant = {
   username: string;
   displayName: string;
   initials: string;
+  avatarUrl?: string;
   role: LiveStageRole;
   joinedAt?: string;
 };
@@ -67,6 +68,7 @@ export type LiveStage = {
   hostId?: string;
   hostUsername: string;
   hostName: string;
+  hostAvatarUrl?: string;
   stageKind: LiveStageKind;
   hostIsVerified: boolean;
   hostIsCanal: boolean;
@@ -105,6 +107,7 @@ export type LiveStageMessage = {
   username: string;
   displayName: string;
   initials: string;
+  avatarUrl?: string;
   body: string;
   createdAt: string;
   editedAt?: string;
@@ -170,6 +173,7 @@ export type LiveStageMemberRow = {
   handle: string;
   role: string;
   joined_at: string;
+  avatar_url?: string | null;
 };
 
 export type LiveStageMessageRow = {
@@ -181,6 +185,14 @@ export type LiveStageMessageRow = {
   body: string;
   created_at: string;
   edited_at?: string | null;
+  avatar_url?: string | null;
+};
+
+type LiveStageProfileRow = {
+  id: string;
+  display_name: string | null;
+  handle: string | null;
+  avatar_url: string | null;
 };
 
 export const LIVE_STAGE_STORAGE_KEY =
@@ -458,6 +470,13 @@ export function normalizeLiveStageRows(
           row.tracks,
         );
 
+      const hostParticipant =
+        participants.find(
+          (participant) =>
+            participant.userId ===
+            row.host_id,
+        );
+
       return {
         id: row.id,
         code:
@@ -485,6 +504,8 @@ export function normalizeLiveStageRows(
             row.host_display_name,
           ) ||
           "Canal Listener",
+        hostAvatarUrl:
+          hostParticipant?.avatarUrl,
         stageKind:
           normalizeStageKind(
             row.stage_kind,
@@ -593,6 +614,10 @@ export function normalizeLiveStageMessageRows(
           getInitials(
             displayName,
           ),
+        avatarUrl:
+          cleanText(
+            row.avatar_url,
+          ) || undefined,
         body:
           cleanText(
             row.body,
@@ -684,6 +709,7 @@ export async function readLiveStages(): Promise<
       rows.map(
         (row) => row.id,
       ),
+      currentUserId,
     );
 
   await assertCurrentLiveStageUser(
@@ -719,7 +745,7 @@ export async function readHostedLiveStages(): Promise<LiveStage[]> {
   }
 
   const rows = (data ?? []) as unknown as LiveStageRow[];
-  const members = await readCloudMembers(rows.map((row) => row.id));
+  const members = await readCloudMembers(rows.map((row) => row.id), currentUserId);
   await assertCurrentLiveStageUser(currentUserId);
 
   return normalizeLiveStageRows(rows, members, currentUserId);
@@ -817,7 +843,7 @@ export async function readLiveStage(
         data as unknown as
           LiveStageRow
       ).id,
-    ]);
+    ], currentUserId);
 
   await assertCurrentLiveStageUser(
     currentUserId,
@@ -918,18 +944,27 @@ export async function readLiveStageMessages(
     const reaction = normalizeLiveStageMessageReaction(candidate.reaction);
     return reaction ? [{ ...candidate, reaction }] : [];
   });
-  const reactionUserIds = Array.from(new Set(normalizedReactionRows.map((row) => row.user_id)));
+  const profileUserIds = Array.from(new Set([
+    ...messages.map((message) => message.userId),
+    ...normalizedReactionRows.map((row) => row.user_id),
+  ]));
   const reactionDisplayNames = new Map<string, string>();
-  if (reactionUserIds.length > 0) {
+  const avatarUrls = new Map<string, string>();
+  if (profileUserIds.length > 0) {
     const { data: profileRows, error: profileError } = await supabase
       .from("profiles")
-      .select("id, display_name, handle")
-      .in("id", reactionUserIds);
+      .select("id, display_name, handle, avatar_url")
+      .in("id", profileUserIds);
     await assertCurrentLiveStageUser(currentUserId);
     if (profileError) throw stageError("load Stage reaction members", profileError.message);
-    for (const profile of (profileRows ?? []) as { id: string; display_name: string | null; handle: string | null }[]) {
+    for (const profile of (profileRows ?? []) as LiveStageProfileRow[]) {
       reactionDisplayNames.set(profile.id, profile.display_name?.trim() || profile.handle?.trim() || "Canal listener");
+      const avatarUrl = cleanText(profile.avatar_url);
+      if (avatarUrl) avatarUrls.set(profile.id, avatarUrl);
     }
+  }
+  for (const message of messages) {
+    message.avatarUrl = avatarUrls.get(message.userId);
   }
   for (const row of normalizedReactionRows) {
     const message = byId.get(row.message_id);
@@ -1922,6 +1957,16 @@ export async function sendLiveStageMessage(
         );
       }
 
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("avatar_url")
+        .eq("id", userId)
+        .maybeSingle();
+      await assertCurrentLiveStageUser(userId);
+      message.avatarUrl = cleanText(
+        (profile as { avatar_url?: string | null } | null)?.avatar_url,
+      ) || undefined;
+
       return message;
     },
   );
@@ -2438,6 +2483,7 @@ async function runLiveStageModerationRpc(
 
 async function readCloudMembers(
   stageIds: string[],
+  expectedUserId: string,
 ): Promise<LiveStageMemberRow[]> {
   if (
     stageIds.length ===
@@ -2476,10 +2522,42 @@ async function readCloudMembers(
     );
   }
 
-  return (
+  const members = (
     data ?? []
-  ) as unknown as
-    LiveStageMemberRow[];
+  ) as unknown as LiveStageMemberRow[];
+
+  await assertCurrentLiveStageUser(expectedUserId);
+
+  const userIds = Array.from(new Set(members.map((member) => member.user_id)));
+  if (userIds.length === 0) return members;
+
+  const { data: profileRows, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, avatar_url")
+    .in("id", userIds);
+
+  await assertCurrentLiveStageUser(expectedUserId);
+
+  if (profileError) {
+    console.warn(
+      "Canal could not load Stage member pictures; using initials:",
+      profileError.message,
+    );
+    return members;
+  }
+
+  const avatarUrls = new Map(
+    ((profileRows ?? []) as { id: string; avatar_url: string | null }[])
+      .flatMap((profile) => {
+        const avatarUrl = cleanText(profile.avatar_url);
+        return avatarUrl ? [[profile.id, avatarUrl] as const] : [];
+      }),
+  );
+
+  return members.map((member) => ({
+    ...member,
+    avatar_url: avatarUrls.get(member.user_id) ?? null,
+  }));
 }
 
 async function getCurrentUserId(): Promise<string> {
@@ -3647,6 +3725,10 @@ function memberRowToParticipant(
       getInitials(
         displayName,
       ),
+    avatarUrl:
+      cleanText(
+        row.avatar_url,
+      ) || undefined,
     role:
       normalizeRole(
         row.role,
@@ -3708,6 +3790,10 @@ function normalizeParticipant(
       getInitials(
         displayName,
       ),
+    avatarUrl:
+      cleanText(
+        record.avatarUrl,
+      ) || undefined,
     role:
       normalizeRole(
         record.role,

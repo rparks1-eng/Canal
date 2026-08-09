@@ -29,6 +29,7 @@ import {
     RecoveryNotice,
 } from "../../components/recovery-notice";
 import { SnapshotComposition } from "../../components/snapshot-composition";
+import { ProfileAvatar } from "../../components/profile-avatar";
 import {
     useReconnectReload,
 } from "../../hooks/use-reconnect-reload";
@@ -1032,9 +1033,11 @@ function SnapshotDetailContent() {
           ) : null}
           {social.comments.map((comment) => (
             <View key={comment.id} style={[styles.commentRow, comment.parentCommentId && styles.replyRow]}>
-              <View style={styles.commentAvatar}>
-                <Text style={styles.commentAvatarText}>{(comment.displayName || comment.handle || "C").slice(0, 1).toUpperCase()}</Text>
-              </View>
+              <ProfileAvatar
+                avatarUrl={comment.avatarUrl}
+                displayName={comment.displayName || comment.handle || "Canal listener"}
+                size={36}
+              />
               <View style={styles.commentContent}>
                 <Text style={styles.commentName}>{comment.displayName || comment.handle || "Canal listener"}</Text>
                 <Text style={styles.commentBody}>{comment.body}</Text>

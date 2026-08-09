@@ -22,6 +22,7 @@ export type SnapshotComment = {
   createdAt: string;
   displayName: string;
   handle: string;
+  avatarUrl?: string | null;
   isVerified: boolean;
   likeCount: number;
   likedByMe: boolean;
@@ -56,6 +57,7 @@ type ProfileRow = {
   display_name: string | null;
   handle: string;
   is_verified: boolean | null;
+  avatar_url: string | null;
 };
 
 export async function loadSnapshotSocial(
@@ -128,6 +130,7 @@ export async function loadSnapshotSocial(
         createdAt: row.created_at,
         displayName: profile?.display_name?.trim() || profile?.handle || "Canal listener",
         handle: profile?.handle || "canal_listener",
+        avatarUrl: profile?.avatar_url ?? null,
         isVerified: profile?.is_verified === true,
         likeCount: rowLikes.length,
         likedByMe: rowLikes.some((like) => like.user_id === safeUserId),
@@ -300,7 +303,7 @@ async function loadProfiles(ids: string[]): Promise<Map<string, ProfileRow>> {
   if (ids.length === 0) return new Map();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, display_name, handle, is_verified")
+    .select("id, display_name, handle, is_verified, avatar_url")
     .in("id", ids);
   if (error) throw error;
   return new Map(((data ?? []) as ProfileRow[]).map((row) => [row.id, row]));

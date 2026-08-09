@@ -27,6 +27,7 @@ export type RelationshipActivity = {
   description: string;
   username?: string;
   displayName?: string;
+  avatarUrl?: string;
   snapshotId?: string;
   commentId?: string;
   stageId?: string;
@@ -954,12 +955,18 @@ async function readActivityForUser(
         localActivities,
       );
 
+    const withAvatars =
+      await hydrateActivityAvatars(
+        merged,
+        expectedUserId,
+      );
+
     await writeActivityForUser(
-      merged,
+      withAvatars,
       expectedUserId,
     );
 
-    return merged;
+    return withAvatars;
   } catch (error) {
     if (
       isAccountChangedError(
@@ -980,6 +987,49 @@ async function readActivityForUser(
 
     return localActivities;
   }
+}
+
+async function hydrateActivityAvatars(
+  items: CanalActivityItem[],
+  expectedUserId: string,
+): Promise<CanalActivityItem[]> {
+  const handles = Array.from(new Set(
+    items.flatMap((item) => {
+      const handle = item.username?.trim().replace(/^@/u, "").toLowerCase();
+      return handle ? [handle] : [];
+    }),
+  ));
+
+  if (handles.length === 0) return items;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("handle, avatar_url")
+    .in("handle", handles);
+
+  await assertExpectedUser(expectedUserId);
+  if (error) {
+    console.warn(
+      "Canal could not load activity profile pictures; using initials:",
+      error.message,
+    );
+    return items;
+  }
+
+  const avatars = new Map(
+    ((data ?? []) as { handle: string; avatar_url: string | null }[])
+      .flatMap((profile) => {
+        const handle = profile.handle?.trim().replace(/^@/u, "").toLowerCase();
+        const avatarUrl = profile.avatar_url?.trim();
+        return handle && avatarUrl ? [[handle, avatarUrl] as const] : [];
+      }),
+  );
+
+  return items.map((item) => {
+    const handle = item.username?.trim().replace(/^@/u, "").toLowerCase();
+    const avatarUrl = handle ? avatars.get(handle) : undefined;
+    return avatarUrl ? { ...item, avatarUrl } : item;
+  });
 }
 
 async function readLocalActivityForUser(

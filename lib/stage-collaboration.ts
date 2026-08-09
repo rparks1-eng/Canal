@@ -36,6 +36,7 @@ export type StageContributionStatus = {
   userId: string;
   displayName: string;
   handle: string;
+  avatarUrl?: string;
   sourceType: StageContributionSource | null;
   sceneName: string | null;
   ready: boolean;
@@ -229,12 +230,32 @@ export async function readStageContributionStatuses(
     throw new Error(error.message || "Canal could not load Stage contributions.");
   }
 
-  return ((data ?? []) as StageContributionStatusRow[]).map((row) => {
+  const rows = (data ?? []) as StageContributionStatusRow[];
+  const contributorIds = Array.from(new Set(rows.map((row) => text(row.user_id)).filter(Boolean)));
+  const avatars = new Map<string, string>();
+
+  if (contributorIds.length > 0) {
+    const { data: profiles, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, avatar_url")
+      .in("id", contributorIds);
+    await assertSameUser(userId);
+    if (!profileError) {
+      for (const profile of (profiles ?? []) as { id: string; avatar_url: string | null }[]) {
+        const avatarUrl = text(profile.avatar_url);
+        if (avatarUrl) avatars.set(profile.id, avatarUrl);
+      }
+    }
+  }
+
+  return rows.map((row) => {
     const source = text(row.source_type);
+    const contributorId = text(row.user_id);
     return {
-      userId: text(row.user_id),
+      userId: contributorId,
       displayName: text(row.display_name) || "Canal Listener",
       handle: text(row.handle),
+      avatarUrl: avatars.get(contributorId),
       sourceType:
         source === "existing_scene" || source === "fresh_scene" || source === "selected_music"
           ? source

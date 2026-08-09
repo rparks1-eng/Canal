@@ -125,6 +125,8 @@ function memberRow(
       "maya.wav",
     role:
       "host",
+    avatar_url:
+      "https://example.com/maya.jpg",
     joined_at:
       "2026-07-28T18:00:00.000Z",
     ...overrides,
@@ -151,6 +153,8 @@ function messageRow(
       "  This transition is perfect.  ",
     created_at:
       "2026-07-28T19:02:00.000Z",
+    avatar_url:
+      "https://example.com/nico.jpg",
     ...overrides,
   };
 }
@@ -217,6 +221,8 @@ describe(
             "248319",
           hostUsername:
             "maya.wav",
+          hostAvatarUrl:
+            "https://example.com/maya.jpg",
           stageKind:
             "community",
           hostIsVerified:
@@ -234,6 +240,10 @@ describe(
           currentTrackIndex:
             0,
         });
+
+        expect(stages[0]?.participants[0]?.avatarUrl).toBe(
+          "https://example.com/maya.jpg",
+        );
 
         expect(
           stages[0]
@@ -835,6 +845,8 @@ describe(
             "nico.fm",
           initials:
             "NA",
+          avatarUrl:
+            "https://example.com/nico.jpg",
           isMine:
             true,
         });

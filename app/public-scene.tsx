@@ -29,6 +29,7 @@ import {
 import {
   RecoveryNotice,
 } from "../components/recovery-notice";
+import { ProfileAvatar } from "../components/profile-avatar";
 import { Image } from "expo-image";
 
 import {
@@ -679,6 +680,11 @@ export default function PublicSceneScreen() {
                     styles.creatorButton
                   }
                 >
+                  <ProfileAvatar
+                    avatarUrl={item.creator.avatarUrl}
+                    displayName={item.creator.displayName}
+                    size={34}
+                  />
                   <Text
                     style={
                       styles.creatorText
@@ -1164,6 +1170,9 @@ const styles =
     },
 
     creatorButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
       backgroundColor: canalDynamicColors.surface,
       borderRadius: 13,
       paddingHorizontal: 13,

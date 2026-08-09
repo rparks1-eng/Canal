@@ -38,6 +38,7 @@ import {
 import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
+import { ProfileAvatar } from "../../components/profile-avatar";
 import {
   LinerNotesOverlay,
   type LinerNotesTrack,
@@ -200,22 +201,11 @@ function MessageRow(
     >
       {!props.message
         .isMine ? (
-        <View
-          style={
-            styles.messageAvatar
-          }
-        >
-          <Text
-            style={
-              styles.messageInitials
-            }
-          >
-            {
-              props.message
-                .initials
-            }
-          </Text>
-        </View>
+        <ProfileAvatar
+          avatarUrl={props.message.avatarUrl}
+          displayName={props.message.displayName}
+          size={30}
+        />
       ) : null}
 
       <View
@@ -2312,7 +2302,13 @@ export default function LiveStageScreen() {
                   },
                 });
               }}
+              style={styles.hostProfileRow}
             >
+              <ProfileAvatar
+                avatarUrl={stage.hostAvatarUrl}
+                displayName={stage.hostName}
+                size={34}
+              />
               <Text
                 selectable
                 style={
@@ -2325,16 +2321,23 @@ export default function LiveStageScreen() {
               </Text>
             </Pressable>
           ) : (
-            <Text
-              selectable
-              style={
-                styles.stageMeta
-              }
-            >
-              Hosted by @
-              {stage.hostUsername} ·{" "}
-              {stage.activity}
-            </Text>
+            <View style={styles.hostProfileRow}>
+              <ProfileAvatar
+                avatarUrl={stage.hostAvatarUrl}
+                displayName={stage.hostName}
+                size={34}
+              />
+              <Text
+                selectable
+                style={
+                  styles.stageMeta
+                }
+              >
+                Hosted by @
+                {stage.hostUsername} ·{" "}
+                {stage.activity}
+              </Text>
+            </View>
           )}
 
           <View
@@ -2935,22 +2938,11 @@ export default function LiveStageScreen() {
                         styles.pressed,
                     ]}
                   >
-                    <View
-                      style={
-                        styles.personAvatar
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.personInitials
-                        }
-                      >
-                        {
-                          participant
-                            .initials
-                        }
-                      </Text>
-                    </View>
+                    <ProfileAvatar
+                      avatarUrl={participant.avatarUrl}
+                      displayName={participant.displayName}
+                      size={40}
+                    />
 
                     <View
                       style={
@@ -4849,19 +4841,12 @@ const styles =
         "flex-end",
     },
 
-    messageAvatar: {
-      width: 30,
-      height: 30,
+    hostProfileRow: {
+      alignSelf: "flex-start",
+      flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 11,
-      backgroundColor: "rgba(201, 255, 243, 0.18)",
-    },
-
-    messageInitials: {
-      color: "#F5A16A",
-      fontSize: 9,
-      fontWeight: "900",
+      gap: 9,
+      minHeight: 48,
     },
 
     messageContent: {
