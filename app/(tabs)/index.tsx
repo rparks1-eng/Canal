@@ -976,13 +976,15 @@ const styles =
         "center",
       justifyContent:
         "center",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.goldLine,
       backgroundColor:
-        canalDynamicColors.gold,
+        canalDynamicColors.goldSurface,
       marginRight: 14,
     },
 
     heroOrbText: {
-      color: canalDynamicColors.onAccent,
+      color: canalDynamicColors.gold,
       fontSize: 30,
       lineHeight: 32,
     },

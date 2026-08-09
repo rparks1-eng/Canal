@@ -22,6 +22,8 @@ export const canalDynamicColors = {
   mint: dynamicColor("#167866", "#8DE5D2"),
   lavender: dynamicColor("#4A64C5", "#9B9FEF"),
   gold: dynamicColor("#8A5B12", "#F0D17E"),
+  goldSurface: dynamicColor("rgba(138,91,18,0.12)", "rgba(240,209,126,0.14)"),
+  goldLine: dynamicColor("rgba(138,91,18,0.24)", "rgba(240,209,126,0.30)"),
   danger: dynamicColor("#B94139", "#FF9289"),
   successSurface: dynamicColor("#EAF9EF", "#10241E"),
   warningSurface: dynamicColor("#FFF4E9", "#2A2015"),

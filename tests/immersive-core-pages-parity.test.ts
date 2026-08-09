@@ -41,6 +41,16 @@ describe("immersive core page parity", () => {
     expect(settings).toContain("previewGlass");
   });
 
+  it("keeps Set the Scene as a subtle adaptive glass accent", () => {
+    const home = source("app/(tabs)/index.tsx");
+    const colors = source("theme/canal-dynamic-colors.ts");
+    expect(home).toContain("backgroundColor:\n        canalDynamicColors.goldSurface");
+    expect(home).toContain("borderColor: canalDynamicColors.goldLine");
+    expect(home).toContain("color: canalDynamicColors.gold");
+    expect(colors).toContain("goldSurface: dynamicColor");
+    expect(colors).toContain("goldLine: dynamicColor");
+  });
+
   it("changes nav glass and Create hue with Explore, Library, Settings, Scene, and Stage routes", () => {
     const nav = source("components/CanalBottomNav.tsx");
     for (const route of ["/explore", "/library", "/settings", "/scenes", "/live-stage"]) {
