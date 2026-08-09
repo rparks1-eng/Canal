@@ -560,6 +560,68 @@ export default function HomeScreen() {
           </Text>
         </Pressable>
 
+        {recommendationIssue?.action ===
+        "reconnect-spotify" ? (
+          <View
+            accessibilityLiveRegion="polite"
+            style={
+              styles.spotifyReconnectCard
+            }
+          >
+            <View
+              style={
+                styles.spotifyReconnectCopy
+              }
+            >
+              <Text
+                selectable
+                style={
+                  styles.spotifyReconnectTitle
+                }
+              >
+                Using your saved music
+              </Text>
+              <Text
+                selectable
+                style={
+                  styles.spotifyReconnectText
+                }
+              >
+                Scenes keep working from the cached library. Reconnect only to refresh Spotify.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Reconnect Spotify"
+              accessibilityRole="button"
+              accessibilityState={{
+                busy:
+                  refreshingRecommendations,
+              }}
+              disabled={
+                refreshingRecommendations
+              }
+              onPress={() =>
+                void recoverRecommendations()
+              }
+              style={({ pressed }) => [
+                styles.spotifyReconnectButton,
+                refreshingRecommendations &&
+                  styles.disabled,
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Text
+                style={
+                  styles.spotifyReconnectButtonText
+                }
+              >
+                Reconnect
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {scenes.length === 0 ? (
           <EmptyScenes />
         ) : (
@@ -633,7 +695,9 @@ export default function HomeScreen() {
               )}
             </ScrollView>
 
-            {recommendationIssue ? (
+            {recommendationIssue &&
+            recommendationIssue.action !==
+              "reconnect-spotify" ? (
               <RecoveryNotice
                 busy={
                   refreshingRecommendations
@@ -1104,6 +1168,58 @@ const styles =
       fontSize: 12,
       lineHeight: 17,
       paddingHorizontal: 2,
+    },
+
+    spotifyReconnectCard: {
+      minHeight: 72,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      padding: 13,
+      marginBottom: 18,
+      borderRadius: 20,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.surface,
+      boxShadow: "0 10px 28px rgba(3, 18, 39, 0.14)",
+    },
+
+    spotifyReconnectCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 3,
+    },
+
+    spotifyReconnectTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    spotifyReconnectText: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      lineHeight: 15,
+    },
+
+    spotifyReconnectButton: {
+      minWidth: 100,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 14,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      backgroundColor: "#1DB954",
+    },
+
+    spotifyReconnectButtonText: {
+      color: "#FFFFFF",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    disabled: {
+      opacity: 0.55,
     },
 
     compactSceneCard: {

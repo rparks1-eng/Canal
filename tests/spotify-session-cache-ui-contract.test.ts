@@ -3,6 +3,7 @@ import path from "node:path";
 
 const root = path.resolve(__dirname, "..");
 const route = fs.readFileSync(path.join(root, "app/music-services.tsx"), "utf8");
+const home = fs.readFileSync(path.join(root, "app/(tabs)/index.tsx"), "utf8");
 const auth = fs.readFileSync(path.join(root, "lib/spotify-auth.ts"), "utf8");
 const library = fs.readFileSync(path.join(root, "lib/spotify-library.ts"), "utf8");
 
@@ -30,5 +31,9 @@ describe("Spotify durable session and bounded cache UI", () => {
     expect(route).toContain("styles.reconnectButton");
     expect(route).toContain("!showsInlineSpotifyReconnect");
     expect(route).toContain("minHeight: 48");
+    expect(home).toContain('accessibilityLabel="Reconnect Spotify"');
+    expect(home).toContain("Using your saved music");
+    expect(home).toContain("styles.spotifyReconnectButton");
+    expect(home).toContain('recommendationIssue.action !==\n              "reconnect-spotify"');
   });
 });
