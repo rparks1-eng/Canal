@@ -50,7 +50,9 @@ describe("Create Scene Living Glass experience", () => {
     expect(model).toMatch(/DEFAULT_SCENE_STUDIO_DRAFT[\s\S]*?moods:\s*\[\]/u);
     expect(source).toContain("activityChosen && visibleDraft.activity === option.value");
     expect(source).toContain('Choose at least one mood before continuing.');
-    expect(source).toContain("...current.moods.slice(-4)");
+    expect(source).toContain("draft.moods.length >= 5");
+    expect(source).toContain("Remove one before adding another");
+    expect(source).toContain("{visibleDraft.moods.length}/5 selected");
     expect(source).toContain("Choose one to five moods");
     expect(source).toContain("Refines ranking");
     expect(model).toContain("scoreSceneDirectionText(");

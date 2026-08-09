@@ -59,16 +59,16 @@ export function classifyLivingCover(input: Readonly<{
     scores[key] += signals.filter((value) => pattern.test(value)).length * weight;
   };
 
-  score("solar", /morning|daylight|sunrise|happy|euphoric|playful|disco|funk|dance pop/u, 6);
-  score("ember", /workout|training|party|celebrat|energ|restless|rock|metal|punk|edm|house/u, 6);
-  score("verdant", /focus|study|work|grounded|steady|productive|instrumental|lo-fi|lofi/u, 6);
-  score("tide", /unwind|relax|sleep|calm|clear|chill|downtempo|ambient/u, 6);
-  score("cobalt", /drive|driving|commute|transit|confident|hip.?hop|rap|electronic|synthwave/u, 6);
-  score("violet", /create|creative|dream|adventur|art|alternative|indie|psychedelic/u, 6);
-  score("rose", /romantic|intimate|date|tender|r&b|rnb|neo.?soul|slow jam/u, 7);
+  score("solar", /morning|start the day|daylight|sunrise|happy|hopeful|euphoric|playful|celebratory|disco|funk|dance pop/u, 6);
+  score("ember", /workout|training|party|celebrat|energ|restless|fierce|rock|metal|punk|edm|house/u, 6);
+  score("verdant", /focus|focused|study|\bwork\b|grounded|steady|productive|outdoors|get outside|hiking|instrumental|lo-fi|lofi/u, 6);
+  score("tide", /unwind|relax|recovery|recover|sleep|calm|clear|serene|chill|downtempo|ambient/u, 6);
+  score("cobalt", /drive|driving|commute|transit|gaming|game|confident|hip.?hop|rap|electronic|synthwave/u, 6);
+  score("violet", /create|creative|curious|dream|adventur|explore|\bart\b|alternative|indie|psychedelic/u, 6);
+  score("rose", /social|romantic|intimate|sensual|\bdate\b|tender|r&b|rnb|neo.?soul|slow jam/u, 7);
   score("copper", /cook|kitchen|cozy|warm|nostalg|folk|country|americana|blues/u, 7);
-  score("silver", /reflect|quiet|clear mind|acoustic|classical|jazz|piano|rain/u, 7);
-  score("midnight", /midnight|after dark|late night|moody|intense|noir|goth|darkwave|trap/u, 7);
+  score("silver", /\bread(?:ing)?\b|reflect|bittersweet|quiet|clear mind|acoustic|classical|jazz|piano|rain/u, 7);
+  score("midnight", /midnight|after dark|late night|moody|rebellious|intense|noir|goth|darkwave|trap/u, 7);
 
   if (typeof input.energy === "number" && Number.isFinite(input.energy)) {
     if (input.energy >= 75) scores.ember += 3;

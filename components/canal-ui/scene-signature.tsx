@@ -65,24 +65,27 @@ function canonicalActivity(value?: string): string | null {
   if (!value) return null;
   const activity = value.trim().toLowerCase();
   if (activity === "commute" || activity === "driving") return "drive";
-  return ["focus", "workout", "unwind", "social", "party", "celebrate", "create", "cook", "morning"].includes(activity) ? activity : null;
+  return [
+    "focus", "workout", "unwind", "social", "party", "celebrate",
+    "create", "cook", "morning", "sleep", "explore", "date",
+    "outdoors", "reading", "gaming", "recovery",
+  ].includes(activity) ? activity : null;
 }
 
 function canonicalMood(value: string | undefined): string | null {
   const signals = (value ?? "").toLowerCase().split(/[,/|]+/u).map((signal) => signal.trim());
-  const aliases: readonly [readonly string[], string][] = [
-    [["happy", "euphoric", "playful"], "happy"],
-    [["energized", "energetic", "restless"], "energetic"],
-    [["steady", "grounded"], "steady"],
-    [["calm"], "calm"],
-    [["reflective", "nostalgic", "moody"], "reflective"],
-    [["dreamy", "adventurous"], "dreamy"],
-    [["romantic", "intimate"], "romantic"],
-    [["cozy", "warm"], "cozy"],
-    [["clear"], "clear"],
-    [["intense", "confident"], "intense"],
-  ];
-  return aliases.find(([values]) => values.some((candidate) => signals.includes(candidate)))?.[1] ?? null;
+  const supported = new Set([
+    "warm", "social", "calm", "clear", "energized", "confident",
+    "happy", "reflective", "romantic", "moody", "adventurous",
+    "euphoric", "dreamy", "intimate", "nostalgic", "grounded",
+    "playful", "restless", "serene", "hopeful", "bittersweet", "cozy",
+    "fierce", "curious", "sensual", "celebratory", "rebellious",
+    "focused", "intense",
+  ]);
+  const normalized = signals
+    .map((signal) => signal === "energetic" ? "energized" : signal === "steady" ? "grounded" : signal)
+    .filter((signal) => supported.has(signal));
+  return normalized.length > 0 ? normalized.join(", ") : null;
 }
 
 function numericEnergy(value: string | undefined): number | null {

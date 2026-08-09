@@ -623,6 +623,10 @@ export default function SceneStudioScreen() {
   };
 
   const toggleMood = (mood: SceneMood): void => {
+    if (!draft.moods.includes(mood) && draft.moods.length >= 5) {
+      setMomentError("You can choose up to five moods. Remove one before adding another.");
+      return;
+    }
     setDraft((current) => {
       const selected = current.moods.includes(mood);
 
@@ -632,10 +636,7 @@ export default function SceneStudioScreen() {
           ? current.moods.filter(
               (item) => item !== mood,
             )
-          : [
-              ...current.moods.slice(-4),
-              mood,
-            ],
+          : [...current.moods, mood],
       };
     });
     setMomentError(null);
@@ -1004,6 +1005,7 @@ export default function SceneStudioScreen() {
                 label={option.label}
                 onPress={() => {
                   setActivityChosen(true);
+                  setMomentError(null);
                   updateDraft("activity", option.value as SceneActivity);
                 }}
                 disabled={!scopeReady}
@@ -1019,6 +1021,9 @@ export default function SceneStudioScreen() {
           </Text>
           <Text style={styles.helperText}>
             Choose one to five moods from a richer emotional palette.
+          </Text>
+          <Text accessibilityLiveRegion="polite" style={styles.moodCount}>
+            {visibleDraft.moods.length}/5 selected
           </Text>
           <View style={styles.moodConstellation}>
             {SCENE_MOOD_OPTIONS.map((option, index) => (
@@ -1300,10 +1305,10 @@ const styles = StyleSheet.create({
   topBar:{alignItems:"center",flexDirection:"row",justifyContent:"space-between"}, topBarTitle:{color:"#F7F4EC",fontSize:16,fontWeight:"800"},
   headerIcon:{alignItems:"center",justifyContent:"center",minHeight:48,minWidth:48}, headerIconText:{color: canalDynamicColors.text,fontSize:35,lineHeight:38}, closeIconText:{color: canalDynamicColors.text,fontSize:25},
   hero:{gap:6,paddingVertical:10}, eyebrow:{color: canalDynamicColors.mint,fontSize:11,fontWeight:"900",letterSpacing:1.4}, title:{color:"#FFFFFF",fontFamily:"Georgia",fontSize:38,fontWeight:"700"}, subtitle:{color:"rgba(255,255,255,.78)",fontSize:15,lineHeight:22},
-  stepBar:{borderColor:"rgba(255,255,255,.17)",borderRadius:20,borderWidth:1,flexDirection:"row",gap:5,overflow:"hidden",padding:5}, stepButton:{alignItems:"center",borderRadius:15,flex:1,justifyContent:"center",minHeight:45,paddingHorizontal:3}, stepButtonSelected:{backgroundColor:"rgba(228,255,248,.9)"}, stepButtonText:{color:"rgba(255,255,255,.58)",fontSize:10,fontWeight:"600"}, stepButtonTextSelected:{color:"#164054"}, stepContent:{gap:10},
+  stepBar:{borderColor:"rgba(255,255,255,.17)",borderRadius:20,borderWidth:1,flexDirection:"row",gap:5,overflow:"hidden",padding:5}, stepButton:{alignItems:"center",borderRadius:15,flex:1,justifyContent:"center",minHeight:48,paddingHorizontal:3}, stepButtonSelected:{backgroundColor:"rgba(228,255,248,.9)"}, stepButtonText:{color:"rgba(255,255,255,.58)",fontSize:10,fontWeight:"600"}, stepButtonTextSelected:{color:"#164054"}, stepContent:{gap:10},
   card:{backgroundColor:"rgba(255,255,255,.08)",borderColor:"rgba(255,255,255,.18)",borderRadius:26,borderWidth:1,gap:12,overflow:"hidden",padding:18}, sectionHeaderRow:{alignItems:"flex-start",flexDirection:"row",gap:12},sectionHeaderCopy:{flex:1,gap:6},sectionTitle:{color:"#FFFFFF",fontSize:19,fontWeight:"800"},sectionMeta:{color: canalDynamicColors.mint,fontSize:11,fontWeight:"800"},helperText:{color:"rgba(255,255,255,.7)",fontSize:13,lineHeight:19},
   wrap:{flexDirection:"row",flexWrap:"wrap",gap:8},chip:{alignItems:"center",backgroundColor:"rgba(255,255,255,.07)",borderColor:"rgba(255,255,255,.18)",borderRadius:999,borderWidth:1,justifyContent:"center",minHeight:48,paddingHorizontal:15},chipSelected:{backgroundColor:"rgba(114,216,196,.9)",borderColor:"#A8F3E3"},chipText:{color:"rgba(255,255,255,.8)",fontSize:13,fontWeight:"700"},chipTextSelected:{color:"#103C46"},
-  moodConstellation:{flexDirection:"row",flexWrap:"wrap",gap:9},moodOrb:{alignItems:"center",borderRadius:999,justifyContent:"center",minHeight:52,minWidth:82,paddingHorizontal:14},moodOrbIdle:{backgroundColor:"rgba(255,255,255,.07)",borderColor:"rgba(255,255,255,.17)",borderWidth:1},moodOrbSelected:{backgroundColor:"rgba(114,216,196,.92)"},moodOrbPressed:{opacity:.72},moodOrbText:{color:"rgba(255,255,255,.82)",fontSize:13,fontWeight:"700"},moodOrbTextSelected:{color:"#103C46"},
+  moodCount:{color:"rgba(255,255,255,.66)",fontSize:12,fontVariant:["tabular-nums"],fontWeight:"700"},moodConstellation:{flexDirection:"row",flexWrap:"wrap",gap:9},moodOrb:{alignItems:"center",borderRadius:999,justifyContent:"center",minHeight:52,minWidth:82,paddingHorizontal:14},moodOrbIdle:{backgroundColor:"rgba(255,255,255,.07)",borderColor:"rgba(255,255,255,.17)",borderWidth:1},moodOrbSelected:{backgroundColor:"rgba(114,216,196,.92)"},moodOrbPressed:{opacity:.72},moodOrbText:{color:"rgba(255,255,255,.82)",fontSize:13,fontWeight:"700"},moodOrbTextSelected:{color:"#103C46"},
   textInput:{backgroundColor:"rgba(8,29,50,.26)",borderColor:"rgba(255,255,255,.17)",borderRadius:17,borderWidth:1,color: canalDynamicColors.text,fontSize:15,minHeight:50,paddingHorizontal:14,paddingVertical:12},sceneNameInput:{fontFamily:"Georgia",fontSize:18},notesInput:{minHeight:100,textAlignVertical:"top"},genreSearchInput:{marginTop:2},genreSuggestions:{gap:8},genreSuggestionLabel:{color: canalDynamicColors.muted,fontSize:11,fontWeight:"800"},genreEmptyText:{color: canalDynamicColors.muted,fontSize:13},selectedGenreSection:{gap:8},selectedGenreLabel:{color: canalDynamicColors.mint,fontSize:11,fontWeight:"800"},
   sliderGrid:{gap:10},sliderCard:{flex:1},familiarityLabels:{alignItems:"center",flexDirection:"row",justifyContent:"space-between"},familiarityLabel:{color:"rgba(255,255,255,.62)",fontSize:11,fontWeight:"700"},familiarityValue:{color:"#FFFFFF",fontSize:14,fontWeight:"800"},
   preferenceRow:{alignItems:"center",borderTopColor:"rgba(255,255,255,.1)",borderTopWidth:1,flexDirection:"row",gap:12,minHeight:64,paddingTop:10},preferenceCopy:{flex:1},preferenceLabel:{color:"#FFFFFF",fontSize:14,fontWeight:"800"},policyRow:{paddingBottom:4},
