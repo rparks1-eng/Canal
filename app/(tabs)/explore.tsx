@@ -39,7 +39,12 @@ import {
 } from "../../components/PublicSnapshotCard";
 import {
   scenePresentation,
+  stagePresentation,
 } from "../../components/canal-ui/scene-signature";
+
+import {
+  SceneCardBackdrop,
+} from "../../components/canal-ui/scene-card-visual";
 
 import {
   RecoveryNotice,
@@ -123,6 +128,7 @@ function filterExploreStages(
 
 function PublicStageCard({ stage }: { stage: LiveStage }) {
   const track = getCurrentLiveStageTrack(stage);
+  const presentation = stagePresentation(stage);
   const provenance = stage.stageKind === "canal"
     ? "CANAL"
     : stage.stageKind === "verified"
@@ -137,14 +143,19 @@ function PublicStageCard({ stage }: { stage: LiveStage }) {
         pathname: "/live-stage/[stageId]",
         params: { stageId: stage.id },
       })}
-      style={({ pressed }) => [styles.stageResult, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.stageResult,
+        { borderColor: `${presentation.accent}4D` },
+        pressed && styles.pressed,
+      ]}
     >
+      <SceneCardBackdrop presentation={presentation} />
       <View style={styles.stageResultTop}>
         <View style={styles.liveBadge}>
           <View style={styles.liveDot} />
           <Text style={styles.liveBadgeText}>LIVE</Text>
         </View>
-        <Text style={styles.stageProvenance}>{provenance}</Text>
+        <Text style={[styles.stageProvenance, { color: presentation.accent }]}>{provenance}</Text>
         <Text style={styles.stageAudience}>{stage.participantCount} in room</Text>
       </View>
       <Text numberOfLines={2} style={styles.stageResultName}>{stage.name}</Text>
@@ -189,6 +200,7 @@ function PublicSceneCard(
     item,
   } = props;
   const presentation = scenePresentation(item.scene);
+  const saveDisabled = item.isMine || item.savedByMe || props.saving;
 
   const artistPreview =
     item.scene.tracks
@@ -217,6 +229,7 @@ function PublicSceneCard(
         },
       ]}
     >
+      <SceneCardBackdrop presentation={presentation} />
       <Pressable
         accessibilityRole="button"
         onPress={() =>
@@ -371,9 +384,7 @@ function PublicSceneCard(
         <Pressable
           accessibilityRole="button"
           disabled={
-            item.isMine ||
-            item.savedByMe ||
-            props.saving
+            saveDisabled
           }
           onPress={
             props.onSave
@@ -381,25 +392,21 @@ function PublicSceneCard(
           style={[
             styles.saveButton,
 
-            (
-              item.isMine ||
-              item.savedByMe ||
-              props.saving
-            ) &&
+            {
+              backgroundColor: presentation.accent,
+            },
+
+            saveDisabled &&
               styles.saveButtonDisabled,
           ]}
         >
           {props.saving ? (
             <ActivityIndicator
-              color="#FFFFFF"
+              color={presentation.accentText}
               size="small"
             />
           ) : (
-            <Text
-              style={
-                styles.saveButtonText
-              }
-            >
+            <Text style={[styles.saveButtonText, { color: saveDisabled ? "#FFFFFF" : presentation.accentText }]}>
               {item.isMine
                 ? "Yours"
                 : item.savedByMe
@@ -1334,13 +1341,13 @@ const styles =
       alignSelf: "flex-start",
       justifyContent: "center",
       borderRadius: 15,
-      backgroundColor: canalDynamicColors.elevated,
+      backgroundColor: "rgba(219,255,248,0.92)",
       paddingHorizontal: 16,
       marginTop: 15,
     },
 
     featureButtonText: {
-      color: "#3D3457",
+      color: "#153F50",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1574,13 +1581,13 @@ const styles =
 
     stageAudience: {
       flex: 1,
-      color: canalDynamicColors.muted,
+      color: "rgba(255,255,255,0.72)",
       fontSize: 9,
       textAlign: "right",
     },
 
     stageResultName: {
-      color: canalDynamicColors.text,
+      color: "#FFFFFF",
       fontFamily: "Georgia",
       fontSize: 29,
       fontWeight: "500",
@@ -1589,7 +1596,7 @@ const styles =
     },
 
     stageResultMeta: {
-      color: canalDynamicColors.muted,
+      color: "rgba(255,255,255,0.72)",
       fontSize: 11,
       marginTop: 5,
     },
@@ -1654,7 +1661,11 @@ const styles =
     card: {
       backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      overflow: "hidden",
       padding: 15,
+      boxShadow: "0 14px 34px rgba(3, 18, 39, 0.2)",
     },
 
     scenePressable: {
@@ -1690,19 +1701,19 @@ const styles =
     },
 
     sceneName: {
-      color: canalDynamicColors.text,
+      color: "#FFFFFF",
       fontSize: 17,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: canalDynamicColors.muted,
+      color: "rgba(255,255,255,0.76)",
       fontSize: 11,
       marginTop: 4,
     },
 
     artistText: {
-      color: "#9A938C",
+      color: "rgba(255,255,255,0.62)",
       fontSize: 10,
       marginTop: 4,
     },
@@ -1713,7 +1724,7 @@ const styles =
         "center",
       borderTopWidth: 1,
       borderTopColor:
-        canalDynamicColors.line,
+        "rgba(255,255,255,0.18)",
       marginTop: 14,
       paddingTop: 12,
     },
@@ -1749,13 +1760,13 @@ const styles =
     },
 
     creatorName: {
-      color: canalDynamicColors.text,
+      color: "#FFFFFF",
       fontSize: 12,
       fontWeight: "900",
     },
 
     creatorHandle: {
-      color: "#8B837C",
+      color: "rgba(255,255,255,0.62)",
       fontSize: 10,
       marginTop: 2,
     },
@@ -1776,7 +1787,7 @@ const styles =
 
     saveButtonDisabled: {
       backgroundColor:
-        canalDynamicColors.elevated,
+        "rgba(255,255,255,0.16)",
     },
 
     saveButtonText: {

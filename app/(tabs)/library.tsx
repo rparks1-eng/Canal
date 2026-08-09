@@ -48,6 +48,11 @@ import {
 } from "../../components/canal-ui/scene-signature";
 
 import {
+  SceneCardBackdrop,
+  ScenePaletteMark,
+} from "../../components/canal-ui/scene-card-visual";
+
+import {
   useReconnectReload,
 } from "../../hooks/use-reconnect-reload";
 
@@ -887,6 +892,7 @@ export default function LibraryScreen() {
                         },
                       ]}
                     >
+                    <SceneCardBackdrop presentation={presentation} />
                     <Pressable
                       accessibilityRole="button"
                       onHoverIn={() =>
@@ -929,6 +935,10 @@ export default function LibraryScreen() {
                         layout === "grid" && styles.sceneMainGrid,
                       ]}
                     >
+                      <ScenePaletteMark
+                        presentation={presentation}
+                        style={layout === "grid" ? styles.scenePaletteMarkGrid : styles.scenePaletteMark}
+                      />
                       <View
                         style={[
                           styles.sceneText,
@@ -994,7 +1004,7 @@ export default function LibraryScreen() {
                           pressed && styles.pressed,
                         ]}
                       >
-                        <Ionicons color={canalDynamicColors.text} name="ellipsis-horizontal" size={18} />
+                        <Ionicons color={presentation.accent} name="ellipsis-horizontal" size={18} />
                       </Pressable>
                     </Pressable>
                     </NativeAnimated.View>
@@ -1241,6 +1251,9 @@ const styles =
     sceneCard: {
       backgroundColor: canalDynamicColors.surface,
       borderRadius: 21,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      overflow: "hidden",
       padding: 14,
       boxShadow: "0 14px 34px rgba(2, 30, 45, 0.13)",
     },
@@ -1347,6 +1360,19 @@ const styles =
       flex: 1,
     },
 
+    scenePaletteMark: {
+      marginRight: 12,
+    },
+
+    scenePaletteMarkGrid: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      width: 40,
+      height: 40,
+      borderRadius: 13,
+    },
+
     sceneName: {
       color: canalDynamicColors.text,
       fontSize: 16,
@@ -1385,7 +1411,7 @@ const styles =
       right: -3,
       width: 40,
       height: 40,
-      backgroundColor: canalDynamicColors.surface,
+      backgroundColor: "rgba(5, 15, 34, 0.34)",
     },
 
     actionRow: {

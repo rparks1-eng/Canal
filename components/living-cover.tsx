@@ -1,4 +1,3 @@
-import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { StyleSheet, Text, View } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
@@ -7,12 +6,19 @@ import { classifyLivingCover, getLivingCoverRecipe } from "../lib/living-covers"
 export function LivingCover(props: Readonly<{
   activity?: string;
   capturedAt?: string;
+  genres?: string;
   mood?: string;
   showCopy?: boolean;
   style?: StyleProp<ViewStyle>;
   title: string;
 }>) {
-  const recipe = getLivingCoverRecipe(classifyLivingCover(props).templateId);
+  const recipe = getLivingCoverRecipe(classifyLivingCover({
+    activity: props.activity,
+    capturedAt: props.capturedAt,
+    genres: props.genres,
+    mood: props.mood,
+    name: props.title,
+  }).templateId);
   return (
     <View style={[styles.cover, { backgroundColor: recipe.gradient[2] }, props.style]}>
       <View style={[styles.colorField, styles.colorFieldOne, { backgroundColor: recipe.gradient[0] }]} />
@@ -37,6 +43,6 @@ const styles = StyleSheet.create({
   lightField: { position: "absolute", width: "78%", aspectRatio: 1, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.10)", top: "8%", left: "28%" },
   copy: { flex: 1, justifyContent: "flex-end", padding: 24 },
   activity: { color: "rgba(255,255,255,0.72)", fontSize: 12, fontWeight: "700", letterSpacing: 1.4, textTransform: "uppercase" },
-  title: { color: canalDynamicColors.text, fontSize: 30, fontWeight: "800", letterSpacing: -1, marginTop: 6 },
+  title: { color: "#FFFFFF", fontSize: 30, fontWeight: "800", letterSpacing: -1, marginTop: 6 },
   mood: { color: "rgba(255,255,255,0.78)", fontSize: 14, marginTop: 6 },
 });

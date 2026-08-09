@@ -36,6 +36,10 @@ import {
 } from "../../components/canal-ui/scene-signature";
 
 import {
+  SceneCardBackdrop,
+} from "../../components/canal-ui/scene-card-visual";
+
+import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
 
@@ -123,6 +127,7 @@ function SceneCard(props: {
           styles.pressed,
       ]}
     >
+      <SceneCardBackdrop presentation={presentation} />
       <Text
         style={[styles.sceneActivity, { color: presentation.accent }]}
       >
@@ -1104,15 +1109,23 @@ const styles =
       minHeight: 190,
       backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      overflow: "hidden",
       padding: 17,
+      boxShadow: "0 16px 36px rgba(3, 18, 39, 0.22)",
     },
 
     sceneCard: {
       minHeight: 155,
       backgroundColor: canalDynamicColors.surface,
       borderRadius: 21,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      overflow: "hidden",
       padding: 17,
       marginBottom: 12,
+      boxShadow: "0 14px 32px rgba(3, 18, 39, 0.2)",
     },
 
     sceneAccent: {

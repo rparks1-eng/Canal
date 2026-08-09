@@ -43,20 +43,54 @@ export const LIVING_COVER_RECIPES: readonly LivingCoverRecipe[] = [
 export function classifyLivingCover(input: Readonly<{
   activity?: string | null;
   mood?: string | null;
+  genres?: string | null;
+  name?: string | null;
   energy?: number | null;
   capturedAt?: string;
 }>): Readonly<{ templateId: LivingCoverTemplateId }> {
-  const signal = `${input.activity ?? ""} ${input.mood ?? ""}`.toLowerCase();
-  let key: LivingCoverKey = "midnight";
-  if (/workout|party|celebrate|energ|intense/u.test(signal)) key = "ember";
-  else if (/happy|morning|playful/u.test(signal)) key = "solar";
-  else if (/focus|steady|grounded|cook/u.test(signal)) key = "verdant";
-  else if (/calm|unwind|clear/u.test(signal)) key = "tide";
-  else if (/drive|commute|social/u.test(signal)) key = "cobalt";
-  else if (/dream|create|advent/u.test(signal)) key = "violet";
-  else if (/romantic|intimate/u.test(signal)) key = "rose";
-  else if (/cozy|warm|nostalg/u.test(signal)) key = "copper";
-  else if (/reflect/u.test(signal)) key = "silver";
+  const signals = [input.name, input.activity, input.mood, input.genres]
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.toLowerCase());
+  const scores: Record<LivingCoverKey, number> = {
+    solar: 0, ember: 0, verdant: 0, tide: 0, cobalt: 0,
+    violet: 0, rose: 0, copper: 0, silver: 0, midnight: 0,
+  };
+  const score = (key: LivingCoverKey, pattern: RegExp, weight: number): void => {
+    scores[key] += signals.filter((value) => pattern.test(value)).length * weight;
+  };
+
+  score("solar", /morning|daylight|sunrise|happy|euphoric|playful|disco|funk|dance pop/u, 6);
+  score("ember", /workout|training|party|celebrat|energ|restless|rock|metal|punk|edm|house/u, 6);
+  score("verdant", /focus|study|work|grounded|steady|productive|instrumental|lo-fi|lofi/u, 6);
+  score("tide", /unwind|relax|sleep|calm|clear|chill|downtempo|ambient/u, 6);
+  score("cobalt", /drive|driving|commute|transit|confident|hip.?hop|rap|electronic|synthwave/u, 6);
+  score("violet", /create|creative|dream|adventur|art|alternative|indie|psychedelic/u, 6);
+  score("rose", /romantic|intimate|date|tender|r&b|rnb|neo.?soul|slow jam/u, 7);
+  score("copper", /cook|kitchen|cozy|warm|nostalg|folk|country|americana|blues/u, 7);
+  score("silver", /reflect|quiet|clear mind|acoustic|classical|jazz|piano|rain/u, 7);
+  score("midnight", /midnight|after dark|late night|moody|intense|noir|goth|darkwave|trap/u, 7);
+
+  if (typeof input.energy === "number" && Number.isFinite(input.energy)) {
+    if (input.energy >= 75) scores.ember += 3;
+    else if (input.energy <= 25) {
+      scores.tide += 2;
+      scores.silver += 1;
+    } else scores.verdant += 1;
+  }
+
+  const hourMatch = input.capturedAt?.match(/T(\d{2}):/u);
+  const hour = hourMatch ? Number(hourMatch[1]) : null;
+  if (hour !== null && Number.isInteger(hour)) {
+    if (hour >= 5 && hour < 11) scores.solar += 4;
+    else if (hour >= 17 && hour < 21) scores.copper += 2;
+    else if (hour >= 21 || hour < 5) scores.midnight += 4;
+  }
+
+  const orderedKeys = LIVING_COVER_RECIPES.map((recipe) => recipe.key);
+  const key = orderedKeys.reduce<LivingCoverKey>(
+    (best, candidate) => scores[candidate] > scores[best] ? candidate : best,
+    "midnight",
+  );
   return { templateId: `living-${key}` };
 }
 

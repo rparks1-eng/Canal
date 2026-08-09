@@ -41,7 +41,7 @@ export type ScenePresentation = Readonly<{
   templateKey: LivingCoverKey;
 }>;
 
-type ScenePaletteInput = Pick<StoredScene, "activity" | "emotions" | "energy" | "name"> & Partial<Pick<StoredScene, "createdAt">>;
+type ScenePaletteInput = Pick<StoredScene, "activity" | "emotions" | "energy" | "name"> & Partial<Pick<StoredScene, "createdAt" | "genres">>;
 
 const PRESENTATION_BY_KEY: Readonly<Record<LivingCoverKey, Readonly<{
   kind: SceneSignatureKind;
@@ -97,8 +97,10 @@ export function scenePresentation(
   scene: ScenePaletteInput,
 ): ScenePresentation {
   const classification = classifyLivingCover({
+    name: scene.name,
     activity: canonicalActivity(scene.activity),
     mood: canonicalMood(scene.emotions),
+    genres: scene.genres,
     energy: numericEnergy(scene.energy),
     capturedAt: scene.createdAt,
   });
@@ -134,13 +136,35 @@ export function stageAtmosphere(stage: Readonly<{
   name: string;
   activity: string;
   atmosphereSignals?: readonly string[];
+  createdAt?: string;
 }>): CanalAtmosphereOverride {
-  return sceneAtmosphere({
+  return sceneAtmosphere(stagePaletteInput(stage));
+}
+
+export function stagePresentation(stage: Readonly<{
+  name: string;
+  activity: string;
+  atmosphereSignals?: readonly string[];
+  createdAt?: string;
+}>): ScenePresentation {
+  return scenePresentation(stagePaletteInput(stage));
+}
+
+function stagePaletteInput(stage: Readonly<{
+  name: string;
+  activity: string;
+  atmosphereSignals?: readonly string[];
+  createdAt?: string;
+}>): ScenePaletteInput {
+  const signals = (stage.atmosphereSignals ?? []).join(", ");
+  return {
     name: stage.name,
     activity: stage.activity,
-    emotions: (stage.atmosphereSignals ?? []).join(", "),
-    energy: (stage.atmosphereSignals ?? []).join(" "),
-  });
+    emotions: signals,
+    genres: signals,
+    energy: signals,
+    createdAt: stage.createdAt,
+  };
 }
 
 export function SceneSignature(props: Readonly<{
