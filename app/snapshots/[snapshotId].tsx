@@ -2082,3 +2082,4 @@ const styles = StyleSheet.create({
     ],
   },
 });
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";

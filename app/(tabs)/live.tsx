@@ -25,6 +25,8 @@ import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   RecoveryNotice,
 } from "../../components/recovery-notice";

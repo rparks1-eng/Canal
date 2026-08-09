@@ -1393,3 +1393,4 @@ const styles =
       marginTop: 3,
     },
   });
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";

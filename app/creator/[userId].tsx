@@ -2948,3 +2948,4 @@ const styles =
     },
 
   });
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";

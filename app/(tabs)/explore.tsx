@@ -89,6 +89,8 @@ import {
 
 import type { SnapshotSocialSummary } from "../../lib/snapshot-social";
 
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   getCurrentLiveStageTrack,
   readLiveStages,

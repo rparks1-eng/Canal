@@ -1176,3 +1176,4 @@ const styles =
       opacity: 0.7,
     },
   });
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
