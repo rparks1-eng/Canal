@@ -49,10 +49,6 @@ import {
 } from "../../components/living-cover";
 
 import {
-  useCanalReduceTransparency,
-} from "../../components/canal-ui/canal-primitives";
-
-import {
   classifyAnalyticsFailure,
   recordAnalyticsEvent,
   recordAnalyticsFailure,
@@ -154,8 +150,6 @@ export default function SceneDetailScreen() {
     setOverride,
   } = use(CanalAtmosphereContext);
   const reduceTransparency = useCanalReduceTransparency();
-  const reduceTransparency =
-    useCanalReduceTransparency();
   const {
     user,
   } =
