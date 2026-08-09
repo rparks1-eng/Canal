@@ -316,14 +316,8 @@ function gradientStyle(
   layer: "upper" | "lower",
 ) {
   const backgroundImage = layer === "upper"
-    ? [
-        `radial-gradient(ellipse at 12% 16%, ${atmosphere.glowOne} 0%, transparent 68%)`,
-        `radial-gradient(ellipse at 86% 34%, ${atmosphere.glowTwo} 0%, transparent 72%)`,
-      ].join(", ")
-    : [
-        `radial-gradient(ellipse at 86% 76%, ${atmosphere.glowThree} 0%, transparent 70%)`,
-        `radial-gradient(ellipse at 24% 92%, ${atmosphere.glowTwo} 0%, transparent 74%)`,
-      ].join(", ");
+    ? `linear-gradient(148deg, ${atmosphere.glowOne} 0%, ${atmosphere.glowTwo} 100%)`
+    : `linear-gradient(322deg, ${atmosphere.glowThree} 0%, ${atmosphere.glowTwo} 100%)`;
 
   return {
     experimental_backgroundImage: backgroundImage,

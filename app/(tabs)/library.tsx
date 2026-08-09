@@ -27,7 +27,6 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
-
 import { CanalAmbientBackground } from "../../components/canal-ui/canal-ambient-background";
 
 import Animated, {
@@ -591,7 +590,7 @@ export default function LibraryScreen() {
             </Text>
           </View>
 
-          <CanalHeaderActions />
+            <CanalHeaderActions tone="light" />
         </Animated.View>
 
         <Pressable
@@ -888,26 +887,6 @@ export default function LibraryScreen() {
                         },
                       ]}
                     >
-                    <View
-                      pointerEvents="none"
-                      style={[
-                        styles.sceneGlowOne,
-                        {
-                          backgroundColor: presentation.colors[0],
-                        },
-                      ]}
-                    />
-
-                    <View
-                      pointerEvents="none"
-                      style={[
-                        styles.sceneGlowTwo,
-                        {
-                          backgroundColor: presentation.colors[1],
-                        },
-                      ]}
-                    />
-
                     <Pressable
                       accessibilityRole="button"
                       onHoverIn={() =>
@@ -1157,8 +1136,7 @@ const styles =
     },
 
     collaborationTitle: {
-      color:
-        canalDynamicColors.text,
+      color: "#F8FBFF",
       fontSize: 15,
       fontWeight:
         "900",
@@ -1166,8 +1144,7 @@ const styles =
 
     collaborationText: {
       marginTop: 3,
-      color:
-        canalDynamicColors.muted,
+      color: "rgba(235, 245, 255, 0.72)",
       fontSize: 12,
     },
 
@@ -1277,26 +1254,6 @@ const styles =
       minHeight: 164,
       paddingHorizontal: 12,
       paddingVertical: 12,
-    },
-
-    sceneGlowOne: {
-      position: "absolute",
-      width: 150,
-      height: 150,
-      borderRadius: 75,
-      right: -58,
-      top: -94,
-      opacity: 0.5,
-    },
-
-    sceneGlowTwo: {
-      position: "absolute",
-      width: 120,
-      height: 120,
-      borderRadius: 60,
-      left: -62,
-      bottom: -88,
-      opacity: 0.3,
     },
 
     featuredSceneCard: {

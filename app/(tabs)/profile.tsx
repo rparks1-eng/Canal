@@ -1371,7 +1371,7 @@ function ProfileScreenContent() {
             </Text>
           </View>
 
-          <CanalHeaderActions />
+          <CanalHeaderActions tone="light" />
         </View>
 
         {profileIssue ? (
@@ -2590,14 +2590,14 @@ const styles =
     },
 
     title: {
-      color: "#181818",
+      color: "#F8FBFF",
       fontSize: 38,
       fontWeight: "500",
       letterSpacing: -1.1,
     },
 
     subtitle: {
-      color: "#746D67",
+      color: "rgba(235, 245, 255, 0.76)",
       fontSize: 13,
       marginTop: 3,
     },
@@ -2757,14 +2757,14 @@ const styles =
     },
 
     heroBio: {
-      color: canalDynamicColors.text,
+      color: "#504A45",
       fontSize: 14,
       lineHeight: 21,
       maxWidth: 320,
     },
 
     heroBioEmpty: {
-      color: canalDynamicColors.muted,
+      color: "#817972",
       fontStyle: "italic",
     },
 
