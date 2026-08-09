@@ -5,6 +5,7 @@ const root = path.resolve(__dirname, "..");
 
 describe("live Stage artwork surfaces", () => {
   it.each([
+    ["Explore filtered Stage cards", "app/(tabs)/explore.tsx"],
     ["Explore Stage cards", "app/(tabs)/live.tsx"],
     ["live room and Up Next", "app/live-stage/[stageId].tsx"],
     ["Stage lobby mix", "app/stage-lobby/[stageId].tsx"],

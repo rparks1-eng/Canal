@@ -101,6 +101,9 @@ import type {
   LiveStage,
   LiveStageKind,
 } from "../../lib/live-stages";
+import {
+  addSpotifyArtworkToLiveStage,
+} from "../../lib/spotify-scene-artwork";
 
 type ExploreContent =
   | "snapshots"
@@ -606,9 +609,22 @@ export default function ExploreScreen() {
         }
 
         if (stageResult.status === "fulfilled") {
-          setStages(stageResult.value.filter((stage) =>
+          const publicStages = stageResult.value.filter((stage) =>
             stage.status === "live" && stage.visibility === "public",
-          ));
+          );
+          const hydratedStages: LiveStage[] = [];
+
+          for (let offset = 0; offset < publicStages.length; offset += 4) {
+            const batch = publicStages.slice(offset, offset + 4);
+            hydratedStages.push(...await Promise.all(
+              batch.map((stage) => addSpotifyArtworkToLiveStage(
+                stage,
+                [stage.currentTrackIndex],
+              )),
+            ));
+          }
+
+          setStages(hydratedStages);
         } else {
           setLoadErrors((current) => ({
             ...current,
