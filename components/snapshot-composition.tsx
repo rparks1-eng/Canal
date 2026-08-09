@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { forwardRef, type RefObject } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { Snapshot } from "../lib/snapshots";
@@ -11,17 +12,21 @@ type SnapshotCompositionProps = {
   snapshot: Snapshot;
   height?: number;
   compact?: boolean;
+  overlayRef?: RefObject<View | null>;
 };
 
-export function SnapshotComposition({
+export const SnapshotComposition = forwardRef<View, SnapshotCompositionProps>(function SnapshotComposition({
   snapshot,
   height = 430,
   compact = false,
-}: SnapshotCompositionProps) {
+  overlayRef,
+}, ref) {
   const palette = snapshotPalette(snapshot.templateTheme);
 
   return (
     <View
+      ref={ref}
+      collapsable={false}
       accessibilityLabel={`${snapshot.sceneName} Snapshot composition`}
       style={[
         styles.frame,
@@ -45,6 +50,7 @@ export function SnapshotComposition({
         />
       )}
 
+      <View ref={overlayRef} collapsable={false} pointerEvents="none" style={styles.overlayCanvas}>
       <View style={snapshot.mediaUri ? styles.scrim : styles.coverScrim} />
 
       <Text
@@ -139,9 +145,10 @@ export function SnapshotComposition({
           </View>
         ) : null}
       </View>
+      </View>
     </View>
   );
-}
+});
 
 function snapshotPalette(theme?: SnapshotTemplateTheme) {
   if (theme === "paper") {
@@ -187,6 +194,9 @@ const styles = StyleSheet.create({
   coverScrim: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(4, 8, 9, 0.18)",
+  },
+  overlayCanvas: {
+    ...StyleSheet.absoluteFillObject,
   },
   scrim: {
     ...StyleSheet.absoluteFillObject,

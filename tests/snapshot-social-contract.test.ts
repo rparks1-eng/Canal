@@ -48,7 +48,9 @@ describe("Snapshot social contract", () => {
   });
 
   it("renders the composition, social actions, replies and collapsed management", () => {
-    expect(detail).toContain("<SnapshotComposition snapshot={snapshot} height={500} />");
+    expect(detail).toContain("<SnapshotComposition");
+    expect(detail).toContain("snapshot={snapshot}");
+    expect(detail).toContain("height={500}");
     expect(detail).toContain("Like Snapshot");
     expect(detail).toContain("Write a reply");
     expect(detail).toContain("Post comment");

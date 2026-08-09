@@ -32,9 +32,7 @@ import { SnapshotComposition } from "../../components/snapshot-composition";
 import {
     useReconnectReload,
 } from "../../hooks/use-reconnect-reload";
-import {
-    shareSnapshot,
-} from "../../lib/canal-share";
+import { shareFinishedSnapshot } from "../../lib/snapshot-media-production";
 import {
     classifyRecoveryIssue,
 } from "../../lib/recovery-issue";
@@ -70,6 +68,7 @@ import type {
   SnapshotComment,
   SnapshotSocialState,
 } from "../../lib/snapshot-social";
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 
 function closeSnapshot(): void {
   const action =
@@ -117,6 +116,8 @@ function SnapshotDetailContent() {
     firstParam(
       params.snapshotId,
     );
+  const compositionRef = useRef<View>(null);
+  const overlayRef = useRef<View>(null);
 
   const loadRequestId =
     useRef(0);
@@ -635,20 +636,13 @@ function SnapshotDetailContent() {
     }
 
     try {
-      const result =
-        await shareSnapshot(
-          snapshot,
-        );
-
-      if (
-        result.method ===
-        "clipboard"
-      ) {
-        Alert.alert(
-          "Snapshot copied",
-          "The Snapshot was copied to your clipboard.",
-        );
-      }
+      await shareFinishedSnapshot({
+        mediaUri: snapshot.mediaUri,
+        mediaType: snapshot.mediaType,
+        compositionRef,
+        overlayRef,
+        dialogTitle: `Snapshot from ${snapshot.sceneName}`,
+      });
     } catch (error) {
       Alert.alert(
         "Unable to share",
@@ -947,7 +941,7 @@ function SnapshotDetailContent() {
           </Pressable>
         </View>
 
-        <SnapshotComposition snapshot={snapshot} height={500} />
+        <SnapshotComposition snapshot={snapshot} ref={compositionRef} overlayRef={overlayRef} height={500} />
 
         <View style={styles.socialBar}>
           <Pressable
@@ -2082,4 +2076,3 @@ const styles = StyleSheet.create({
     ],
   },
 });
-import { canalDynamicColors } from "../../theme/canal-dynamic-colors";

@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -31,6 +30,7 @@ import {
   RecoveryNotice,
 } from "../components/recovery-notice";
 import { SnapshotMediaPreview } from "../components/snapshot-media-preview";
+import { SnapshotComposition } from "../components/snapshot-composition";
 
 import {
   useCanalReduceTransparency,
@@ -54,6 +54,12 @@ import {
   createSnapshotWithStatus,
   syncSnapshotWithStatus,
 } from "../lib/snapshots";
+import type { Snapshot } from "../lib/snapshots";
+import {
+  cleanupSnapshotMediaDraft,
+  isSnapshotMediaDraftOwnedByScope,
+  shareFinishedSnapshot,
+} from "../lib/snapshot-media-production";
 
 import {
   BUILT_IN_SNAPSHOT_STYLES,
@@ -66,7 +72,6 @@ import type {
 import {
   getSceneById,
   sceneDurationMinutes,
-  sceneShareText,
 } from "../lib/scenes";
 
 import type {
@@ -85,6 +90,7 @@ import {
 import {
   useConnectivity,
 } from "../providers/connectivity-provider";
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 
 type SnapshotPalette = {
   backgroundColor: string;
@@ -152,9 +158,11 @@ export default function SceneSnapshotScreen() {
     sessionGeneration,
     user,
   } = useAuth();
+  const draftScope = `${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`;
 
   return (
     <SceneSnapshotContent
+      draftScope={draftScope}
       key={
         user?.id
           ? `${user.id}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`
@@ -164,7 +172,7 @@ export default function SceneSnapshotScreen() {
   );
 }
 
-function SceneSnapshotContent() {
+function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
   const reduceTransparency =
     useCanalReduceTransparency();
   const {
@@ -191,8 +199,15 @@ function SceneSnapshotContent() {
       mediaType?: string;
     }>();
 
-  const mediaUri = typeof params.mediaUri === "string" ? params.mediaUri : "";
+  const requestedMediaUri = typeof params.mediaUri === "string" ? params.mediaUri : "";
+  const mediaUri = requestedMediaUri.startsWith("file:")
+    ? isSnapshotMediaDraftOwnedByScope(requestedMediaUri, draftScope) ? requestedMediaUri : ""
+    : requestedMediaUri;
   const mediaType = params.mediaType === "video" ? "video" as const : "photo" as const;
+
+  useEffect(() => () => {
+    cleanupSnapshotMediaDraft(mediaUri || undefined, draftScope);
+  }, [draftScope, mediaUri]);
 
   const sceneId =
     typeof params.sceneId ===
@@ -244,6 +259,8 @@ function SceneSnapshotContent() {
 
   const shareInFlight =
     useRef(false);
+  const exportCompositionRef = useRef<View>(null);
+  const exportOverlayRef = useRef<View>(null);
 
   const [
     selectedTemplateId,
@@ -420,16 +437,12 @@ function SceneSnapshotContent() {
       setShareError("");
 
       try {
-        await Share.share({
-          message: [
-            caption.trim(),
-
-            sceneShareText(
-              scene,
-            ),
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
+        await shareFinishedSnapshot({
+          mediaUri: mediaUri || undefined,
+          mediaType: mediaUri ? mediaType : undefined,
+          compositionRef: exportCompositionRef,
+          overlayRef: exportOverlayRef,
+          dialogTitle: `Snapshot from ${scene.name}`,
         });
       } catch (error) {
         setShareError(
@@ -581,6 +594,8 @@ function SceneSnapshotContent() {
           return;
         }
 
+        cleanupSnapshotMediaDraft(mediaUri || undefined, draftScope);
+
         setPendingSnapshotId("");
         setPublished(true);
         setPublishErrorCause(
@@ -718,6 +733,28 @@ function SceneSnapshotContent() {
         )
       : CLASSIC_PALETTE;
 
+  const exportSnapshot = useMemo<Snapshot | null>(() => scene ? ({
+    id: pendingSnapshotId || "snapshot-export-preview",
+    sceneId: scene.id,
+    sceneName: scene.name,
+    sceneActivity: scene.activity,
+    trackId: selectedTrack?.id,
+    trackTitle: selectedTrack?.title,
+    trackArtist: selectedTrack?.artist,
+    trackImageUrl: selectedTrack?.imageUrl,
+    spotifyUrl: selectedTrack?.spotifyUrl,
+    mediaUri: mediaUri || undefined,
+    mediaType: mediaUri ? mediaType : undefined,
+    positionMs: 0,
+    note: caption.trim(),
+    mood: scene.emotions || `${scene.energy} energy`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    visibility: "private",
+    templateBrandLabel: selectedTemplate?.brandLabel,
+    templateTheme: selectedTemplate?.theme,
+  }) : null, [caption, mediaType, mediaUri, pendingSnapshotId, scene, selectedTemplate, selectedTrack]);
+
   if (isLoadingScene) {
     return (
       <SafeAreaView
@@ -844,6 +881,16 @@ function SceneSnapshotContent() {
         "bottom",
       ]}
     >
+      {exportSnapshot ? (
+        <View pointerEvents="none" style={styles.exportSurface}>
+          <SnapshotComposition
+            ref={exportCompositionRef}
+            overlayRef={exportOverlayRef}
+            snapshot={exportSnapshot}
+            height={450}
+          />
+        </View>
+      ) : null}
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Return from Snapshot composer"
@@ -1363,10 +1410,9 @@ function SceneSnapshotContent() {
         ) : null}
 
         <Text style={styles.footnote}>
-          The system share sheet sends text
-          from this MVP. Exporting the visual
-          card as an image requires adding a
-          native screenshot-sharing module.
+          Share exports this finished Canal
+          composition as an image or a bounded
+          ten-second video—not a text-only link.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -1534,6 +1580,13 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor: canalDynamicColors.baseCanvas,
+    },
+    exportSurface: {
+      position: "absolute",
+      left: -10000,
+      top: 0,
+      width: 360,
+      height: 450,
     },
 
     center: {
@@ -2163,4 +2216,3 @@ const styles =
       opacity: 0.7,
     },
   });
-import { canalDynamicColors } from "../theme/canal-dynamic-colors";

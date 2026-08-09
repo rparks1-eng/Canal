@@ -7,14 +7,24 @@ import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } 
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SnapshotMediaPreview } from "../components/snapshot-media-preview";
+import {
+  cleanupSnapshotMediaDraft,
+  persistSnapshotCaptureDraft,
+  reapExpiredSnapshotMediaDrafts,
+} from "../lib/snapshot-media-production";
+import { useAuth } from "../providers/auth-provider";
 
 type Capture = { uri: string; type: "photo" | "video" };
 const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
 
 export default function SnapshotCameraScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+  const draftScope = `${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}`;
   const params = useLocalSearchParams<Record<string, string | string[]>>();
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
+  const captureRef = useRef<Capture | null>(null);
+  const handedOffRef = useRef(false);
   const [mode, setMode] = useState<CameraMode>("picture");
   const [facing, setFacing] = useState<CameraType>("back");
   const [capture, setCapture] = useState<Capture | null>(null);
@@ -22,6 +32,15 @@ export default function SnapshotCameraScreen() {
   const [recordingPaused, setRecordingPaused] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(10);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    try { reapExpiredSnapshotMediaDrafts(); } catch { /* Draft cleanup retries on the next camera launch. */ }
+    return () => {
+      if (!handedOffRef.current) cleanupSnapshotMediaDraft(captureRef.current?.uri, draftScope);
+    };
+  }, [draftScope]);
+
+  useEffect(() => { captureRef.current = capture; }, [capture]);
 
   useEffect(() => {
     if (!recording || recordingPaused) return;
@@ -42,7 +61,7 @@ export default function SnapshotCameraScreen() {
     setBusy(true);
     try {
       const result = await camera.current.takePictureAsync({ quality: 0.85 });
-      if (result?.uri) setCapture({ uri: result.uri, type: "photo" });
+      if (result?.uri) setCapture(persistSnapshotCaptureDraft({ uri: result.uri, type: "photo" }, draftScope));
     } catch { Alert.alert("Camera unavailable", "Canal could not take that photo. Try again."); }
     finally { setBusy(false); }
   }
@@ -70,7 +89,7 @@ export default function SnapshotCameraScreen() {
     setBusy(true);
     try {
       const result = await camera.current.recordAsync({ maxDuration: 10 });
-      if (result?.uri) setCapture({ uri: result.uri, type: "video" });
+      if (result?.uri) setCapture(persistSnapshotCaptureDraft({ uri: result.uri, type: "video" }, draftScope));
     } catch { Alert.alert("Video unavailable", "Canal could not record that video. Try again."); }
     finally { setRecording(false); setRecordingPaused(false); setBusy(false); setSecondsRemaining(10); }
   }
@@ -82,6 +101,7 @@ export default function SnapshotCameraScreen() {
 
   function useCapture() {
     if (!capture) return;
+    handedOffRef.current = true;
     router.replace({
       pathname: "/scene-snapshot",
       params: {
@@ -118,7 +138,7 @@ export default function SnapshotCameraScreen() {
             <View style={styles.songText}><Text style={styles.songTitle}>{first(params.trackTitle) || first(params.sceneName) || "Scene Snapshot"}</Text><Text style={styles.songArtist}>{first(params.trackArtist) || "Canal"}</Text></View>
           </View>
           <View style={styles.row}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Retake" style={styles.secondary} onPress={() => setCapture(null)}><Text style={styles.secondaryText}>Retake</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Retake" style={styles.secondary} onPress={() => { cleanupSnapshotMediaDraft(capture.uri, draftScope); setCapture(null); }}><Text style={styles.secondaryText}>Retake</Text></Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Use in Snapshot" style={styles.primary} onPress={useCapture}><Text style={styles.primaryText}>Use in Snapshot</Text></Pressable>
           </View>
         </SafeAreaView>
