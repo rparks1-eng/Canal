@@ -24,6 +24,8 @@ import { VerifiedAccountBadge } from "./verified-account-badge";
 
 import type { SnapshotSocialSummary } from "../lib/snapshot-social";
 
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
+
 export type SnapshotCardItem =
   Snapshot & {
     creator?:
