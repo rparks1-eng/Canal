@@ -187,13 +187,15 @@ export default function CanalBottomNav() {
 
   useEffect(() => {
     const timing = {
-      duration: reduceMotion ? 0 : CANAL_ATMOSPHERE_TRANSITION_MS,
+      duration: reduceMotion
+        ? 0
+        : override?.transitionMs ?? CANAL_ATMOSPHERE_TRANSITION_MS,
       easing: Easing.inOut(Easing.sin),
     };
     glassColor.value = withTiming(navAtmosphere.glass, timing);
     accentColor.value = withTiming(navAtmosphere.accent, timing);
     selectedColor.value = withTiming(navAtmosphere.selected, timing);
-  }, [accentColor, glassColor, navAtmosphere, reduceMotion, selectedColor]);
+  }, [accentColor, glassColor, navAtmosphere, override?.transitionMs, reduceMotion, selectedColor]);
 
   useEffect(() => {
     navigationInFlightRef.current = null;

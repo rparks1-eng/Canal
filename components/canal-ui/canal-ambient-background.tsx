@@ -141,7 +141,9 @@ export function CanalAmbientBackground() {
     }
 
     const timing = {
-      duration: appearanceChanged ? 240 : CANAL_ATMOSPHERE_TRANSITION_MS,
+      duration: appearanceChanged
+        ? 240
+        : override?.transitionMs ?? CANAL_ATMOSPHERE_TRANSITION_MS,
       easing: Easing.inOut(Easing.sin),
     };
 
@@ -150,6 +152,7 @@ export function CanalAmbientBackground() {
     atmosphere.base,
     appearanceChanged,
     baseColor,
+    override?.transitionMs,
     reduceMotion,
   ]);
 
@@ -171,13 +174,16 @@ export function CanalAmbientBackground() {
 
     gradientProgress.value = 0;
     gradientProgress.value = withTiming(1, {
-      duration: appearanceChanged ? 240 : CANAL_ATMOSPHERE_TRANSITION_MS,
+      duration: appearanceChanged
+        ? 240
+        : override?.transitionMs ?? CANAL_ATMOSPHERE_TRANSITION_MS,
       easing: Easing.inOut(Easing.sin),
     });
   }, [
     atmosphere,
     appearanceChanged,
     gradientProgress,
+    override?.transitionMs,
     reduceMotion,
   ]);
 

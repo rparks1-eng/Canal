@@ -12,6 +12,9 @@ import type {
 export const CANAL_ATMOSPHERE_TRANSITION_MS =
   6_000;
 
+export const CANAL_STUDIO_ATMOSPHERE_TRANSITION_MS =
+  8_500;
+
 export type CanalAtmosphereOverride = Readonly<{
   base: string;
   glowOne: string;
@@ -23,6 +26,7 @@ export type CanalAtmosphereOverride = Readonly<{
   selected: string;
   border: string;
   shadow: string;
+  transitionMs?: number;
 }>;
 
 type CanalAtmosphereContextValue = Readonly<{
