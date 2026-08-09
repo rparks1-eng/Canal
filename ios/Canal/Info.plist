@@ -54,6 +54,12 @@
     </dict>
     <key>NSFaceIDUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Allow Canal to take photos and videos for Snapshots.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Allow Canal to record audio with Snapshot videos.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Allow Canal to choose a profile photo and Snapshot media from your library.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>
