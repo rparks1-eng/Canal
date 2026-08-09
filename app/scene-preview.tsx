@@ -138,7 +138,15 @@ import {
 } from "../lib/scenes";
 
 function returnToStudio(stageId?: string): void {
-  router.replace("/scene-studio" as never);
+  router.replace({
+    pathname: "/scene-studio",
+    params: {
+      mode: "edit",
+      ...(stageId
+        ? { stageId }
+        : {}),
+    },
+  } as never);
 }
 
 function sameSpotifyAccountGuard(

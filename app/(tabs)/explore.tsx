@@ -1603,7 +1603,7 @@ const styles =
     },
 
     stageResultName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 29,
       fontWeight: "500",
@@ -1612,7 +1612,7 @@ const styles =
     },
 
     stageResultMeta: {
-      color: "rgba(255,255,255,0.72)",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 5,
     },
@@ -1717,13 +1717,13 @@ const styles =
     },
 
     sceneName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 17,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "rgba(255,255,255,0.76)",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 4,
     },
@@ -1776,7 +1776,7 @@ const styles =
     },
 
     creatorName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "900",
     },

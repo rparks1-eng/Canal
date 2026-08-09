@@ -146,8 +146,8 @@ describe("Living Editorial Scene playback interactions", () => {
     const renderer = await render(React.createElement(SceneFeedbackScreen));
     const perfect = renderer.root.findAll(
       (node: any) =>
-        node.props.accessibilityRole === "button" &&
-        node.props.accessibilityState?.selected === false,
+        node.props.accessibilityRole === "radio" &&
+        node.props.accessibilityState?.checked === false,
     )[0];
     expect(
       Math.max(

@@ -221,25 +221,18 @@ export default function LibraryScreen() {
         );
 
         try {
-          const localScenes =
-            await readScenes();
+          try {
+            await syncScenesWithCloud();
+          } catch (syncError) {
+            console.warn(
+              "Canal could not refresh cross-device Scenes; showing the latest local Library instead:",
+              syncError,
+            );
+          }
 
-          setScenes(localScenes);
-          setLoading(false);
-
-          void syncScenesWithCloud()
-            .then(async () => {
-              const syncedScenes =
-                await readScenes();
-
-              setScenes(syncedScenes);
-            })
-            .catch((syncError) => {
-              console.warn(
-                "Canal could not refresh cross-device Scenes; showing the latest local Library instead:",
-                syncError,
-              );
-            });
+          setScenes(
+            await readScenes(),
+          );
         } catch (error) {
           setLoadIssue(
             classifyRecoveryIssue(
@@ -678,6 +671,11 @@ export default function LibraryScreen() {
                   value
                 }
                 accessibilityRole="button"
+                accessibilityState={{
+                  selected:
+                    filter ===
+                    value,
+                }}
                 onPress={() => {
                   setFilter(
                     value,

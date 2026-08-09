@@ -1,5 +1,6 @@
 import type {
   GeneratedSceneResult,
+  GeneratedTrackSignal,
   SceneStudioDraft,
 } from "./scene-studio";
 
@@ -41,7 +42,7 @@ function preserveChosenTrackSignals(
   current: GeneratedSceneResult,
 ): GeneratedTrackSignal[] {
   const signalsById = new Map(
-    scrubGeneratedSignals(current.trackSignals).map((signal) => [
+    current.trackSignals.map((signal) => [
       signal.track.id,
       signal,
     ]),
@@ -176,5 +177,31 @@ export function createUserDirectedScenePreview(
     },
     estimatedDurationMinutes: 0,
     createdAt,
+  };
+}
+
+export function updateUserDirectedScenePreview(
+  current: GeneratedSceneResult,
+  draft: SceneStudioDraft,
+): GeneratedSceneResult {
+  const updatedAt = new Date().toISOString();
+  const shell = createUserDirectedScenePreview(draft, {
+    id: current.id,
+    createdAt: current.createdAt,
+  });
+
+  return {
+    ...current,
+    draft: shell.draft,
+    scene: {
+      ...current.scene,
+      ...shell.scene,
+      id: current.scene.id,
+      tracks: current.scene.tracks.map((track) => ({ ...track })),
+      createdAt: current.scene.createdAt,
+      updatedAt,
+    },
+    trackSignals: preserveChosenTrackSignals(current),
+    rejectedTrackIds: [...(current.rejectedTrackIds ?? [])],
   };
 }

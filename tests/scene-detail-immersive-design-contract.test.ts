@@ -11,7 +11,7 @@ describe("immersive Scene detail design", () => {
     expect(source).toContain("CanalAtmosphereContext");
     expect(source).toContain("setOverride(sceneAtmosphere(scene))");
     expect(source).toContain("setOverride(null)");
-    expect(source).toContain('backgroundColor: "transparent"');
+    expect(source).toMatch(/backgroundColor:\s*"transparent"/u);
   });
 
   it("uses the Scene identity to drive the atmosphere", () => {

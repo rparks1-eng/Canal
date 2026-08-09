@@ -21,6 +21,9 @@ const ACTIVE_SCENE_USER_KEY =
 const ISOLATION_VERSION =
   "account-isolation-v3";
 
+const SCENE_DELETION_KEY_PREFIX =
+  "@canal/scene-deletions:v1";
+
 type SceneRow = {
   user_id: string;
   id: string;
@@ -196,6 +199,89 @@ function isolationKey(
   userId: string,
 ): string {
   return `@canal/scene-isolation:${ISOLATION_VERSION}:${userId}`;
+}
+
+function sceneDeletionKey(
+  userId: string,
+): string {
+  return `${SCENE_DELETION_KEY_PREFIX}:${userId}`;
+}
+
+async function readSceneDeletionIds(
+  owner: SceneCacheOwner,
+): Promise<Set<string>> {
+  await assertSceneCacheOwner(
+    owner,
+  );
+
+  const stored =
+    await AsyncStorage.getItem(
+      sceneDeletionKey(
+        owner.userId,
+      ),
+    );
+
+  await assertSceneCacheOwner(
+    owner,
+  );
+
+  if (!stored) {
+    return new Set();
+  }
+
+  try {
+    const parsed =
+      JSON.parse(stored) as unknown;
+
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter(
+            (value): value is string =>
+              typeof value === "string" &&
+              value.length > 0 &&
+              value.length <= 256,
+          )
+        : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+async function applySceneDeletionToCloud(
+  owner: SceneCacheOwner,
+  sceneId: string,
+): Promise<void> {
+  await assertSceneCacheOwner(
+    owner,
+  );
+
+  const {
+    error,
+  } = await supabase
+    .from("scenes")
+    .update({
+      deleted_at:
+        new Date().toISOString(),
+    })
+    .eq(
+      "user_id",
+      owner.userId,
+    )
+    .eq(
+      "id",
+      sceneId,
+    );
+
+  if (error) {
+    throw new Error(
+      `Canal could not delete this Scene from Supabase: ${error.message}`,
+    );
+  }
+
+  await assertSceneCacheOwner(
+    owner,
+  );
 }
 
 function rowToScene(
@@ -699,6 +785,14 @@ async function performSceneSync(
       owner,
     );
 
+  for (const row of remoteRows) {
+    if (row.deleted_at) {
+      deletionIds.add(
+        row.id,
+      );
+    }
+  }
+
   for (const sceneId of deletionIds) {
     await applySceneDeletionToCloud(
       owner,
@@ -891,6 +985,9 @@ async function performSceneSync(
     }
   }
 
+  let uploaded =
+    0;
+
   if (
     uploads.length >
     0
@@ -909,34 +1006,37 @@ async function performSceneSync(
       );
 
     if (safeUploads.length > 0) {
-    await assertSceneCacheOwner(
-      owner,
-    );
-
-    const {
-      error: uploadError,
-    } =
-      await supabase
-        .from(
-          "scenes",
-        )
-        .upsert(
-          safeUploads,
-          {
-            onConflict:
-              "user_id,id",
-          },
-        );
-
-    if (uploadError) {
-      throw new Error(
-        `Canal could not upload this account's Scenes: ${uploadError.message}`,
+      await assertSceneCacheOwner(
+        owner,
       );
-    }
 
-    await assertSceneCacheOwner(
-      owner,
-    );
+      const {
+        error: uploadError,
+      } =
+        await supabase
+          .from(
+            "scenes",
+          )
+          .upsert(
+            safeUploads,
+            {
+              onConflict:
+                "user_id,id",
+            },
+          );
+
+      if (uploadError) {
+        throw new Error(
+          `Canal could not upload this account's Scenes: ${uploadError.message}`,
+        );
+      }
+
+      uploaded +=
+        safeUploads.length;
+
+      await assertSceneCacheOwner(
+        owner,
+      );
     }
 
     for (const sceneId of deletionIds) {
@@ -946,9 +1046,6 @@ async function performSceneSync(
       );
     }
   }
-
-  let uploaded =
-    0;
 
   for (
     const row of

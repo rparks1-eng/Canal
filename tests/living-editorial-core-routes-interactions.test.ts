@@ -21,6 +21,8 @@ const mockReadScenes = jest.fn<Promise<Array<Record<string, unknown>>>, []>(asyn
 const mockResolvePublicProfileIdByHandle = jest.fn<Promise<string>, [string]>(
   async () => "profile-maya",
 );
+const mockClearUnreadCount = jest.fn();
+const mockRefreshUnreadCount = jest.fn(async () => {});
 let mockParams: Record<string, string> = { username: "maya.wav" };
 let mockIdentity = {
   accountEpoch: 1,
@@ -58,6 +60,13 @@ jest.mock("../providers/auth-provider", () => ({ useAuth: () => mockIdentity }))
 jest.mock("../providers/connectivity-provider", () => ({
   useConnectivity: () => ({ refresh: jest.fn(async () => "online"), status: "online" }),
 }));
+jest.mock("../providers/notification-center-provider", () => ({
+  useNotificationCenter: () => ({
+    clearUnreadCount: mockClearUnreadCount,
+    refreshUnreadCount: mockRefreshUnreadCount,
+    unreadCount: 0,
+  }),
+}));
 jest.mock("../hooks/use-reconnect-reload", () => ({ useReconnectReload: jest.fn() }));
 jest.mock("../components/recovery-notice", () => ({ RecoveryNotice: () => null }));
 jest.mock("../lib/recovery-issue", () => ({ classifyRecoveryIssue: jest.fn(() => null) }));
@@ -74,6 +83,23 @@ jest.mock("../lib/live-stages", () => ({
 jest.mock("../lib/scenes", () => ({ readScenes: () => mockReadScenes() }));
 jest.mock("../lib/snapshots", () => ({ readSnapshots: jest.fn(async () => []) }));
 jest.mock("../lib/social", () => ({
+  loadExploreScenes: jest.fn(async () => [{
+    creator: {
+      bio: person.bio,
+      displayName: person.displayName,
+      favoriteActivities: "Driving",
+      handle: person.username,
+      id: "profile-maya",
+      isVerified: false,
+    },
+    isMine: false,
+    ownerId: "profile-maya",
+    scene: {
+      artists: person.favoriteArtists.join(", "),
+      genres: person.genres.join(", "),
+      tracks: [],
+    },
+  }]),
   resolvePublicProfileIdByHandle: (handle: string) =>
     mockResolvePublicProfileIdByHandle(handle),
 }));
@@ -274,7 +300,7 @@ describe("Living Editorial core route interactions", () => {
     await act(async () => renderer.root.findByProps({ accessibilityLabel: "Invite friends" }).props.onPress());
     expect(mockRouter.push).toHaveBeenCalledWith("/invite-friends");
     await act(async () => renderer.root.findAllByProps({ accessibilityLabel: "Open Maya Thompson" })[0].props.onPress());
-    expect(mockRouter.push).toHaveBeenCalledWith({ pathname: "/friend/[username]", params: { username: "maya.wav" } });
+    expect(mockRouter.push).toHaveBeenCalledWith({ pathname: "/creator/[userId]", params: { userId: "profile-maya" } });
     await act(async () => renderer.root.findByProps({ accessibilityLabel: "Follow Maya Thompson" }).props.onPress());
     expect(mockFollowUser).toHaveBeenCalledWith("maya.wav", "Maya Thompson");
   });

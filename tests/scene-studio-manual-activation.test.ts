@@ -26,6 +26,10 @@ const mockRouter = {
     jest.fn(),
 };
 
+let mockParams: {
+  mode?: string;
+} = {};
+
 const studioDraft = {
   ...DEFAULT_SCENE_STUDIO_DRAFT,
   name:
@@ -127,6 +131,7 @@ let mockAuth = {
 jest.mock(
   "expo-router",
   () => ({
+    useLocalSearchParams: () => mockParams,
     router: {
       back: (...args: unknown[]) =>
         mockRouter.back(...args),
@@ -276,6 +281,7 @@ describe(
         sessionGeneration:
           "session-a1",
       };
+      mockParams = {};
       mockReadPreview.mockResolvedValue({
         kind:
           "missing",
@@ -426,29 +432,41 @@ describe(
     it(
       "resumes an existing scoped preview without overwriting it",
       async () => {
+        mockParams = {
+          mode: "edit",
+        };
         mockReadPreview.mockResolvedValueOnce({
           kind:
             "ready",
           revision:
             4,
-          value: {
-            id:
-              "existing",
-          },
+          value: createUserDirectedScenePreview(
+            studioDraft,
+            { id: "existing" },
+          ),
         });
         const renderer =
           await renderStudio();
 
+        await openReview(renderer);
+
         await act(async () => {
           await renderer.root.findByProps({
             accessibilityLabel:
-              "Create Scene",
+              "Update Scene Preview",
           }).props.onPress();
         });
 
         expect(
           mockSavePreview,
-        ).not.toHaveBeenCalled();
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            expectedRevision: 4,
+            preview: expect.objectContaining({
+              id: "existing",
+            }),
+          }),
+        );
         expect(
           mockRouter.push,
         ).toHaveBeenCalledWith(
@@ -470,7 +488,6 @@ describe(
         );
         const renderer =
           await renderStudio();
-        await openReview(renderer);
         await openReview(renderer);
 
         let activation:

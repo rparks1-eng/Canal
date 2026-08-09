@@ -29,7 +29,8 @@ describe("Scene Studio account-scoped provider-unavailable route", () => {
     expect(source).toContain("skipNextAutosaveRef.current = true");
     expect(source).toContain("setLoadedScope(operationScope)");
     expect(source).toContain("Studio draft cleared from this device.");
-    expect(source).toContain("getSceneStudioProviderState");
+    expect(source).toContain("captureSpotifyCanalAccountGuard");
+    expect(source).toContain("readSpotifyConnectionStateForAccount");
     expect(source).not.toContain("getLatestSpotifyLibrarySnapshot");
     expect(source).not.toContain("syncSpotifyLibrary");
     expect(source).toContain("readSpotifyLibrarySnapshot");

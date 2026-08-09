@@ -30,7 +30,7 @@ describe("collaborative Stage route contract", () => {
     expect(contribution).toContain('pathname: "/scene-studio"');
     expect(contribution).toContain("params: { stageId");
     expect(studio).toContain("params.stageId");
-    expect(studio).toContain('pathname:\n              "/scene-preview"');
+    expect(studio).toMatch(/pathname:\s*"\/scene-preview"/u);
     expect(preview).toContain('pathname: "/stage-contribution"');
     expect(preview).toContain("params: { stageId, sceneId: savedScene.id }");
   });

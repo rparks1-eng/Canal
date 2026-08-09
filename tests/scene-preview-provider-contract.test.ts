@@ -337,12 +337,12 @@ describe(
           "utf8",
         );
 
-        expect(studioSource).toContain('accessibilityLabel="Create Scene"');
+        expect(studioSource).toContain('"Generate editable preview"');
         expect(studioSource).toContain("readSpotifyConnectionStateForAccount");
         expect(studioSource).toContain("readSpotifyLibrarySnapshot");
         expect(studioSource).toContain("generateSceneWithSpotifyGenreFallback");
         expect(studioSource).toContain("savePreview");
-        expect(studioSource).toContain('router.push(\n          "/scene-preview"');
+        expect(studioSource).toContain('router.push("/scene-preview")');
         expect(studioSource).not.toContain(
           "saveGeneratedSceneToLibrary",
         );
