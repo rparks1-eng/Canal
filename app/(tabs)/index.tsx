@@ -1,3 +1,5 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   useCallback,
   useState,
@@ -20,8 +22,6 @@ import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
-import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
-
 import {
   StatusBar,
 } from "expo-status-bar";
@@ -29,6 +29,7 @@ import {
 import {
   CanalHeaderActions,
 } from "../../components/canal-ui/canal-header-actions";
+import { CanalAmbientBackground } from "../../components/canal-ui/canal-ambient-background";
 
 import {
   scenePresentation,
@@ -402,6 +403,7 @@ export default function HomeScreen() {
       style={styles.safeArea}
       edges={["top"]}
     >
+      <CanalAmbientBackground />
       <StatusBar style="light" />
       <ScrollView
         contentContainerStyle={
@@ -765,7 +767,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#080B0C",
+        "transparent",
     },
 
     content: {
@@ -790,15 +792,14 @@ const styles =
     },
 
     eyebrow: {
-      color: "#72D8C4",
+      color: "#F47A24",
       fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.4,
     },
 
     title: {
-      fontFamily: "Georgia",
-      color: "#F7F4EC",
+      color: "#F7FFFD",
       fontSize: 38,
       lineHeight: 41,
       fontWeight: "500",
@@ -808,10 +809,28 @@ const styles =
 
     subtitle: {
       maxWidth: 280,
-      color: "#A5AEA9",
+      color: "rgba(239,255,250,0.72)",
       fontSize: 14,
       lineHeight: 20,
       marginTop: 5,
+    },
+
+    spotifyButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      backgroundColor:
+        "#1DB954",
+    },
+
+    spotifyButtonText: {
+      color: "#FFFFFF",
+      fontSize: 20,
+      fontWeight: "900",
     },
 
     stageStrip: {
@@ -953,12 +972,12 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        canalDynamicColors.mint,
+        "#F47A24",
       marginRight: 14,
     },
 
     heroOrbText: {
-      color: "#10201C",
+      color: "#FFFFFF",
       fontSize: 30,
       lineHeight: 32,
     },
@@ -968,7 +987,7 @@ const styles =
     },
 
     heroTitle: {
-      color: canalDynamicColors.text,
+      color: "#FFFFFF",
       fontSize: 19,
       fontWeight: "900",
     },
@@ -988,20 +1007,20 @@ const styles =
 
     emptyCard: {
       backgroundColor:
-        "#0F1514",
+        "#FFFFFF",
       borderRadius: 22,
       padding: 20,
       marginBottom: 22,
     },
 
     emptyTitle: {
-      color: "#F7F4EC",
+      color: "#181818",
       fontSize: 20,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#A5AEA9",
+      color: "#6C655F",
       fontSize: 14,
       lineHeight: 21,
       marginTop: 7,
@@ -1016,11 +1035,11 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        canalDynamicColors.mint,
+        "#F47A24",
     },
 
     primaryButtonText: {
-      color: "#10201C",
+      color: "#FFFFFF",
       fontSize: 15,
       fontWeight: "800",
     },
@@ -1042,19 +1061,19 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#F7F4EC",
+      color: "#F7FFFD",
       fontSize: 20,
       fontWeight: "900",
     },
 
     sectionSubtitle: {
-      color: "#A5AEA9",
+      color: "rgba(239,255,250,0.7)",
       fontSize: 12,
       marginTop: 3,
     },
 
     seeAll: {
-      color: "#72D8C4",
+      color: "#F47A24",
       fontSize: 13,
       fontWeight: "800",
     },
@@ -1085,7 +1104,7 @@ const styles =
       width: 215,
       minHeight: 190,
       backgroundColor:
-        "#0F1514",
+        "#FFFFFF",
       borderRadius: 22,
       padding: 17,
     },
@@ -1093,7 +1112,7 @@ const styles =
     sceneCard: {
       minHeight: 155,
       backgroundColor:
-        "#0F1514",
+        "#FFFFFF",
       borderRadius: 21,
       padding: 17,
       marginBottom: 12,
@@ -1104,12 +1123,12 @@ const styles =
       height: 5,
       borderRadius: 3,
       backgroundColor:
-        "#72D8C4",
+        "#F47A24",
       marginBottom: 15,
     },
 
     sceneActivity: {
-      color: "#72D8C4",
+      color: "#F47A24",
       fontSize: 10,
       fontWeight: "900",
       textTransform:
@@ -1118,7 +1137,7 @@ const styles =
     },
 
     sceneName: {
-      color: "#F7F4EC",
+      color: "#181818",
       fontSize: 20,
       fontWeight: "900",
       marginTop: 5,
@@ -1132,7 +1151,7 @@ const styles =
     },
 
     sceneMeta: {
-      color: "#A5AEA9",
+      color: "#8A827B",
       fontSize: 11,
       marginTop: 14,
     },
@@ -1141,7 +1160,7 @@ const styles =
       position: "absolute",
       top: 16,
       right: 16,
-      color: "#72D8C4",
+      color: "#F47A24",
       fontSize: 16,
     },
 
@@ -1173,13 +1192,13 @@ const styles =
     },
 
     statValue: {
-      color: "#F7F4EC",
+      color: "#181818",
       fontSize: 24,
       fontWeight: "900",
     },
 
     statLabel: {
-      color: "#A5AEA9",
+      color: "#746D67",
       fontSize: 11,
       marginTop: 2,
     },

@@ -1,6 +1,8 @@
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   Stack,
   router,
@@ -3907,13 +3909,13 @@ const styles =
 
     listContent: {
       paddingHorizontal: 18,
-      paddingBottom: 28,
+      paddingBottom: 120,
     },
 
     roomHeader: {
-      gap: 18,
-      paddingTop: 12,
-      paddingBottom: 18,
+      gap: 10,
+      paddingTop: 6,
+      paddingBottom: 14,
     },
 
     stageIdentity: {
@@ -4076,7 +4078,7 @@ const styles =
       borderColor: "rgba(209, 255, 247, 0.18)",
       borderRadius: 16,
       borderCurve: "continuous",
-      backgroundColor: "rgba(7, 44, 64, 0.38)",
+      backgroundColor: "rgba(7, 43, 58, 0.30)",
     },
 
     codeLabel: {
@@ -4098,7 +4100,7 @@ const styles =
     },
 
     shareButton: {
-      minHeight: 42,
+      minHeight: 44,
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
@@ -4121,15 +4123,17 @@ const styles =
     },
 
     nowPlayingCard: {
-      minHeight: 130,
-      flexDirection: "row",
+      position: "relative",
+      flexDirection: "column",
       alignItems: "center",
-      gap: 14,
+      gap: 10,
       padding: 14,
-      borderRadius: 24,
+      borderColor: "rgba(235, 255, 251, 0.19)",
       borderCurve: "continuous",
-      backgroundColor: "rgba(231, 255, 250, 0.91)",
-      boxShadow: "0 18px 38px rgba(7, 34, 57, 0.22)",
+      borderRadius: 28,
+      borderWidth: 1,
+      backgroundColor: "rgba(8, 30, 46, 0.36)",
+      boxShadow: "inset 0 1px rgba(255, 255, 255, 0.09), 0 18px 50px rgba(7, 22, 39, 0.13)",
     },
 
     artworkFrame: {
@@ -4140,20 +4144,21 @@ const styles =
     },
 
     artwork: {
-      width: 94,
-      height: 94,
-      borderRadius: 18,
+      width: "100%",
+      height: undefined,
+      aspectRatio: 1.55,
+      borderRadius: 26,
       borderCurve: "continuous",
-      backgroundColor:
-        "#DCCBC0",
+      backgroundColor: "rgba(7, 43, 58, 0.35)",
+      boxShadow: "0 18px 34px rgba(7, 32, 48, 0.22)",
     },
 
     artworkFallback: {
-      width: 94,
-      height: 94,
+      width: "100%",
+      aspectRatio: 1.55,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 18,
+      borderRadius: 26,
       borderCurve: "continuous",
       backgroundColor:
         "#F47A24",
@@ -4167,11 +4172,37 @@ const styles =
 
     nowPlayingCopy: {
       flex: 1,
+      alignItems: "flex-start",
       gap: 3,
     },
 
+    nowPlayingTextRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 10,
+      paddingHorizontal: 2,
+      width: "100%",
+    },
+
+    currentContextButton: {
+      alignItems: "center",
+      backgroundColor: "rgba(222, 255, 246, 0.12)",
+      borderCurve: "continuous",
+      borderRadius: 24,
+      height: 48,
+      justifyContent: "center",
+      width: 48,
+    },
+
+    currentContextText: {
+      color: "#EAFFF8",
+      fontFamily: "Georgia",
+      fontSize: 18,
+      fontWeight: "700",
+    },
+
     nowPlayingLabel: {
-      color: "#B9571A",
+      color: "rgba(239, 255, 251, 0.70)",
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 1.1,
@@ -4185,13 +4216,13 @@ const styles =
     },
 
     trackArtist: {
-      color: "#416577",
+      color: "rgba(239, 255, 251, 0.76)",
       fontSize: 13,
       lineHeight: 18,
     },
 
     trackProgress: {
-      color: "#5F7B89",
+      color: "rgba(239, 255, 251, 0.64)",
       fontSize: 10,
       fontWeight: "800",
       fontVariant: [
@@ -4200,12 +4231,15 @@ const styles =
     },
 
     openTrackButton: {
-      width: 38,
-      height: 38,
+      position: "absolute",
+      right: 2,
+      bottom: 2,
+      width: 44,
+      height: 44,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 13,
-      backgroundColor: "#163F53",
+      borderRadius: 24,
+      backgroundColor: "transparent",
     },
 
     openTrackText: {
@@ -4215,23 +4249,65 @@ const styles =
     },
 
     quickActions: {
+      alignItems: "center",
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
+      justifyContent: "center",
+      gap: 10,
+      paddingHorizontal: 2,
     },
 
     quickAction: {
-      minHeight: 44,
-      flexDirection: "row",
+      width: 48,
+      height: 48,
       alignItems: "center",
       justifyContent: "center",
-      gap: 7,
-      paddingHorizontal: 13,
-      borderWidth: 1,
-      borderColor: "rgba(222, 255, 249, 0.18)",
-      borderRadius: 15,
+      borderWidth: 0,
+      borderRadius: 23,
       borderCurve: "continuous",
-      backgroundColor: "rgba(7, 43, 63, 0.38)",
+      backgroundColor: "transparent",
+    },
+
+    chatBadge: {
+      position: "absolute",
+      top: -3,
+      right: -3,
+      minWidth: 17,
+      height: 17,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 4,
+      borderRadius: 9,
+      backgroundColor: "#F1B8EA",
+    },
+
+    chatBadgeText: {
+      color: "#342342",
+      fontSize: 9,
+      fontWeight: "900",
+    },
+
+    nextTrackButton: {
+      minHeight: 50,
+      flex: 1,
+      flexDirection: "row",
+      gap: 9,
+      paddingHorizontal: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      borderCurve: "continuous",
+      borderRadius: 17,
+      backgroundColor: "#DFFFF5",
+    },
+
+    nextTrackText: {
+      color: "#173F4C",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    nextTrackPressed: {
+      opacity: 0.74,
+      transform: [{ scale: 0.94 }],
     },
 
     quickActionIcon: {
@@ -4247,14 +4323,12 @@ const styles =
     },
 
     hostAction: {
-      borderColor:
-        "#6F3820",
-      backgroundColor:
-        "#3A2116",
+      borderColor: "rgba(213, 255, 245, 0.52)",
+      backgroundColor: "#D5FFF5",
     },
 
     hostActionText: {
-      color: "#FFAA72",
+      color: "#173D52",
       fontSize: 12,
       fontWeight: "900",
     },
@@ -4266,7 +4340,14 @@ const styles =
       borderCurve: "continuous",
       borderWidth: 1,
       borderColor: "rgba(222, 255, 249, 0.14)",
-      backgroundColor: "rgba(7, 43, 63, 0.38)",
+      backgroundColor: "rgba(7, 43, 58, 0.30)",
+    },
+
+    queueHeader: {
+      minHeight: 42,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
     },
 
     queueExpandButton: {
@@ -4283,14 +4364,14 @@ const styles =
     },
 
     sectionEyebrow: {
-      color: "#B57750",
+      color: "rgba(239, 255, 251, 0.72)",
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 1.2,
     },
 
     queueRow: {
-      minHeight: 44,
+      minHeight: 58,
       flexDirection: "row",
       alignItems: "center",
       gap: 11,
@@ -4326,7 +4407,7 @@ const styles =
 
     queueArtworkFallback: {
       alignItems: "center",
-      backgroundColor: canalDynamicColors.lavender,
+      backgroundColor: "rgba(235, 255, 250, 0.15)",
       justifyContent: "center",
     },
 
@@ -4346,13 +4427,18 @@ const styles =
     },
 
     queueArtist: {
-      color: canalDynamicColors.muted,
+      color: "rgba(239, 255, 251, 0.74)",
       fontSize: 11,
     },
 
     peopleSection: {
       gap: 12,
-      paddingVertical: 4,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: "rgba(235, 255, 250, 0.14)",
+      borderRadius: 22,
+      borderCurve: "continuous",
+      backgroundColor: "rgba(7, 43, 58, 0.30)",
     },
 
     sectionTitleRow: {
@@ -4606,8 +4692,8 @@ const styles =
         "space-between",
       paddingTop: 8,
       borderTopWidth: 1,
-      borderTopColor:
-        "rgba(222, 255, 249, 0.14)",
+      borderTopColor: "rgba(222, 255, 249, 0.14)",
+      backgroundColor: "transparent",
     },
 
     chatModal: {
@@ -5029,7 +5115,7 @@ const styles =
       borderTopWidth: 1,
       borderTopColor:
         "transparent",
-      backgroundColor: "transparent",
+      backgroundColor: "rgba(7, 43, 58, 0.20)",
     },
 
     inputWrap: {
@@ -5067,11 +5153,8 @@ const styles =
     },
 
     sendButton: {
-      position: "absolute",
-      right: 2,
-      bottom: 2,
-      width: 44,
-      height: 44,
+      width: 48,
+      height: 48,
       alignItems: "center",
       justifyContent: "center",
       borderRadius: 17,
@@ -5143,4 +5226,3 @@ const styles =
       ],
     },
   });
-import { canalDynamicColors } from "../../theme/canal-dynamic-colors";

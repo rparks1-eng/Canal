@@ -1,3 +1,5 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   useCallback,
   useMemo,
@@ -25,8 +27,7 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
-
-import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+import { CanalAmbientBackground } from "../../components/canal-ui/canal-ambient-background";
 
 import Animated, {
   FadeInUp,
@@ -554,6 +555,7 @@ export default function LibraryScreen() {
         "top",
       ]}
     >
+      <CanalAmbientBackground />
       <ScrollView
         contentContainerStyle={
           styles.content
@@ -588,9 +590,7 @@ export default function LibraryScreen() {
             </Text>
           </View>
 
-          <View style={styles.headerActions}>
-            <CanalHeaderActions />
-          </View>
+          <CanalHeaderActions />
         </Animated.View>
 
         <Pressable
@@ -644,7 +644,7 @@ export default function LibraryScreen() {
             setQuery
           }
           placeholder="Search your Library"
-          placeholderTextColor="#5C5A54"
+          placeholderTextColor="#9A938C"
           autoCapitalize="none"
           autoCorrect={
             false
@@ -672,13 +672,7 @@ export default function LibraryScreen() {
                 key={
                   value
                 }
-                accessibilityLabel={`Filter Library by ${value}`}
                 accessibilityRole="button"
-                accessibilityState={{
-                  selected:
-                    filter ===
-                    value,
-                }}
                 onPress={() => {
                   setFilter(
                     value,
@@ -893,26 +887,6 @@ export default function LibraryScreen() {
                         },
                       ]}
                     >
-                    <View
-                      pointerEvents="none"
-                      style={[
-                        styles.sceneGlowOne,
-                        {
-                          backgroundColor: presentation.colors[0],
-                        },
-                      ]}
-                    />
-
-                    <View
-                      pointerEvents="none"
-                      style={[
-                        styles.sceneGlowTwo,
-                        {
-                          backgroundColor: presentation.colors[1],
-                        },
-                      ]}
-                    />
-
                     <Pressable
                       accessibilityRole="button"
                       onHoverIn={() =>
@@ -1069,7 +1043,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#F3EFE5",
+        "transparent",
     },
 
     content: {
@@ -1110,19 +1084,32 @@ const styles =
     },
 
     title: {
-      fontFamily: "Georgia",
-      color: "#191A18",
+      color: "#F7FFFD",
       fontSize: 34,
       fontWeight: "500",
       letterSpacing: -1.1,
     },
 
     subtitle: {
-      color: "#6D6B64",
+      color: "rgba(239,255,250,0.72)",
       fontSize: 13,
       marginTop: 3,
       lineHeight: 19,
       maxWidth: 325,
+    },
+
+    createButton: {
+      borderRadius: 14,
+      backgroundColor:
+        "#F47A24",
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+    },
+
+    createButtonText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "900",
     },
 
     collaborationButton: {
@@ -1172,10 +1159,10 @@ const styles =
       borderWidth: 1,
       borderColor:
         canalDynamicColors.line,
-      borderRadius: 18,
+      borderRadius: 13,
       backgroundColor:
-        "#FFFDF8",
-      color: "#191A18",
+        "#FFFFFF",
+      color: "#1B1B1B",
       paddingHorizontal: 14,
     },
 
@@ -1188,14 +1175,12 @@ const styles =
     },
 
     filterButton: {
-      minHeight: 38,
-      justifyContent: "center",
       borderWidth: 1,
       borderColor:
         "#E2DAD4",
       borderRadius: 13,
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       paddingHorizontal: 11,
       paddingVertical: 8,
     },
@@ -1225,23 +1210,29 @@ const styles =
 
     filterSelected: {
       borderColor:
-        "#4C46C8",
+        "#F47A24",
       backgroundColor:
         "#FFF0E5",
     },
 
     filterText: {
-      color: "#A5AEA9",
+      color: "#756E68",
       fontSize: 11,
       fontWeight: "800",
     },
 
     filterTextSelected: {
-      color: "#4C46C8",
+      color: "#F47A24",
     },
 
     list: {
       gap: 7,
+    },
+
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 9,
     },
 
     sceneWrapper: {
@@ -1254,7 +1245,7 @@ const styles =
 
     sceneCard: {
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       borderRadius: 21,
       padding: 14,
       boxShadow: "0 14px 34px rgba(2, 30, 45, 0.13)",
@@ -1265,26 +1256,6 @@ const styles =
       minHeight: 164,
       paddingHorizontal: 12,
       paddingVertical: 12,
-    },
-
-    sceneGlowOne: {
-      position: "absolute",
-      width: 150,
-      height: 150,
-      borderRadius: 75,
-      right: -58,
-      top: -94,
-      opacity: 0.5,
-    },
-
-    sceneGlowTwo: {
-      position: "absolute",
-      width: 120,
-      height: 120,
-      borderRadius: 60,
-      left: -62,
-      bottom: -88,
-      opacity: 0.3,
     },
 
     featuredSceneCard: {
@@ -1374,7 +1345,7 @@ const styles =
     },
 
     artworkText: {
-      color: "#4C46C8",
+      color: "#F47A24",
       fontSize: 23,
       fontWeight: "900",
     },
@@ -1384,19 +1355,19 @@ const styles =
     },
 
     sceneName: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 16,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#6D6B64",
+      color: "#746D67",
       fontSize: 10,
       marginTop: 4,
     },
 
     sourceText: {
-      color: "#A5AEA9",
+      color: "#9A938C",
       fontSize: 10,
       marginTop: 4,
     },
@@ -1447,7 +1418,7 @@ const styles =
 
     visibilityButton: {
       minWidth: 66,
-      minHeight: 48,
+      minHeight: 33,
       borderRadius: 9,
       alignItems:
         "center",
@@ -1462,17 +1433,17 @@ const styles =
 
     publicSelected: {
       backgroundColor:
-        "#4C46C8",
+        "#F47A24",
     },
 
     visibilityText: {
-      color: "#A5AEA9",
+      color: "#756E68",
       fontSize: 10,
       fontWeight: "900",
     },
 
     visibilityTextSelected: {
-      color: "#10201C",
+      color: "#FFFFFF",
     },
 
     privateBadge: {
@@ -1484,14 +1455,14 @@ const styles =
     },
 
     privateBadgeText: {
-      color: "#A5AEA9",
+      color: "#756E68",
       fontSize: 10,
       fontWeight: "800",
     },
 
     deleteButton: {
       minWidth: 70,
-      minHeight: 48,
+      minHeight: 36,
       borderWidth: 1,
       borderColor:
         "#E4B8B4",
@@ -1544,7 +1515,7 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       borderRadius: 22,
       borderWidth: 1,
       borderColor: "rgba(216, 255, 247, 0.22)",
@@ -1552,7 +1523,7 @@ const styles =
 
     emptyCard: {
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       borderRadius: 22,
       padding: 22,
       borderWidth: 1,
@@ -1560,13 +1531,13 @@ const styles =
     },
 
     emptyTitle: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 18,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#6D6B64",
+      color: "#746D67",
       fontSize: 13,
       lineHeight: 20,
       marginTop: 7,

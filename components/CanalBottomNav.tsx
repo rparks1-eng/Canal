@@ -183,7 +183,6 @@ export default function CanalBottomNav() {
   );
   const glassColor = useSharedValue(navAtmosphere.glass);
   const accentColor = useSharedValue(navAtmosphere.accent);
-  const borderColor = useSharedValue(navAtmosphere.border);
   const selectedColor = useSharedValue(navAtmosphere.selected);
 
   useEffect(() => {
@@ -193,17 +192,15 @@ export default function CanalBottomNav() {
     };
     glassColor.value = withTiming(navAtmosphere.glass, timing);
     accentColor.value = withTiming(navAtmosphere.accent, timing);
-    borderColor.value = withTiming(navAtmosphere.border, timing);
     selectedColor.value = withTiming(navAtmosphere.selected, timing);
-  }, [accentColor, borderColor, glassColor, navAtmosphere, reduceMotion, selectedColor]);
+  }, [accentColor, glassColor, navAtmosphere, reduceMotion, selectedColor]);
 
   useEffect(() => {
     navigationInFlightRef.current = null;
   }, [pathname]);
 
   const glassTintStyle = useAnimatedStyle(() => ({ backgroundColor: glassColor.value }));
-  const borderStyle = useAnimatedStyle(() => ({ borderColor: borderColor.value }));
-  const createSurfaceStyle = useAnimatedStyle(() => ({ backgroundColor: accentColor.value, borderColor: borderColor.value }));
+  const createSurfaceStyle = useAnimatedStyle(() => ({ backgroundColor: accentColor.value }));
   const selectedTextStyle = useAnimatedStyle(() => ({ color: selectedColor.value }));
   const selectedMarkerStyle = useAnimatedStyle(() => ({ backgroundColor: selectedColor.value }));
 
@@ -247,7 +244,6 @@ export default function CanalBottomNav() {
   );
   const shellContents = <>
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.glassTint, glassTintStyle]} />
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.borderOverlay, borderStyle]} />
     {navigationItems}
   </>;
   return (
@@ -276,19 +272,13 @@ const styles =
       marginBottom: 4,
       borderRadius: 30,
       borderCurve: "continuous",
-      overflow: "visible",
+      overflow: "hidden",
       boxShadow: "0 14px 40px rgba(0, 18, 34, 0.24)",
     },
 
     glassTint: {
       borderRadius: 28,
       opacity: 0.34,
-    },
-
-    borderOverlay: {
-      borderRadius: 28,
-      borderCurve: "continuous",
-      borderWidth: StyleSheet.hairlineWidth,
     },
 
     itemsRow: {

@@ -1,3 +1,5 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
+
 import {
   useCallback,
   useRef,
@@ -23,6 +25,7 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
+import { CanalAmbientBackground } from "../components/canal-ui/canal-ambient-background";
 
 import Animated, {
   FadeInUp,
@@ -468,6 +471,7 @@ export default function SettingsScreen() {
         "bottom",
       ]}
     >
+      <CanalAmbientBackground />
       <Animated.View entering={FadeInUp.duration(240)} style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -867,7 +871,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#F3EFE5",
+        "transparent",
     },
 
     header: {
@@ -893,7 +897,7 @@ const styles =
     },
 
     backText: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
@@ -906,15 +910,14 @@ const styles =
     },
 
     title: {
-      fontFamily: "Georgia",
-      color: "#191A18",
+      color: "#FFFFFF",
       fontSize: 27,
       fontWeight: "500",
       letterSpacing: -0.7,
     },
 
     subtitle: {
-      color: "#746D67",
+      color: "rgba(255, 255, 255, 0.76)",
       fontSize: 12,
       lineHeight: 18,
       marginTop: 4,
@@ -929,10 +932,12 @@ const styles =
 
     sectionCard: {
       backgroundColor:
-        "#FFFFFF",
+        "rgba(10, 31, 58, 0.54)",
+      borderWidth: 1,
+      borderColor: "rgba(231, 242, 255, 0.20)",
       borderRadius: 22,
       padding: 18,
-      boxShadow: "0 16px 38px rgba(19, 24, 62, 0.16)",
+      boxShadow: "0 16px 38px rgba(8, 18, 47, 0.18)",
     },
 
     appearanceCard: {
@@ -998,7 +1003,7 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#191A18",
+      color: "#FFFFFF",
       fontSize: 18,
       fontWeight: "900",
       marginBottom: 12,
@@ -1062,7 +1067,7 @@ const styles =
     },
 
     privacyMarkText: {
-      color: "#4C46C8",
+      color: "#D85E0D",
       fontSize: 20,
       fontWeight: "900",
     },
@@ -1072,19 +1077,20 @@ const styles =
     },
 
     serviceName: {
-      color: canalDynamicColors.text,
+      color: "#FFFFFF",
       fontSize: 15,
       fontWeight: "900",
     },
 
     serviceStatus: {
-      color: "#77706A",
-      fontSize: 11,
+      color: "rgba(255, 255, 255, 0.70)",
+      fontSize: 12,
+      lineHeight: 17,
       marginTop: 3,
     },
 
     arrow: {
-      color: "#6D6B64",
+      color: "rgba(255, 255, 255, 0.72)",
       fontSize: 26,
       marginLeft: 8,
     },
@@ -1123,7 +1129,7 @@ const styles =
     },
 
     explanationText: {
-      color: "#6D6B64",
+      color: "rgba(255, 255, 255, 0.76)",
       fontSize: 13,
       lineHeight: 20,
     },
@@ -1176,4 +1182,3 @@ const styles =
       opacity: 0.7,
     },
   });
-import { canalDynamicColors } from "../theme/canal-dynamic-colors";

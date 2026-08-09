@@ -1,3 +1,5 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   useCallback,
   useMemo,
@@ -26,6 +28,7 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
+import { CanalAmbientBackground } from "../../components/canal-ui/canal-ambient-background";
 
 import Animated, {
   FadeInUp,
@@ -49,11 +52,6 @@ import {
 import {
   classifyRecoveryIssue,
 } from "../../lib/recovery-issue";
-
-import {
-  filterExploreScenes,
-  filterExploreStages,
-} from "../../lib/explore-search";
 
 import type {
   RecoveryIssue,
@@ -89,8 +87,6 @@ import {
 
 import type { SnapshotSocialSummary } from "../../lib/snapshot-social";
 
-import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
-
 import {
   getCurrentLiveStageTrack,
   readLiveStages,
@@ -107,6 +103,23 @@ type ExploreContent =
   | "stages";
 
 type StageFilter = "all" | LiveStageKind;
+
+function filterExploreStages(
+  stages: readonly LiveStage[],
+  query: string,
+  filter: StageFilter,
+): LiveStage[] {
+  const needle = query.trim().toLowerCase();
+  return stages.filter((stage) => {
+    if (stage.visibility !== "public" || stage.status !== "live") return false;
+    if (filter !== "all" && stage.stageKind !== filter) return false;
+    if (!needle) return true;
+    return [stage.name, stage.hostName, stage.hostUsername, stage.activity, ...(stage.atmosphereSignals ?? [])]
+      .join(" ")
+      .toLowerCase()
+      .includes(needle);
+  });
+}
 
 function PublicStageCard({ stage }: { stage: LiveStage }) {
   const track = getCurrentLiveStageTrack(stage);
@@ -126,7 +139,6 @@ function PublicStageCard({ stage }: { stage: LiveStage }) {
       })}
       style={({ pressed }) => [styles.stageResult, pressed && styles.pressed]}
     >
-      <View style={styles.stageResultGlow} />
       <View style={styles.stageResultTop}>
         <View style={styles.liveBadge}>
           <View style={styles.liveDot} />
@@ -288,7 +300,6 @@ function PublicSceneCard(
         }
       >
         <Pressable
-          accessibilityLabel={`Open creator ${item.creator.displayName}`}
           accessibilityRole="button"
           onPress={() =>
             router.push({
@@ -380,7 +391,7 @@ function PublicSceneCard(
         >
           {props.saving ? (
             <ActivityIndicator
-              color="#FFFDF8"
+              color="#FFFFFF"
               size="small"
             />
           ) : (
@@ -678,11 +689,39 @@ export default function ExploreScreen() {
 
   const filteredScenes =
     useMemo(
-      () =>
-        filterExploreScenes(
-          scenes,
-          query,
-        ),
+      () => {
+        const needle =
+          query
+            .trim()
+            .toLowerCase();
+
+        if (!needle) {
+          return scenes;
+        }
+
+        return scenes.filter(
+          (item) =>
+            [
+              item.scene.name,
+              item.scene.activity,
+              item.scene.emotions,
+              item.scene.genres,
+              item.creator.displayName,
+              item.creator.handle,
+              ...item.scene.tracks.map(
+                (track) =>
+                  `${track.title} ${track.artist}`,
+              ),
+            ]
+              .join(
+                " ",
+              )
+              .toLowerCase()
+              .includes(
+                needle,
+              ),
+        );
+      },
       [
         query,
         scenes,
@@ -827,6 +866,7 @@ export default function ExploreScreen() {
         "top",
       ]}
     >
+      <CanalAmbientBackground />
       <ScrollView
         contentContainerStyle={
           styles.content
@@ -876,7 +916,6 @@ export default function ExploreScreen() {
           entering={FadeInUp.duration(260).delay(45)}
           style={styles.liveFeature}
         >
-          <View style={styles.liveFeatureGlow} />
           <Text style={styles.featureKicker}>LIVE ON CANAL</Text>
           <Text style={styles.featureTitle}>Step into the room.</Text>
           <Text style={styles.featureText}>
@@ -903,7 +942,7 @@ export default function ExploreScreen() {
           placeholder={activeContent === "stages"
             ? "Search Stages, hosts, activities, songs, or artists"
             : "Search moments, Scenes, creators, moods, or artists"}
-          placeholderTextColor="#5C5A54"
+          placeholderTextColor="#9A938C"
           autoCapitalize="none"
           autoCorrect={
             false
@@ -943,7 +982,7 @@ export default function ExploreScreen() {
               "scenes"
             }
             count={
-              filteredScenes.length
+              scenes.length
             }
             label="Scenes"
             onPress={() =>
@@ -1239,47 +1278,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#F3EFE5",
-    },
-
-    content: {
-      paddingHorizontal: 20,
-      paddingTop: 10,
-      paddingBottom: 120,
-      gap: 11,
-    },
-
-    header: {
-      flexDirection: "row",
-      alignItems:
-        "center",
-      justifyContent:
-        "space-between",
-      marginBottom: 2,
-    },
-
-    eyebrow: {
-      color: "rgba(222, 255, 249, 0.82)",
-      fontSize: 10,
-      fontWeight: "900",
-      letterSpacing: 2.1,
-      marginBottom: 8,
-    },
-
-    title: {
-      fontFamily: "Georgia",
-      color: "#191A18",
-      fontSize: 38,
-      fontWeight: "500",
-      letterSpacing: -1.1,
-    },
-
-    subtitle: {
-      color: "#6D6B64",
-      fontSize: 13,
-      marginTop: 3,
-      lineHeight: 19,
-      maxWidth: 325,
+        "transparent",
     },
 
     liveFeature: {
@@ -1345,22 +1344,58 @@ const styles =
       fontWeight: "900",
     },
 
+    content: {
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: 120,
+      gap: 11,
+    },
+
+    header: {
+      flexDirection: "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      marginBottom: 2,
+    },
+
+    eyebrow: {
+      color: "rgba(222, 255, 249, 0.82)",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 2.1,
+      marginBottom: 8,
+    },
+
+    title: {
+      color: "#F7FFFD",
+      fontSize: 38,
+      fontWeight: "500",
+      letterSpacing: -1.1,
+    },
+
+    subtitle: {
+      color: "rgba(239,255,250,0.72)",
+      fontSize: 13,
+      marginTop: 3,
+      lineHeight: 19,
+    },
+
     refreshButton: {
-      minHeight: 48,
-      justifyContent: "center",
       borderWidth: 1,
       borderColor:
         "#E2DAD4",
       borderRadius: 14,
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       paddingHorizontal: 13,
       paddingVertical: 10,
     },
 
     refreshText: {
-      color: "#4C46C8",
-      fontSize: 12,
+      color: "#F47A24",
+      fontSize: 11,
       fontWeight: "900",
     },
 
@@ -1371,8 +1406,8 @@ const styles =
         canalDynamicColors.line,
       borderRadius: 18,
       backgroundColor:
-        "#FFFDF8",
-      color: "#191A18",
+        "#FFFFFF",
+      color: "#1B1B1B",
       fontSize: 15,
       fontWeight: "500",
       letterSpacing: -0.2,
@@ -1393,7 +1428,7 @@ const styles =
     },
 
     segmentButton: {
-      minHeight: 48,
+      minHeight: 42,
       flex: 1,
       flexDirection: "row",
       alignItems:
@@ -1406,17 +1441,17 @@ const styles =
 
     segmentButtonActive: {
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
     },
 
     segmentText: {
-      color: "#6D6B64",
-      fontSize: 11,
+      color: "#817972",
+      fontSize: 12,
       fontWeight: "800",
     },
 
     segmentTextActive: {
-      color: "#191A18",
+      color: "#1B1B1B",
     },
 
     segmentCount: {
@@ -1621,7 +1656,7 @@ const styles =
 
     card: {
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       borderRadius: 22,
       padding: 15,
     },
@@ -1650,7 +1685,7 @@ const styles =
     },
 
     artworkText: {
-      color: "#4C46C8",
+      color: "#F47A24",
       fontSize: 25,
       fontWeight: "900",
     },
@@ -1660,19 +1695,19 @@ const styles =
     },
 
     sceneName: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 17,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#6D6B64",
+      color: "#746D67",
       fontSize: 11,
       marginTop: 4,
     },
 
     artistText: {
-      color: canalDynamicColors.muted,
+      color: "#9A938C",
       fontSize: 10,
       marginTop: 4,
     },
@@ -1689,7 +1724,6 @@ const styles =
     },
 
     creatorButton: {
-      minHeight: 48,
       flex: 1,
       flexDirection: "row",
       alignItems:
@@ -1726,21 +1760,21 @@ const styles =
     },
 
     creatorHandle: {
-      color: "#5C5A54",
+      color: "#8B837C",
       fontSize: 10,
       marginTop: 2,
     },
 
     saveButton: {
       minWidth: 68,
-      minHeight: 48,
+      minHeight: 38,
       borderRadius: 13,
       alignItems:
         "center",
       justifyContent:
         "center",
       backgroundColor:
-        "#4C46C8",
+        "#F47A24",
       paddingHorizontal: 12,
       marginLeft: 10,
     },
@@ -1751,7 +1785,7 @@ const styles =
     },
 
     saveButtonText: {
-      color: "#FFFDF8",
+      color: "#FFFFFF",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1763,21 +1797,21 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       borderRadius: 22,
       borderWidth: 1,
       borderColor: canalDynamicColors.line,
     },
 
     loadingText: {
-      color: "#6D6B64",
+      color: "#746D67",
       fontSize: 13,
       marginTop: 12,
     },
 
     emptyCard: {
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       borderRadius: 22,
       padding: 22,
       borderWidth: 1,
@@ -1785,13 +1819,13 @@ const styles =
     },
 
     emptyTitle: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 18,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#6D6B64",
+      color: "#746D67",
       fontSize: 13,
       lineHeight: 20,
       marginTop: 7,
@@ -1833,8 +1867,6 @@ const styles =
     },
 
     recoveryButton: {
-      minHeight: 48,
-      justifyContent: "center",
       alignSelf:
         "flex-start",
       borderRadius: 12,
@@ -1846,7 +1878,7 @@ const styles =
     },
 
     recoveryButtonText: {
-      color: "#FFFDF8",
+      color: "#FFFFFF",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1866,7 +1898,6 @@ function ExploreTab(
 ) {
   return (
     <Pressable
-      accessibilityLabel={`Show ${props.label}`}
       accessibilityRole="tab"
       accessibilityState={{
         selected:
