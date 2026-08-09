@@ -27,6 +27,7 @@ import {
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
+
 import { CanalAmbientBackground } from "../../components/canal-ui/canal-ambient-background";
 
 import Animated, {
@@ -887,6 +888,26 @@ export default function LibraryScreen() {
                         },
                       ]}
                     >
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.sceneGlowOne,
+                        {
+                          backgroundColor: presentation.colors[0],
+                        },
+                      ]}
+                    />
+
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.sceneGlowTwo,
+                        {
+                          backgroundColor: presentation.colors[1],
+                        },
+                      ]}
+                    />
+
                     <Pressable
                       accessibilityRole="button"
                       onHoverIn={() =>
@@ -1256,6 +1277,26 @@ const styles =
       minHeight: 164,
       paddingHorizontal: 12,
       paddingVertical: 12,
+    },
+
+    sceneGlowOne: {
+      position: "absolute",
+      width: 150,
+      height: 150,
+      borderRadius: 75,
+      right: -58,
+      top: -94,
+      opacity: 0.5,
+    },
+
+    sceneGlowTwo: {
+      position: "absolute",
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      left: -62,
+      bottom: -88,
+      opacity: 0.3,
     },
 
     featuredSceneCard: {

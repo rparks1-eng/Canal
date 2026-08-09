@@ -248,9 +248,15 @@ export default function CanalBottomNav() {
   </>;
   return (
     <SafeAreaView edges={["bottom"]} style={styles.safeArea}>
-      <BlurView accessibilityRole="tablist" intensity={72} style={styles.container} tint={isDark ? "systemUltraThinMaterialDark" : "systemUltraThinMaterialLight"}>
+      <View accessibilityRole="tablist" style={styles.container}>
+        <BlurView
+          intensity={72}
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, styles.blurShell]}
+          tint={isDark ? "systemUltraThinMaterialDark" : "systemUltraThinMaterialLight"}
+        />
         {shellContents}
-      </BlurView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -272,12 +278,19 @@ const styles =
       marginBottom: 4,
       borderRadius: 30,
       borderCurve: "continuous",
-      overflow: "hidden",
+      overflow: "visible",
       boxShadow: "0 14px 40px rgba(0, 18, 34, 0.24)",
+    },
+
+    blurShell: {
+      borderRadius: 30,
+      borderCurve: "continuous",
+      overflow: "hidden",
     },
 
     glassTint: {
       borderRadius: 28,
+      overflow: "hidden",
       opacity: 0.34,
     },
 

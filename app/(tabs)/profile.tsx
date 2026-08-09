@@ -1,3 +1,5 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   useCallback,
   useEffect,
@@ -8,6 +10,7 @@ import {
 
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -18,6 +21,9 @@ import {
   View,
 } from "react-native";
 
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
+
 import {
   router,
   useFocusEffect,
@@ -27,7 +33,7 @@ import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
-import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+import { CanalAmbientBackground } from "../../components/canal-ui/canal-ambient-background";
 
 import {
   PublicSnapshotGrid,
@@ -95,6 +101,11 @@ import {
 } from "../../lib/supabase";
 
 import {
+  removeOwnedProfileAvatar,
+  uploadProfileAvatar,
+} from "../../lib/profile-avatar";
+
+import {
   useAuth,
 } from "../../providers/auth-provider";
 
@@ -103,6 +114,7 @@ import {
 } from "../../providers/connectivity-provider";
 
 type ProfileForm = {
+  avatarUrl: string;
   displayName: string;
   handle: string;
   bio: string;
@@ -113,6 +125,7 @@ type ProfileForm = {
 };
 
 const EMPTY_PROFILE: ProfileForm = {
+  avatarUrl: "",
   displayName: "",
   handle: "",
   bio: "",
@@ -347,6 +360,16 @@ function ProfileScreenContent() {
   ] = useState(false);
 
   const [
+    pendingAvatar,
+    setPendingAvatar,
+  ] = useState<ImagePicker.ImagePickerAsset | null>(null);
+
+  const [
+    removeAvatar,
+    setRemoveAvatar,
+  ] = useState(false);
+
+  const [
     message,
     setMessage,
   ] = useState("");
@@ -478,7 +501,7 @@ function ProfileScreenContent() {
                       "profiles",
                     )
                     .select(
-                      "display_name, handle, bio, favorite_activities, is_public, is_verified, is_canal",
+                      "display_name, handle, avatar_url, bio, favorite_activities, is_public, is_verified, is_canal",
                     )
                     .eq(
                       "id",
@@ -500,6 +523,8 @@ function ProfileScreenContent() {
                   profileResult.data;
 
                 const next: ProfileForm = {
+                  avatarUrl:
+                    row?.avatar_url || "",
                   displayName:
                     row?.display_name ||
                     user.user_metadata
@@ -812,6 +837,7 @@ function ProfileScreenContent() {
     (
       cachedAuthProfile
         ? {
+            avatarUrl: "",
             displayName:
               cachedAuthProfile.displayName,
 
@@ -956,6 +982,8 @@ function ProfileScreenContent() {
       setFormErrorMessage(
         "",
       );
+      setPendingAvatar(null);
+      setRemoveAvatar(false);
       setEditing(
         true,
       );
@@ -978,10 +1006,68 @@ function ProfileScreenContent() {
       setFormErrorMessage(
         "",
       );
+      setPendingAvatar(null);
+      setRemoveAvatar(false);
       setEditing(
         false,
       );
     };
+
+  const chooseProfilePicture = async (
+    source: "camera" | "library",
+  ): Promise<void> => {
+    try {
+      if (source === "camera") {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          throw new Error("Allow camera access in Settings to take a profile picture.");
+        }
+      }
+
+      const result = source === "camera"
+        ? await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            cameraType: ImagePicker.CameraType.front,
+            mediaTypes: ["images"],
+            quality: 0.82,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            mediaTypes: ["images"],
+            quality: 0.82,
+          });
+
+      if (!result.canceled && result.assets[0]) {
+        setPendingAvatar(result.assets[0]);
+        setRemoveAvatar(false);
+        setFormErrorMessage("");
+      }
+    } catch (error) {
+      setFormErrorMessage(
+        error instanceof Error ? error.message : "Canal could not open that photo.",
+      );
+    }
+  };
+
+  const openProfilePictureMenu = (): void => {
+    Alert.alert(
+      "Profile picture",
+      "Choose a square photo. You can crop it before saving.",
+      [
+        { text: "Take Photo", onPress: () => void chooseProfilePicture("camera") },
+        { text: "Choose from Library", onPress: () => void chooseProfilePicture("library") },
+        ...(draft.avatarUrl || pendingAvatar
+          ? [{ text: "Remove Photo", style: "destructive" as const, onPress: () => {
+              setPendingAvatar(null);
+              setRemoveAvatar(true);
+            } }]
+          : []),
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  };
 
   const save =
     async (): Promise<void> => {
@@ -997,6 +1083,9 @@ function ProfileScreenContent() {
       setFormErrorMessage(
         "",
       );
+
+      let uploadedAvatarUrl: string | null = null;
+      let authenticatedUserId: string | null = null;
 
       try {
         const {
@@ -1016,6 +1105,7 @@ function ProfileScreenContent() {
             "Your Canal account session expired.",
           );
         }
+        authenticatedUserId = user.id;
 
         const displayName =
           draft.displayName
@@ -1045,6 +1135,13 @@ function ProfileScreenContent() {
           );
         }
 
+        let avatarUrl = removeAvatar ? "" : draft.avatarUrl;
+        if (pendingAvatar) {
+          const uploaded = await uploadProfileAvatar(pendingAvatar, user.id);
+          uploadedAvatarUrl = uploaded.publicUrl;
+          avatarUrl = uploaded.publicUrl;
+        }
+
         const {
           data,
           error,
@@ -1062,6 +1159,9 @@ function ProfileScreenContent() {
                   displayName,
 
                 handle,
+
+                avatar_url:
+                  avatarUrl || null,
 
                 bio:
                   draft.bio
@@ -1092,7 +1192,7 @@ function ProfileScreenContent() {
               },
             )
             .select(
-              "display_name, handle, bio, favorite_activities, is_public, is_verified, is_canal",
+              "display_name, handle, avatar_url, bio, favorite_activities, is_public, is_verified, is_canal",
             )
             .single();
 
@@ -1113,6 +1213,8 @@ function ProfileScreenContent() {
         }
 
         const next: ProfileForm = {
+          avatarUrl:
+            data.avatar_url || "",
           displayName:
             data.display_name,
 
@@ -1149,14 +1251,32 @@ function ProfileScreenContent() {
           next,
         );
 
+        setPendingAvatar(null);
+        setRemoveAvatar(false);
+
         setEditing(
           false,
         );
 
-        setMessage(
-          "Profile updated.",
-        );
+        const replacedAvatar = draft.avatarUrl && draft.avatarUrl !== next.avatarUrl;
+        if ((removeAvatar || replacedAvatar) && draft.avatarUrl) {
+          try {
+            await removeOwnedProfileAvatar(draft.avatarUrl, user.id);
+          } catch {
+            setMessage("Profile updated. Canal will retry cleaning up the previous photo later.");
+            return;
+          }
+        }
+
+        setMessage("Profile updated.");
       } catch (error) {
+        if (uploadedAvatarUrl && authenticatedUserId) {
+          try {
+            await removeOwnedProfileAvatar(uploadedAvatarUrl, authenticatedUserId);
+          } catch {
+            // The failed upload is owner-scoped and can be retried by cleanup tooling.
+          }
+        }
         setFormErrorMessage(
           error instanceof Error
             ? error.message
@@ -1217,6 +1337,7 @@ function ProfileScreenContent() {
         "top",
       ]}
     >
+      <CanalAmbientBackground />
       <ScrollView
         contentContainerStyle={
           styles.content
@@ -1232,6 +1353,7 @@ function ProfileScreenContent() {
           }
         >
           <View>
+            <Text style={styles.eyebrow}>CANAL IDENTITY</Text>
             <Text
               style={
                 styles.title
@@ -1245,7 +1367,7 @@ function ProfileScreenContent() {
                 styles.subtitle
               }
             >
-              Your Canal identity.
+              Your music, people, and moments in one place.
             </Text>
           </View>
 
@@ -1284,50 +1406,82 @@ function ProfileScreenContent() {
           />
         ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open My Stages"
-          onPress={() => router.push("/managed-stages")}
-          style={({ pressed }) => [styles.managedStagesLink, pressed && styles.pressed]}
-        >
-          <View>
-            <Text style={styles.managedStagesTitle}>My Stages</Text>
-            <Text style={styles.managedStagesCopy}>Manage live rooms, collaborators, privacy, and ended Stage history.</Text>
-          </View>
-          <Text accessibilityElementsHidden style={styles.managedStagesArrow}>›</Text>
-        </Pressable>
-
         {displayProfile ? (
           <View
             style={
               styles.identityCard
             }
           >
-            <View style={styles.identitySummary}>
-              <View style={styles.avatar}>
+            <View
+              style={
+                styles.avatar
+              }
+            >
+              {displayProfile.avatarUrl ? (
+                <Image
+                  accessibilityLabel={`${displayProfile.displayName} profile picture`}
+                  contentFit="cover"
+                  source={displayProfile.avatarUrl}
+                  style={styles.avatarImage}
+                />
+              ) : (
                 <Text style={styles.avatarText}>{avatarText}</Text>
-              </View>
+              )}
+            </View>
 
-              <View style={styles.identityCopy}>
-                <View style={styles.profileNameRow}>
-                  <Text style={styles.profileName}>{displayProfile.displayName}</Text>
-                  {displayProfile.isVerified ? <VerifiedAccountBadge size={19} /> : null}
-                </View>
-                <Text style={styles.handle}>{displayProfile.handle}</Text>
-                <View style={styles.visibilityBadge}>
-                  <Text style={styles.visibilityBadgeText}>
-                    {displayProfile.isCanal
-                      ? "Canal profile"
-                      : displayProfile.isVerified
-                        ? "Verified profile"
-                        : profile
-                          ? profile.isPublic
-                            ? "Public profile"
-                            : "Private profile"
-                          : "Saved profile details"}
-                  </Text>
-                </View>
-              </View>
+            <View style={styles.profileNameRow}>
+              <Text style={styles.profileName}>{displayProfile.displayName}</Text>
+              {displayProfile.isVerified ? <VerifiedAccountBadge size={19} /> : null}
+
+              {profile ? (
+                <Pressable
+                  accessibilityLabel="Edit Profile"
+                  accessibilityHint="Change your picture, name, handle, bio, and visibility."
+                  accessibilityRole="button"
+                  onPress={beginEditing}
+                  style={({ pressed }) => [styles.heroEditButton, pressed && styles.pressed]}
+                >
+                  <Image source="sf:pencil" style={styles.heroEditIcon} tintColor={canalDynamicColors.text} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <Text style={[styles.heroBio, !displayProfile.bio && styles.heroBioEmpty]}>
+              {displayProfile.bio || "Add a short note about what moves you."}
+            </Text>
+
+            <Text
+              style={
+                styles.handle
+              }
+            >
+              {
+                displayProfile.handle
+              }
+            </Text>
+
+            <View
+              style={
+                styles.visibilityBadge
+              }
+            >
+              <Text
+                style={
+                  styles.visibilityBadgeText
+                }
+              >
+                {displayProfile
+                  .isCanal
+                  ? "Canal profile"
+                  : displayProfile
+                      .isVerified
+                    ? "Verified profile"
+                    : profile
+                      ? profile.isPublic
+                        ? "Public profile"
+                        : "Private profile"
+                      : "Saved profile details"}
+              </Text>
             </View>
 
             {sceneDataResolved ? (
@@ -1356,6 +1510,13 @@ function ProfileScreenContent() {
                   }
                   label="Saved"
                 />
+              </View>
+            ) : null}
+
+            {displayProfile.favoriteActivities ? (
+              <View style={styles.favoriteActivityRow}>
+                <Text style={styles.favoriteActivityLabel}>IN ROTATION</Text>
+                <Text numberOfLines={1} style={styles.favoriteActivityValue}>{displayProfile.favoriteActivities}</Text>
               </View>
             ) : null}
           </View>
@@ -1411,6 +1572,34 @@ function ProfileScreenContent() {
             </View>
           </View>
         ) : null}
+
+        <View style={styles.profileActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open My Stages"
+            onPress={() => router.push("/managed-stages")}
+            style={({ pressed }) => [styles.profileAction, pressed && styles.pressed]}
+          >
+            <View style={styles.profileActionIconSurface}>
+              <Image source="sf:dot.radiowaves.left.and.right" style={styles.profileActionIcon} tintColor={canalDynamicColors.mint} />
+            </View>
+            <Text style={styles.profileActionTitle}>My Stages</Text>
+            <Text numberOfLines={2} style={styles.profileActionCopy}>Host, resume, or close a live room.</Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Discover people"
+            onPress={() => router.push("/(tabs)/explore")}
+            style={({ pressed }) => [styles.profileAction, pressed && styles.pressed]}
+          >
+            <View style={styles.profileActionIconSurface}>
+              <Image source="sf:person.2" style={styles.profileActionIcon} tintColor={canalDynamicColors.mint} />
+            </View>
+            <Text style={styles.profileActionTitle}>Find people</Text>
+            <Text numberOfLines={2} style={styles.profileActionCopy}>Follow creators and shared taste.</Text>
+          </Pressable>
+        </View>
 
         {user &&
         socialDataResolved ? (
@@ -1552,13 +1741,7 @@ function ProfileScreenContent() {
                   styles.connectionStat
                 }
               >
-                <Text
-                  style={
-                    styles.connectionValue
-                  }
-                >
-                  ↗
-                </Text>
+                <Image source="sf:bell" style={styles.connectionIcon} tintColor={canalDynamicColors.text} />
 
                 <Text
                   style={
@@ -1659,13 +1842,7 @@ function ProfileScreenContent() {
                           styles.playlistIcon
                         }
                       >
-                        <Text
-                          style={
-                            styles.playlistIconText
-                          }
-                        >
-                          ♪
-                        </Text>
+                        <Image source="sf:music.note" style={styles.playlistSymbol} tintColor={canalDynamicColors.text} />
                       </View>
 
                       <View
@@ -1759,36 +1936,6 @@ function ProfileScreenContent() {
 
         {!editing ? (
           <>
-            {displayProfile ? (
-              <View
-                style={
-                  styles.infoCard
-                }
-              >
-                <ProfileSection
-                  label="BIO"
-                  value={
-                    displayProfile.bio
-                  }
-                  empty="No bio added yet."
-                />
-
-                <View
-                  style={
-                    styles.divider
-                  }
-                />
-
-                <ProfileSection
-                  label="FAVORITE ACTIVITIES"
-                  value={
-                    displayProfile.favoriteActivities
-                  }
-                  empty="No favorite activities added yet."
-                />
-              </View>
-            ) : null}
-
             <View
               style={
                 styles.collectionSectionHeader
@@ -2101,6 +2248,35 @@ function ProfileScreenContent() {
               Edit profile
             </Text>
 
+            <View style={styles.avatarEditor}>
+              <View style={styles.avatarPreview}>
+                {pendingAvatar?.uri || (!removeAvatar && draft.avatarUrl) ? (
+                  <Image
+                    accessibilityLabel="Profile picture preview"
+                    contentFit="cover"
+                    source={pendingAvatar?.uri || draft.avatarUrl}
+                    style={styles.avatarImage}
+                  />
+                ) : (
+                  <Text style={styles.avatarText}>{initials(draft.displayName)}</Text>
+                )}
+              </View>
+              <View style={styles.avatarEditorCopy}>
+                <Text style={styles.avatarEditorTitle}>Profile picture</Text>
+                <Text style={styles.avatarEditorHelp}>Square JPEG, PNG, or WebP · 5 MB maximum</Text>
+                <Pressable
+                  accessibilityLabel="Change profile picture"
+                  accessibilityHint="Choose a photo from the library, take a new photo, or remove the current photo"
+                  accessibilityRole="button"
+                  disabled={saving}
+                  onPress={openProfilePictureMenu}
+                  style={({ pressed }) => [styles.avatarAction, pressed && styles.pressed]}
+                >
+                  <Text style={styles.avatarActionText}>{draft.avatarUrl || pendingAvatar ? "Change photo" : "Add photo"}</Text>
+                </Pressable>
+              </View>
+            </View>
+
             <FieldLabel
               text="Display name"
             />
@@ -2122,7 +2298,7 @@ function ProfileScreenContent() {
                 )
               }
               placeholder="Your name"
-              placeholderTextColor="#5C5A54"
+              placeholderTextColor="#9A938C"
               maxLength={60}
               style={
                 styles.input
@@ -2150,7 +2326,7 @@ function ProfileScreenContent() {
                 )
               }
               placeholder="@yourhandle"
-              placeholderTextColor="#5C5A54"
+              placeholderTextColor="#9A938C"
               autoCapitalize="none"
               autoCorrect={
                 false
@@ -2182,7 +2358,7 @@ function ProfileScreenContent() {
                 )
               }
               placeholder="Tell people about your music taste."
-              placeholderTextColor="#5C5A54"
+              placeholderTextColor="#9A938C"
               multiline
               maxLength={300}
               style={[
@@ -2212,7 +2388,7 @@ function ProfileScreenContent() {
                 )
               }
               placeholder="Driving, studying, working out..."
-              placeholderTextColor="#5C5A54"
+              placeholderTextColor="#9A938C"
               multiline
               maxLength={300}
               style={[
@@ -2307,7 +2483,7 @@ function ProfileScreenContent() {
               >
                 {saving ? (
                   <ActivityIndicator
-                    color="#FFFDF8"
+                    color="#FFFFFF"
                   />
                 ) : (
                   <Text
@@ -2358,38 +2534,6 @@ function Stat(
   );
 }
 
-function ProfileSection(
-  props: {
-    label: string;
-    value: string;
-    empty: string;
-  },
-) {
-  return (
-    <View>
-      <Text
-        style={
-          styles.sectionLabel
-        }
-      >
-        {props.label}
-      </Text>
-
-      <Text
-        style={[
-          styles.sectionValue,
-
-          !props.value &&
-            styles.emptyValue,
-        ]}
-      >
-        {props.value ||
-          props.empty}
-      </Text>
-    </View>
-  );
-}
-
 function FieldLabel(
   props: {
     text: string;
@@ -2411,7 +2555,7 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor:
-        "#F3EFE5",
+        "transparent",
     },
 
     loading: {
@@ -2424,37 +2568,114 @@ const styles =
 
     content: {
       paddingHorizontal: 20,
-      paddingTop: 10,
+      paddingTop: 8,
       paddingBottom: 120,
-      gap: 14,
+      gap: 12,
     },
 
     header: {
       flexDirection: "row",
-      alignItems:
-        "center",
+      alignItems: "stretch",
       justifyContent:
         "space-between",
+      marginBottom: 4,
+    },
+
+    eyebrow: {
+      color: canalDynamicColors.mint,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 2,
+      marginBottom: 6,
     },
 
     title: {
-      fontFamily: "Georgia",
-      color: "#191A18",
+      color: "#181818",
       fontSize: 38,
       fontWeight: "500",
       letterSpacing: -1.1,
     },
 
     subtitle: {
-      color: "#6D6B64",
+      color: "#746D67",
       fontSize: 13,
       marginTop: 3,
     },
 
-    identityCard: {
-      alignItems: "stretch",
+    headerActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+
+    activityButton: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: "#E2DAD4",
+      borderRadius: 24,
+      backgroundColor: "#FFFDF8",
+    },
+
+    activityIcon: {
+      width: 22,
+      height: 24,
+      alignItems: "center",
+      justifyContent: "flex-end",
+    },
+
+    activityBellDome: {
+      width: 16,
+      height: 15,
+      borderWidth: 1.75,
+      borderBottomWidth: 0,
+      borderColor: "#4C46C8",
+      borderTopLeftRadius: 9,
+      borderTopRightRadius: 9,
+    },
+
+    activityBellLip: {
+      width: 20,
+      height: 5,
+      borderWidth: 1.75,
+      borderColor: "#4C46C8",
+      borderTopWidth: 0,
+      borderBottomLeftRadius: 7,
+      borderBottomRightRadius: 7,
+    },
+
+    activityBellClapper: {
+      width: 4,
+      height: 3,
+      marginTop: 1,
+      borderRadius: 2,
+      backgroundColor: "#4C46C8",
+    },
+
+    settingsButton: {
+      borderWidth: 1,
+      borderColor:
+        "#E2DAD4",
+      borderRadius: 14,
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
+      paddingHorizontal: 13,
+      paddingVertical: 10,
+    },
+
+    settingsText: {
+      color: "#F47A24",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    identityCard: {
+      alignItems:
+        "center",
+      backgroundColor:
+        "#FFFFFF",
       borderRadius: 24,
       padding: 17,
       gap: 15,
@@ -2472,14 +2693,14 @@ const styles =
     },
 
     localLibraryTitle: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 19,
       fontWeight: "900",
     },
 
     localLibraryText: {
       maxWidth: 300,
-      color: "#6D6B64",
+      color: "#746D67",
       fontSize: 12,
       lineHeight: 18,
       textAlign: "center",
@@ -2487,34 +2708,68 @@ const styles =
     },
 
     avatar: {
-      width: 62,
-      height: 62,
-      borderRadius: 31,
+      width: 82,
+      height: 82,
+      borderRadius: 41,
       alignItems:
         "center",
       justifyContent:
         "center",
       backgroundColor:
-        "#4C46C8",
+        "#F47A24",
     },
 
     avatarText: {
-      color: "#FFFDF8",
-      fontSize: 22,
+      color: "#FFFFFF",
+      fontSize: 27,
       fontWeight: "900",
     },
 
+    avatarImage: {
+      width: "100%",
+      height: "100%",
+      borderRadius: 41,
+    },
+
     profileName: {
-      color: "#191A18",
-      fontSize: 22,
+      color: "#1B1B1B",
+      fontSize: 25,
       fontFamily: "Georgia",
       fontWeight: "500",
     },
 
     profileNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
 
+    heroEditButton: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(229, 255, 249, 0.12)",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+    },
+
+    heroEditIcon: {
+      width: 18,
+      height: 18,
+    },
+
+    heroBio: {
+      color: canalDynamicColors.text,
+      fontSize: 14,
+      lineHeight: 21,
+      maxWidth: 320,
+    },
+
+    heroBioEmpty: {
+      color: canalDynamicColors.muted,
+      fontStyle: "italic",
+    },
+
     handle: {
-      color: "#6D6B64",
+      color: "#817972",
       fontSize: 13,
       marginTop: 3,
     },
@@ -2529,8 +2784,8 @@ const styles =
     },
 
     visibilityBadgeText: {
-      color: "#4C46C8",
-      fontSize: 10,
+      color: "#F47A24",
+      fontSize: 11,
       fontWeight: "900",
     },
 
@@ -2538,6 +2793,9 @@ const styles =
       width: "100%",
       flexDirection: "row",
       marginTop: 2,
+      paddingTop: 14,
+      borderTopWidth: 1,
+      borderTopColor: canalDynamicColors.line,
     },
 
     stat: {
@@ -2547,15 +2805,81 @@ const styles =
     },
 
     statValue: {
-      color: "#191A18",
-      fontSize: 19,
+      color: "#1B1B1B",
+      fontSize: 21,
       fontWeight: "900",
     },
 
     statLabel: {
-      color: "#6D6B64",
+      color: "#817972",
       fontSize: 10,
       marginTop: 3,
+    },
+
+    favoriteActivityRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      minHeight: 34,
+      paddingTop: 2,
+    },
+
+    favoriteActivityLabel: {
+      color: canalDynamicColors.mint,
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+
+    favoriteActivityValue: {
+      flex: 1,
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+    },
+
+    profileActions: {
+      flexDirection: "row",
+      gap: 10,
+    },
+
+    profileAction: {
+      flex: 1,
+      minHeight: 126,
+      justifyContent: "flex-end",
+      padding: 15,
+      borderRadius: 22,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.surface,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+    },
+
+    profileActionIconSurface: {
+      width: 44,
+      height: 44,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 15,
+      backgroundColor: canalDynamicColors.elevated,
+      marginBottom: 12,
+    },
+
+    profileActionIcon: {
+      width: 20,
+      height: 20,
+    },
+
+    profileActionTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+
+    profileActionCopy: {
+      color: canalDynamicColors.muted,
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 4,
     },
 
     connectionCard: {
@@ -2564,7 +2888,7 @@ const styles =
         canalDynamicColors.line,
       borderRadius: 22,
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       padding: 17,
       gap: 16,
     },
@@ -2580,19 +2904,19 @@ const styles =
     },
 
     connectionTitle: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 17,
       fontWeight: "900",
     },
 
     connectionSubtitle: {
-      color: "#6D6B64",
+      color: "#817972",
       fontSize: 10,
       marginTop: 3,
     },
 
     discoverText: {
-      color: "#4C46C8",
+      color: "#F47A24",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -2616,7 +2940,7 @@ const styles =
     },
 
     connectionValue: {
-      color: "#191A18",
+      color: "#241B16",
       fontSize: 17,
       fontWeight: "900",
       fontVariant: [
@@ -2624,8 +2948,13 @@ const styles =
       ],
     },
 
+    connectionIcon: {
+      width: 19,
+      height: 19,
+    },
+
     connectionLabel: {
-      color: "#6D6B64",
+      color: "#817972",
       fontSize: 9,
       fontWeight: "800",
       marginTop: 4,
@@ -2685,7 +3014,7 @@ const styles =
       gap: 11,
       borderRadius: 15,
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       padding: 10,
     },
 
@@ -2705,6 +3034,11 @@ const styles =
       color: "#07130B",
       fontSize: 17,
       fontWeight: "900",
+    },
+
+    playlistSymbol: {
+      width: 20,
+      height: 20,
     },
 
     playlistCopy: {
@@ -2734,9 +3068,61 @@ const styles =
       lineHeight: 17,
     },
 
+    avatarEditor: {
+      minHeight: 96,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      padding: 14,
+      borderRadius: 20,
+      backgroundColor: canalDynamicColors.surface,
+    },
+
+    avatarPreview: {
+      width: 76,
+      height: 76,
+      borderRadius: 24,
+      overflow: "hidden",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#4C46C8",
+    },
+
+    avatarEditorCopy: {
+      flex: 1,
+      gap: 4,
+    },
+
+    avatarEditorTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+
+    avatarEditorHelp: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+    },
+
+    avatarAction: {
+      alignSelf: "flex-start",
+      minHeight: 44,
+      justifyContent: "center",
+      paddingHorizontal: 14,
+      borderRadius: 16,
+      backgroundColor: canalDynamicColors.elevated,
+    },
+
+    avatarActionText: {
+      color: canalDynamicColors.text,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
     infoCard: {
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       borderRadius: 22,
       padding: 18,
     },
@@ -2783,19 +3169,19 @@ const styles =
     },
 
     collectionCreateButton: {
-      minHeight: 48,
+      minHeight: 38,
       alignItems:
         "center",
       justifyContent:
         "center",
       borderRadius: 13,
       backgroundColor:
-        "#4C46C8",
+        "#F47A24",
       paddingHorizontal: 16,
     },
 
     collectionCreateText: {
-      color: "#FFFDF8",
+      color: "#FFFFFF",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -2815,7 +3201,7 @@ const styles =
         canalDynamicColors.line,
       borderRadius: 18,
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       paddingHorizontal: 16,
       paddingVertical: 13,
     },
@@ -2825,20 +3211,20 @@ const styles =
     },
 
     collectionTitle: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 14,
       fontWeight: "900",
     },
 
     collectionMeta: {
-      color: "#6D6B64",
+      color: "#817972",
       fontSize: 10,
       lineHeight: 15,
       marginTop: 4,
     },
 
     collectionArrow: {
-      color: "#4C46C8",
+      color: "#F47A24",
       fontSize: 24,
       marginLeft: 10,
     },
@@ -2868,7 +3254,7 @@ const styles =
       borderCurve:
         "continuous",
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       padding: 16,
     },
 
@@ -2893,7 +3279,7 @@ const styles =
     },
 
     manageTemplateButton: {
-      minHeight: 48,
+      minHeight: 46,
       alignItems:
         "center",
       justifyContent:
@@ -2913,19 +3299,19 @@ const styles =
     },
 
     snapshotSectionTitle: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 19,
       fontWeight: "900",
     },
 
     snapshotSectionSubtitle: {
-      color: "#6D6B64",
+      color: "#817972",
       fontSize: 11,
       marginTop: 3,
     },
 
     snapshotCount: {
-      color: "#4C46C8",
+      color: "#F47A24",
       fontSize: 13,
       fontWeight: "900",
     },
@@ -2936,18 +3322,18 @@ const styles =
         canalDynamicColors.line,
       borderRadius: 20,
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       padding: 18,
     },
 
     snapshotEmptyTitle: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 15,
       fontWeight: "900",
     },
 
     snapshotEmptyText: {
-      color: "#6D6B64",
+      color: "#746D67",
       fontSize: 12,
       lineHeight: 18,
       marginTop: 5,
@@ -2958,14 +3344,14 @@ const styles =
         "flex-start",
       borderRadius: 12,
       backgroundColor:
-        "#4C46C8",
+        "#F47A24",
       paddingHorizontal: 12,
       paddingVertical: 9,
       marginTop: 12,
     },
 
     snapshotActionText: {
-      color: "#FFFDF8",
+      color: "#FFFFFF",
       fontSize: 11,
       fontWeight: "900",
     },
@@ -2978,24 +3364,24 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#4C46C8",
+        "#F47A24",
     },
 
     editButtonText: {
-      color: "#FFFDF8",
+      color: "#FFFFFF",
       fontSize: 15,
       fontWeight: "900",
     },
 
     editCard: {
       backgroundColor:
-        "#FFFDF8",
+        "#FFFFFF",
       borderRadius: 22,
       padding: 18,
     },
 
     editTitle: {
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 19,
       fontWeight: "900",
       marginBottom: 2,
@@ -3017,7 +3403,7 @@ const styles =
       borderRadius: 15,
       backgroundColor:
         canalDynamicColors.elevated,
-      color: "#191A18",
+      color: "#1B1B1B",
       fontSize: 14,
       paddingHorizontal: 14,
       paddingVertical: 12,
@@ -3052,7 +3438,7 @@ const styles =
     },
 
     publicDescription: {
-      color: "#6D6B64",
+      color: "#817972",
       fontSize: 11,
       lineHeight: 17,
       marginTop: 4,
@@ -3092,11 +3478,11 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#4C46C8",
+        "#F47A24",
     },
 
     saveText: {
-      color: "#FFFDF8",
+      color: "#FFFFFF",
       fontSize: 14,
       fontWeight: "900",
     },
