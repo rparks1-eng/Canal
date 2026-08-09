@@ -31,6 +31,8 @@ import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
 
+import { ProfileAvatar } from "../../components/profile-avatar";
+
 import {
   useReconnectReload,
 } from "../../hooks/use-reconnect-reload";
@@ -2011,23 +2013,11 @@ function CreatorReleaseDetailContent(
                                 styles.disabledButton,
                             ]}
                           >
-                            <View
-                              style={
-                                styles.avatar
-                              }
-                            >
-                              <Text
-                                style={
-                                  styles.avatarText
-                                }
-                              >
-                                {displayName
-                                  .charAt(
-                                    0,
-                                  )
-                                  .toUpperCase()}
-                              </Text>
-                            </View>
+                            <ProfileAvatar
+                              avatarUrl={contributor.profile?.avatarUrl}
+                              displayName={displayName}
+                              size={46}
+                            />
 
                             <View
                               style={

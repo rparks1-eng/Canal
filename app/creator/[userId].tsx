@@ -6,6 +6,8 @@ import {
   useState,
 } from "react";
 
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+
 import {
   ActivityIndicator,
   Alert,
@@ -29,6 +31,8 @@ import {
 import {
   PublicSnapshotGrid,
 } from "../../components/PublicSnapshotCard";
+
+import { ProfileAvatar } from "../../components/profile-avatar";
 
 import {
   RecoveryNotice,
@@ -112,32 +116,6 @@ function safeBack(): void {
   router.replace(
     "/(tabs)/explore" as never,
   );
-}
-
-function creatorInitials(
-  profile: PublicCanalProfile,
-): string {
-  return profile.displayName
-    .trim()
-    .split(
-      /\s+/,
-    )
-    .filter(
-      Boolean,
-    )
-    .slice(
-      0,
-      2,
-    )
-    .map(
-      (word) =>
-        word
-          .charAt(
-            0,
-          )
-          .toUpperCase(),
-    )
-    .join("") || "C";
 }
 
 export default function CreatorProfileScreen() {
@@ -888,19 +866,6 @@ function CreatorProfileScreenContent(
       }
     };
 
-  const initials =
-    useMemo(
-      () =>
-        profile
-          ? creatorInitials(
-              profile,
-            )
-          : "C",
-      [
-        profile,
-      ],
-    );
-
   const save =
     async (
       scene: PublicCanalScene,
@@ -1545,19 +1510,11 @@ function CreatorProfileScreenContent(
                 styles.profileCard
               }
             >
-              <View
-                style={
-                  styles.avatar
-                }
-              >
-                <Text
-                  style={
-                    styles.avatarText
-                  }
-                >
-                  {initials}
-                </Text>
-              </View>
+              <ProfileAvatar
+                avatarUrl={profile.avatarUrl}
+                displayName={profile.displayName}
+                size={80}
+              />
 
               <Text
                 style={
@@ -2934,4 +2891,3 @@ const styles =
     },
 
   });
-import { canalDynamicColors } from "../../theme/canal-dynamic-colors";

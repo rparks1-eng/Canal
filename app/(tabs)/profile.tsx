@@ -40,6 +40,7 @@ import {
   PublicSnapshotGrid,
 } from "../../components/PublicSnapshotCard";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
+import { ProfileAvatar } from "../../components/profile-avatar";
 
 import {
   CanalHeaderActions,
@@ -1290,20 +1291,6 @@ function ProfileScreenContent() {
       }
     };
 
-  const avatarText =
-    useMemo(
-      () =>
-        initials(
-          displayProfile
-            ?.displayName ??
-            "",
-        ),
-      [
-        displayProfile
-          ?.displayName,
-      ],
-    );
-
   if (
     loading &&
     !displayProfile &&
@@ -1415,18 +1402,11 @@ function ProfileScreenContent() {
           >
             <View style={styles.identitySummary}>
               <View style={styles.avatarFrame}>
-                <View style={styles.avatar}>
-                  {displayProfile.avatarUrl ? (
-                    <Image
-                      accessibilityLabel={`${displayProfile.displayName} profile picture`}
-                      contentFit="cover"
-                      source={displayProfile.avatarUrl}
-                      style={styles.avatarImage}
-                    />
-                  ) : (
-                    <Text style={styles.avatarText}>{avatarText}</Text>
-                  )}
-                </View>
+                <ProfileAvatar
+                  avatarUrl={displayProfile.avatarUrl}
+                  displayName={displayProfile.displayName}
+                  size={88}
+                />
               </View>
 
               <View style={styles.identityCopy}>

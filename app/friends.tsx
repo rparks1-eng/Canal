@@ -21,6 +21,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ProfileAvatar } from "../components/profile-avatar";
+
 import { useAuth } from "../providers/auth-provider";
 
 import {
@@ -555,21 +557,11 @@ function FriendsScreenContent() {
                           styles.pressed,
                       ]}
                     >
-                      <View
-                        style={
-                          styles.avatar
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.avatarText
-                          }
-                        >
-                          {profileInitials(
-                            user,
-                          )}
-                        </Text>
-                      </View>
+                      <ProfileAvatar
+                        avatarUrl={user.avatarUrl}
+                        displayName={user.displayName}
+                        size={57}
+                      />
 
                       <View
                         style={
@@ -703,26 +695,6 @@ function FriendsScreenContent() {
         )}
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function profileInitials(
-  profile: DiscoverableProfile,
-): string {
-  return (
-    profile.displayName
-      .trim()
-      .split(/\s+/u)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map(
-        (part) =>
-          part
-            .charAt(0)
-            .toUpperCase(),
-      )
-      .join("") ||
-    "C"
   );
 }
 

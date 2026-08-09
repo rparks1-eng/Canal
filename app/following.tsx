@@ -24,6 +24,8 @@ import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
+import { ProfileAvatar } from "../components/profile-avatar";
+
 import {
   captureProfileSocialAccount,
   loadProfileConnectionSummary,
@@ -59,35 +61,6 @@ function firstParam(
         ""
     : value ??
         "";
-}
-
-function connectionInitials(
-  connection: ProfileConnection,
-): string {
-  return (
-    connection.profile.displayName
-      .trim()
-      .split(
-        /\s+/,
-      )
-      .filter(
-        Boolean,
-      )
-      .slice(
-        0,
-        2,
-      )
-      .map(
-        (word) =>
-          word
-            .charAt(
-              0,
-            )
-            .toUpperCase(),
-      )
-      .join("") ||
-    "C"
-  );
 }
 
 export default function FollowingScreen() {
@@ -915,21 +888,11 @@ export default function FollowingScreen() {
                         styles.profileButton
                       }
                     >
-                      <View
-                        style={
-                          styles.avatar
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.avatarText
-                          }
-                        >
-                          {connectionInitials(
-                            connection,
-                          )}
-                        </Text>
-                      </View>
+                      <ProfileAvatar
+                        avatarUrl={profile.avatarUrl}
+                        displayName={profile.displayName}
+                        size={56}
+                      />
 
                       <View
                         style={

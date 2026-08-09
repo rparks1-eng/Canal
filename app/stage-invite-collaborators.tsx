@@ -37,6 +37,8 @@ import {
   canalDynamicColors,
 } from "../theme/canal-dynamic-colors";
 
+import { ProfileAvatar } from "../components/profile-avatar";
+
 function first(
   value: string | string[] | undefined,
 ): string {
@@ -298,19 +300,11 @@ export default function StageInviteCollaboratorsScreen() {
                   }
                   style={styles.friend}
                 >
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {friend.profile.displayName
-                        .split(/\s+/u)
-                        .map(
-                          (part) =>
-                            part[0],
-                        )
-                        .join("")
-                        .slice(0, 2)
-                        .toUpperCase()}
-                    </Text>
-                  </View>
+                  <ProfileAvatar
+                    avatarUrl={friend.profile.avatarUrl}
+                    displayName={friend.profile.displayName}
+                    size={48}
+                  />
                   <View style={styles.grow}>
                     <Text style={styles.name}>
                       {friend.profile.displayName}
