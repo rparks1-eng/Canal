@@ -96,70 +96,70 @@ function selectedSymbol(symbol: string): string {
 function navigationAtmosphere(pathname: string, isDark: boolean) {
   if (pathname.startsWith("/explore") || pathname.startsWith("/snapshots")) {
     return {
-      glass: isDark ? "rgba(53, 28, 65, 0.88)" : "rgba(116, 67, 105, 0.78)",
+      glass: isDark ? "rgba(53, 28, 65, 0.88)" : "rgba(252, 239, 247, 0.92)",
       accent: "#FFD1C9",
       accentText: "#522F54",
-      selected: "#FFE6E1",
-      border: "rgba(255, 223, 218, 0.34)",
+      selected: isDark ? "#FFE6E1" : "#65385E",
+      border: isDark ? "rgba(255, 223, 218, 0.34)" : "rgba(82, 47, 84, 0.22)",
       shadow: "0 15px 42px rgba(44, 17, 57, 0.38)",
     };
   }
   if (pathname.startsWith("/library")) {
     return {
-      glass: isDark ? "rgba(7, 48, 65, 0.88)" : "rgba(24, 92, 100, 0.78)",
+      glass: isDark ? "rgba(7, 48, 65, 0.88)" : "rgba(229, 250, 248, 0.92)",
       accent: "#D6FFF5",
       accentText: "#143F52",
-      selected: "#C7FFF2",
-      border: "rgba(213, 255, 246, 0.34)",
+      selected: isDark ? "#C7FFF2" : "#164B55",
+      border: isDark ? "rgba(213, 255, 246, 0.34)" : "rgba(20, 63, 82, 0.20)",
       shadow: "0 15px 42px rgba(2, 39, 50, 0.36)",
     };
   }
   if (pathname.startsWith("/settings") || pathname.startsWith("/appearance") || pathname.startsWith("/data-controls") || pathname.startsWith("/music-services")) {
     return {
-      glass: isDark ? "rgba(24, 41, 70, 0.9)" : "rgba(72, 83, 139, 0.78)",
+      glass: isDark ? "rgba(24, 41, 70, 0.9)" : "rgba(239, 241, 255, 0.93)",
       accent: "#E3DBFF",
       accentText: "#36345F",
-      selected: "#ECE7FF",
-      border: "rgba(229, 222, 255, 0.34)",
+      selected: isDark ? "#ECE7FF" : "#373C68",
+      border: isDark ? "rgba(229, 222, 255, 0.34)" : "rgba(54, 52, 95, 0.20)",
       shadow: "0 15px 42px rgba(27, 30, 73, 0.38)",
     };
   }
   if (pathname.startsWith("/scenes") || pathname.startsWith("/scene-") || pathname.startsWith("/public-scene") || pathname.startsWith("/now-playing")) {
     return {
-      glass: isDark ? "rgba(8, 43, 68, 0.9)" : "rgba(23, 95, 107, 0.8)",
+      glass: isDark ? "rgba(8, 43, 68, 0.9)" : "rgba(231, 247, 252, 0.93)",
       accent: "#C8FFF3",
       accentText: "#0C4157",
-      selected: "#D8FFF7",
-      border: "rgba(203, 255, 244, 0.36)",
+      selected: isDark ? "#D8FFF7" : "#124658",
+      border: isDark ? "rgba(203, 255, 244, 0.36)" : "rgba(12, 65, 87, 0.20)",
       shadow: "0 15px 42px rgba(2, 33, 55, 0.38)",
     };
   }
   if (pathname.startsWith("/live-stage") || pathname.startsWith("/stage-") || pathname.startsWith("/create-stage") || pathname.startsWith("/managed-stages")) {
     return {
-      glass: isDark ? "rgba(52, 39, 76, 0.9)" : "rgba(105, 71, 112, 0.8)",
+      glass: isDark ? "rgba(52, 39, 76, 0.9)" : "rgba(250, 240, 249, 0.93)",
       accent: "#FFD4C5",
       accentText: "#57374B",
-      selected: "#FFE2D8",
-      border: "rgba(255, 218, 204, 0.34)",
+      selected: isDark ? "#FFE2D8" : "#5D3B55",
+      border: isDark ? "rgba(255, 218, 204, 0.34)" : "rgba(87, 55, 75, 0.20)",
       shadow: "0 15px 42px rgba(43, 25, 65, 0.38)",
     };
   }
   if (pathname.startsWith("/profile") || pathname.startsWith("/creator") || pathname.startsWith("/friend")) {
     return {
-      glass: isDark ? "rgba(12, 45, 64, 0.9)" : "rgba(28, 92, 94, 0.8)",
+      glass: isDark ? "rgba(12, 45, 64, 0.9)" : "rgba(230, 249, 247, 0.93)",
       accent: "#C8FFF3",
       accentText: "#0D4354",
-      selected: "#D8FFF7",
-      border: "rgba(203, 255, 244, 0.34)",
+      selected: isDark ? "#D8FFF7" : "#134957",
+      border: isDark ? "rgba(203, 255, 244, 0.34)" : "rgba(13, 67, 84, 0.20)",
       shadow: "0 15px 42px rgba(2, 34, 49, 0.38)",
     };
   }
   return {
-    glass: isDark ? "rgba(3, 30, 50, 0.9)" : "rgba(24, 82, 93, 0.8)",
+    glass: isDark ? "rgba(3, 30, 50, 0.9)" : "rgba(230, 248, 249, 0.93)",
     accent: "#D9FFF6",
     accentText: "#0C4157",
-    selected: "#C8FFF3",
-    border: "rgba(217, 255, 246, 0.34)",
+    selected: isDark ? "#C8FFF3" : "#124756",
+    border: isDark ? "rgba(217, 255, 246, 0.34)" : "rgba(12, 65, 87, 0.20)",
     shadow: "0 15px 42px rgba(0, 29, 44, 0.38)",
   };
 }
@@ -203,6 +203,9 @@ export default function CanalBottomNav() {
   const createSurfaceStyle = useAnimatedStyle(() => ({ backgroundColor: accentColor.value }));
   const selectedTextStyle = useAnimatedStyle(() => ({ color: selectedColor.value }));
   const selectedMarkerStyle = useAnimatedStyle(() => ({ backgroundColor: selectedColor.value }));
+  const neutralForeground = isDark
+    ? "rgba(232, 250, 247, 0.74)"
+    : "rgba(16, 54, 67, 0.72)";
 
   const navigationItems = (
     <View style={styles.itemsRow}>
@@ -228,12 +231,12 @@ export default function CanalBottomNav() {
           >
             <Animated.View style={[styles.symbolContainer, item.primary && styles.primarySymbolContainer, item.primary && createSurfaceStyle]}>
               <Ionicons
-                color={item.primary ? "rgba(7, 39, 51, 0.82)" : selected ? "rgba(244, 255, 252, 0.94)" : "rgba(232, 250, 247, 0.58)"}
+                color={item.primary ? "rgba(7, 39, 51, 0.86)" : selected ? navAtmosphere.selected : neutralForeground}
                 name={(selected ? selectedSymbol(item.symbol) : item.symbol) as never}
                 size={item.primary ? 26 : 21}
               />
             </Animated.View>
-            <Animated.Text numberOfLines={1} style={[styles.label, selected && [styles.selectedLabel, selectedTextStyle]]}>
+            <Animated.Text numberOfLines={1} style={[styles.label, { color: neutralForeground }, selected && [styles.selectedLabel, selectedTextStyle]]}>
               {item.label}
             </Animated.Text>
             {selected ? <Animated.View pointerEvents="none" style={[styles.selectedMarker, selectedMarkerStyle]} /> : null}
@@ -342,7 +345,6 @@ const styles =
     label: {
       position: "absolute",
       bottom: 6,
-      color: "rgba(232, 250, 247, 0.58)",
       fontSize: 10,
       fontWeight: "600",
     },

@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -374,7 +375,7 @@ function FriendProfileContent() {
           <Ionicons
             name="person-outline"
             size={42}
-            color="#ff9a50"
+            color={canalDynamicColors.gold}
           />
 
           <Text
@@ -467,7 +468,7 @@ function FriendProfileContent() {
             <Ionicons
               name="ban-outline"
               size={38}
-              color="#ff9187"
+              color={canalDynamicColors.danger}
             />
           </View>
 
@@ -600,7 +601,7 @@ function FriendProfileContent() {
             <Ionicons
               name="lock-closed-outline"
               size={38}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
           </View>
 
@@ -748,7 +749,7 @@ function FriendProfileContent() {
             <Ionicons
               name="globe-outline"
               size={12}
-              color="#9ff3b5"
+              color={canalDynamicColors.mint}
             />
 
             <Text
@@ -826,7 +827,7 @@ function FriendProfileContent() {
             <Ionicons
               name="share-social-outline"
               size={19}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
 
             <Text
@@ -953,7 +954,7 @@ function FriendProfileContent() {
           <Ionicons
             name="share-social-outline"
             size={20}
-            color="#17110c"
+            color={canalDynamicColors.text}
           />
 
           <Text
@@ -1097,7 +1098,7 @@ function getInitials(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F3EFE5",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -1126,20 +1127,20 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 16,
     fontWeight: "700",
   },
 
   headerAction: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 14,
     fontWeight: "700",
     textAlign: "right",
@@ -1155,14 +1156,14 @@ const styles = StyleSheet.create({
 
   centeredText: {
     maxWidth: 320,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 14,
     lineHeight: 21,
     textAlign: "center",
   },
 
   notFoundTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 23,
     fontWeight: "700",
     textAlign: "center",
@@ -1200,7 +1201,7 @@ const styles = StyleSheet.create({
   },
 
   avatarText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 34,
     fontWeight: "800",
   },
@@ -1215,7 +1216,7 @@ const styles = StyleSheet.create({
 
   username: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 14,
   },
 
@@ -1231,7 +1232,7 @@ const styles = StyleSheet.create({
   },
 
   publicBadgeText: {
-    color: "#9ff3b5",
+    color: canalDynamicColors.mint,
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.7,
@@ -1263,7 +1264,7 @@ const styles = StyleSheet.create({
   followingButton: {
     borderWidth: 1,
     borderColor: "#39413c",
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   followButtonText: {
@@ -1290,7 +1291,7 @@ const styles = StyleSheet.create({
   },
 
   shareText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 13,
     fontWeight: "800",
   },
@@ -1299,13 +1300,13 @@ const styles = StyleSheet.create({
     gap: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 21,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   cardTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 19,
     fontWeight: "700",
   },
@@ -1315,7 +1316,7 @@ const styles = StyleSheet.create({
   },
 
   informationLabel: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -1334,7 +1335,7 @@ const styles = StyleSheet.create({
   },
 
   chipText: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -1344,7 +1345,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 20,
     fontWeight: "700",
   },
@@ -1358,7 +1359,7 @@ const styles = StyleSheet.create({
   },
 
   emptyText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
   },
 
@@ -1368,9 +1369,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 12,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 17,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   sceneArtwork: {
@@ -1384,7 +1385,7 @@ const styles = StyleSheet.create({
   },
 
   sceneArtworkText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -1394,14 +1395,14 @@ const styles = StyleSheet.create({
   },
 
   sceneName: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "700",
   },
 
   sceneSubtitle: {
     marginTop: 4,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
   },
 
@@ -1430,11 +1431,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#39413c",
     borderRadius: 15,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   secondaryButtonText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -1450,7 +1451,7 @@ const styles = StyleSheet.create({
   },
 
   blockButtonText: {
-    color: "#ff9187",
+    color: canalDynamicColors.danger,
     fontSize: 13,
     fontWeight: "700",
   },

@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useCallback,
   useEffect,
@@ -3280,8 +3281,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     header: {
@@ -3301,13 +3301,12 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       marginRight: 12,
     },
 
     backText: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
@@ -3319,13 +3318,13 @@ const styles =
 
     title: {
       fontFamily: "Georgia",
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 28,
       fontWeight: "900",
     },
 
     subtitle: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 20,
       marginTop: 4,
@@ -3341,8 +3340,7 @@ const styles =
       flexDirection: "row",
       alignItems:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 17,
     },
@@ -3371,13 +3369,13 @@ const styles =
     },
 
     serviceName: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
     },
 
     serviceStatus: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 17,
       marginTop: 3,
@@ -3459,8 +3457,7 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderWidth: 1,
       borderColor:
         "#D8D0CA",
@@ -3486,14 +3483,13 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 16,
       padding: 14,
     },
 
     errorTitle: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -3506,21 +3502,20 @@ const styles =
     },
 
     explanationCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 20,
       padding: 17,
     },
 
     explanationTitle: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
       marginBottom: 8,
     },
 
     explanationText: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 19,
       marginTop: 3,
@@ -3541,13 +3536,13 @@ const styles =
     },
 
     logoutButtonText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 14,
       fontWeight: "900",
     },
 
     redirectText: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       lineHeight: 14,
       textAlign: "center",

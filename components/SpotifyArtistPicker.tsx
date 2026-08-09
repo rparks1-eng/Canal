@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   useEffect,
@@ -386,7 +387,7 @@ export default function SpotifyArtistPicker({
                   <Ionicons
                     name="close"
                     size={18}
-                    color="#ff9187"
+                    color={canalDynamicColors.danger}
                   />
                 </Pressable>
               </View>
@@ -399,14 +400,14 @@ export default function SpotifyArtistPicker({
         <Ionicons
           name="search-outline"
           size={20}
-          color="#8f9891"
+          color={canalDynamicColors.muted}
         />
 
         <TextInput
           value={query}
           onChangeText={setQuery}
           placeholder="Search artists"
-          placeholderTextColor="#777f79"
+          placeholderTextColor={canalDynamicColors.muted}
           autoCapitalize="words"
           style={styles.searchInput}
         />
@@ -427,7 +428,7 @@ export default function SpotifyArtistPicker({
             <Ionicons
               name="close-circle"
               size={20}
-              color="#777f79"
+              color={canalDynamicColors.muted}
             />
           </Pressable>
         ) : null}
@@ -620,7 +621,7 @@ export default function SpotifyArtistPicker({
           <Ionicons
             name="add-circle-outline"
             size={19}
-            color="#ff9a50"
+            color={canalDynamicColors.gold}
           />
 
           <Text
@@ -649,20 +650,20 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 15,
     fontWeight: "700",
   },
 
   helperText: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 16,
   },
 
   count: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -706,7 +707,7 @@ const styles = StyleSheet.create({
   },
 
   selectedInitial: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 15,
     fontWeight: "800",
   },
@@ -748,7 +749,7 @@ const styles = StyleSheet.create({
 
   searchInput: {
     flex: 1,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
   },
 
@@ -762,13 +763,13 @@ const styles = StyleSheet.create({
   },
 
   errorTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 13,
     fontWeight: "700",
   },
 
   errorText: {
-    color: "#bca99b",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 17,
   },
@@ -790,9 +791,9 @@ const styles = StyleSheet.create({
   resultsCard: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 17,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   resultRow: {
@@ -828,7 +829,7 @@ const styles = StyleSheet.create({
   },
 
   resultInitial: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 15,
     fontWeight: "800",
   },
@@ -839,7 +840,7 @@ const styles = StyleSheet.create({
   },
 
   resultName: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -871,7 +872,7 @@ const styles = StyleSheet.create({
   },
 
   selectedButtonText: {
-    color: "#9ff3b5",
+    color: canalDynamicColors.mint,
   },
 
   manualButton: {
@@ -887,7 +888,7 @@ const styles = StyleSheet.create({
   },
 
   manualButtonText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "700",
   },

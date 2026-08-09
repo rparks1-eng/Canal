@@ -8,7 +8,7 @@ const light = {
   muted: "#496875",
   line: "rgba(16, 58, 76, 0.16)",
   glass: "rgba(241, 255, 252, 0.68)",
-  accent: "#526ED0",
+  accent: "#4A64C5",
   mint: "#167866",
   gold: "#8B6118",
   danger: "#A93640",

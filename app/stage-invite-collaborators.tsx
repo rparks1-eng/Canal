@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     backgroundColor: canalDynamicColors.mint,
   },
   primaryText: {
-    color: "#0C1714",
+    color: canalDynamicColors.text,
     fontSize: 15,
     fontWeight: "900",
   },

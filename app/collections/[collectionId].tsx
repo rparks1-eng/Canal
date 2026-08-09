@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useCallback,
   useState,
@@ -667,8 +668,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
     header: {
       flexDirection: "row",
@@ -687,16 +687,15 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 21,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
     },
     headerTitle: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 22,
       fontWeight: "400",
@@ -718,40 +717,38 @@ const styles =
     },
     hero: {
       borderRadius: 24,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 20,
     },
     publicBadge: {
       alignSelf:
         "flex-start",
       borderRadius: 9,
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       paddingHorizontal: 9,
       paddingVertical: 5,
     },
     publicBadgeText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.5,
     },
     title: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 28,
       fontWeight: "400",
       marginTop: 12,
     },
     description: {
-      color: "#5F5751",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
       marginTop: 8,
     },
     count: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 11,
       fontWeight: "900",
       marginTop: 13,
@@ -783,13 +780,13 @@ const styles =
       letterSpacing: 0.7,
     },
     releaseText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
       marginTop: 3,
     },
     releaseArrow: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 28,
     },
     planEventButton: {
@@ -809,19 +806,19 @@ const styles =
       paddingVertical: 12,
     },
     planEventEyebrow: {
-      color: "#FFB781",
+      color: canalDynamicColors.gold,
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
     planEventText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
       marginTop: 3,
     },
     planEventArrow: {
-      color: "#FFB781",
+      color: canalDynamicColors.gold,
       fontSize: 28,
     },
     editButton: {
@@ -836,7 +833,7 @@ const styles =
         "#F47A24",
     },
     editText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 11,
       fontWeight: "900",
     },
@@ -872,8 +869,7 @@ const styles =
       borderColor:
         "#EEE5DE",
       borderRadius: 18,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 12,
     },
     position: {
@@ -884,12 +880,11 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 11,
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       marginRight: 11,
     },
     positionText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -897,17 +892,17 @@ const styles =
       flex: 1,
     },
     sceneName: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },
     sceneMeta: {
-      color: "#817972",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
     },
     arrow: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 24,
       marginLeft: 8,
     },
@@ -935,7 +930,7 @@ const styles =
       marginTop: 11,
     },
     retryText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 10,
       fontWeight: "900",
     },

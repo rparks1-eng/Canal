@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -277,14 +278,14 @@ function SearchScreenContent() {
           <Ionicons
             name="search-outline"
             size={21}
-            color="#8f9891"
+            color={canalDynamicColors.muted}
           />
 
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Search Canal"
-            placeholderTextColor="#777f79"
+            placeholderTextColor={canalDynamicColors.muted}
             autoFocus={
               !initialQuery
             }
@@ -304,7 +305,7 @@ function SearchScreenContent() {
               <Ionicons
                 name="close-circle"
                 size={21}
-                color="#777f79"
+                color={canalDynamicColors.muted}
               />
             </Pressable>
           ) : null}
@@ -360,7 +361,7 @@ function SearchScreenContent() {
                 <Ionicons
                   name="search"
                   size={30}
-                  color="#ff9a50"
+                  color={canalDynamicColors.gold}
                 />
               </View>
 
@@ -386,7 +387,7 @@ function SearchScreenContent() {
               <Ionicons
                 name="search-outline"
                 size={31}
-                color="#ff9a50"
+                color={canalDynamicColors.gold}
               />
 
               <Text
@@ -672,7 +673,7 @@ function SearchResultRow({
         <Ionicons
           name={icon}
           size={22}
-          color="#ff9a50"
+          color={canalDynamicColors.gold}
         />
       </View>
 
@@ -717,7 +718,7 @@ function SearchResultRow({
       <Ionicons
         name="chevron-forward"
         size={19}
-        color="#717a73"
+        color={canalDynamicColors.muted}
       />
     </Pressable>
   );
@@ -869,7 +870,7 @@ function firstParam(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F3EFE5",
+    backgroundColor: "transparent",
   },
 
   header: {
@@ -891,13 +892,13 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 16,
     fontWeight: "700",
@@ -917,12 +918,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#5d3b24",
     borderRadius: 18,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   searchInput: {
     flex: 1,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 15,
   },
 
@@ -953,7 +954,7 @@ const styles = StyleSheet.create({
   },
 
   retryButtonText: {
-    color: "#787DFF",
+    color: canalDynamicColors.lavender,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -985,7 +986,7 @@ const styles = StyleSheet.create({
 
   introTitle: {
     marginTop: 13,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 19,
     fontWeight: "700",
   },
@@ -993,7 +994,7 @@ const styles = StyleSheet.create({
   introText: {
     maxWidth: 330,
     marginTop: 8,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -1010,14 +1011,14 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 18,
     fontWeight: "700",
   },
 
   emptyText: {
     maxWidth: 320,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -1034,13 +1035,13 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 19,
     fontWeight: "700",
   },
 
   sectionCount: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -1048,9 +1049,9 @@ const styles = StyleSheet.create({
   resultList: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 20,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   resultRow: {
@@ -1078,14 +1079,14 @@ const styles = StyleSheet.create({
   },
 
   resultTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "700",
   },
 
   resultSubtitle: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
   },
 

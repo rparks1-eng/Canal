@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useRef,
   useState,
@@ -230,7 +231,7 @@ export default function ForgotPasswordScreen() {
               setEmail
             }
             placeholder="you@example.com"
-            placeholderTextColor="#6D6B64"
+            placeholderTextColor={canalDynamicColors.muted}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={
@@ -306,7 +307,7 @@ export default function ForgotPasswordScreen() {
                 setRecoveryLink
               }
               placeholder="Paste the complete https:// link"
-              placeholderTextColor="#6D6B64"
+              placeholderTextColor={canalDynamicColors.muted}
               autoCapitalize="none"
               autoCorrect={
                 false
@@ -403,8 +404,7 @@ const styles =
 
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     content: {
@@ -422,26 +422,25 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
     },
 
     title: {
       fontFamily: "Georgia",
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 29,
       fontWeight: "900",
       marginTop: 34,
     },
 
     subtitle: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 21,
       marginTop: 8,
@@ -449,7 +448,7 @@ const styles =
     },
 
     label: {
-      color: "#5E5752",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "800",
       marginBottom: 7,
@@ -461,9 +460,8 @@ const styles =
       borderColor:
         "#E2DAD4",
       borderRadius: 15,
-      backgroundColor:
-        "#FFFFFF",
-      color: "#191A18",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       fontSize: 15,
       paddingHorizontal: 14,
       paddingVertical: 12,
@@ -488,21 +486,20 @@ const styles =
     },
 
     simulatorCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 20,
       padding: 17,
       marginTop: 24,
     },
 
     simulatorTitle: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
 
     simulatorText: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 19,
       marginTop: 7,
@@ -529,14 +526,13 @@ const styles =
     },
 
     secondaryButtonText: {
-      color: "#4C46C8",
+      color: canalDynamicColors.lavender,
       fontSize: 14,
       fontWeight: "900",
     },
 
     messageBox: {
-      backgroundColor:
-        "#EAF9EF",
+      backgroundColor: canalDynamicColors.successSurface,
       borderRadius: 15,
       padding: 14,
       marginTop: 16,
@@ -549,15 +545,14 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 15,
       padding: 14,
       marginTop: 16,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },

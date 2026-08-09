@@ -2458,8 +2458,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     header: {
@@ -2481,19 +2480,18 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFDF8",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
     },
 
     headerTitle: {
       fontFamily: "Georgia",
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
@@ -2518,8 +2516,7 @@ const styles =
     profileCard: {
       alignItems:
         "center",
-      backgroundColor:
-        "#FFFDF8",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 24,
       padding: 22,
     },
@@ -2527,8 +2524,7 @@ const styles =
     blockedFallbackCard: {
       alignItems:
         "center",
-      backgroundColor:
-        "#FFFDF8",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 24,
       padding: 22,
       marginTop: 14,
@@ -2553,7 +2549,7 @@ const styles =
     },
 
     name: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
       marginTop: 12,
@@ -2567,15 +2563,14 @@ const styles =
 
     verifiedBadge: {
       borderRadius: 9,
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       paddingHorizontal: 9,
       paddingVertical: 5,
       marginTop: 8,
     },
 
     verifiedBadgeText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.5,
@@ -2590,7 +2585,7 @@ const styles =
     },
 
     blockedFallbackText: {
-      color: "#4F4944",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
       textAlign: "center",
@@ -2599,22 +2594,21 @@ const styles =
 
     activitiesBox: {
       width: "100%",
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
       borderRadius: 16,
       padding: 14,
       marginTop: 15,
     },
 
     activitiesLabel: {
-      color: "#A09993",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.6,
     },
 
     activitiesText: {
-      color: "#4F4944",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
       marginTop: 5,
@@ -2642,7 +2636,7 @@ const styles =
     },
 
     connectionValue: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
       fontVariant: [
@@ -2651,7 +2645,7 @@ const styles =
     },
 
     connectionLabel: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "800",
       marginTop: 4,
@@ -2671,7 +2665,7 @@ const styles =
     },
 
     relationshipStatusText: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "700",
     },
@@ -2717,12 +2711,11 @@ const styles =
       borderColor:
         "#E6B8B4",
       borderRadius: 15,
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
     },
 
     blockButtonText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -2738,8 +2731,7 @@ const styles =
       borderColor:
         "#E6B8B4",
       borderRadius: 15,
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       marginTop: 12,
     },
 
@@ -2764,13 +2756,13 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 19,
       fontWeight: "900",
     },
 
     sceneCount: {
-      color: "#4C46C8",
+      color: canalDynamicColors.lavender,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -2789,8 +2781,7 @@ const styles =
       borderColor:
         "#EEE5DE",
       borderRadius: 19,
-      backgroundColor:
-        "#FFFDF8",
+      backgroundColor: canalDynamicColors.surface,
       paddingHorizontal: 16,
       paddingVertical: 14,
     },
@@ -2800,27 +2791,27 @@ const styles =
     },
 
     collectionTitle: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
 
     collectionDescription: {
-      color: "#6F6862",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 16,
       marginTop: 4,
     },
 
     collectionMeta: {
-      color: "#4C46C8",
+      color: canalDynamicColors.lavender,
       fontSize: 9,
       fontWeight: "900",
       marginTop: 7,
     },
 
     collectionArrow: {
-      color: "#4C46C8",
+      color: canalDynamicColors.lavender,
       fontSize: 26,
       marginLeft: 12,
     },
@@ -2833,8 +2824,7 @@ const styles =
       flexDirection: "row",
       alignItems:
         "center",
-      backgroundColor:
-        "#FFFDF8",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 19,
       padding: 13,
     },
@@ -2854,13 +2844,12 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       marginRight: 11,
     },
 
     sceneArtworkText: {
-      color: "#4C46C8",
+      color: canalDynamicColors.lavender,
       fontSize: 21,
       fontWeight: "900",
     },
@@ -2870,13 +2859,13 @@ const styles =
     },
 
     sceneName: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
     },
@@ -2907,21 +2896,19 @@ const styles =
     },
 
     emptyCard: {
-      backgroundColor:
-        "#FFFDF8",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 19,
       padding: 18,
     },
 
     emptyText: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 19,
     },
 
     successBox: {
-      backgroundColor:
-        "#EAF9EF",
+      backgroundColor: canalDynamicColors.successSurface,
       borderRadius: 15,
       padding: 13,
       marginTop: 14,
@@ -2934,15 +2921,14 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 15,
       padding: 13,
       marginTop: 14,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },

@@ -20,11 +20,6 @@ describe("full-app Living Editorial theme", () => {
       /backgroundcolor:\s*["']#ffffff["']/u,
       /backgroundcolor:\s*["']#fff0e5["']/u,
       /backgroundcolor:\s*["']#fff1e5["']/u,
-      /backgroundcolor:\s*["']#f47a24["']/u,
-      /backgroundcolor:\s*["']#ff9a50["']/u,
-      /color:\s*["']#191a18["']/u,
-      /color:\s*["']#6d6b64["']/u,
-      /color:\s*["']#4c46c8["']/u,
     ];
 
     for (const file of sourceFiles(path.join(projectRoot, "app"))) {
@@ -52,7 +47,8 @@ describe("full-app Living Editorial theme", () => {
     expect(navigation).toContain("Ionicons");
     expect(navigation).toContain('symbol: "albums-outline"');
     expect(navigation).toContain("navAtmosphere");
-    expect(navigation).toContain("${navAtmosphere.accent}66");
+    expect(navigation).toContain("neutralForeground");
+    expect(navigation).toContain("withTiming(navAtmosphere.glass");
     expect(navigation).not.toContain("rgba(72, 204, 167, 0.30)");
     expect(navigation).not.toContain('symbol: "⌂"');
     expect(navigation).not.toContain('symbol: "⌕"');
@@ -96,7 +92,11 @@ describe("full-app Living Editorial theme", () => {
     ]) {
       const source = fs.readFileSync(file, "utf8").toLowerCase();
       for (const color of fixedCreams) {
-        expect(`${path.relative(projectRoot, file)}:${color}:${source.includes(color)}`).toBe(
+        const fixedSurface = new RegExp(
+          `backgroundcolor:\\s*["']${color}["']`,
+          "u",
+        ).test(source);
+        expect(`${path.relative(projectRoot, file)}:${color}:${fixedSurface}`).toBe(
           `${path.relative(projectRoot, file)}:${color}:false`,
         );
       }

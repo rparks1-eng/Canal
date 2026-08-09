@@ -823,7 +823,7 @@ function SnapshotDetailContent() {
           <Ionicons
             name="camera-outline"
             size={42}
-            color="#ff9a50"
+            color={canalDynamicColors.gold}
           />
 
           <Text
@@ -1009,7 +1009,7 @@ function SnapshotDetailContent() {
             <Ionicons
               name="cloud-offline-outline"
               size={20}
-              color="#ffb27a"
+              color={canalDynamicColors.gold}
             />
 
             <View
@@ -1095,7 +1095,7 @@ function SnapshotDetailContent() {
               onPress={() => { void submitComment(); }}
               style={({ pressed }) => [styles.postCommentButton, (!commentText.trim() || socialAction === "comment") && styles.disabled, pressed && styles.pressed]}
             >
-              {socialAction === "comment" ? <ActivityIndicator color="#17110c" /> : <Ionicons name="arrow-up" size={20} color="#17110c" />}
+              {socialAction === "comment" ? <ActivityIndicator color={canalDynamicColors.text} /> : <Ionicons name="arrow-up" size={20} color={canalDynamicColors.text} />}
             </Pressable>
           </View>
         </View>
@@ -1185,7 +1185,7 @@ function SnapshotDetailContent() {
               value={mood}
               onChangeText={setMood}
               placeholder="Calm · reflective"
-              placeholderTextColor="#777f79"
+              placeholderTextColor={canalDynamicColors.muted}
               maxLength={120}
               style={styles.input}
             />
@@ -1203,7 +1203,7 @@ function SnapshotDetailContent() {
               value={note}
               onChangeText={setNote}
               placeholder="Why did this moment matter?"
-              placeholderTextColor="#777f79"
+              placeholderTextColor={canalDynamicColors.muted}
               multiline
               textAlignVertical="top"
               maxLength={500}
@@ -1340,7 +1340,7 @@ function SnapshotDetailContent() {
           <Ionicons
             name="share-social-outline"
             size={19}
-            color="#ff9a50"
+            color={canalDynamicColors.gold}
           />
 
           <Text
@@ -1453,13 +1453,13 @@ const styles = StyleSheet.create({
   },
 
   notFoundTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 24,
     fontWeight: "700",
   },
 
   notFoundText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 14,
     textAlign: "center",
   },
@@ -1495,20 +1495,20 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: canalDynamicColors.muted,
     fontSize: 14,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#F6F1E7",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 22,
     fontWeight: "400",
   },
 
   headerAction: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 14,
     fontWeight: "700",
     textAlign: "right",
@@ -1767,7 +1767,7 @@ const styles = StyleSheet.create({
 
   heading: {
     marginTop: 10,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 28,
     fontWeight: "700",
     textAlign: "center",
@@ -1775,7 +1775,7 @@ const styles = StyleSheet.create({
 
   dateText: {
     marginTop: 7,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
   },
 
@@ -1805,14 +1805,14 @@ const styles = StyleSheet.create({
   },
 
   templateProvenanceLabel: {
-    color: "#8F9891",
+    color: canalDynamicColors.muted,
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 0.8,
   },
 
   templateProvenanceName: {
-    color: "#FFFFFF",
+    color: canalDynamicColors.text,
     fontSize: 15,
     fontWeight: "900",
   },
@@ -1833,7 +1833,7 @@ const styles = StyleSheet.create({
   },
 
   syncWarningTitle: {
-    color: "#ffb27a",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -1858,7 +1858,7 @@ const styles = StyleSheet.create({
 
   readOnlyText: {
     flex: 1,
-    color: "#b8d8c1",
+    color: canalDynamicColors.muted,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -1869,9 +1869,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 15,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 20,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   trackIcon: {
@@ -1889,7 +1889,7 @@ const styles = StyleSheet.create({
   },
 
   trackLabel: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 8,
     fontWeight: "900",
     letterSpacing: 0.8,
@@ -1897,7 +1897,7 @@ const styles = StyleSheet.create({
 
   trackTitle: {
     marginTop: 5,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
@@ -1929,9 +1929,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 19,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   visibilityCopy: {
@@ -1940,14 +1940,14 @@ const styles = StyleSheet.create({
   },
 
   visibilityTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "700",
   },
 
   visibilityText: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 16,
   },
@@ -1956,9 +1956,9 @@ const styles = StyleSheet.create({
     gap: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 21,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   field: {
@@ -1966,7 +1966,7 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -1978,7 +1978,7 @@ const styles = StyleSheet.create({
     borderColor: "#39413c",
     borderRadius: 15,
     backgroundColor: "#111613",
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
   },
 
@@ -2026,13 +2026,13 @@ const styles = StyleSheet.create({
   },
 
   soundscapeButtonText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 13,
     fontWeight: "700",
   },
 
   onSoundscapeButtonText: {
-    color: "#9ff3b5",
+    color: canalDynamicColors.mint,
   },
 
   secondaryButton: {
@@ -2044,11 +2044,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#39413c",
     borderRadius: 16,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   secondaryButtonText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -2064,7 +2064,7 @@ const styles = StyleSheet.create({
   },
 
   deleteButtonText: {
-    color: "#ff9187",
+    color: canalDynamicColors.danger,
     fontSize: 13,
     fontWeight: "700",
   },

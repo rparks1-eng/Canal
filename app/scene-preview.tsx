@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   use,
   useCallback,
@@ -788,7 +789,7 @@ export default function ScenePreviewScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="light" />
+      <StatusBar style="auto" />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.content}
@@ -854,7 +855,7 @@ export default function ScenePreviewScreen() {
                 onChangeText={setCatalogQuery}
                 onSubmitEditing={() => void searchSpotify()}
                 placeholder="Song or artist"
-                placeholderTextColor="#77817C"
+                placeholderTextColor={canalDynamicColors.muted}
                 returnKeyType="search"
                 style={styles.searchInput}
                 value={catalogQuery}
@@ -949,7 +950,7 @@ export default function ScenePreviewScreen() {
                       style={styles.mismatchButton}
                     >
                       <Ionicons
-                        color="#72D8C4"
+                        color={canalDynamicColors.mint}
                         name="sync-outline"
                         size={14}
                       />
@@ -970,7 +971,7 @@ export default function ScenePreviewScreen() {
                         )}
                         style={[styles.iconButton, (controlsBusy || index === 0) && styles.disabled]}
                       >
-                            <Ionicons color="#A5AEA9" name="chevron-up" size={16} />
+                            <Ionicons color={canalDynamicColors.muted} name="chevron-up" size={16} />
                       </Pressable>
                       <Pressable
                         accessibilityLabel={`Move ${signal.track.name} down`}
@@ -984,7 +985,7 @@ export default function ScenePreviewScreen() {
                         )}
                         style={[styles.iconButton, (controlsBusy || index === visiblePreview.trackSignals.length - 1) && styles.disabled]}
                       >
-                            <Ionicons color="#A5AEA9" name="chevron-down" size={16} />
+                            <Ionicons color={canalDynamicColors.muted} name="chevron-down" size={16} />
                       </Pressable>
                     </View>
                     <Pressable
@@ -997,7 +998,7 @@ export default function ScenePreviewScreen() {
                       onPress={() => void replaceTrack(signal.track.id, signal.track.name, false)}
                       style={[styles.trashButton, controlsBusy && styles.disabled]}
                     >
-                      <Ionicons color="#D92D20" name="trash" size={16} />
+                      <Ionicons color={canalDynamicColors.danger} name="trash" size={16} />
                     </Pressable>
                   </View>
                 </View>
@@ -1068,7 +1069,7 @@ export default function ScenePreviewScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#080B0C",
+    backgroundColor: canalDynamicColors.baseCanvas,
   },
   content: {
     flexGrow: 1,
@@ -1078,7 +1079,7 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   title: {
-    color: "#F7F4EC",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 34,
     fontWeight: "700",
@@ -1092,12 +1093,12 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   noticeTitle: {
-    color: "#72D8C4",
+    color: canalDynamicColors.mint,
     fontSize: 17,
     fontWeight: "800",
   },
   noticeText: {
-    color: "#B8C3BE",
+    color: canalDynamicColors.muted,
     fontSize: 16,
     lineHeight: 23,
   },
@@ -1118,7 +1119,7 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   previewTitle: {
-    color: "#F7F4EC",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 24,
     fontWeight: "700",
@@ -1138,7 +1139,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   sectionTitle: {
-    color: "#F7F4EC",
+    color: canalDynamicColors.text,
     fontSize: 17,
     fontWeight: "900",
   },
@@ -1150,7 +1151,7 @@ const styles = StyleSheet.create({
     borderColor: "#39433F",
     borderRadius: 14,
     borderWidth: 1,
-    color: "#F7F4EC",
+    color: canalDynamicColors.text,
     fontSize: 16,
     minHeight: 48,
     paddingHorizontal: 14,
@@ -1234,7 +1235,7 @@ const styles = StyleSheet.create({
     minHeight: 32,
   },
   mismatchButtonText: {
-    color: "#72D8C4",
+    color: canalDynamicColors.mint,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -1253,7 +1254,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   secondaryButtonText: {
-    color: "#72D8C4",
+    color: canalDynamicColors.mint,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -1264,7 +1265,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   trackTitle: {
-    color: "#F7F4EC",
+    color: canalDynamicColors.text,
     fontSize: 15,
     fontWeight: "800",
   },
@@ -1273,7 +1274,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   matchText: {
-    color: "#72D8C4",
+    color: canalDynamicColors.mint,
     fontSize: 13,
     lineHeight: 17,
   },

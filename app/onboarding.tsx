@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useEffect,
   useState,
@@ -206,7 +207,7 @@ export default function OnboardingScreen() {
         "bottom",
       ]}
     >
-      <StatusBar style="dark" />
+      <StatusBar style="auto" />
 
       <View
         style={
@@ -1120,8 +1121,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     screen: {
@@ -1140,7 +1140,7 @@ const styles =
     },
 
     brand: {
-      color: "#4C46C8",
+      color: canalDynamicColors.lavender,
       fontSize: 24,
       fontWeight: "900",
       letterSpacing: -1,
@@ -1178,7 +1178,7 @@ const styles =
     },
 
     progressLabel: {
-      color: "#A49B94",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "800",
       letterSpacing: 0.8,
@@ -1188,7 +1188,7 @@ const styles =
     },
 
     progressLabelActive: {
-      color: "#473C34",
+      color: canalDynamicColors.text,
     },
 
     content: {
@@ -1203,7 +1203,7 @@ const styles =
     },
 
     eyebrow: {
-      color: "#4C46C8",
+      color: canalDynamicColors.lavender,
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 1.8,
@@ -1212,7 +1212,7 @@ const styles =
 
     title: {
       fontFamily: "Georgia",
-      color: "#1A1816",
+      color: canalDynamicColors.text,
       fontSize: 33,
       lineHeight: 39,
       fontWeight: "900",
@@ -1221,7 +1221,7 @@ const styles =
     },
 
     description: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       lineHeight: 23,
       marginTop: 12,
@@ -1239,8 +1239,7 @@ const styles =
       borderColor:
         "#EBDDD3",
       borderRadius: 28,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     canalDisc: {
@@ -1256,7 +1255,7 @@ const styles =
     },
 
     canalDiscText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 44,
       fontWeight: "900",
       marginTop: -6,
@@ -1342,7 +1341,7 @@ const styles =
     },
 
     scenePreviewName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "800",
       marginTop: 6,
@@ -1397,13 +1396,13 @@ const styles =
     },
 
     mixLabel: {
-      color: "#8F8882",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "700",
     },
 
     mixValue: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "800",
       marginTop: 3,
@@ -1439,19 +1438,18 @@ const styles =
       borderColor:
         "#E8DED6",
       borderRadius: 16,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 12,
     },
 
     detailNumber: {
-      color: "#4C46C8",
+      color: canalDynamicColors.lavender,
       fontSize: 10,
       fontWeight: "900",
     },
 
     detailText: {
-      color: "#4E4640",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 15,
       fontWeight: "800",
@@ -1482,7 +1480,7 @@ const styles =
     },
 
     exploreVisualMark: {
-      color: "#4C46C8",
+      color: canalDynamicColors.lavender,
       fontSize: 82,
       fontWeight: "900",
       lineHeight: 90,
@@ -1529,7 +1527,7 @@ const styles =
     },
 
     exportName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 21,
       lineHeight: 26,
       fontWeight: "900",
@@ -1567,8 +1565,7 @@ const styles =
       borderTopWidth: 1,
       borderTopColor:
         "#EEE3DB",
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
       paddingHorizontal: 24,
       paddingTop: 14,
       paddingBottom: 8,
@@ -1601,8 +1598,7 @@ const styles =
       borderColor:
         "#DDD0C6",
       borderRadius: 16,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     secondaryButtonText: {
@@ -1620,7 +1616,7 @@ const styles =
     },
 
     backLinkText: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "700",
     },

@@ -1092,12 +1092,11 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
     },
@@ -1128,8 +1127,7 @@ const styles =
     hero: {
       alignItems:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 24,
       padding: 22,
     },
@@ -1142,18 +1140,17 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     artworkText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 35,
       fontWeight: "900",
     },
 
     sceneName: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
       textAlign: "center",
@@ -1161,14 +1158,13 @@ const styles =
     },
 
     sceneMeta: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       marginTop: 6,
     },
 
     creatorButton: {
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 13,
       paddingHorizontal: 13,
       paddingVertical: 9,
@@ -1176,7 +1172,7 @@ const styles =
     },
 
     creatorText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1214,7 +1210,7 @@ const styles =
     },
 
     saveButtonText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -1251,8 +1247,7 @@ const styles =
     },
 
     successBox: {
-      backgroundColor:
-        "#EAF9EF",
+      backgroundColor: canalDynamicColors.successSurface,
       borderRadius: 16,
       padding: 14,
     },
@@ -1282,14 +1277,13 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 16,
       padding: 14,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -1299,22 +1293,20 @@ const styles =
       alignSelf:
         "flex-start",
       borderRadius: 11,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       paddingHorizontal: 12,
       paddingVertical: 9,
       marginTop: 10,
     },
 
     connectText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 10,
       fontWeight: "900",
     },
 
     detailCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 18,
     },
@@ -1340,14 +1332,14 @@ const styles =
     },
 
     detailLabel: {
-      color: "#817972",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "800",
     },
 
     detailValue: {
       maxWidth: "68%",
-      color: "#322E2B",
+      color: canalDynamicColors.text,
       fontSize: 11,
       lineHeight: 17,
       textAlign: "right",
@@ -1382,7 +1374,7 @@ const styles =
     },
 
     trackTitle: {
-      color: "#282421",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },

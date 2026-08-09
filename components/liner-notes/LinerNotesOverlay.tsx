@@ -133,11 +133,9 @@ export function LinerNotesOverlay({
         />
         <Animated.View
           accessibilityViewIsModal
-          style={[
-            styles.sheet,
-            { transform: [{ translateY }] },
-          ]}
+          style={{ transform: [{ translateY }] }}
         >
+          <View style={styles.sheet}>
           <View style={styles.handle} />
           <View style={styles.sheetHeader}>
             <View style={styles.sheetHeaderCopy}>
@@ -263,6 +261,7 @@ export function LinerNotesOverlay({
                 {fullNotes ? "Quick context" : "Full liner notes"}
               </Text>
             </Pressable>
+          </View>
           </View>
         </Animated.View>
       </View>

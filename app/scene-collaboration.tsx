@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useCallback,
   useEffect,
@@ -910,7 +911,7 @@ export default function SceneCollaborationScreen() {
                     setHandle
                   }
                   placeholder="@handle"
-                  placeholderTextColor="#91877E"
+                  placeholderTextColor={canalDynamicColors.muted}
                   style={
                     styles.input
                   }
@@ -1032,7 +1033,7 @@ export default function SceneCollaborationScreen() {
                     setSceneName
                   }
                   placeholder="Scene name"
-                  placeholderTextColor="#91877E"
+                  placeholderTextColor={canalDynamicColors.muted}
                   style={
                     styles.input
                   }
@@ -1047,7 +1048,7 @@ export default function SceneCollaborationScreen() {
                     setSceneActivity
                   }
                   placeholder="Activity"
-                  placeholderTextColor="#91877E"
+                  placeholderTextColor={canalDynamicColors.muted}
                   style={
                     styles.input
                   }
@@ -1482,8 +1483,7 @@ const styles =
         "center",
       borderRadius:
         15,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
@@ -1525,8 +1525,7 @@ const styles =
         "#E6D8CE",
       borderRadius:
         22,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     centerCard: {
@@ -1536,8 +1535,7 @@ const styles =
       padding: 28,
       borderRadius:
         22,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     cardEyebrow: {
@@ -1644,8 +1642,7 @@ const styles =
         "#D8C8BC",
       borderRadius:
         15,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     secondaryButtonText: {

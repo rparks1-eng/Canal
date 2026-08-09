@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useMemo,
 } from "react";
@@ -1311,14 +1312,14 @@ const styles =
     },
 
     eyebrow: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1,
     },
 
     heading: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
       lineHeight: 29,
@@ -1344,7 +1345,7 @@ const styles =
     },
 
     fixtureNoticeText: {
-      color: "#6D625A",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.5,
@@ -1382,13 +1383,13 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
     },
 
     groupLabel: {
-      color: "#756A62",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 0.5,
@@ -1411,19 +1412,17 @@ const styles =
       borderColor:
         "#E4D8CE",
       borderRadius: 14,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     activeFilter: {
       borderColor:
         "#F47A24",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     filterText: {
-      color: "#6F655D",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       fontWeight: "800",
     },
@@ -1453,14 +1452,14 @@ const styles =
     },
 
     panelTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
       lineHeight: 25,
     },
 
     body: {
-      color: "#625A54",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 19,
     },
@@ -1469,8 +1468,7 @@ const styles =
       gap: 6,
       padding: 14,
       borderRadius: 16,
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     privacyTitle: {
@@ -1486,8 +1484,7 @@ const styles =
       borderColor:
         "#EEE2D8",
       borderRadius: 20,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     actionRow: {
@@ -1514,8 +1511,7 @@ const styles =
     },
 
     secondaryButton: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     selectedButton: {
@@ -1560,8 +1556,7 @@ const styles =
       borderColor:
         "#EEE2D8",
       borderRadius: 16,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     sceneCopy: {
@@ -1570,13 +1565,13 @@ const styles =
     },
 
     sceneTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#81776F",
+      color: canalDynamicColors.muted,
       fontSize: 11,
     },
 
@@ -1601,8 +1596,7 @@ const styles =
       color: "#326646",
       fontSize: 10,
       fontWeight: "900",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     resultRow: {
@@ -1618,8 +1612,7 @@ const styles =
       borderColor:
         "#E3E9E5",
       borderRadius: 15,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     winner: {
@@ -1641,20 +1634,19 @@ const styles =
       borderColor:
         "#EEE2D8",
       borderRadius: 22,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     centerBody: {
       maxWidth: 360,
-      color: "#625A54",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 21,
       textAlign: "center",
     },
 
     emptyIcon: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 42,
       lineHeight: 46,
     },

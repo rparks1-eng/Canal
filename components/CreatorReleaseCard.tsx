@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   router,
 } from "expo-router";
@@ -260,8 +261,7 @@ const styles =
       borderRadius: 22,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     pressed: {
@@ -289,8 +289,7 @@ const styles =
       paddingHorizontal: 9,
       paddingVertical: 5,
       borderRadius: 9,
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     openBadge: {
@@ -304,7 +303,7 @@ const styles =
     },
 
     statusText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.6,
@@ -320,7 +319,7 @@ const styles =
 
     ownerLabel: {
       flexShrink: 1,
-      color: "#8B8179",
+      color: canalDynamicColors.muted,
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.5,
@@ -328,14 +327,14 @@ const styles =
     },
 
     title: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 21,
       fontWeight: "900",
       lineHeight: 26,
     },
 
     description: {
-      color: "#625A54",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 19,
     },
@@ -351,13 +350,13 @@ const styles =
 
     detail: {
       flex: 1,
-      color: "#81776F",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 16,
     },
 
     arrow: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 28,
       lineHeight: 30,
     },

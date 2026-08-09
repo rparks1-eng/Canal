@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useEffect,
   useRef,
@@ -403,7 +404,7 @@ export default function ResetPasswordScreen() {
                   setPassword
                 }
                 placeholder="New password"
-                placeholderTextColor="#6D6B64"
+                placeholderTextColor={canalDynamicColors.muted}
                 secureTextEntry
                 textContentType="newPassword"
                 autoCapitalize="none"
@@ -423,7 +424,7 @@ export default function ResetPasswordScreen() {
                   setConfirmation
                 }
                 placeholder="Confirm new password"
-                placeholderTextColor="#6D6B64"
+                placeholderTextColor={canalDynamicColors.muted}
                 secureTextEntry
                 textContentType="newPassword"
                 autoCapitalize="none"
@@ -505,8 +506,7 @@ const styles =
 
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     content: {
@@ -519,7 +519,7 @@ const styles =
     },
 
     checkingText: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       textAlign: "center",
       marginTop: 15,
@@ -527,13 +527,13 @@ const styles =
 
     title: {
       fontFamily: "Georgia",
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 29,
       fontWeight: "900",
     },
 
     subtitle: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 21,
       marginTop: 8,
@@ -546,9 +546,8 @@ const styles =
       borderColor:
         "#E2DAD4",
       borderRadius: 15,
-      backgroundColor:
-        "#FFFFFF",
-      color: "#191A18",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       fontSize: 15,
       paddingHorizontal: 14,
     },
@@ -577,7 +576,7 @@ const styles =
     },
 
     errorTitle: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 25,
       fontWeight: "900",
       textAlign: "center",
@@ -592,15 +591,14 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 15,
       padding: 14,
       marginTop: 15,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },

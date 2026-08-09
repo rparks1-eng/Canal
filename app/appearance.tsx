@@ -145,7 +145,7 @@ export default function AppearanceScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: canalDynamicColors.canvas },
+  screen: { flex: 1, backgroundColor: "transparent" },
   content: { gap: 22, paddingHorizontal: 20, paddingBottom: 120 },
   back: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   header: { gap: 7 },
@@ -167,4 +167,3 @@ const styles = StyleSheet.create({
   previewAction: { minHeight: 50, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: canalDynamicColors.mint, marginTop: 5 },
   previewActionText: { color: canalDynamicColors.onAccent, fontSize: 15, fontWeight: "900" },
 });
-

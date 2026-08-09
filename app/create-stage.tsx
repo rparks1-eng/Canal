@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import * as Haptics from "expo-haptics";
 import {
   Stack,
@@ -708,8 +709,7 @@ export default function CreateStageScreen() {
           headerShadowVisible:
             false,
           headerStyle: {
-            backgroundColor:
-              "#FFF9F4",
+            backgroundColor: canalDynamicColors.surface,
           },
           headerTintColor:
             "#2B211B",
@@ -1011,7 +1011,7 @@ export default function CreateStageScreen() {
                     setName
                   }
                   placeholder="Late Night Drive Live"
-                  placeholderTextColor="#A99F97"
+                  placeholderTextColor={canalDynamicColors.muted}
                   maxLength={80}
                   returnKeyType="next"
                   style={
@@ -1025,7 +1025,7 @@ export default function CreateStageScreen() {
                     setActivity
                   }
                   placeholder="What is everyone doing?"
-                  placeholderTextColor="#A99F97"
+                  placeholderTextColor={canalDynamicColors.muted}
                   maxLength={120}
                   returnKeyType="done"
                   style={
@@ -1273,8 +1273,7 @@ const styles =
   StyleSheet.create({
     screen: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     content: {
@@ -1318,7 +1317,7 @@ const styles =
 
     heading: {
       maxWidth: 350,
-      color: "#211A16",
+      color: canalDynamicColors.text,
       fontSize: 32,
       lineHeight: 37,
       fontWeight: "900",
@@ -1344,18 +1343,17 @@ const styles =
       borderColor: "#E9DED5",
       borderRadius: 24,
       borderCurve: "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     emptyTitle: {
-      color: "#28201B",
+      color: canalDynamicColors.text,
       fontSize: 21,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#776D66",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       lineHeight: 21,
     },
@@ -1387,8 +1385,7 @@ const styles =
       borderColor: "#E5DAD2",
       borderRadius: 21,
       borderCurve: "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     sceneCardSelected: {
@@ -1423,12 +1420,11 @@ const styles =
     radioSelected: {
       borderWidth: 5,
       borderColor: "#F47A24",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     sceneName: {
-      color: "#29211C",
+      color: canalDynamicColors.text,
       fontSize: 18,
       lineHeight: 22,
       fontWeight: "900",
@@ -1455,9 +1451,8 @@ const styles =
       borderColor: "#E2D8D0",
       borderRadius: 17,
       borderCurve: "continuous",
-      backgroundColor:
-        "#FFFFFF",
-      color: "#251D19",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       fontSize: 16,
     },
 
@@ -1492,24 +1487,23 @@ const styles =
     },
 
     visibilityOptionSelected: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       boxShadow:
         "0 3px 10px rgba(58, 38, 24, 0.08)",
     },
 
     visibilityLabel: {
-      color: "#776D66",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       fontWeight: "800",
     },
 
     visibilityLabelSelected: {
-      color: "#D35F14",
+      color: canalDynamicColors.gold,
     },
 
     visibilityDetail: {
-      color: "#998E86",
+      color: canalDynamicColors.muted,
       fontSize: 11,
     },
 
@@ -1534,7 +1528,7 @@ const styles =
     },
 
     queueTitle: {
-      color: "#302620",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
@@ -1570,8 +1564,7 @@ const styles =
       width: 9,
       height: 9,
       borderRadius: 5,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     startButtonText: {

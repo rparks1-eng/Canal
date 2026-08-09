@@ -914,8 +914,8 @@ export default function ExploreScreen() {
 
         <Animated.View
           entering={FadeInUp.duration(260).delay(45)}
-          style={styles.liveFeature}
         >
+          <View style={styles.liveFeature}>
           <Text style={styles.featureKicker}>LIVE ON CANAL</Text>
           <Text style={styles.featureTitle}>Step into the room.</Text>
           <Text style={styles.featureText}>
@@ -929,6 +929,7 @@ export default function ExploreScreen() {
           >
             <Text style={styles.featureButtonText}>Browse Live Stages</Text>
           </Pressable>
+          </View>
         </Animated.View>
 
         <Animated.View entering={FadeInUp.duration(260).delay(80)}>
@@ -942,7 +943,7 @@ export default function ExploreScreen() {
           placeholder={activeContent === "stages"
             ? "Search Stages, hosts, activities, songs, or artists"
             : "Search moments, Scenes, creators, moods, or artists"}
-          placeholderTextColor="#9A938C"
+          placeholderTextColor={canalDynamicColors.muted}
           autoCapitalize="none"
           autoCorrect={
             false
@@ -1285,10 +1286,10 @@ const styles =
       minHeight: 168,
       overflow: "hidden",
       borderWidth: 1,
-      borderColor: "rgba(255, 225, 220, 0.27)",
+      borderColor: canalDynamicColors.line,
       borderRadius: 27,
       borderCurve: "continuous",
-      backgroundColor: "rgba(79, 47, 102, 0.62)",
+      backgroundColor: canalDynamicColors.surface,
       padding: 18,
       justifyContent: "flex-end",
       boxShadow: "0 18px 42px rgba(35, 15, 55, 0.22)",
@@ -1333,7 +1334,7 @@ const styles =
       alignSelf: "flex-start",
       justifyContent: "center",
       borderRadius: 15,
-      backgroundColor: "rgba(244, 255, 252, 0.92)",
+      backgroundColor: canalDynamicColors.elevated,
       paddingHorizontal: 16,
       marginTop: 15,
     },
@@ -1361,7 +1362,7 @@ const styles =
     },
 
     eyebrow: {
-      color: "rgba(222, 255, 249, 0.82)",
+      color: canalDynamicColors.text,
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 2.1,
@@ -1369,14 +1370,14 @@ const styles =
     },
 
     title: {
-      color: "#F7FFFD",
+      color: canalDynamicColors.text,
       fontSize: 38,
       fontWeight: "500",
       letterSpacing: -1.1,
     },
 
     subtitle: {
-      color: "rgba(239,255,250,0.72)",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       marginTop: 3,
       lineHeight: 19,
@@ -1387,14 +1388,13 @@ const styles =
       borderColor:
         "#E2DAD4",
       borderRadius: 14,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       paddingHorizontal: 13,
       paddingVertical: 10,
     },
 
     refreshText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1405,9 +1405,8 @@ const styles =
       borderColor:
         canalDynamicColors.line,
       borderRadius: 18,
-      backgroundColor:
-        "#FFFFFF",
-      color: "#1B1B1B",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "500",
       letterSpacing: -0.2,
@@ -1440,18 +1439,17 @@ const styles =
     },
 
     segmentButtonActive: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     segmentText: {
-      color: "#817972",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "800",
     },
 
     segmentTextActive: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
     },
 
     segmentCount: {
@@ -1469,8 +1467,7 @@ const styles =
     },
 
     segmentCountActive: {
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       color: "#123F54",
     },
 
@@ -1495,9 +1492,9 @@ const styles =
       minHeight: 44,
       justifyContent: "center",
       borderWidth: 1,
-      borderColor: "rgba(255, 226, 220, 0.22)",
+      borderColor: canalDynamicColors.line,
       borderRadius: 18,
-      backgroundColor: "rgba(45, 29, 65, 0.4)",
+      backgroundColor: canalDynamicColors.surface,
       paddingHorizontal: 13,
     },
 
@@ -1520,10 +1517,10 @@ const styles =
       overflow: "hidden",
       minHeight: 260,
       borderWidth: 1,
-      borderColor: "rgba(255, 226, 220, 0.25)",
+      borderColor: canalDynamicColors.line,
       borderRadius: 27,
       borderCurve: "continuous",
-      backgroundColor: "rgba(71, 46, 100, 0.62)",
+      backgroundColor: canalDynamicColors.surface,
       padding: 18,
       boxShadow: "0 18px 42px rgba(35, 15, 55, 0.2)",
     },
@@ -1603,9 +1600,9 @@ const styles =
       alignItems: "center",
       gap: 11,
       borderWidth: 1,
-      borderColor: "rgba(228, 255, 250, 0.16)",
+      borderColor: canalDynamicColors.line,
       borderRadius: 18,
-      backgroundColor: "rgba(10, 34, 59, 0.42)",
+      backgroundColor: canalDynamicColors.surface,
       padding: 10,
       marginTop: 18,
     },
@@ -1629,7 +1626,7 @@ const styles =
     },
 
     stageTrackKicker: {
-      color: "#C8FFF3",
+      color: canalDynamicColors.mint,
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 1.3,
@@ -1655,8 +1652,7 @@ const styles =
     },
 
     card: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 15,
     },
@@ -1679,13 +1675,12 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       marginRight: 13,
     },
 
     artworkText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 25,
       fontWeight: "900",
     },
@@ -1695,13 +1690,13 @@ const styles =
     },
 
     sceneName: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 17,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 4,
     },
@@ -1754,7 +1749,7 @@ const styles =
     },
 
     creatorName: {
-      color: "#322E2B",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -1796,22 +1791,20 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       borderWidth: 1,
       borderColor: canalDynamicColors.line,
     },
 
     loadingText: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       marginTop: 12,
     },
 
     emptyCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 22,
       borderWidth: 1,
@@ -1819,21 +1812,20 @@ const styles =
     },
 
     emptyTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
       marginTop: 7,
     },
 
     successBox: {
-      backgroundColor:
-        "#EAF9EF",
+      backgroundColor: canalDynamicColors.successSurface,
       borderRadius: 15,
       padding: 13,
       marginBottom: 13,
@@ -1846,15 +1838,14 @@ const styles =
     },
 
     errorBox: {
-      backgroundColor:
-        "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       borderRadius: 15,
       padding: 13,
       marginBottom: 13,
     },
 
     errorText: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },

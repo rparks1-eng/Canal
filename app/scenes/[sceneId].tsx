@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   use,
   useCallback,
@@ -802,7 +803,7 @@ export default function SceneDetailScreen() {
               styles.pressed,
           ]}
         >
-          <Ionicons color="#F7FFFC" name="chevron-back" size={24} />
+          <Ionicons color={canalDynamicColors.text} name="chevron-back" size={24} />
         </Pressable>
 
         <Pressable
@@ -1418,7 +1419,7 @@ const styles =
     },
 
     missingTitle: {
-      color: "#181818",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
       marginBottom: 16,
@@ -1498,14 +1499,14 @@ const styles =
     },
 
     firstUpKicker: {
-      color: "#72D8C4",
+      color: canalDynamicColors.mint,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.8,
     },
 
     firstUpTitle: {
-      color: "#F7FFFC",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
       marginTop: 3,
@@ -1548,7 +1549,7 @@ const styles =
     },
 
     heroName: {
-      color: "#F7FFFC",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 36,
       fontWeight: "500",
@@ -1580,7 +1581,7 @@ const styles =
     },
 
     heroMetaText: {
-      color: "#BFA99F",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "800",
       letterSpacing: 0.25,
@@ -1589,7 +1590,7 @@ const styles =
     },
 
     heroMetaDot: {
-      color: "#806C63",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       marginHorizontal: 6,
     },
@@ -1636,14 +1637,14 @@ const styles =
     },
 
     actionTitle: {
-      color: "#25211F",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
       letterSpacing: -0.15,
     },
 
     actionText: {
-      color: "#807871",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 3,
     },
@@ -1653,8 +1654,7 @@ const styles =
     },
 
     message: {
-      backgroundColor:
-        "#EAF9EF",
+      backgroundColor: canalDynamicColors.successSurface,
       borderRadius: 16,
       padding: 14,
     },
@@ -1674,7 +1674,7 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#F7FFFC",
+      color: canalDynamicColors.text,
       fontSize: 19,
       fontWeight: "900",
       marginBottom: 8,
@@ -1694,14 +1694,14 @@ const styles =
 
     detailLabel: {
       width: 95,
-      color: "rgba(231, 250, 245, 0.62)",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "700",
     },
 
     detailValue: {
       flex: 1,
-      color: "rgba(247, 255, 252, 0.90)",
+      color: canalDynamicColors.text,
       fontSize: 12,
       lineHeight: 18,
       textAlign: "right",
@@ -1749,7 +1749,7 @@ const styles =
     },
 
     trackTitle: {
-      color: "#F7FFFC",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "800",
     },
@@ -1761,7 +1761,7 @@ const styles =
     },
 
     trackArrow: {
-      color: "rgba(231, 250, 245, 0.52)",
+      color: canalDynamicColors.muted,
       fontSize: 25,
       marginLeft: 8,
     },

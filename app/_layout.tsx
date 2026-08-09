@@ -46,6 +46,10 @@ import {
 } from "../theme/canal-appearance";
 
 import {
+  canalDynamicColors,
+} from "../theme/canal-dynamic-colors";
+
+import {
   CanalAtmosphereProvider,
 } from "../theme/canal-atmosphere-context";
 
@@ -735,7 +739,7 @@ const styles =
     root: {
       flex: 1,
       backgroundColor:
-        "#080B0C",
+        canalDynamicColors.baseCanvas,
     },
 
     navigatorShell: {
@@ -749,6 +753,6 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#080B0C",
+        canalDynamicColors.baseCanvas,
     },
   });

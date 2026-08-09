@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -362,7 +363,7 @@ function SnapshotsContent() {
             <Ionicons
               name="cloud-offline-outline"
               size={19}
-              color="#ffb27a"
+              color={canalDynamicColors.gold}
             />
 
             <View
@@ -389,14 +390,14 @@ function SnapshotsContent() {
           <Ionicons
             name="search-outline"
             size={20}
-            color="#8f9891"
+            color={canalDynamicColors.muted}
           />
 
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Search Snapshots"
-            placeholderTextColor="#777f79"
+            placeholderTextColor={canalDynamicColors.muted}
             style={styles.searchInput}
           />
 
@@ -411,7 +412,7 @@ function SnapshotsContent() {
               <Ionicons
                 name="close-circle"
                 size={20}
-                color="#777f79"
+                color={canalDynamicColors.muted}
               />
             </Pressable>
           ) : null}
@@ -498,7 +499,7 @@ function SnapshotsContent() {
             <Ionicons
               name="camera-outline"
               size={32}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
 
             <Text
@@ -554,7 +555,7 @@ function SnapshotsContent() {
                       <Ionicons
                         name="camera-outline"
                         size={24}
-                        color="#ff9a50"
+                        color={canalDynamicColors.gold}
                       />
                     </View>
 
@@ -631,7 +632,7 @@ function SnapshotsContent() {
                     <Ionicons
                       name="chevron-forward"
                       size={19}
-                      color="#717a73"
+                      color={canalDynamicColors.muted}
                     />
                   </Pressable>
 
@@ -657,7 +658,7 @@ function SnapshotsContent() {
                       <Ionicons
                         name="share-social-outline"
                         size={17}
-                        color="#ff9a50"
+                        color={canalDynamicColors.gold}
                       />
 
                       <Text
@@ -711,7 +712,7 @@ function SnapshotsContent() {
                           <Ionicons
                             name="trash-outline"
                             size={17}
-                            color="#ff9187"
+                            color={canalDynamicColors.danger}
                           />
 
                           <Text
@@ -786,20 +787,20 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#F6F1E7",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 22,
     fontWeight: "400",
   },
 
   headerAction: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "700",
     textAlign: "right",
@@ -807,14 +808,14 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginBottom: 8,
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#F6F1E7",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "400",
@@ -822,7 +823,7 @@ const styles = StyleSheet.create({
 
   description: {
     marginTop: 10,
-    color: "#aeb6b0",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -834,9 +835,9 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 15,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 17,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   syncWarning: {
@@ -855,7 +856,7 @@ const styles = StyleSheet.create({
   },
 
   syncWarningTitle: {
-    color: "#ffb27a",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -869,7 +870,7 @@ const styles = StyleSheet.create({
 
   searchInput: {
     flex: 1,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
   },
 
@@ -888,7 +889,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#39413c",
     borderRadius: 15,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   selectedFilter: {
@@ -897,7 +898,7 @@ const styles = StyleSheet.create({
   },
 
   filterText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -909,7 +910,7 @@ const styles = StyleSheet.create({
   },
 
   selectedFilterText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
   },
 
   centered: {
@@ -929,13 +930,13 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 19,
     fontWeight: "700",
   },
 
   emptyText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -948,9 +949,9 @@ const styles = StyleSheet.create({
   snapshotCard: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 20,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   snapshotMain: {
@@ -983,20 +984,20 @@ const styles = StyleSheet.create({
 
   snapshotTitle: {
     flex: 1,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 15,
     fontWeight: "700",
   },
 
   trackText: {
     marginTop: 6,
-    color: "#c5cbc6",
+    color: canalDynamicColors.muted,
     fontSize: 11,
   },
 
   moodText: {
     marginTop: 6,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 10,
   },
 
@@ -1004,7 +1005,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: "#303833",
+    borderTopColor: canalDynamicColors.line,
   },
 
   cardAction: {
@@ -1016,20 +1017,20 @@ const styles = StyleSheet.create({
   },
 
   cardActionText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 11,
     fontWeight: "800",
   },
 
   deleteText: {
-    color: "#ff9187",
+    color: canalDynamicColors.danger,
     fontSize: 11,
     fontWeight: "800",
   },
 
   actionDivider: {
     width: 1,
-    backgroundColor: "#303833",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   disabled: {

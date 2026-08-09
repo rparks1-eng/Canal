@@ -23,6 +23,21 @@ function contrast(foreground: string, background: string): number {
 
 describe("Living Editorial contrast", () => {
   it.each([
+    ["light primary", "#102C3A", "#DDF4F2", 7],
+    ["light secondary", "#496875", "#DDF4F2", 4.5],
+    ["light mint", "#167866", "#DDF4F2", 4.5],
+    ["light lavender", "#4A64C5", "#DDF4F2", 4.5],
+    ["light danger", "#A93640", "#DDF4F2", 4.5],
+    ["dark primary", "#F6FEFF", "#102E43", 7],
+    ["dark secondary", "#B5CCD4", "#102E43", 4.5],
+    ["dark mint", "#8DE5D2", "#102E43", 4.5],
+    ["dark lavender", "#9B9FEF", "#102E43", 4.5],
+    ["dark danger", "#FF9289", "#102E43", 4.5],
+  ])("keeps Canal %s semantic roles readable", (_name, foreground, background, minimum) => {
+    expect(contrast(foreground, background)).toBeGreaterThanOrEqual(minimum as number);
+  });
+
+  it.each([
     ["primary text", "#F7F4EC", "#080B0C", 7],
     ["secondary text on page", "#A5AEA9", "#080B0C", 4.5],
     ["secondary text on cards", "#A5AEA9", "#0F1514", 4.5],

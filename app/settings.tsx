@@ -527,8 +527,7 @@ export default function SettingsScreen() {
           false
         }
       >
-        <Animated.View
-          entering={FadeInUp.duration(260).delay(45)}
+        <View
           style={[styles.sectionCard, styles.appearanceCard]}
         >
           <Text style={styles.sectionTitle}>Appearance</Text>
@@ -559,10 +558,9 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.arrow}>›</Text>
           </Pressable>
-        </Animated.View>
+        </View>
 
-        <Animated.View
-          entering={FadeInUp.duration(260).delay(80)}
+        <View
           style={styles.sectionCard}
         >
           <Text
@@ -684,7 +682,7 @@ export default function SettingsScreen() {
               )}
             </Pressable>
           ) : null}
-        </Animated.View>
+        </View>
 
         {message ? (
           <View
@@ -701,8 +699,7 @@ export default function SettingsScreen() {
           </View>
         ) : null}
 
-        <Animated.View
-          entering={FadeInUp.duration(260).delay(115)}
+        <View
           style={styles.sectionCard}
         >
           <Text
@@ -724,10 +721,9 @@ export default function SettingsScreen() {
             Scene Studio only reads the saved
             snapshot.
           </Text>
-        </Animated.View>
+        </View>
 
-        <Animated.View
-          entering={FadeInUp.duration(260).delay(145)}
+        <View
           style={styles.sectionCard}
         >
           <Text
@@ -799,7 +795,7 @@ export default function SettingsScreen() {
               ›
             </Text>
           </Pressable>
-        </Animated.View>
+        </View>
 
         <View style={styles.logoutCard}>
           <Text
@@ -892,12 +888,12 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#FFFFFF",
+        canalDynamicColors.elevated,
       marginRight: 12,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
@@ -910,14 +906,14 @@ const styles =
     },
 
     title: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 27,
       fontWeight: "500",
       letterSpacing: -0.7,
     },
 
     subtitle: {
-      color: "rgba(255, 255, 255, 0.76)",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
       marginTop: 4,
@@ -932,9 +928,9 @@ const styles =
 
     sectionCard: {
       backgroundColor:
-        "rgba(10, 31, 58, 0.54)",
+        canalDynamicColors.surface,
       borderWidth: 1,
-      borderColor: "rgba(231, 242, 255, 0.20)",
+      borderColor: canalDynamicColors.line,
       borderRadius: 22,
       padding: 18,
       boxShadow: "0 16px 38px rgba(8, 18, 47, 0.18)",
@@ -960,7 +956,7 @@ const styles =
       top: 4,
       left: -18,
       transform: [{ rotate: "-7deg" }],
-      backgroundColor: "rgba(209, 255, 245, 0.42)",
+      backgroundColor: canalDynamicColors.elevated,
     },
 
     previewOrbTwo: {
@@ -982,9 +978,9 @@ const styles =
       justifyContent: "center",
       gap: 7,
       borderWidth: 1,
-      borderColor: "rgba(255, 255, 255, 0.32)",
+      borderColor: canalDynamicColors.line,
       borderRadius: 15,
-      backgroundColor: "rgba(23, 47, 82, 0.36)",
+      backgroundColor: canalDynamicColors.surface,
       paddingHorizontal: 13,
     },
 
@@ -992,18 +988,18 @@ const styles =
       width: "58%",
       height: 5,
       borderRadius: 3,
-      backgroundColor: "rgba(255, 255, 255, 0.88)",
+      backgroundColor: canalDynamicColors.elevated,
     },
 
     previewLineShort: {
       width: "34%",
       height: 4,
       borderRadius: 2,
-      backgroundColor: "rgba(230, 255, 250, 0.52)",
+      backgroundColor: canalDynamicColors.elevated,
     },
 
     sectionTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
       marginBottom: 12,
@@ -1077,20 +1073,20 @@ const styles =
     },
 
     serviceName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
 
     serviceStatus: {
-      color: "rgba(255, 255, 255, 0.70)",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 17,
       marginTop: 3,
     },
 
     arrow: {
-      color: "rgba(255, 255, 255, 0.72)",
+      color: canalDynamicColors.muted,
       fontSize: 26,
       marginLeft: 8,
     },
@@ -1117,7 +1113,7 @@ const styles =
       backgroundColor:
         canalDynamicColors.surface,
       borderWidth: 1,
-      borderColor: "rgba(226, 222, 255, 0.22)",
+      borderColor: canalDynamicColors.line,
       borderRadius: 16,
       padding: 14,
     },
@@ -1129,14 +1125,14 @@ const styles =
     },
 
     explanationText: {
-      color: "rgba(255, 255, 255, 0.76)",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
     },
 
     logoutCard: {
       backgroundColor:
-        "rgba(92, 25, 38, 0.52)",
+        canalDynamicColors.dangerSurface,
       borderWidth: 1,
       borderColor: "rgba(255, 171, 176, 0.42)",
       borderRadius: 22,

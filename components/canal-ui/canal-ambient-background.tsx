@@ -21,6 +21,10 @@ import {
   CANAL_ATMOSPHERE_TRANSITION_MS,
 } from "../../theme/canal-atmosphere-context";
 
+import {
+  canalDynamicColors,
+} from "../../theme/canal-dynamic-colors";
+
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -44,42 +48,42 @@ function atmosphereForPath(
   if (pathname.startsWith("/explore") || pathname.startsWith("/snapshots")) {
     return isDark
       ? { base: "#263D72", glowOne: "rgba(238,154,144,0.54)", glowTwo: "rgba(156,98,141,0.55)", glowThree: "rgba(81,92,164,0.42)" }
-      : { base: "#6A527F", glowOne: "rgba(255,180,167,0.62)", glowTwo: "rgba(174,100,154,0.56)", glowThree: "rgba(85,104,171,0.52)" };
+      : { base: "#F0E2EC", glowOne: "rgba(255,180,167,0.34)", glowTwo: "rgba(215,153,198,0.28)", glowThree: "rgba(171,181,231,0.30)" };
   }
 
   if (pathname.startsWith("/library")) {
     return isDark
       ? { base: "#162849", glowOne: "rgba(104,217,198,0.54)", glowTwo: "rgba(47,137,154,0.52)", glowThree: "rgba(49,88,135,0.46)" }
-      : { base: "#245B72", glowOne: "rgba(104,223,201,0.64)", glowTwo: "rgba(53,151,164,0.56)", glowThree: "rgba(61,94,151,0.52)" };
+      : { base: "#D6EEF0", glowOne: "rgba(104,223,201,0.34)", glowTwo: "rgba(119,194,204,0.28)", glowThree: "rgba(163,181,225,0.28)" };
   }
 
   if (pathname.startsWith("/settings") || pathname.startsWith("/appearance") || pathname.startsWith("/data-controls") || pathname.startsWith("/music-services")) {
     return isDark
       ? { base: "#193A54", glowOne: "rgba(168,161,239,0.48)", glowTwo: "rgba(94,120,181,0.5)", glowThree: "rgba(76,197,180,0.32)" }
-      : { base: "#365A7A", glowOne: "rgba(190,181,255,0.62)", glowTwo: "rgba(102,132,193,0.56)", glowThree: "rgba(84,204,185,0.42)" };
+      : { base: "#DDE8F4", glowOne: "rgba(190,181,255,0.34)", glowTwo: "rgba(151,173,222,0.28)", glowThree: "rgba(140,224,207,0.25)" };
   }
 
   if (pathname.startsWith("/profile") || pathname.startsWith("/friend") || pathname.startsWith("/creator") || pathname.startsWith("/friends") || pathname.startsWith("/following")) {
     return isDark
       ? { base: "#1D3658", glowOne: "rgba(107,216,189,0.5)", glowTwo: "rgba(57,127,147,0.52)", glowThree: "rgba(89,87,158,0.37)" }
-      : { base: "#315F7A", glowOne: "rgba(112,226,199,0.62)", glowTwo: "rgba(83,151,181,0.58)", glowThree: "rgba(130,119,206,0.42)" };
+      : { base: "#D8EEF0", glowOne: "rgba(112,226,199,0.34)", glowTwo: "rgba(132,196,216,0.28)", glowThree: "rgba(184,174,232,0.26)" };
   }
 
   if (pathname.startsWith("/scenes") || pathname.startsWith("/scene-") || pathname.startsWith("/public-scene") || pathname.startsWith("/now-playing")) {
     return isDark
       ? { base: "#18376B", glowOne: "rgba(116,224,207,0.58)", glowTwo: "rgba(61,133,204,0.55)", glowThree: "rgba(115,102,210,0.4)" }
-      : { base: "#315F8F", glowOne: "rgba(117,228,207,0.68)", glowTwo: "rgba(70,132,205,0.60)", glowThree: "rgba(139,119,220,0.40)" };
+      : { base: "#D9E8F7", glowOne: "rgba(117,228,207,0.34)", glowTwo: "rgba(133,178,226,0.30)", glowThree: "rgba(190,175,236,0.26)" };
   }
 
   if (pathname.startsWith("/live-stage") || pathname.startsWith("/stage-") || pathname.startsWith("/create-stage") || pathname.startsWith("/managed-stages")) {
     return isDark
       ? { base: "#24345D", glowOne: "rgba(139,111,210,0.52)", glowTwo: "rgba(61,185,174,0.48)", glowThree: "rgba(220,129,113,0.32)" }
-      : { base: "#536590", glowOne: "rgba(175,151,232,0.61)", glowTwo: "rgba(105,217,199,0.54)", glowThree: "rgba(242,167,151,0.40)" };
+      : { base: "#E7E2F1", glowOne: "rgba(175,151,232,0.32)", glowTwo: "rgba(149,222,207,0.28)", glowThree: "rgba(242,183,170,0.28)" };
   }
 
   return isDark
     ? { base: "#15354F", glowOne: "rgba(112,221,199,0.54)", glowTwo: "rgba(58,108,199,0.48)", glowThree: "rgba(139,104,232,0.36)" }
-    : { base: "#315F8F", glowOne: "rgba(117,228,207,0.74)", glowTwo: "rgba(70,132,205,0.58)", glowThree: "rgba(139,119,220,0.34)" };
+    : { base: "#D8E9F4", glowOne: "rgba(117,228,207,0.36)", glowTwo: "rgba(133,178,226,0.30)", glowThree: "rgba(190,175,236,0.24)" };
 }
 
 export function CanalAmbientBackground() {
@@ -89,6 +93,8 @@ export function CanalAmbientBackground() {
   const reduceMotion = useReducedMotion();
   const pathname = usePathname();
   const isDark = useColorScheme() === "dark";
+  const previousSchemeRef = useRef(isDark);
+  const appearanceChanged = previousSchemeRef.current !== isDark;
   const atmosphere = useMemo(
     () => override ?? atmosphereForPath(pathname, isDark),
     [isDark, override, pathname],
@@ -101,6 +107,10 @@ export function CanalAmbientBackground() {
     from: atmosphere,
     to: atmosphere,
   }));
+
+  useEffect(() => {
+    previousSchemeRef.current = isDark;
+  }, [isDark]);
 
   useEffect(() => {
     if (
@@ -131,13 +141,14 @@ export function CanalAmbientBackground() {
     }
 
     const timing = {
-      duration: CANAL_ATMOSPHERE_TRANSITION_MS,
+      duration: appearanceChanged ? 240 : CANAL_ATMOSPHERE_TRANSITION_MS,
       easing: Easing.inOut(Easing.sin),
     };
 
     baseColor.value = withTiming(atmosphere.base, timing);
   }, [
     atmosphere.base,
+    appearanceChanged,
     baseColor,
     reduceMotion,
   ]);
@@ -160,11 +171,12 @@ export function CanalAmbientBackground() {
 
     gradientProgress.value = 0;
     gradientProgress.value = withTiming(1, {
-      duration: CANAL_ATMOSPHERE_TRANSITION_MS,
+      duration: appearanceChanged ? 240 : CANAL_ATMOSPHERE_TRANSITION_MS,
       easing: Easing.inOut(Easing.sin),
     });
   }, [
     atmosphere,
+    appearanceChanged,
     gradientProgress,
     reduceMotion,
   ]);
@@ -307,7 +319,7 @@ const styles = StyleSheet.create({
   },
   depthWash: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(4, 23, 39, 0.08)",
+    backgroundColor: canalDynamicColors.ambientWash,
   },
 });
 

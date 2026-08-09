@@ -318,7 +318,7 @@ function MessageRow(
             </Pressable>;
           })}
           <Pressable accessibilityRole="button" accessibilityLabel="Add emoji reaction" hitSlop={6} onPress={() => props.onOpenReactionPicker(props.message)} style={styles.addReactionButton}>
-            <Ionicons color="#BCEFE6" name="add" size={19} />
+            <Ionicons color={canalDynamicColors.mint} name="add" size={19} />
           </Pressable>
         </View>
 
@@ -333,18 +333,18 @@ function MessageRow(
               }}
               style={styles.messageAction}
             >
-              <Ionicons color="#BCEFE6" name="happy-outline" size={15} />
+              <Ionicons color={canalDynamicColors.mint} name="happy-outline" size={15} />
               <Text style={styles.messageActionText}>React</Text>
             </Pressable>
 
             {props.canEdit ? (
               <>
                 <Pressable accessibilityRole="button" accessibilityLabel="Edit your message" onPress={() => { setActionsVisible(false); props.onEdit(props.message); }} style={styles.messageAction}>
-                  <Ionicons color="#F4FFFC" name="pencil-outline" size={14} />
+                  <Ionicons color={canalDynamicColors.text} name="pencil-outline" size={14} />
                   <Text style={styles.messageActionText}>Edit</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Delete your message" onPress={() => { setActionsVisible(false); props.onDelete(props.message); }} style={[styles.messageAction, styles.messageRemoveAction]}>
-                  <Ionicons color="#FF9D87" name="trash-outline" size={14} />
+                  <Ionicons color={canalDynamicColors.danger} name="trash-outline" size={14} />
                   <Text style={[styles.messageActionText, styles.messageRemoveActionText]}>Delete</Text>
                 </Pressable>
               </>
@@ -382,7 +382,7 @@ function MessageRow(
                     styles.pressed,
                 ]}
               >
-                <Ionicons color="#F4FFFC" name="flag-outline" size={14} />
+                <Ionicons color={canalDynamicColors.text} name="flag-outline" size={14} />
                 <Text
                   style={
                     styles.messageActionText
@@ -426,7 +426,7 @@ function MessageRow(
                     styles.pressed,
                 ]}
               >
-                <Ionicons color="#FF9D87" name="remove-circle-outline" size={14} />
+                <Ionicons color={canalDynamicColors.danger} name="remove-circle-outline" size={14} />
                 <Text
                   style={[
                     styles.messageActionText,
@@ -500,7 +500,7 @@ export default function LiveStageScreen() {
           ]}
         >
           <Ionicons
-            color="#FFFFFF"
+            color={canalDynamicColors.text}
             name="chevron-back"
             size={24}
             style={styles.headerBackIcon}
@@ -2558,7 +2558,7 @@ export default function LiveStageScreen() {
                   styles.pressed,
               ]}
             >
-              <Ionicons color="#F4FFFC" name="musical-notes-outline" size={20} />
+              <Ionicons color={canalDynamicColors.text} name="musical-notes-outline" size={20} />
             </Pressable>
           ) : null}
 
@@ -2576,7 +2576,7 @@ export default function LiveStageScreen() {
             onPress={openChat}
             style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
           >
-            <Ionicons color="#F4FFFC" name="chatbubble-ellipses-outline" size={20} />
+            <Ionicons color={canalDynamicColors.text} name="chatbubble-ellipses-outline" size={20} />
             {messages.length > 0 ? (
               <View style={styles.chatBadge}>
                 <Text style={styles.chatBadgeText}>{Math.min(messages.length, 99)}</Text>
@@ -2642,7 +2642,7 @@ export default function LiveStageScreen() {
               {capturingSnapshot ? (
                 <ActivityIndicator color="#F4FFFC" size="small" />
               ) : (
-                <Ionicons color="#F4FFFC" name="camera-outline" size={20} />
+                <Ionicons color={canalDynamicColors.text} name="camera-outline" size={20} />
               )}
             </Pressable>
           ) : null}
@@ -2778,7 +2778,7 @@ export default function LiveStageScreen() {
                       })}
                       style={styles.queueContextAction}
                     >
-                      <Ionicons color="#8CE8DA" name="document-text-outline" size={18} />
+                      <Ionicons color={canalDynamicColors.mint} name="document-text-outline" size={18} />
                     </Pressable>
                   </View>
                 ),
@@ -3689,7 +3689,7 @@ export default function LiveStageScreen() {
                   />
                 ) : (
                   <View style={[styles.chatArtwork, styles.queueArtworkFallback]}>
-                    <Ionicons color="#C8FFF3" name="musical-note" size={20} />
+                    <Ionicons color={canalDynamicColors.mint} name="musical-note" size={20} />
                   </View>
                 )}
 
@@ -3706,7 +3706,7 @@ export default function LiveStageScreen() {
                   onPress={closeChat}
                   style={({ pressed }) => [styles.closeChatButton, pressed && styles.pressed]}
                 >
-                  <Ionicons color="#F4FFFC" name="close" size={22} />
+                  <Ionicons color={canalDynamicColors.text} name="close" size={22} />
                 </Pressable>
               </View>
 
@@ -3752,7 +3752,7 @@ export default function LiveStageScreen() {
                         onChangeText={setMessageBody}
                         onSubmitEditing={() => void sendMessage()}
                         placeholder="Message the Stage…"
-                        placeholderTextColor="#8B7E76"
+                        placeholderTextColor={canalDynamicColors.muted}
                         returnKeyType="send"
                         style={styles.messageInput}
                         value={messageBody}
@@ -3778,7 +3778,7 @@ export default function LiveStageScreen() {
                       {sending ? (
                         <ActivityIndicator color="#FFFFFF" size="small" />
                       ) : (
-                        <Ionicons color="#FFFFFF" name={editingMessageId ? "checkmark" : "arrow-up"} size={20} />
+                        <Ionicons color={canalDynamicColors.text} name={editingMessageId ? "checkmark" : "arrow-up"} size={20} />
                       )}
                     </Pressable>
                   </>
@@ -3856,7 +3856,7 @@ const styles =
     },
 
     loadingText: {
-      color: "#A99C94",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       fontWeight: "700",
     },
@@ -3883,13 +3883,13 @@ const styles =
     },
 
     notFoundIconText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 36,
       fontWeight: "900",
     },
 
     notFoundTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
       textAlign: "center",
@@ -3897,7 +3897,7 @@ const styles =
 
     notFoundText: {
       maxWidth: 330,
-      color: "#A99C94",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       lineHeight: 22,
       textAlign: "center",
@@ -4006,13 +4006,13 @@ const styles =
     },
 
     realtimeText: {
-      color: "#91857D",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "700",
     },
 
     stageName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 32,
       lineHeight: 37,
       fontWeight: "900",
@@ -4020,7 +4020,7 @@ const styles =
     },
 
     stageMeta: {
-      color: "#A99C94",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 17,
     },
@@ -4070,11 +4070,11 @@ const styles =
     },
 
     provenanceLabelCommunity: {
-      color: "#B4A69D",
+      color: canalDynamicColors.muted,
     },
 
     provenanceCopy: {
-      color: "#BDB0A8",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 15,
     },
@@ -4124,13 +4124,13 @@ const styles =
     },
 
     shareIcon: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
 
     shareText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -4208,7 +4208,7 @@ const styles =
     },
 
     currentContextText: {
-      color: "#EAFFF8",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 18,
       fontWeight: "700",
@@ -4222,7 +4222,7 @@ const styles =
     },
 
     trackTitle: {
-      color: "#241B16",
+      color: canalDynamicColors.text,
       fontSize: 19,
       lineHeight: 23,
       fontWeight: "900",
@@ -4256,7 +4256,7 @@ const styles =
     },
 
     openTrackText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 17,
       fontWeight: "900",
     },
@@ -4330,7 +4330,7 @@ const styles =
     },
 
     quickActionText: {
-      color: "#EDE3DC",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "800",
     },
@@ -4371,13 +4371,13 @@ const styles =
     },
 
     queueExpandText: {
-      color: "rgba(239, 255, 251, 0.78)",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "700",
     },
 
     sectionEyebrow: {
-      color: "rgba(239, 255, 251, 0.72)",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 1.2,
@@ -4434,7 +4434,7 @@ const styles =
     },
 
     queueTitle: {
-      color: "#EEE5DF",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "800",
     },
@@ -4462,13 +4462,13 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
     },
 
     sectionSubtitle: {
-      color: "#8F837C",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontVariant: [
         "tabular-nums",
@@ -4486,7 +4486,7 @@ const styles =
     },
 
     joinRoomText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -4544,7 +4544,7 @@ const styles =
 
     personName: {
       maxWidth: "100%",
-      color: "#F1E8E2",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "800",
     },
@@ -4588,7 +4588,7 @@ const styles =
     },
 
     memberRemoveActionText: {
-      color: "#FF9D87",
+      color: canalDynamicColors.danger,
     },
 
     moderationFeedback: {
@@ -4639,7 +4639,7 @@ const styles =
     },
 
     retryText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 11,
       fontWeight: "900",
     },
@@ -4763,13 +4763,13 @@ const styles =
     },
 
     chatStageName: {
-      color: "#F7FFFD",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
 
     chatTrackName: {
-      color: "rgba(239, 255, 251, 0.72)",
+      color: canalDynamicColors.muted,
       fontSize: 12,
     },
 
@@ -4798,13 +4798,13 @@ const styles =
     },
 
     chatTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
     },
 
     chatSubtitle: {
-      color: "#8F837C",
+      color: canalDynamicColors.muted,
       fontSize: 12,
     },
 
@@ -4824,14 +4824,14 @@ const styles =
     },
 
     emptyChatTitle: {
-      color: "#CFC3BC",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       fontWeight: "800",
     },
 
     emptyChatText: {
       maxWidth: 280,
-      color: "#7F736C",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
       textAlign: "center",
@@ -4919,13 +4919,13 @@ const styles =
     },
 
     messageBody: {
-      color: "#F0E6E0",
+      color: canalDynamicColors.text,
       fontSize: 14,
       lineHeight: 20,
     },
 
     messageBodyMine: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
     },
 
     messageTimeMine: {
@@ -4997,7 +4997,7 @@ const styles =
     },
 
     messageActionText: {
-      color: "#AFA19A",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "800",
     },
@@ -5008,7 +5008,7 @@ const styles =
     },
 
     messageRemoveActionText: {
-      color: "#FF9D87",
+      color: canalDynamicColors.danger,
     },
 
     reportBackdrop: {
@@ -5032,13 +5032,13 @@ const styles =
     },
 
     reportTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
     },
 
     reportCopy: {
-      color: "#B5A79F",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 19,
     },
@@ -5081,7 +5081,7 @@ const styles =
     },
 
     reportReasonText: {
-      color: "#EFE5DF",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "800",
     },
@@ -5105,7 +5105,7 @@ const styles =
     },
 
     reportCancelText: {
-      color: "#CFC3BC",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "800",
     },
@@ -5122,7 +5122,7 @@ const styles =
     },
 
     reportSubmitText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -5157,7 +5157,7 @@ const styles =
       paddingHorizontal: 14,
       paddingTop: 12,
       paddingBottom: 10,
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 15,
       lineHeight: 20,
     },
@@ -5186,7 +5186,7 @@ const styles =
     },
 
     sendText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 23,
       lineHeight: 25,
       fontWeight: "900",
@@ -5203,14 +5203,14 @@ const styles =
     },
 
     joinComposerText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
 
     readOnlyText: {
       flex: 1,
-      color: "#948880",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       textAlign: "center",
       paddingVertical: 14,

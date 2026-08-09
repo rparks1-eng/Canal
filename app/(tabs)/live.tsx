@@ -1129,7 +1129,7 @@ const styles =
     },
 
     closeText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
       fontWeight: "300",
@@ -1154,7 +1154,7 @@ const styles =
     },
 
     heading: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 24,
       lineHeight: 29,
       fontWeight: "900",
@@ -1187,13 +1187,13 @@ const styles =
     },
 
     primaryActionIcon: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 17,
       fontWeight: "900",
     },
 
     primaryActionText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
@@ -1212,7 +1212,7 @@ const styles =
     },
 
     secondaryActionText: {
-      color: "#F5EAE2",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "800",
     },
@@ -1225,7 +1225,7 @@ const styles =
     },
 
     loadingText: {
-      color: "#968A82",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       fontWeight: "700",
     },
@@ -1262,7 +1262,7 @@ const styles =
     },
 
     emptyTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
       textAlign: "center",
@@ -1270,7 +1270,7 @@ const styles =
 
     emptyText: {
       maxWidth: 290,
-      color: "#A99C94",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       lineHeight: 22,
       textAlign: "center",
@@ -1407,14 +1407,14 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#F9F2ED",
+      color: canalDynamicColors.text,
       fontSize: 19,
       fontWeight: "900",
     },
 
     sectionCount: {
       minWidth: 28,
-      color: "#FF9A50",
+      color: canalDynamicColors.gold,
       fontSize: 14,
       fontWeight: "900",
       fontVariant: [
@@ -1515,7 +1515,7 @@ const styles =
     },
 
     stageName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 24,
       lineHeight: 28,
       fontWeight: "900",
@@ -1553,7 +1553,7 @@ const styles =
     },
 
     albumTileText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
     },
@@ -1571,7 +1571,7 @@ const styles =
     },
 
     trackTitle: {
-      color: "#F8F0EA",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
@@ -1582,7 +1582,7 @@ const styles =
     },
 
     cardArrow: {
-      color: "#7E7168",
+      color: canalDynamicColors.muted,
       fontSize: 26,
       fontWeight: "300",
     },

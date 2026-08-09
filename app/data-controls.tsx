@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
     router,
@@ -457,7 +458,7 @@ export default function DataControlsScreen() {
             <Ionicons
               name="phone-portrait-outline"
               size={28}
-              color="#4C46C8"
+              color={canalDynamicColors.lavender}
             />
           </View>
 
@@ -656,7 +657,7 @@ export default function DataControlsScreen() {
                 <Ionicons
                   name="download-outline"
                   size={24}
-                  color="#4C46C8"
+                  color={canalDynamicColors.lavender}
                 />
               </View>
 
@@ -714,7 +715,7 @@ export default function DataControlsScreen() {
                   <Ionicons
                     name="share-outline"
                     size={20}
-                    color="#191A18"
+                    color={canalDynamicColors.text}
                   />
 
                   <Text
@@ -754,7 +755,7 @@ export default function DataControlsScreen() {
                 <Ionicons
                   name="trash-outline"
                   size={24}
-                  color="#ff9187"
+                  color={canalDynamicColors.danger}
                 />
               </View>
 
@@ -827,7 +828,7 @@ export default function DataControlsScreen() {
           <Ionicons
             name="information-circle-outline"
             size={22}
-            color="#4C46C8"
+            color={canalDynamicColors.lavender}
           />
 
           <Text style={styles.noteText}>
@@ -872,7 +873,7 @@ function formatStorageSize(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F3EFE5",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -900,20 +901,20 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#c5cbc6",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   eyebrow: {
     marginBottom: 8,
-    color: "#4C46C8",
+    color: canalDynamicColors.lavender,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
@@ -921,14 +922,14 @@ const styles = StyleSheet.create({
 
   heading: {
       fontFamily: "Georgia",
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 30,
     fontWeight: "700",
   },
 
   description: {
     marginTop: 10,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -939,7 +940,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D9D3C8",
     borderRadius: 22,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   summaryIcon: {
@@ -948,19 +949,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 21,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   summaryTitle: {
     marginTop: 13,
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 17,
     fontWeight: "700",
   },
 
   summaryText: {
     marginTop: 6,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 12,
   },
 
@@ -969,7 +970,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 19,
     fontWeight: "700",
   },
@@ -980,12 +981,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D9D3C8",
     borderRadius: 21,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   dangerCard: {
     borderColor: "#D8AAA6",
-    backgroundColor: "#FFF0EF",
+    backgroundColor: canalDynamicColors.dangerSurface,
   },
 
   actionHeader: {
@@ -1000,7 +1001,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
     borderRadius: 17,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   dangerIcon: {
@@ -1010,7 +1011,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
     borderRadius: 17,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   actionCopy: {
@@ -1024,14 +1025,14 @@ const styles = StyleSheet.create({
   },
 
   actionTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   actionText: {
     marginTop: 5,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -1059,7 +1060,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#5d3b24",
     borderRadius: 16,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   secondaryButtonText: {
@@ -1069,7 +1070,7 @@ const styles = StyleSheet.create({
   },
 
   analyticsStatus: {
-    color: "#52605A",
+    color: canalDynamicColors.muted,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -1087,11 +1088,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#6e3833",
     borderRadius: 16,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   dangerButtonText: {
-    color: "#A62E27",
+    color: canalDynamicColors.danger,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -1103,12 +1104,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#5d3b24",
     borderRadius: 17,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   noteText: {
     flex: 1,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 17,
   },

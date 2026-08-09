@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useCallback,
   useState,
@@ -418,7 +419,7 @@ function NewSceneCollectionContent() {
               setTitle
             }
             placeholder="Late-night drives"
-            placeholderTextColor="#9A938C"
+            placeholderTextColor={canalDynamicColors.muted}
             style={
               styles.input
             }
@@ -493,7 +494,7 @@ function NewSceneCollectionContent() {
               setDescription
             }
             placeholder="What connects these Scenes?"
-            placeholderTextColor="#9A938C"
+            placeholderTextColor={canalDynamicColors.muted}
             style={[
               styles.input,
               styles.descriptionInput,
@@ -721,8 +722,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
     header: {
       flexDirection: "row",
@@ -741,16 +741,15 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 21,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
     },
     headerTitle: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 22,
       fontWeight: "400",
@@ -772,24 +771,23 @@ const styles =
     },
     introCard: {
       borderRadius: 22,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 18,
     },
     title: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 24,
       fontWeight: "400",
     },
     subtitle: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
       marginTop: 6,
     },
     label: {
-      color: "#8B817A",
+      color: canalDynamicColors.muted,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.7,
@@ -801,9 +799,8 @@ const styles =
       borderColor:
         "#E8DFD8",
       borderRadius: 15,
-      backgroundColor:
-        "#FFFFFF",
-      color: "#1B1B1B",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       fontSize: 13,
       paddingHorizontal: 14,
       paddingVertical: 12,
@@ -819,8 +816,7 @@ const styles =
         "center",
       gap: 14,
       borderRadius: 17,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 15,
     },
     switchControl: {
@@ -831,12 +827,12 @@ const styles =
       flex: 1,
     },
     visibilityTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },
     visibilityDescription: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       lineHeight: 15,
       marginTop: 4,
@@ -850,12 +846,12 @@ const styles =
       marginTop: 8,
     },
     sectionTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
     },
     selectionCount: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 10,
       fontWeight: "900",
     },
@@ -872,8 +868,7 @@ const styles =
       borderColor:
         "#E8DFD8",
       borderRadius: 17,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 12,
     },
     sceneCardSelected: {
@@ -902,7 +897,7 @@ const styles =
         "#F47A24",
     },
     checkText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -910,12 +905,12 @@ const styles =
       flex: 1,
     },
     sceneName: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },
     sceneMeta: {
-      color: "#817972",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
     },
@@ -924,17 +919,16 @@ const styles =
       borderColor:
         "#EEE5DE",
       borderRadius: 19,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 18,
     },
     emptyTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
     emptyText: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 17,
       marginTop: 5,
@@ -965,7 +959,7 @@ const styles =
       opacity: 0.5,
     },
     publishText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },

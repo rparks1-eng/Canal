@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -342,7 +343,7 @@ export default function ActivityScreen() {
             ]}
           >
             <Ionicons
-              color="#191A18"
+              color={canalDynamicColors.text}
               name="chevron-back"
               size={24}
             />
@@ -440,7 +441,7 @@ export default function ActivityScreen() {
               <Ionicons
                 name="notifications-outline"
                 size={31}
-                color="#ff9a50"
+                color={canalDynamicColors.gold}
               />
             </View>
 
@@ -583,7 +584,7 @@ export default function ActivityScreen() {
                     <Ionicons
                       name="chevron-forward"
                       size={19}
-                      color="#717a73"
+                      color={canalDynamicColors.muted}
                     />
                   ) : null}
                 </Pressable>
@@ -750,7 +751,7 @@ function formatActivityDate(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F3EFE5",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -785,13 +786,13 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   clearText: {
-    color: "#ff9187",
+    color: canalDynamicColors.danger,
     fontSize: 13,
     fontWeight: "700",
     textAlign: "right",
@@ -799,14 +800,14 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginBottom: 8,
-    color: "#787DFF",
+    color: canalDynamicColors.lavender,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "700",
@@ -814,14 +815,14 @@ const styles = StyleSheet.create({
 
   description: {
     marginTop: 10,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
   },
 
   pendingText: {
     marginTop: 5,
-    color: "#ffb27a",
+    color: canalDynamicColors.gold,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -852,13 +853,13 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 18,
     fontWeight: "700",
   },
 
   emptyText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -890,9 +891,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 14,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 19,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   activityIcon: {
@@ -910,14 +911,14 @@ const styles = StyleSheet.create({
   },
 
   activityTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "700",
   },
 
   activityDescription: {
     marginTop: 4,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 16,
   },

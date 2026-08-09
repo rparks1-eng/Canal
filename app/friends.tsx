@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -366,14 +367,14 @@ function FriendsScreenContent() {
           <Ionicons
             name="search-outline"
             size={20}
-            color="#8f9891"
+            color={canalDynamicColors.muted}
           />
 
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Search people or music taste"
-            placeholderTextColor="#777f79"
+            placeholderTextColor={canalDynamicColors.muted}
             autoCapitalize="none"
             style={styles.searchInput}
           />
@@ -392,7 +393,7 @@ function FriendsScreenContent() {
               <Ionicons
                 name="close-circle"
                 size={20}
-                color="#777f79"
+                color={canalDynamicColors.muted}
               />
             </Pressable>
           ) : null}
@@ -416,7 +417,7 @@ function FriendsScreenContent() {
             <Ionicons
               name="people-outline"
               size={20}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
 
             <Text
@@ -455,7 +456,7 @@ function FriendsScreenContent() {
             <Ionicons
               name="ban-outline"
               size={20}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
 
             <Text
@@ -495,7 +496,7 @@ function FriendsScreenContent() {
             <Ionicons
               name="people-outline"
               size={31}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
 
             <Text
@@ -609,7 +610,7 @@ function FriendsScreenContent() {
                       <Ionicons
                         name="chevron-forward"
                         size={19}
-                        color="#717a73"
+                        color={canalDynamicColors.muted}
                       />
                     </Pressable>
 
@@ -746,7 +747,7 @@ function showPendingRelationshipSync(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F3EFE5",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -770,19 +771,19 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   headerAction: {
-    color: "#787DFF",
+    color: canalDynamicColors.lavender,
     fontSize: 14,
     fontWeight: "700",
     textAlign: "right",
@@ -790,14 +791,14 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginBottom: 8,
-    color: "#787DFF",
+    color: canalDynamicColors.lavender,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "700",
@@ -805,7 +806,7 @@ const styles = StyleSheet.create({
 
   description: {
     marginTop: 10,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -817,14 +818,14 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 15,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 17,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   searchInput: {
     flex: 1,
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
   },
 
@@ -850,13 +851,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 16,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   quickActionText: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -894,13 +895,13 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 18,
     fontWeight: "700",
   },
 
   emptyText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -913,9 +914,9 @@ const styles = StyleSheet.create({
   userCard: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 20,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   userMain: {
@@ -936,7 +937,7 @@ const styles = StyleSheet.create({
   },
 
   avatarText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 15,
     fontWeight: "800",
   },
@@ -954,7 +955,7 @@ const styles = StyleSheet.create({
 
   username: {
     marginTop: 4,
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -969,7 +970,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: "#303833",
+    borderTopColor: canalDynamicColors.line,
   },
 
   footerAction: {
@@ -980,18 +981,18 @@ const styles = StyleSheet.create({
   },
 
   footerActionText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 11,
     fontWeight: "800",
   },
 
   followingText: {
-    color: "#9ff3b5",
+    color: canalDynamicColors.mint,
   },
 
   footerDivider: {
     width: 1,
-    backgroundColor: "#303833",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   disabled: {

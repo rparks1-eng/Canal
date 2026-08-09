@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import * as Haptics from "expo-haptics";
 import {
   Stack,
@@ -208,23 +209,23 @@ export default function StageContributionScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#080B0C" },
+  screen: { flex: 1, backgroundColor: "transparent" },
   content: { gap: 14, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 110 },
   header: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   iconButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-  backIcon: { color: "#F7F4EC", fontSize: 34, fontWeight: "300" },
-  headerTitle: { color: "#F7F4EC", fontSize: 16, fontWeight: "800" },
+  backIcon: { color: canalDynamicColors.text, fontSize: 34, fontWeight: "300" },
+  headerTitle: { color: canalDynamicColors.text, fontSize: 16, fontWeight: "800" },
   hero: { gap: 6, paddingVertical: 8 },
-  eyebrow: { color: "#72D8C4", fontSize: 11, fontWeight: "900", letterSpacing: 1.5 },
-  title: { color: "#F7F4EC", fontFamily: "Georgia", fontSize: 29, fontWeight: "900" },
-  subtitle: { color: "#A5AEA9", fontSize: 14, lineHeight: 21 },
+  eyebrow: { color: canalDynamicColors.mint, fontSize: 11, fontWeight: "900", letterSpacing: 1.5 },
+  title: { color: canalDynamicColors.text, fontFamily: "Georgia", fontSize: 29, fontWeight: "900" },
+  subtitle: { color: canalDynamicColors.muted, fontSize: 14, lineHeight: 21 },
   newScene: { minHeight: 84, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 20, borderWidth: 1, borderColor: "#31554C", backgroundColor: "#101B18", padding: 14 },
-  newSceneMark: { color: "#72D8C4", fontSize: 28 },
+  newSceneMark: { color: canalDynamicColors.mint, fontSize: 28 },
   grow: { flex: 1 },
-  cardTitle: { color: "#F7F4EC", fontSize: 15, fontWeight: "800" },
-  cardMeta: { color: "#9DA6A1", fontSize: 12, lineHeight: 17, marginTop: 3 },
-  chevron: { color: "#72D8C4", fontSize: 28 },
-  sectionLabel: { color: "#72D8C4", fontSize: 10, fontWeight: "900", letterSpacing: 1.2, marginTop: 6 },
+  cardTitle: { color: canalDynamicColors.text, fontSize: 15, fontWeight: "800" },
+  cardMeta: { color: canalDynamicColors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
+  chevron: { color: canalDynamicColors.mint, fontSize: 28 },
+  sectionLabel: { color: canalDynamicColors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.2, marginTop: 6 },
   sceneRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 17, borderWidth: 1, borderColor: "#29312E", backgroundColor: "#101514", padding: 11 },
   sceneRowSelected: { borderColor: "#72D8C4", backgroundColor: "#101B18" },
   sceneArt: { width: 48, height: 48, borderRadius: 10, backgroundColor: "#30443E" },
@@ -234,6 +235,6 @@ const styles = StyleSheet.create({
   consentRow: { minHeight: 88, flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: "#29312E", paddingVertical: 12 },
   message: { color: "#E8B4AE", fontSize: 13, lineHeight: 19 },
   primary: { minHeight: 54, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "#72D8C4" },
-  primaryText: { color: "#0C1714", fontSize: 15, fontWeight: "900" },
+  primaryText: { color: canalDynamicColors.text, fontSize: 15, fontWeight: "900" },
   disabled: { opacity: 0.45 },
 });

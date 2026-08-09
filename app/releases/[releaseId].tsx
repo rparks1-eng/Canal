@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useCallback,
   useMemo,
@@ -2588,8 +2589,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#FFF9F4",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     header: {
@@ -2611,18 +2611,17 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 22,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
     },
 
     headerTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
@@ -2712,7 +2711,7 @@ const styles =
     },
 
     loadingText: {
-      color: "#716861",
+      color: canalDynamicColors.muted,
       fontSize: 13,
     },
 
@@ -2725,18 +2724,17 @@ const styles =
       borderRadius: 22,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     emptyTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 21,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#6D655E",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
     },
@@ -2765,8 +2763,7 @@ const styles =
       paddingHorizontal: 9,
       paddingVertical: 5,
       borderRadius: 9,
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     closedBadge: {
@@ -2775,7 +2772,7 @@ const styles =
     },
 
     statusText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.6,
@@ -2787,7 +2784,7 @@ const styles =
 
     roleLabel: {
       flexShrink: 1,
-      color: "#CBB8AD",
+      color: canalDynamicColors.muted,
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.6,
@@ -2795,20 +2792,20 @@ const styles =
     },
 
     title: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 29,
       fontWeight: "900",
       lineHeight: 35,
     },
 
     description: {
-      color: "#E8D9D0",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
     },
 
     dateText: {
-      color: "#CBB8AD",
+      color: canalDynamicColors.muted,
       fontSize: 10,
     },
 
@@ -2825,8 +2822,7 @@ const styles =
       borderRadius: 20,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     roleMarker: {
@@ -2839,12 +2835,11 @@ const styles =
       borderRadius: 14,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     roleMarkerText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 16,
       fontWeight: "900",
     },
@@ -2855,13 +2850,13 @@ const styles =
     },
 
     roleTitle: {
-      color: "#2B211B",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
 
     roleDetail: {
-      color: "#71675F",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 17,
     },
@@ -2894,18 +2889,17 @@ const styles =
       borderRadius: 21,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     ownerTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
     },
 
     ownerText: {
-      color: "#675F58",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 19,
     },
@@ -2969,14 +2963,14 @@ const styles =
     },
 
     eyebrow: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.7,
     },
 
     creditTitle: {
-      color: "#2C1C14",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
     },
@@ -3014,8 +3008,7 @@ const styles =
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 999,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     creditActions: {
@@ -3041,8 +3034,7 @@ const styles =
       borderRadius: 14,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     creditButtonSelected: {
@@ -3083,19 +3075,19 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 19,
       fontWeight: "900",
     },
 
     sectionDescription: {
-      color: "#746B64",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
     },
 
     sectionCount: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 12,
       fontWeight: "900",
       fontVariant: [
@@ -3124,8 +3116,7 @@ const styles =
       borderRadius: 17,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     avatar: {
@@ -3136,12 +3127,11 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 19,
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     avatarText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 15,
       fontWeight: "900",
     },
@@ -3152,7 +3142,7 @@ const styles =
     },
 
     contributorName: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -3170,12 +3160,11 @@ const styles =
       borderRadius: 17,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     emptyItemsText: {
-      color: "#6F665F",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -3197,8 +3186,7 @@ const styles =
       borderRadius: 18,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     itemCardSelected: {
@@ -3216,12 +3204,11 @@ const styles =
       justifyContent:
         "center",
       borderRadius: 12,
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     positionText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 12,
       fontWeight: "900",
       fontVariant: [
@@ -3235,7 +3222,7 @@ const styles =
     },
 
     itemTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
@@ -3326,13 +3313,13 @@ const styles =
     },
 
     privateResultsTitle: {
-      color: "#49423D",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
 
     privateResultsText: {
-      color: "#706861",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -3373,7 +3360,7 @@ const styles =
     },
 
     noVotesText: {
-      color: "#4F705A",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -3395,8 +3382,7 @@ const styles =
       borderRadius: 15,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     winnerRow: {
@@ -3433,7 +3419,7 @@ const styles =
     },
 
     resultName: {
-      color: "#1E3526",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "900",
     },
@@ -3491,7 +3477,7 @@ const styles =
     },
 
     privacyText: {
-      color: "#55705E",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       lineHeight: 16,
     },

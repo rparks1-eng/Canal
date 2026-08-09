@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import * as Haptics from "expo-haptics";
 import {
   Stack,
@@ -232,7 +233,7 @@ export default function JoinStageScreen() {
               }}
               accessibilityLabel="Six-digit Stage code"
               placeholder="000000"
-              placeholderTextColor="#4A403A"
+              placeholderTextColor={canalDynamicColors.muted}
               keyboardType="number-pad"
               returnKeyType="done"
               maxLength={6}
@@ -414,7 +415,7 @@ const styles =
     },
 
     heading: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 31,
       lineHeight: 37,
       fontWeight: "900",
@@ -424,7 +425,7 @@ const styles =
 
     description: {
       maxWidth: 335,
-      color: "#AA9D95",
+      color: canalDynamicColors.muted,
       fontSize: 15,
       lineHeight: 22,
       textAlign: "center",
@@ -446,7 +447,7 @@ const styles =
       borderCurve: "continuous",
       backgroundColor:
         "#1B1613",
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 36,
       lineHeight: 44,
       fontWeight: "800",
@@ -502,13 +503,13 @@ const styles =
     },
 
     joinIcon: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
     },
 
     joinText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },

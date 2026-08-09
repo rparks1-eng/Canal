@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -635,7 +636,7 @@ export default function SoundscapeScreen() {
                   value={bio}
                   onChangeText={setBio}
                   placeholder="Describe your music identity"
-                  placeholderTextColor="#777f79"
+                  placeholderTextColor={canalDynamicColors.muted}
                   multiline
                   textAlignVertical="top"
                   maxLength={240}
@@ -806,7 +807,7 @@ export default function SoundscapeScreen() {
                     <Ionicons
                       name="camera-outline"
                       size={29}
-                      color="#ff9a50"
+                      color={canalDynamicColors.gold}
                     />
 
                     <Text
@@ -895,7 +896,7 @@ export default function SoundscapeScreen() {
                               <Ionicons
                                 name="camera-outline"
                                 size={22}
-                                color="#ff9a50"
+                                color={canalDynamicColors.gold}
                               />
                             </View>
 
@@ -949,7 +950,7 @@ export default function SoundscapeScreen() {
                             <Ionicons
                               name="close"
                               size={18}
-                              color="#ff9187"
+                              color={canalDynamicColors.danger}
                             />
                           </Pressable>
                         </View>
@@ -974,7 +975,7 @@ export default function SoundscapeScreen() {
                 <Ionicons
                   name="share-social-outline"
                   size={20}
-                  color="#17110c"
+                  color={canalDynamicColors.text}
                 />
 
                 <Text
@@ -1028,7 +1029,7 @@ function ProfileField({
         placeholder={
           placeholder
         }
-        placeholderTextColor="#777f79"
+        placeholderTextColor={canalDynamicColors.muted}
         autoCapitalize={
           autoCapitalize ??
           "sentences"
@@ -1141,7 +1142,7 @@ const styles = StyleSheet.create({
 
   loadingText: {
     marginTop: 12,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
   },
 
@@ -1177,7 +1178,7 @@ const styles = StyleSheet.create({
   },
 
   headerAction: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 14,
     fontWeight: "700",
     textAlign: "right",
@@ -1211,7 +1212,7 @@ const styles = StyleSheet.create({
 
   username: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 14,
   },
 
@@ -1250,7 +1251,7 @@ const styles = StyleSheet.create({
     gap: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 21,
     backgroundColor: canalColors.light.surface,
   },
@@ -1294,9 +1295,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 19,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   visibilityCopy: {
@@ -1305,14 +1306,14 @@ const styles = StyleSheet.create({
   },
 
   visibilityTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "700",
   },
 
   visibilityText: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 16,
   },
@@ -1321,7 +1322,7 @@ const styles = StyleSheet.create({
     gap: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 21,
     backgroundColor: canalColors.light.surface,
   },
@@ -1338,7 +1339,7 @@ const styles = StyleSheet.create({
   },
 
   chipLabel: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -1357,13 +1358,13 @@ const styles = StyleSheet.create({
   },
 
   chipText: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 11,
     fontWeight: "600",
   },
 
   noValueText: {
-    color: "#777f79",
+    color: canalDynamicColors.muted,
     fontSize: 11,
   },
 
@@ -1386,12 +1387,12 @@ const styles = StyleSheet.create({
 
   sectionDescription: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
   },
 
   seeAllText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -1407,13 +1408,13 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   emptyText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 12,
     lineHeight: 18,
     textAlign: "center",
@@ -1429,9 +1430,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 10,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 17,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   snapshotMain: {
@@ -1455,14 +1456,14 @@ const styles = StyleSheet.create({
   },
 
   snapshotTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 13,
     fontWeight: "700",
   },
 
   snapshotSubtitle: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 10,
   },
 
@@ -1502,7 +1503,7 @@ const styles = StyleSheet.create({
   },
 
   secondaryButtonText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "700",
   },

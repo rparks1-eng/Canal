@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   use,
   useCallback,
@@ -1216,7 +1217,7 @@ export default function NowPlayingScreen() {
               styles.pressed,
           ]}
         >
-          <Ionicons color="#F4FFFC" name="chevron-back" size={24} />
+          <Ionicons color={canalDynamicColors.text} name="chevron-back" size={24} />
         </Pressable>
 
         <View
@@ -1257,7 +1258,7 @@ export default function NowPlayingScreen() {
               styles.pressed,
           ]}
         >
-          <Ionicons color="#F4FFFC" name="options-outline" size={22} />
+          <Ionicons color={canalDynamicColors.text} name="options-outline" size={22} />
         </Pressable>
       </View>
 
@@ -1425,7 +1426,7 @@ export default function NowPlayingScreen() {
             onPress={() => router.push({ pathname: "/scenes/[sceneId]", params: { sceneId: scene.id } })}
             style={styles.playbackAction}
           >
-            <Ionicons color="#F4FFFC" name="sparkles-outline" size={18} />
+            <Ionicons color={canalDynamicColors.text} name="sparkles-outline" size={18} />
             <Text style={styles.playbackActionText}>Scene details</Text>
           </Pressable>
           <Pressable
@@ -1434,7 +1435,7 @@ export default function NowPlayingScreen() {
             onPress={() => router.push({ pathname: "/scene-snapshot", params: { sceneId: scene.id } } as never)}
             style={styles.playbackAction}
           >
-            <Ionicons color="#F4FFFC" name="camera-outline" size={18} />
+            <Ionicons color={canalDynamicColors.text} name="camera-outline" size={18} />
             <Text style={styles.playbackActionText}>Snapshot</Text>
           </Pressable>
         </View>
@@ -1704,7 +1705,7 @@ const styles =
     },
 
     missingTitle: {
-      color: "#181818",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
       marginBottom: 15,
@@ -1712,7 +1713,7 @@ const styles =
     },
 
     missingCopy: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 21,
       marginBottom: 18,
@@ -1753,14 +1754,14 @@ const styles =
     },
 
     headerEyebrow: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.9,
     },
 
     headerTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "800",
       marginTop: 2,
@@ -1776,7 +1777,7 @@ const styles =
     },
 
     doneText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 13,
       fontWeight: "800",
     },
@@ -1849,7 +1850,7 @@ const styles =
 
     trackTitle: {
       ...canalTypography.title,
-      color: "#F7FFFD",
+      color: canalDynamicColors.text,
       textAlign: "center",
       marginTop: 6,
       fontFamily: "Georgia",
@@ -1886,7 +1887,7 @@ const styles =
     },
 
     timeText: {
-      color: "#8A827B",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontVariant: [
         "tabular-nums",
@@ -1894,7 +1895,7 @@ const styles =
     },
 
     timeLabel: {
-      color: "#A09790",
+      color: canalDynamicColors.muted,
       fontSize: 9,
     },
 
@@ -1919,7 +1920,7 @@ const styles =
     },
 
     secondaryControlText: {
-      color: "#F7FFFD",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
@@ -1952,8 +1953,7 @@ const styles =
 
     notice: {
       width: "100%",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       borderRadius: 15,
       padding: 13,
       marginTop: 16,
@@ -2017,15 +2017,14 @@ const styles =
 
     sceneProfile: {
       width: "100%",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 20,
       padding: 17,
       marginTop: 19,
     },
 
     profileTitle: {
-      color: "#F7FFFD",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
@@ -2045,7 +2044,7 @@ const styles =
     },
 
     tagText: {
-      color: "#5A524D",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "700",
       textTransform:
@@ -2063,7 +2062,7 @@ const styles =
     },
 
     queueTitle: {
-      color: "#F7FFFD",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
       marginBottom: 7,
@@ -2102,7 +2101,7 @@ const styles =
     },
 
     queueImageText: {
-      color: "#8A827B",
+      color: canalDynamicColors.muted,
       fontSize: 18,
     },
 

@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -134,7 +135,7 @@ function InviteFriendsContent() {
             <Ionicons
               name="people-outline"
               size={43}
-              color="#ff9a50"
+              color={canalDynamicColors.gold}
             />
           </View>
 
@@ -181,7 +182,7 @@ function InviteFriendsContent() {
               <Ionicons
                 name="share-social-outline"
                 size={21}
-                color="#17110c"
+                color={canalDynamicColors.text}
               />
 
               <Text
@@ -260,7 +261,7 @@ function InviteFriendsContent() {
           <Ionicons
             name="information-circle-outline"
             size={22}
-            color="#ff9a50"
+            color={canalDynamicColors.gold}
           />
 
           <Text style={styles.noteText}>
@@ -304,7 +305,7 @@ function OptionRow({
         <Ionicons
           name={icon}
           size={22}
-          color="#ff9a50"
+          color={canalDynamicColors.gold}
         />
       </View>
 
@@ -329,7 +330,7 @@ function OptionRow({
       <Ionicons
         name="chevron-forward"
         size={19}
-        color="#717a73"
+        color={canalDynamicColors.muted}
       />
     </Pressable>
   );
@@ -338,7 +339,7 @@ function OptionRow({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F3EFE5",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -366,13 +367,13 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 16,
     fontWeight: "700",
@@ -393,7 +394,7 @@ const styles = StyleSheet.create({
 
   eyebrow: {
     marginTop: 18,
-    color: "#787DFF",
+    color: canalDynamicColors.lavender,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
@@ -401,7 +402,7 @@ const styles = StyleSheet.create({
 
   heading: {
     marginTop: 8,
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 28,
     fontWeight: "700",
@@ -411,7 +412,7 @@ const styles = StyleSheet.create({
   description: {
     maxWidth: 350,
     marginTop: 10,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
     textAlign: "center",
@@ -437,7 +438,7 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 14,
     borderRadius: 16,
-    backgroundColor: "#FFF0EF",
+    backgroundColor: canalDynamicColors.dangerSurface,
   },
 
   shareErrorText: {
@@ -462,9 +463,9 @@ const styles = StyleSheet.create({
   optionsCard: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 21,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   optionRow: {
@@ -490,14 +491,14 @@ const styles = StyleSheet.create({
   },
 
   optionTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "700",
   },
 
   optionDescription: {
     marginTop: 5,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 16,
   },
@@ -520,7 +521,7 @@ const styles = StyleSheet.create({
 
   noteText: {
     flex: 1,
-    color: "#bca99b",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 17,
   },

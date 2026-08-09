@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
   router,
@@ -437,7 +438,7 @@ function BlockedUsersScreenContent(
               <Ionicons
                 name="shield-checkmark-outline"
                 size={31}
-                color="#9ff3b5"
+                color={canalDynamicColors.mint}
               />
             </View>
 
@@ -641,7 +642,7 @@ function createFallbackUser(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F3EFE5",
+    backgroundColor: "transparent",
   },
 
   page: {
@@ -669,27 +670,27 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     fontWeight: "600",
   },
 
   headerTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   eyebrow: {
     marginBottom: 8,
-    color: "#787DFF",
+    color: canalDynamicColors.lavender,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
   },
 
   heading: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontFamily: "Georgia",
     fontSize: 30,
     fontWeight: "700",
@@ -697,7 +698,7 @@ const styles = StyleSheet.create({
 
   description: {
     marginTop: 10,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -728,13 +729,13 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: "#ffffff",
+    color: canalDynamicColors.text,
     fontSize: 18,
     fontWeight: "700",
   },
 
   emptyText: {
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 13,
   },
 
@@ -748,9 +749,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 14,
     borderWidth: 1,
-    borderColor: "#303833",
+    borderColor: canalDynamicColors.line,
     borderRadius: 19,
-    backgroundColor: "#171c19",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   avatar: {
@@ -764,7 +765,7 @@ const styles = StyleSheet.create({
   },
 
   avatarText: {
-    color: "#ff9187",
+    color: canalDynamicColors.danger,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -782,7 +783,7 @@ const styles = StyleSheet.create({
 
   username: {
     marginTop: 4,
-    color: "#8f9891",
+    color: canalDynamicColors.muted,
     fontSize: 12,
   },
 
@@ -799,7 +800,7 @@ const styles = StyleSheet.create({
   },
 
   unblockText: {
-    color: "#ff9a50",
+    color: canalDynamicColors.gold,
     fontSize: 12,
     fontWeight: "800",
   },

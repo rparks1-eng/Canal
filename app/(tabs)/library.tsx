@@ -590,7 +590,7 @@ export default function LibraryScreen() {
             </Text>
           </View>
 
-            <CanalHeaderActions tone="light" />
+            <CanalHeaderActions />
         </Animated.View>
 
         <Pressable
@@ -644,7 +644,7 @@ export default function LibraryScreen() {
             setQuery
           }
           placeholder="Search your Library"
-          placeholderTextColor="#9A938C"
+          placeholderTextColor={canalDynamicColors.muted}
           autoCapitalize="none"
           autoCorrect={
             false
@@ -994,7 +994,7 @@ export default function LibraryScreen() {
                           pressed && styles.pressed,
                         ]}
                       >
-                        <Ionicons color="#E3FFF8" name="ellipsis-horizontal" size={18} />
+                        <Ionicons color={canalDynamicColors.text} name="ellipsis-horizontal" size={18} />
                       </Pressable>
                     </Pressable>
                     </NativeAnimated.View>
@@ -1076,7 +1076,7 @@ const styles =
     },
 
     eyebrow: {
-      color: "rgba(215, 255, 246, 0.82)",
+      color: canalDynamicColors.text,
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 2.1,
@@ -1084,14 +1084,14 @@ const styles =
     },
 
     title: {
-      color: "#F7FFFD",
+      color: canalDynamicColors.text,
       fontSize: 34,
       fontWeight: "500",
       letterSpacing: -1.1,
     },
 
     subtitle: {
-      color: "rgba(239,255,250,0.72)",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       marginTop: 3,
       lineHeight: 19,
@@ -1127,16 +1127,16 @@ const styles =
         14,
       borderWidth: 1,
       borderColor:
-        "rgba(216, 255, 247, 0.22)",
+        canalDynamicColors.line,
       borderRadius:
         20,
       backgroundColor:
-        "rgba(5, 46, 64, 0.48)",
+        canalDynamicColors.surface,
       boxShadow: "0 14px 34px rgba(2, 31, 46, 0.14)",
     },
 
     collaborationTitle: {
-      color: "#F8FBFF",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight:
         "900",
@@ -1144,7 +1144,7 @@ const styles =
 
     collaborationText: {
       marginTop: 3,
-      color: "rgba(235, 245, 255, 0.72)",
+      color: canalDynamicColors.muted,
       fontSize: 12,
     },
 
@@ -1158,9 +1158,8 @@ const styles =
       borderColor:
         canalDynamicColors.line,
       borderRadius: 13,
-      backgroundColor:
-        "#FFFFFF",
-      color: "#1B1B1B",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       paddingHorizontal: 14,
     },
 
@@ -1177,8 +1176,7 @@ const styles =
       borderColor:
         "#E2DAD4",
       borderRadius: 13,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       paddingHorizontal: 11,
       paddingVertical: 8,
     },
@@ -1190,7 +1188,7 @@ const styles =
     layoutToggle: {
       flexDirection: "row",
       borderRadius: 13,
-      backgroundColor: "rgba(5, 37, 58, 0.36)",
+      backgroundColor: canalDynamicColors.surface,
       padding: 3,
     },
 
@@ -1209,18 +1207,17 @@ const styles =
     filterSelected: {
       borderColor:
         "#F47A24",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     filterText: {
-      color: "#756E68",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "800",
     },
 
     filterTextSelected: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
     },
 
     list: {
@@ -1242,8 +1239,7 @@ const styles =
     },
 
     sceneCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 21,
       padding: 14,
       boxShadow: "0 14px 34px rgba(2, 30, 45, 0.13)",
@@ -1260,7 +1256,7 @@ const styles =
       minHeight: 230,
       justifyContent: "flex-end",
       overflow: "hidden",
-      backgroundColor: "rgba(44, 93, 137, 0.68)",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 27,
       padding: 18,
       boxShadow: "0 19px 45px rgba(2, 28, 47, 0.22)",
@@ -1276,7 +1272,7 @@ const styles =
       alignItems: "center",
       justifyContent: "center",
       borderRadius: 24,
-      backgroundColor: "rgba(5, 38, 61, 0.34)",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     featuredSceneMain: {
@@ -1326,8 +1322,7 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       marginRight: 12,
     },
 
@@ -1343,7 +1338,7 @@ const styles =
     },
 
     artworkText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 23,
       fontWeight: "900",
     },
@@ -1353,25 +1348,25 @@ const styles =
     },
 
     sceneName: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
 
     sceneMeta: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
     },
 
     sourceText: {
-      color: "#9A938C",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
     },
 
     arrow: {
-      color: "#B4AAA3",
+      color: canalDynamicColors.muted,
       fontSize: 25,
       marginLeft: 8,
     },
@@ -1390,7 +1385,7 @@ const styles =
       right: -3,
       width: 40,
       height: 40,
-      backgroundColor: "rgba(4, 25, 49, 0.18)",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     actionRow: {
@@ -1435,7 +1430,7 @@ const styles =
     },
 
     visibilityText: {
-      color: "#756E68",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       fontWeight: "900",
     },
@@ -1473,7 +1468,7 @@ const styles =
     },
 
     deleteText: {
-      color: "#FF9289",
+      color: canalDynamicColors.danger,
       fontSize: 10,
       fontWeight: "900",
     },
@@ -1495,13 +1490,13 @@ const styles =
     },
 
     successText: {
-      color: "#72D8C4",
+      color: canalDynamicColors.mint,
       fontSize: 12,
       lineHeight: 18,
     },
 
     errorText: {
-      color: "#FF9289",
+      color: canalDynamicColors.danger,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -1512,16 +1507,14 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       borderWidth: 1,
-      borderColor: "rgba(216, 255, 247, 0.22)",
+      borderColor: canalDynamicColors.line,
     },
 
     emptyCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 22,
       borderWidth: 1,
@@ -1529,13 +1522,13 @@ const styles =
     },
 
     emptyTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 18,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       lineHeight: 20,
       marginTop: 7,

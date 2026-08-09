@@ -404,7 +404,7 @@ export default function HomeScreen() {
       edges={["top"]}
     >
       <CanalAmbientBackground />
-      <StatusBar style="light" />
+      <StatusBar style="auto" />
       <ScrollView
         contentContainerStyle={
           styles.content
@@ -792,14 +792,14 @@ const styles =
     },
 
     eyebrow: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 12,
       fontWeight: "900",
       letterSpacing: 1.4,
     },
 
     title: {
-      color: "#F7FFFD",
+      color: canalDynamicColors.text,
       fontSize: 38,
       lineHeight: 41,
       fontWeight: "500",
@@ -809,7 +809,7 @@ const styles =
 
     subtitle: {
       maxWidth: 280,
-      color: "rgba(239,255,250,0.72)",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 20,
       marginTop: 5,
@@ -828,7 +828,7 @@ const styles =
     },
 
     spotifyButtonText: {
-      color: "#FFFFFF",
+      color: "#041F13",
       fontSize: 20,
       fontWeight: "900",
     },
@@ -851,8 +851,8 @@ const styles =
       gap: 11,
       borderRadius: 19,
       borderWidth: 1,
-      borderColor: "rgba(216, 255, 247, 0.22)",
-      backgroundColor: "rgba(5, 42, 61, 0.52)",
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.surface,
       padding: 10,
       marginBottom: 11,
     },
@@ -863,14 +863,14 @@ const styles =
     },
 
     continueEyebrow: {
-      color: "#CAFFF3",
+      color: canalDynamicColors.mint,
       fontSize: 8,
       fontWeight: "800",
       letterSpacing: 1,
     },
 
     continueTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 17,
       fontWeight: "500",
@@ -883,11 +883,11 @@ const styles =
       alignItems: "center",
       justifyContent: "center",
       borderRadius: 22,
-      backgroundColor: "rgba(255,255,255,0.1)",
+      backgroundColor: canalDynamicColors.elevated,
     },
 
     continuePlayText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 15,
     },
 
@@ -896,14 +896,14 @@ const styles =
     },
 
     stageStripEyebrow: {
-      color: "#72D8C4",
+      color: canalDynamicColors.mint,
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1.3,
     },
 
     stageStripTitle: {
-      color: "#F7F4EC",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 21,
       fontWeight: "900",
@@ -926,7 +926,7 @@ const styles =
       alignItems: "center",
       justifyContent: "center",
       borderRadius: 15,
-      backgroundColor: "#72D8C4",
+      backgroundColor: canalDynamicColors.mint,
     },
 
     stagePrimaryText: {
@@ -946,7 +946,7 @@ const styles =
     },
 
     stageJoinText: {
-      color: "#F7F4EC",
+      color: canalDynamicColors.text,
       fontSize: 13,
       fontWeight: "800",
     },
@@ -972,12 +972,12 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        canalDynamicColors.gold,
       marginRight: 14,
     },
 
     heroOrbText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.onAccent,
       fontSize: 30,
       lineHeight: 32,
     },
@@ -987,7 +987,7 @@ const styles =
     },
 
     heroTitle: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 19,
       fontWeight: "900",
     },
@@ -1000,27 +1000,26 @@ const styles =
     },
 
     heroArrow: {
-      color: "#72D8C4",
+      color: canalDynamicColors.mint,
       fontSize: 30,
       marginLeft: 8,
     },
 
     emptyCard: {
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 20,
       marginBottom: 22,
     },
 
     emptyTitle: {
-      color: "#181818",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
     },
 
     emptyText: {
-      color: "#6C655F",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 21,
       marginTop: 7,
@@ -1035,11 +1034,11 @@ const styles =
       justifyContent:
         "center",
       backgroundColor:
-        "#F47A24",
+        canalDynamicColors.gold,
     },
 
     primaryButtonText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.onAccent,
       fontSize: 15,
       fontWeight: "800",
     },
@@ -1061,19 +1060,19 @@ const styles =
     },
 
     sectionTitle: {
-      color: "#F7FFFD",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
     },
 
     sectionSubtitle: {
-      color: "rgba(239,255,250,0.7)",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       marginTop: 3,
     },
 
     seeAll: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 13,
       fontWeight: "800",
     },
@@ -1103,16 +1102,14 @@ const styles =
     compactSceneCard: {
       width: 215,
       minHeight: 190,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 17,
     },
 
     sceneCard: {
       minHeight: 155,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 21,
       padding: 17,
       marginBottom: 12,
@@ -1128,7 +1125,7 @@ const styles =
     },
 
     sceneActivity: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 10,
       fontWeight: "900",
       textTransform:
@@ -1137,7 +1134,7 @@ const styles =
     },
 
     sceneName: {
-      color: "#181818",
+      color: canalDynamicColors.text,
       fontSize: 20,
       fontWeight: "900",
       marginTop: 5,
@@ -1151,7 +1148,7 @@ const styles =
     },
 
     sceneMeta: {
-      color: "#8A827B",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 14,
     },
@@ -1160,7 +1157,7 @@ const styles =
       position: "absolute",
       top: 16,
       right: 16,
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 16,
     },
 
@@ -1175,7 +1172,7 @@ const styles =
     },
 
     statsTitle: {
-      color: "#F7F4EC",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
@@ -1192,13 +1189,13 @@ const styles =
     },
 
     statValue: {
-      color: "#181818",
+      color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
     },
 
     statLabel: {
-      color: "#746D67",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 2,
     },

@@ -1211,7 +1211,7 @@ function SceneSnapshotContent() {
           value={caption}
           onChangeText={setCaption}
           placeholder="Say something about this Scene..."
-          placeholderTextColor="#9A938C"
+          placeholderTextColor={canalDynamicColors.muted}
           multiline
           maxLength={280}
           textAlignVertical="top"
@@ -1533,8 +1533,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     center: {
@@ -1553,14 +1552,14 @@ const styles =
     },
 
     stateTitle: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
       textAlign: "center",
     },
 
     stateText: {
-      color: "#6E6660",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 20,
       textAlign: "center",
@@ -1604,19 +1603,18 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
     },
 
     backText: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 34,
       lineHeight: 36,
       marginTop: -2,
     },
 
     headerTitle: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 22,
       fontWeight: "400",
@@ -1756,7 +1754,7 @@ const styles =
     },
 
     snapshotActivity: {
-      color: "#FFB781",
+      color: canalDynamicColors.gold,
       fontSize: 11,
       fontWeight: "900",
       textTransform:
@@ -1765,7 +1763,7 @@ const styles =
     },
 
     snapshotName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 34,
       lineHeight: 38,
@@ -1780,7 +1778,7 @@ const styles =
     },
 
     snapshotMeta: {
-      color: "#BDA89E",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 19,
     },
@@ -1793,7 +1791,7 @@ const styles =
     },
 
     captionLabel: {
-      color: "#5E5752",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "800",
       marginTop: 18,
@@ -1870,14 +1868,14 @@ const styles =
     },
 
     formatTitle: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontFamily: "Georgia",
       fontSize: 24,
       lineHeight: 29,
     },
 
     formatDescription: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       lineHeight: 21,
     },
@@ -1893,7 +1891,7 @@ const styles =
       borderWidth: 1,
       borderColor: "rgba(25,26,24,0.14)",
       borderRadius: 16,
-      backgroundColor: "#FFFDF8",
+      backgroundColor: canalDynamicColors.surface,
       paddingHorizontal: 16,
       paddingVertical: 10,
     },
@@ -1908,13 +1906,13 @@ const styles =
     },
 
     formatChoiceLabel: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "800",
     },
 
     formatChoiceDescription: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
       marginTop: 2,
@@ -1937,13 +1935,13 @@ const styles =
     },
 
     templateLabel: {
-      color: "#5E5752",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "900",
     },
 
     templateDescription: {
-      color: "#8B837C",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 16,
     },
@@ -1956,7 +1954,7 @@ const styles =
     },
 
     manageTemplatesText: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 12,
       fontWeight: "900",
     },
@@ -1981,8 +1979,7 @@ const styles =
       borderRadius: 16,
       borderCurve:
         "continuous",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       padding: 8,
     },
 
@@ -2017,13 +2014,13 @@ const styles =
     },
 
     templateChoiceLabel: {
-      color: "#6E6660",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       fontWeight: "800",
     },
 
     selectedTemplateChoiceLabel: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
     },
 
     templateWarning: {
@@ -2038,10 +2035,9 @@ const styles =
       borderWidth: 1,
       borderColor:
         "#E5DDD7",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 17,
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 14,
       padding: 13,
     },
@@ -2078,22 +2074,20 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderWidth: 1,
       borderColor:
         "#F47A24",
     },
 
     secondaryButtonText: {
-      color: "#F47A24",
+      color: canalDynamicColors.gold,
       fontSize: 14,
       fontWeight: "900",
     },
 
     success: {
-      backgroundColor:
-        "#EAF9EF",
+      backgroundColor: canalDynamicColors.successSurface,
       borderRadius: 17,
       padding: 14,
       marginTop: 14,
@@ -2107,7 +2101,7 @@ const styles =
       gap: 8,
       marginTop: 14,
       borderRadius: 16,
-      backgroundColor: "#FFF0EF",
+      backgroundColor: canalDynamicColors.dangerSurface,
       padding: 14,
     },
 

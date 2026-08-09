@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   useEffect,
   useState,
@@ -152,8 +153,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
 
     content: {
@@ -166,13 +166,13 @@ const styles =
     },
 
     loadingText: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       marginTop: 14,
     },
 
     errorTitle: {
-      color: "#A62E27",
+      color: canalDynamicColors.danger,
       fontSize: 23,
       fontWeight: "900",
     },

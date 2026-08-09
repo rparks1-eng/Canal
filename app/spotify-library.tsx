@@ -1480,7 +1480,7 @@ export default function SpotifyLibraryScreen() {
         "bottom",
       ]}
     >
-      <StatusBar style="dark" />
+      <StatusBar style="auto" />
 
       <View style={styles.header}>
         <Pressable
@@ -2205,7 +2205,7 @@ export default function SpotifyLibraryScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#FFF9F4",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   header: {
@@ -2222,12 +2222,12 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: canalDynamicColors.surface,
     marginRight: 12,
   },
 
   backText: {
-    color: "#1B1B1B",
+    color: canalDynamicColors.text,
     fontSize: 34,
     lineHeight: 36,
     marginTop: -2,
@@ -2239,13 +2239,13 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    color: "#181818",
+    color: canalDynamicColors.text,
     fontSize: 28,
     fontWeight: "800",
   },
 
   subtitle: {
-    color: "#6C655F",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     marginTop: 4,
   },
@@ -2264,26 +2264,26 @@ const styles = StyleSheet.create({
   },
 
   centerStateText: {
-    color: "#655F5A",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     marginTop: 14,
     textAlign: "center",
   },
 
   emptyCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: canalDynamicColors.surface,
     borderRadius: 24,
     padding: 22,
   },
 
   emptyTitle: {
-    color: "#1A1A1A",
+    color: canalDynamicColors.text,
     fontSize: 21,
     fontWeight: "800",
   },
 
   emptyText: {
-    color: "#655F5A",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     marginTop: 8,
     marginBottom: 18,
@@ -2292,7 +2292,7 @@ const styles = StyleSheet.create({
   profileCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: canalDynamicColors.surface,
     borderRadius: 24,
     padding: 18,
   },
@@ -2308,7 +2308,7 @@ const styles = StyleSheet.create({
   },
 
   profileFallbackText: {
-    color: "#FFFFFF",
+    color: canalDynamicColors.text,
     fontSize: 26,
     fontWeight: "900",
   },
@@ -2318,7 +2318,7 @@ const styles = StyleSheet.create({
   },
 
   profileEyebrow: {
-    color: "#F47A24",
+    color: canalDynamicColors.gold,
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -2326,7 +2326,7 @@ const styles = StyleSheet.create({
   },
 
   profileName: {
-    color: "#181818",
+    color: canalDynamicColors.text,
     fontSize: 22,
     fontWeight: "800",
     marginTop: 3,
@@ -2381,7 +2381,7 @@ const styles = StyleSheet.create({
   },
 
   sceneButtonArrow: {
-    color: "#FFB781",
+    color: canalDynamicColors.gold,
     fontSize: 28,
     marginLeft: 8,
   },
@@ -2397,7 +2397,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F47A24",
+    backgroundColor: canalDynamicColors.mint,
     paddingHorizontal: 12,
   },
 
@@ -2413,14 +2413,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: canalDynamicColors.surface,
     borderWidth: 1,
     borderColor: "#F47A24",
     paddingHorizontal: 12,
   },
 
   exportButtonText: {
-    color: "#F47A24",
+    color: canalDynamicColors.gold,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -2430,7 +2430,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F47A24",
+    backgroundColor: canalDynamicColors.mint,
     paddingHorizontal: 18,
   },
 
@@ -2447,7 +2447,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#D8D2CD",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: canalDynamicColors.surface,
     marginTop: 10,
     paddingHorizontal: 18,
   },
@@ -2465,7 +2465,7 @@ const styles = StyleSheet.create({
 
   metricCard: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: canalDynamicColors.surface,
     borderRadius: 18,
     paddingVertical: 16,
     paddingHorizontal: 10,
@@ -2473,13 +2473,13 @@ const styles = StyleSheet.create({
   },
 
   metricValue: {
-    color: "#181818",
+    color: canalDynamicColors.text,
     fontSize: 24,
     fontWeight: "900",
   },
 
   metricLabel: {
-    color: "#746D67",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     fontWeight: "700",
     marginTop: 3,
@@ -2487,7 +2487,7 @@ const styles = StyleSheet.create({
   },
 
   sectionCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: canalDynamicColors.surface,
     borderRadius: 22,
     padding: 18,
   },
@@ -2497,7 +2497,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: "#1B1B1B",
+    color: canalDynamicColors.text,
     fontSize: 19,
     fontWeight: "800",
   },
@@ -2515,14 +2515,14 @@ const styles = StyleSheet.create({
   },
 
   genreChip: {
-    backgroundColor: "#F4F0EC",
+    backgroundColor: canalDynamicColors.surface,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
 
   primaryGenreChip: {
-    backgroundColor: "#F47A24",
+    backgroundColor: canalDynamicColors.mint,
   },
 
   genreText: {
@@ -2533,7 +2533,7 @@ const styles = StyleSheet.create({
   },
 
   primaryGenreText: {
-    color: "#FFFFFF",
+    color: canalDynamicColors.text,
   },
 
   listRow: {
@@ -2564,7 +2564,7 @@ const styles = StyleSheet.create({
     borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F0E7DF",
+    backgroundColor: canalDynamicColors.surface,
     marginRight: 12,
   },
 
@@ -2574,7 +2574,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F0E7DF",
+    backgroundColor: canalDynamicColors.surface,
     marginRight: 12,
   },
 
@@ -2584,12 +2584,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F0E7DF",
+    backgroundColor: canalDynamicColors.surface,
     marginRight: 12,
   },
 
   fallbackText: {
-    color: "#F47A24",
+    color: canalDynamicColors.gold,
     fontSize: 18,
     fontWeight: "900",
   },
@@ -2606,7 +2606,7 @@ const styles = StyleSheet.create({
   },
 
   rowSubtitle: {
-    color: "#77706A",
+    color: canalDynamicColors.muted,
     fontSize: 12,
     marginTop: 2,
     textTransform: "capitalize",
@@ -2628,7 +2628,7 @@ const styles = StyleSheet.create({
   },
 
   successBox: {
-    backgroundColor: "#EAF9EF",
+    backgroundColor: canalDynamicColors.successSurface,
     borderRadius: 16,
     padding: 15,
   },
@@ -2640,7 +2640,7 @@ const styles = StyleSheet.create({
   },
 
   errorBox: {
-    backgroundColor: "#FFF0EF",
+    backgroundColor: canalDynamicColors.dangerSurface,
     borderRadius: 16,
     padding: 15,
   },
@@ -2658,7 +2658,7 @@ const styles = StyleSheet.create({
   },
 
   warningBox: {
-    backgroundColor: "#FFF4E9",
+    backgroundColor: canalDynamicColors.warningSurface,
     borderRadius: 16,
     padding: 15,
   },
@@ -2677,7 +2677,7 @@ const styles = StyleSheet.create({
   },
 
   importCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: canalDynamicColors.surface,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "#E2DAD4",
@@ -2686,13 +2686,13 @@ const styles = StyleSheet.create({
   },
 
   importTitle: {
-    color: "#1B1B1B",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "800",
   },
 
   importStatusSummary: {
-    backgroundColor: "#FFF4E9",
+    backgroundColor: canalDynamicColors.warningSurface,
     borderRadius: 12,
     padding: 12,
   },
@@ -2727,12 +2727,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 14,
-    backgroundColor: "#F47A24",
+    backgroundColor: canalDynamicColors.mint,
     paddingHorizontal: 16,
   },
 
   importResumeText: {
-    color: "#FFFFFF",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -2754,7 +2754,7 @@ const styles = StyleSheet.create({
   },
 
   recoveryStatusSummary: {
-    backgroundColor: "#FFF0EF",
+    backgroundColor: canalDynamicColors.dangerSurface,
     borderRadius: 16,
     padding: 15,
   },

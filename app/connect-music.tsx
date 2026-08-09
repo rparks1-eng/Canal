@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 
 import {
   useEffect,
@@ -635,7 +636,7 @@ function getInitials(
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F3EFE5",
+    backgroundColor: "transparent",
   },
 
   layout: {
@@ -654,7 +655,7 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    color: "#4C46C8",
+    color: canalDynamicColors.lavender,
     fontSize: 44,
     fontWeight: "800",
     letterSpacing: -2,
@@ -675,7 +676,7 @@ const styles = StyleSheet.create({
 
   heading: {
       fontFamily: "Georgia",
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 33,
     fontWeight: "700",
     textAlign: "center",
@@ -684,7 +685,7 @@ const styles = StyleSheet.create({
   description: {
     maxWidth: 360,
     marginTop: 11,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
     textAlign: "center",
@@ -712,12 +713,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D9D3C8",
     borderRadius: 23,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   loadingText: {
     marginTop: 12,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 14,
   },
 
@@ -727,7 +728,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#245c37",
     borderRadius: 24,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   serviceHeader: {
@@ -764,7 +765,7 @@ const styles = StyleSheet.create({
 
   connectedHeading: {
     marginTop: 5,
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 18,
     fontWeight: "700",
   },
@@ -795,7 +796,7 @@ const styles = StyleSheet.create({
   },
 
   profilePlaceholderText: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 14,
     fontWeight: "900",
   },
@@ -805,14 +806,14 @@ const styles = StyleSheet.create({
   },
 
   profileName: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "700",
   },
 
   profileDetail: {
     marginTop: 4,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 12,
   },
 
@@ -838,7 +839,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#245c37",
     borderRadius: 24,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   spotifyLogoLarge: {
@@ -857,13 +858,13 @@ const styles = StyleSheet.create({
   },
 
   connectCardTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 21,
     fontWeight: "700",
   },
 
   connectCardText: {
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center",
@@ -891,11 +892,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D9D3C8",
     borderRadius: 21,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   explanationTitle: {
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 17,
     fontWeight: "700",
   },
@@ -912,18 +913,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 11,
     borderRadius: 12,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   benefitNumberText: {
-    color: "#4C46C8",
+    color: canalDynamicColors.lavender,
     fontSize: 10,
     fontWeight: "800",
   },
 
   benefitText: {
     flex: 1,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -935,7 +936,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     borderTopWidth: 1,
     borderTopColor: "#262d29",
-    backgroundColor: "#F3EFE5",
+    backgroundColor: canalDynamicColors.baseCanvas,
   },
 
   continueButton: {
@@ -953,7 +954,7 @@ const styles = StyleSheet.create({
   },
 
   footerText: {
-    color: "#707971",
+    color: canalDynamicColors.muted,
     fontSize: 11,
     lineHeight: 16,
     textAlign: "center",

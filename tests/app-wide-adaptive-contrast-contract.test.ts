@@ -12,7 +12,7 @@ function sourceFiles(root: string): string[] {
 }
 
 const adaptiveTextRole =
-  /(?:title|heading|name|subtitle|description|body|copy|label|meta|caption|status|helper|artist|duration|detail|value|arrow|icon|text)/iu;
+  /(?:title|heading|name|subtitle|description|body|copy|label|meta|caption|status|helper|artist|duration|detail|value|arrow|icon|text|eyebrow|kicker|overline|input|search|field)/iu;
 const intentionalFixedRole =
   /(?:accent|art|artwork|avatar|badge|brand|button|cta|danger|delete|logo|mark|pill|play|provider|selected|spotify|success|warning)/iu;
 
@@ -45,15 +45,29 @@ describe("app-wide adaptive contrast", () => {
         if (!adaptiveTextRole.test(activeStyle) || intentionalFixedRole.test(activeStyle)) return;
 
         const fixedNeutral = line.match(/\bcolor:\s*["'](#[0-9a-f]{6})["']/iu);
-        if (!fixedNeutral) return;
+        const fixedNeutralRgba = line.match(
+          /\bcolor:\s*["']rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/iu,
+        );
+        if (!fixedNeutral && !fixedNeutralRgba) return;
 
-        const [red, green, blue] = fixedNeutral[1]
+        if (fixedNeutralRgba) {
+          const channels = fixedNeutralRgba.slice(1, 4).map(Number);
+          const spread = Math.max(...channels) - Math.min(...channels);
+          if (spread <= 44) {
+            failures.push(
+              `${path.relative(projectRoot, file)}:${index + 1}:${activeStyle}:${fixedNeutralRgba[0]}`,
+            );
+          }
+          return;
+        }
+
+        const [red, green, blue] = fixedNeutral![1]
           .slice(1)
           .match(/.{2}/gu)!
           .map((channel) => Number.parseInt(channel, 16));
         const spread = Math.max(red, green, blue) - Math.min(red, green, blue);
         if (spread <= 34) {
-          failures.push(`${path.relative(projectRoot, file)}:${index + 1}:${activeStyle}:${fixedNeutral[1]}`);
+          failures.push(`${path.relative(projectRoot, file)}:${index + 1}:${activeStyle}:${fixedNeutral![1]}`);
         }
       });
     }

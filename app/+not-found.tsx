@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import { Ionicons } from "@expo/vector-icons";
 import {
     router,
@@ -20,7 +21,7 @@ export default function NotFoundScreen() {
           <Ionicons
             name="map-outline"
             size={43}
-            color="#4C46C8"
+            color={canalDynamicColors.lavender}
           />
         </View>
 
@@ -92,7 +93,7 @@ export default function NotFoundScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F3EFE5",
+    backgroundColor: "transparent",
   },
 
   content: {
@@ -108,12 +109,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 34,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   eyebrow: {
     marginTop: 20,
-    color: "#4C46C8",
+    color: canalDynamicColors.lavender,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
@@ -123,7 +124,7 @@ const styles = StyleSheet.create({
       fontFamily: "Georgia",
     maxWidth: 340,
     marginTop: 9,
-    color: "#191A18",
+    color: canalDynamicColors.text,
     fontSize: 27,
     fontWeight: "700",
     lineHeight: 34,
@@ -133,7 +134,7 @@ const styles = StyleSheet.create({
   description: {
     maxWidth: 330,
     marginTop: 10,
-    color: "#6D6B64",
+    color: canalDynamicColors.muted,
     fontSize: 14,
     lineHeight: 21,
     textAlign: "center",
@@ -164,11 +165,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#39413c",
     borderRadius: 16,
-    backgroundColor: "#FFFDF8",
+    backgroundColor: canalDynamicColors.surface,
   },
 
   secondaryButtonText: {
-    color: "#4C46C8",
+    color: canalDynamicColors.lavender,
     fontSize: 13,
     fontWeight: "700",
   },

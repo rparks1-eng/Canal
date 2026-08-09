@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useEffect,
   useRef,
@@ -365,7 +366,7 @@ export default function SceneFeedbackScreen() {
           value={note}
           onChangeText={setNote}
           placeholder="What worked or did not work?"
-          placeholderTextColor="#9A938C"
+          placeholderTextColor={canalDynamicColors.muted}
           multiline
           maxLength={300}
           textAlignVertical="top"
@@ -492,7 +493,7 @@ const styles =
     },
 
     sceneActivity: {
-      color: "#FFB781",
+      color: canalDynamicColors.gold,
       fontSize: 10,
       fontWeight: "900",
       textTransform:
@@ -501,7 +502,7 @@ const styles =
     },
 
     sceneName: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 22,
       fontWeight: "900",
       textAlign: "center",
@@ -525,8 +526,7 @@ const styles =
       borderWidth: 1,
       borderColor:
         "#E5DED8",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 17,
       padding: 14,
     },
@@ -534,12 +534,11 @@ const styles =
     optionSelected: {
       borderColor:
         "#F47A24",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
     },
 
     optionLabel: {
-      color: "#292522",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
@@ -549,7 +548,7 @@ const styles =
     },
 
     optionDescription: {
-      color: "#77706A",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       lineHeight: 16,
       marginTop: 3,
@@ -587,7 +586,7 @@ const styles =
     },
 
     noteLabel: {
-      color: "#5F5853",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "800",
       marginTop: 19,
@@ -599,10 +598,9 @@ const styles =
       borderWidth: 1,
       borderColor:
         "#E5DED8",
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       borderRadius: 17,
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 14,
       padding: 13,
     },
@@ -620,7 +618,7 @@ const styles =
     },
 
     submitText: {
-      color: "#FFFFFF",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
@@ -635,7 +633,7 @@ const styles =
     },
 
     skipText: {
-      color: "#77706A",
+      color: canalDynamicColors.muted,
       fontSize: 13,
       fontWeight: "700",
     },

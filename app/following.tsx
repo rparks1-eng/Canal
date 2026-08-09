@@ -1,3 +1,4 @@
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   router,
   useFocusEffect,
@@ -758,7 +759,7 @@ export default function FollowingScreen() {
             setQuery
           }
           placeholder="Search people"
-          placeholderTextColor="#5C5A54"
+          placeholderTextColor={canalDynamicColors.muted}
           autoCapitalize="none"
           autoCorrect={
             false
@@ -1035,8 +1036,7 @@ const styles =
   StyleSheet.create({
     screen: {
       flex: 1,
-      backgroundColor:
-        "#F3EFE5",
+      backgroundColor: canalDynamicColors.baseCanvas,
     },
     page: {
       paddingHorizontal: 20,
@@ -1062,7 +1062,7 @@ const styles =
         "#F4EAE2",
     },
     backText: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 32,
       lineHeight: 34,
     },
@@ -1076,12 +1076,12 @@ const styles =
     },
     title: {
       fontFamily: "Georgia",
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 21,
       fontWeight: "900",
     },
     subtitle: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 2,
     },
@@ -1104,16 +1104,15 @@ const styles =
       paddingVertical: 11,
     },
     segmentButtonActive: {
-      backgroundColor:
-        "#FFFDF8",
+      backgroundColor: canalDynamicColors.surface,
     },
     segmentText: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       fontWeight: "800",
     },
     segmentTextActive: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
     },
     search: {
       minHeight: 48,
@@ -1121,9 +1120,8 @@ const styles =
       borderColor:
         "#E7D8CC",
       borderRadius: 15,
-      backgroundColor:
-        "#FFFDF8",
-      color: "#191A18",
+      backgroundColor: canalDynamicColors.surface,
+      color: canalDynamicColors.text,
       fontSize: 14,
       paddingHorizontal: 16,
     },
@@ -1147,8 +1145,7 @@ const styles =
       borderColor:
         "#ECDDD2",
       borderRadius: 18,
-      backgroundColor:
-        "#FFFDF8",
+      backgroundColor: canalDynamicColors.surface,
       padding: 13,
     },
     profileButton: {
@@ -1188,7 +1185,7 @@ const styles =
     },
     name: {
       flexShrink: 1,
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 14,
       fontWeight: "900",
     },
@@ -1198,9 +1195,8 @@ const styles =
     },
     verified: {
       borderRadius: 6,
-      backgroundColor:
-        "#FFF0E5",
-      color: "#B9500B",
+      backgroundColor: canalDynamicColors.warningSurface,
+      color: canalDynamicColors.gold,
       fontSize: 8,
       fontWeight: "900",
       paddingHorizontal: 5,
@@ -1223,7 +1219,7 @@ const styles =
         "#51463E",
     },
     followText: {
-      color: "#FFFDF8",
+      color: canalDynamicColors.text,
       fontSize: 11,
       fontWeight: "900",
     },
@@ -1275,7 +1271,7 @@ const styles =
       paddingVertical: 8,
     },
     retryText: {
-      color: "#FFFDF8",
+      color: canalDynamicColors.text,
       fontSize: 10,
       fontWeight: "900",
     },
@@ -1286,17 +1282,16 @@ const styles =
       borderColor:
         "#ECDDD2",
       borderRadius: 18,
-      backgroundColor:
-        "#FFFDF8",
+      backgroundColor: canalDynamicColors.surface,
       padding: 28,
     },
     emptyTitle: {
-      color: "#191A18",
+      color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
     },
     emptyText: {
-      color: "#6D6B64",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 18,
       textAlign:

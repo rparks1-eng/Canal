@@ -11,6 +11,9 @@ describe("Light, Dark and System appearance", () => {
     expect(source).toContain("AsyncStorage.getItem(APPEARANCE_STORAGE_KEY)");
     expect(source).toContain("AsyncStorage.setItem(APPEARANCE_STORAGE_KEY, nextMode)");
     expect(source).toContain('Appearance.setColorScheme(mode === "system" ? null : mode)');
+    expect(source).toContain("resolvedScheme");
+    expect(source).toContain("SystemUI.setBackgroundColorAsync");
+    expect(source).toContain('resolvedScheme === "dark" ? "light" : "dark"');
   });
 
   it("exposes Settings to Appearance navigation and accessible radio choices", () => {
@@ -25,7 +28,7 @@ describe("Light, Dark and System appearance", () => {
     expect(appearance).toContain("accessibilityState={{ checked: selected }}");
   });
 
-  it("uses dynamic semantic colors throughout every StyleSheet-backed app surface", () => {
+  it("does not force route status bars against the selected appearance", () => {
     const visit = (directory: string): string[] =>
       fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
         const absolute = path.join(directory, entry.name);
@@ -33,23 +36,11 @@ describe("Light, Dark and System appearance", () => {
         return entry.name.endsWith(".tsx") ? [absolute] : [];
       });
 
-    const canonicalLiterals = [
-      '"#080B0C"', '"#0F1514"', '"#151D1B"', '"#F7F4EC"',
-      '"#A5AEA9"', '"#29332F"', '"#72D8C4"', '"#A991E8"',
-      '"#FF9289"', '"#10201C"',
-    ];
-
     for (const file of visit(path.join(root, "app"))) {
-      if (file.endsWith("appearance.tsx")) continue;
       const source = fs.readFileSync(file, "utf8");
-      const styleIndex = source.indexOf("StyleSheet.create");
-      if (styleIndex < 0) continue;
-      const styles = source.slice(styleIndex);
-      for (const literal of canonicalLiterals) {
-        expect(`${path.relative(root, file)}:${literal}:${styles.includes(literal)}`).toBe(
-          `${path.relative(root, file)}:${literal}:false`,
-        );
-      }
+      expect(`${path.relative(root, file)}:${/<StatusBar style="(?:light|dark)"/u.test(source)}`).toBe(
+        `${path.relative(root, file)}:false`,
+      );
     }
   });
 
@@ -59,7 +50,8 @@ describe("Light, Dark and System appearance", () => {
       "utf8",
     );
 
-    expect(colors).toContain('canvas: dynamicColor("rgba(243,239,229,0.94)", "rgba(8,11,12,0.94)")');
-    expect(colors).toContain('baseCanvas: dynamicColor("#F3EFE5", "#080B0C")');
+    expect(colors).toContain('canvas: dynamicColor("rgba(221,244,242,0.72)", "rgba(8,38,57,0.56)")');
+    expect(colors).toContain('baseCanvas: dynamicColor("#DDF4F2", "#102E43")');
+    expect(colors).toContain('ambientWash: dynamicColor("rgba(255,255,255,0.22)", "rgba(4,23,39,0.08)")');
   });
 });

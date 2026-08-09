@@ -367,8 +367,7 @@ const styles =
       borderColor:
         "#EEE5DE",
       borderRadius: 20,
-      backgroundColor:
-        "#FFFFFF",
+      backgroundColor: canalDynamicColors.surface,
       overflow:
         "hidden",
     },
@@ -430,8 +429,7 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#FFF0E5",
+      backgroundColor: canalDynamicColors.warningSurface,
       marginBottom: 11,
       overflow:
         "hidden",
@@ -476,7 +474,7 @@ const styles =
     },
 
     sceneName: {
-      color: "#1B1B1B",
+      color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
@@ -505,7 +503,7 @@ const styles =
     },
 
     templateProvenance: {
-      color: "#B9500B",
+      color: canalDynamicColors.gold,
       fontSize: 9,
       fontWeight: "900",
       letterSpacing: 0.2,
@@ -559,16 +557,15 @@ const styles =
 
     creatorName: {
       flexShrink: 1,
-      color: "#2A2724",
+      color: canalDynamicColors.text,
       fontSize: 11,
       fontWeight: "800",
     },
 
     creatorBadge: {
       borderRadius: 6,
-      backgroundColor:
-        "#FFF0E5",
-      color: "#B9500B",
+      backgroundColor: canalDynamicColors.warningSurface,
+      color: canalDynamicColors.gold,
       fontSize: 7,
       fontWeight: "900",
       paddingHorizontal: 5,
