@@ -42,10 +42,6 @@ import {
 } from "../components/canal-ui/canal-ambient-background";
 
 import {
-  CanalAmbientBackground,
-} from "../components/canal-ui/canal-ambient-background";
-
-import {
   CanalAppearanceProvider,
 } from "../theme/canal-appearance";
 
