@@ -191,6 +191,7 @@ describe(
       () => {
         expect(sources.rootLayout).toContain("showPersistentNavigation");
         expect(sources.rootLayout).toContain("<CanalBottomNav />");
+        expect(sources.rootLayout).not.toContain('rootSegment !== "scene-studio"');
         expect(sources.tabLayout).toContain("tabBar={() => (");
         expect(sources.tabLayout).toContain("<CanalBottomNav />");
         expect(sources.bottomNav).toContain('route: "/(tabs)"');

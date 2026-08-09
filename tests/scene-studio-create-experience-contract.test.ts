@@ -4,6 +4,13 @@ import path from "node:path";
 describe("Create Scene Living Glass experience", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "app/scene-studio.tsx"), "utf8");
 
+  it("keeps one clear Continue action above the persistent navigation", () => {
+    expect(source).not.toContain("Preview another Scene atmosphere");
+    expect(source).not.toContain("styles.atmosphereButton");
+    expect(source).toContain("bottom:88");
+    expect(source).toContain("paddingBottom:250");
+  });
+
   it("keeps the cycling atmosphere active until the route leaves after Generate", () => {
     expect(source).toContain("LIVING_COVER_RECIPES");
     expect(source).toContain("CANAL_ATMOSPHERE_TRANSITION_MS");
@@ -29,9 +36,9 @@ describe("Create Scene Living Glass experience", () => {
   });
 
   it("keeps every primary interactive surface at least 48 points tall", () => {
-    expect(source).toMatch(/suggestNameButton:\s*\{[\s\S]*?minHeight: 48/u);
-    expect(source).toMatch(/textInput:\s*\{[\s\S]*?minHeight: 48/u);
-    expect(source).toMatch(/moodOrb:\s*\{[\s\S]*?minHeight: 48/u);
+    expect(source).toMatch(/suggestNameButton:\s*\{[\s\S]*?minHeight:\s*48/u);
+    expect(source).toMatch(/textInput:\s*\{[\s\S]*?minHeight:\s*48/u);
+    expect(source).toMatch(/moodOrb:\s*\{[\s\S]*?minHeight:\s*48/u);
   });
 
   it("starts Moment unselected, requires a mood, permits five, and explains Direct Canal", () => {

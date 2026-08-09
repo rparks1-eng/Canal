@@ -538,7 +538,6 @@ function CanalNavigator() {
     rootSegment !== "auth" &&
     rootSegment !== "onboarding" &&
     rootSegment !== "connect-music" &&
-    rootSegment !== "scene-studio" &&
     rootSegment !== "spotify-callback";
 
   return (

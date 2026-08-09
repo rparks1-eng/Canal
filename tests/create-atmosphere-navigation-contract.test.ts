@@ -9,7 +9,7 @@ describe("Create atmosphere and navigation contract", () => {
     const studio = read("app/scene-studio.tsx");
     expect(studio).toContain("LIVING_COVER_RECIPES");
     expect(studio).toContain("setOverride(sceneAtmosphere({");
-    expect(studio).toContain("paletteIndex = (paletteIndex + 1) % LIVING_COVER_RECIPES.length");
+    expect(studio).toContain("(palettePreviewIndexRef.current + 1) % LIVING_COVER_RECIPES.length");
     expect(studio).toContain("}, CANAL_ATMOSPHERE_TRANSITION_MS)");
     expect(studio).toContain("if (interval) clearInterval(interval)");
     expect(studio).toContain("setOverride(null)");
