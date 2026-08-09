@@ -3369,6 +3369,35 @@ export default function LiveStageScreen() {
     ) ||
     cloudIsOffline;
 
+  function renderStageMessage({ item }: { item: LiveStageMessage }) {
+      if (!stage) {
+        return null;
+      }
+
+      const messageIsFromHost = stage.hostId
+        ? item.userId === stage.hostId
+        : item.isMine && isHost;
+
+      return (
+        <MessageRow
+          canEdit={item.isMine && !isEnded}
+          canRemove={ isHost && !messageIsFromHost }
+          canReport={ !item.isMine }
+          message={item}
+          removeDisabled={moderationDisabled}
+          moderating={moderatingTarget === `message:${item.id}`}
+          onRemove={confirmRemoveMessage}
+          onReport={openReportMessage}
+          onEdit={beginEditMessage}
+          onDelete={confirmDeleteOwnMessage}
+          onReact={toggleReaction}
+          onOpenReactionPicker={setReactionMessage}
+          onViewReactors={viewReactionMembers}
+          reportDisabled={reportDisabled}
+        />
+      );
+  }
+
   return (
     <>
       <Stack.Screen
@@ -3597,57 +3626,12 @@ export default function LiveStageScreen() {
         style={styles.screen}
       >
         <FlatList
-          ref={listRef}
           data={[] as LiveStageMessage[]}
           keyExtractor={
             (message) =>
               message.id
           }
-          renderItem={({
-            item,
-          }) => {
-            const messageIsFromHost =
-              stage.hostId
-                ? item.userId ===
-                  stage.hostId
-                : item.isMine &&
-                  isHost;
-
-            return (
-              <MessageRow
-                canEdit={item.isMine && !isEnded}
-                canRemove={
-                  isHost &&
-                  !messageIsFromHost
-                }
-                canReport={
-                  !item.isMine
-                }
-                message={item}
-                removeDisabled={
-                  moderationDisabled
-                }
-                moderating={
-                  moderatingTarget ===
-                  `message:${item.id}`
-                }
-                onRemove={
-                  confirmRemoveMessage
-                }
-                onReport={
-                  openReportMessage
-                }
-                onEdit={beginEditMessage}
-                onDelete={confirmDeleteOwnMessage}
-                onReact={toggleReaction}
-                onOpenReactionPicker={setReactionMessage}
-                onViewReactors={viewReactionMembers}
-                reportDisabled={
-                  reportDisabled
-                }
-              />
-            );
-          }}
+          renderItem={renderStageMessage}
           ListHeaderComponent={
             header
           }
@@ -3660,148 +3644,177 @@ export default function LiveStageScreen() {
           }
         />
 
-        <View
-          style={[
-            styles.composer,
-            {
-              paddingBottom:
-                Math.max(
-                  insets.bottom,
-                  10,
-                ),
-            },
-          ]}
+        <Modal
+          animationType="none"
+          onRequestClose={closeChat}
+          transparent
+          visible={chatOpen}
         >
-          {canChat ? (
-            <>
-              <View
-                style={
-                  styles.inputWrap
-                }
-              >
-                <TextInput
-                  value={
-                    messageBody
-                  }
-                  onChangeText={
-                    setMessageBody
-                  }
-                  onSubmitEditing={() => {
-                    void sendMessage();
-                  }}
-                  accessibilityLabel="Message Stage chat"
-                  placeholder="Message the Stage…"
-                  placeholderTextColor="#8B7E76"
-                  maxLength={500}
-                  multiline
-                  returnKeyType="send"
-                  blurOnSubmit={
-                    false
-                  }
-                  style={
-                    styles.messageInput
-                  }
-                />
-
-                {messageBody.length >
-                420 ? (
-                  <Text
-                    style={
-                      styles.messageCounter
-                    }
-                  >
-                    {
-                      messageBody.length
-                    }
-                    /500
-                  </Text>
-                ) : null}
-              </View>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Send message"
-                disabled={
-                  sending ||
-                  !messageBody.trim() ||
-                  cloudIsOffline
-                }
-                onPress={() => {
-                  void sendMessage();
-                }}
-                style={({
-                  pressed,
-                }) => [
-                  styles.sendButton,
-                  (
-                    sending ||
-                    !messageBody.trim() ||
-                    cloudIsOffline
-                  ) &&
-                    styles.disabled,
-                  pressed &&
-                    styles.pressed,
-                ]}
-              >
-                {sending ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#FFFFFF"
+          <KeyboardAvoidingView
+            behavior={process.env.EXPO_OS === "ios" ? "padding" : undefined}
+            style={styles.chatModalContainer}
+          >
+          <Animated.View
+            accessibilityViewIsModal
+            style={[
+              styles.chatModal,
+              {
+                opacity: chatReveal,
+                transform: [
+                  {
+                    translateY: chatReveal.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [42, 0],
+                    }),
+                  },
+                  {
+                    scale: chatReveal.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.97, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.chatSheet}>
+              <View style={styles.chatNowPlaying}>
+                {currentTrackImageUrl ? (
+                  <Image
+                    accessibilityLabel={`${currentTrack?.title ?? "Current track"} album artwork`}
+                    contentFit="cover"
+                    source={ currentTrackImageUrl }
+                    style={styles.chatArtwork}
+                    transition={140}
                   />
                 ) : (
-                  <Text
-                    style={
-                      styles.sendText
-                    }
-                  >
-                    {editingMessageId ? "Save" : "↑"}
-                  </Text>
+                  <View style={[styles.chatArtwork, styles.queueArtworkFallback]}>
+                    <Ionicons color="#C8FFF3" name="musical-note" size={20} />
+                  </View>
                 )}
-              </Pressable>
-            </>
-          ) : !isEnded ? (
-            <Pressable
-              accessibilityRole="button"
-              disabled={
-                updating ||
-                cloudIsOffline
-              }
-              onPress={() => {
-                void joinStage();
-              }}
-              style={({
-                pressed,
-              }) => [
-                styles.joinComposerButton,
-                (
-                  updating ||
-                  cloudIsOffline
-                ) &&
-                  styles.disabled,
-                pressed &&
-                  styles.pressed,
-              ]}
-            >
-              <Text
-                style={
-                  styles.joinComposerText
-                }
+
+                <View style={styles.chatNowPlayingCopy}>
+                  <Text numberOfLines={1} style={styles.chatStageName}>{stage.name}</Text>
+                  <Text numberOfLines={1} style={styles.chatTrackName}>
+                    {currentTrack ? `${currentTrack.title} · ${currentTrack.artist}` : "Queue ready"}
+                  </Text>
+                </View>
+
+                <Pressable
+                  accessibilityLabel="Close Stage chat"
+                  accessibilityRole="button"
+                  onPress={closeChat}
+                  style={({ pressed }) => [styles.closeChatButton, pressed && styles.pressed]}
+                >
+                  <Ionicons color="#F4FFFC" name="close" size={22} />
+                </Pressable>
+              </View>
+
+              <View style={styles.chatSheetTitleRow}>
+                <View>
+                  <Text accessibilityRole="header" style={styles.chatTitle}>Stage chat</Text>
+                  <Text style={styles.chatSubtitle}>Live with the room</Text>
+                </View>
+                <Text style={styles.chatCount}>{messages.length}</Text>
+              </View>
+
+              <FlatList
+                ref={listRef}
+                data={messages}
+                keyExtractor={(message) => message.id}
+                renderItem={renderStageMessage}
+                keyboardDismissMode="interactive"
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.chatMessages}
+                ListEmptyComponent={(
+                  <View style={styles.emptyChat}>
+                    <Text style={styles.emptyChatTitle}>The room is listening</Text>
+                    <Text style={styles.emptyChatText}>Start the conversation or react when a message arrives.</Text>
+                  </View>
+                )}
+              />
+
+              <View
+                style={[
+                  styles.composer,
+                  { paddingBottom: Math.max(insets.bottom, 10) },
+                ]}
               >
-                Join Stage to chat
-              </Text>
-            </Pressable>
-          ) : (
-            <Text
-              selectable
-              style={
-                styles.readOnlyText
-              }
-            >
-              This Stage has ended.
-              Chat is read-only.
-            </Text>
-          )}
-        </View>
+                {canChat ? (
+                  <>
+                    <View style={styles.inputWrap}>
+                      <TextInput
+                        accessibilityLabel="Message Stage chat"
+                      autoCapitalize="none"
+                        blurOnSubmit={false}
+                        maxLength={500}
+                        multiline
+                        onChangeText={setMessageBody}
+                        onSubmitEditing={() => void sendMessage()}
+                        placeholder="Message the Stage…"
+                        placeholderTextColor="#8B7E76"
+                        returnKeyType="send"
+                        style={styles.messageInput}
+                        value={messageBody}
+                      />
+
+                      {messageBody.length > 420 ? (
+                        <Text style={styles.messageCounter}>{messageBody.length}/500</Text>
+                      ) : null}
+                    </View>
+
+                    <Pressable
+                      accessibilityHint={editingMessageId ? "Saves your edited message." : "Sends your message to the Stage."}
+                      accessibilityLabel="Send message"
+                      accessibilityRole="button"
+                      disabled={sending || !messageBody.trim() || cloudIsOffline}
+                      onPress={() => void sendMessage()}
+                      style={({ pressed }) => [
+                        styles.sendButton,
+                        (sending || !messageBody.trim() || cloudIsOffline) && styles.disabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      {sending ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <Ionicons color="#FFFFFF" name={editingMessageId ? "checkmark" : "arrow-up"} size={20} />
+                      )}
+                    </Pressable>
+                  </>
+                ) : !isEnded ? (
+                  <Pressable
+                    accessibilityLabel="Join Stage to chat"
+                    accessibilityRole="button"
+                    disabled={updating || cloudIsOffline}
+                    onPress={() => void joinStage()}
+                    style={({ pressed }) => [
+                      styles.joinComposerButton,
+                      (updating || cloudIsOffline) && styles.disabled,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.joinComposerText}>Join Stage to chat</Text>
+                  </Pressable>
+                ) : (
+                  <Text selectable style={styles.readOnlyText}>This Stage has ended. Chat is read-only.</Text>
+                )}
+              </View>
+
+              <StageEmojiPicker
+                accountKey={accountKey}
+                messageLabel={reactionMessage?.body ?? "Stage message"}
+                onClose={() => setReactionMessage(null)}
+                onSelect={(emoji) => {
+                  if (reactionMessage) toggleReaction(reactionMessage, emoji);
+                }}
+                visible={Boolean(reactionMessage)}
+              />
+            </View>
+          </Animated.View>
+          </KeyboardAvoidingView>
+        </Modal>
+
         <LinerNotesOverlay
           context={linerNotes.context}
           onClose={() => setContextTrack(null)}
@@ -4697,9 +4710,18 @@ const styles =
     },
 
     chatModal: {
-      flex: 1,
+      position: "absolute",
+      zIndex: 30,
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
       justifyContent: "flex-start",
-      backgroundColor: "rgba(9, 29, 45, 0.08)",
+      backgroundColor: "rgba(3, 18, 30, 0.46)",
+    },
+
+    chatModalContainer: {
+      flex: 1,
     },
 
     chatSheet: {
