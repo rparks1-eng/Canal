@@ -96,6 +96,7 @@ import type {
 } from "../lib/spotify-auth";
 
 import {
+  getLatestSpotifyLibrarySnapshot,
   readSpotifyLibrarySnapshot,
   syncSpotifyLibrary,
 } from "../lib/spotify-library";
@@ -858,6 +859,25 @@ export default function MusicServicesScreen() {
           );
 
           return;
+        }
+
+        if (snapshot) {
+          const latestLibrary =
+            await getLatestSpotifyLibrarySnapshot();
+
+          if (!canCommit()) {
+            return;
+          }
+
+          snapshot =
+            latestLibrary.snapshot ??
+            snapshot;
+
+          if (latestLibrary.warning) {
+            setStatusMessage(
+              latestLibrary.warning,
+            );
+          }
         }
 
         if (!snapshot) {
@@ -2599,6 +2619,10 @@ export default function MusicServicesScreen() {
       ],
     );
 
+  const showsInlineSpotifyReconnect =
+    recoveryIssue?.action ===
+    "reconnect-spotify";
+
   const retryCleanup =
     async (
       allowSignOut: boolean,
@@ -2983,6 +3007,44 @@ export default function MusicServicesScreen() {
                     ? "Your last snapshot stays available on this device. Reconnect Spotify to refresh it and export playlists."
                     : "Use Sync Spotify Library before creating a Scene."}
               </Text>
+
+              {showsInlineSpotifyReconnect ? (
+                <Pressable
+                  accessibilityLabel="Reconnect Spotify"
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    disabled:
+                      connectivityStatus ===
+                        "offline" ||
+                      !requestReady ||
+                      accountAction !==
+                        null,
+                  }}
+                  disabled={
+                    connectivityStatus ===
+                      "offline" ||
+                    !requestReady ||
+                    accountAction !==
+                      null
+                  }
+                  onPress={() =>
+                    void connect()
+                  }
+                  style={({ pressed }) => [
+                    styles.reconnectButton,
+                    pressed &&
+                      styles.pressed,
+                  ]}
+                >
+                  <Text
+                    style={
+                      styles.reconnectButtonText
+                    }
+                  >
+                    Reconnect Spotify
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
 
             <Pressable
@@ -3163,7 +3225,8 @@ export default function MusicServicesScreen() {
           </View>
         ) : null}
 
-        {recoveryIssue ? (
+        {recoveryIssue &&
+        !showsInlineSpotifyReconnect ? (
           <RecoveryNotice
             busy={
               visibleConnectionState ===
@@ -3412,6 +3475,26 @@ const styles =
       fontSize: 12,
       lineHeight: 18,
       marginTop: 4,
+    },
+
+    reconnectButton: {
+      minHeight: 48,
+      alignSelf: "flex-start",
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 12,
+      paddingHorizontal: 17,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      backgroundColor: "#1DB954",
+    },
+
+    reconnectButtonText: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "800",
     },
 
     primaryButton: {
