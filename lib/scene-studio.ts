@@ -38,50 +38,106 @@ export const SCENE_ACTIVITY_OPTIONS = [
   {
     value: "focus",
     label: "Focus",
+    palette: "living-verdant",
     description:
       "Concentration, studying, writing, or deep work.",
   },
   {
     value: "workout",
     label: "Workout",
+    palette: "living-ember",
     description:
       "Lifting, running, training, or high-energy movement.",
   },
   {
     value: "commute",
     label: "Commute",
+    palette: "living-cobalt",
     description:
       "A balanced soundtrack for traveling.",
   },
   {
     value: "unwind",
     label: "Unwind",
+    palette: "living-tide",
     description:
       "Slower music for decompressing and relaxing.",
   },
   {
     value: "party",
     label: "Party",
+    palette: "living-ember",
     description:
       "Recognizable, energetic tracks for a social setting.",
   },
   {
     value: "sleep",
     label: "Sleep",
+    palette: "living-tide",
     description:
       "A soft, low-intensity sequence for winding down.",
   },
   {
     value: "social",
     label: "Social",
+    palette: "living-rose",
     description:
       "Background music for friends, dinner, or conversation.",
   },
   {
     value: "explore",
     label: "Explore",
+    palette: "living-violet",
     description:
       "A more varied route through your existing music taste.",
+  },
+  {
+    value: "morning",
+    label: "Start the day",
+    palette: "living-solar",
+    description: "A bright reset for waking up and getting moving.",
+  },
+  {
+    value: "cook",
+    label: "Cook",
+    palette: "living-copper",
+    description: "A warm, rhythmic backdrop for the kitchen.",
+  },
+  {
+    value: "create",
+    label: "Create",
+    palette: "living-violet",
+    description: "Imaginative music for making, drawing, or brainstorming.",
+  },
+  {
+    value: "date",
+    label: "Date night",
+    palette: "living-rose",
+    description: "Close, warm music for a shared evening.",
+  },
+  {
+    value: "outdoors",
+    label: "Get outside",
+    palette: "living-verdant",
+    description: "Open-air energy for walking, hiking, or a day outside.",
+  },
+  {
+    value: "reading",
+    label: "Read",
+    palette: "living-silver",
+    description: "Detailed but unobtrusive music for reading.",
+  },
+  {
+    value: "gaming",
+    label: "Gaming",
+    palette: "living-cobalt",
+    description: "Immersive momentum for playing or competing.",
+  },
+  {
+    value: "recovery",
+    label: "Stretch & recover",
+    palette: "living-tide",
+    description: "Gentle pacing for stretching, cooling down, or healing.",
   },
 ] as const;
 
@@ -89,75 +145,103 @@ export const SCENE_MOOD_OPTIONS = [
   {
     value: "warm",
     label: "Warm",
+    palette: "living-copper",
   },
   {
     value: "social",
-    label: "Social",
+    label: "Outgoing",
+    palette: "living-rose",
   },
   {
     value: "calm",
     label: "Calm",
+    palette: "living-tide",
   },
   {
     value: "clear",
-    label: "Clear",
+    label: "Clear-headed",
+    palette: "living-tide",
   },
   {
     value: "energized",
     label: "Energized",
+    palette: "living-ember",
   },
   {
     value: "confident",
     label: "Confident",
+    palette: "living-cobalt",
   },
   {
     value: "happy",
-    label: "Happy",
+    label: "Joyful",
+    palette: "living-solar",
   },
   {
     value: "reflective",
     label: "Reflective",
+    palette: "living-silver",
   },
   {
     value: "romantic",
     label: "Romantic",
+    palette: "living-rose",
   },
   {
     value: "moody",
-    label: "Moody",
+    label: "Brooding",
+    palette: "living-midnight",
   },
   {
     value: "adventurous",
     label: "Adventurous",
+    palette: "living-violet",
   },
   {
     value: "euphoric",
     label: "Euphoric",
+    palette: "living-solar",
   },
   {
     value: "dreamy",
     label: "Dreamy",
+    palette: "living-violet",
   },
   {
     value: "intimate",
     label: "Intimate",
+    palette: "living-rose",
   },
   {
     value: "nostalgic",
     label: "Nostalgic",
+    palette: "living-copper",
   },
   {
     value: "grounded",
     label: "Grounded",
+    palette: "living-verdant",
   },
   {
     value: "playful",
     label: "Playful",
+    palette: "living-solar",
   },
   {
     value: "restless",
     label: "Restless",
+    palette: "living-ember",
   },
+  { value: "serene", label: "Serene", palette: "living-tide" },
+  { value: "hopeful", label: "Hopeful", palette: "living-solar" },
+  { value: "bittersweet", label: "Bittersweet", palette: "living-silver" },
+  { value: "cozy", label: "Cozy", palette: "living-copper" },
+  { value: "fierce", label: "Fierce", palette: "living-ember" },
+  { value: "curious", label: "Curious", palette: "living-violet" },
+  { value: "sensual", label: "Sensual", palette: "living-rose" },
+  { value: "celebratory", label: "Celebratory", palette: "living-solar" },
+  { value: "rebellious", label: "Rebellious", palette: "living-midnight" },
+  { value: "focused", label: "Locked in", palette: "living-verdant" },
 ] as const;
 
 export const SCENE_ENERGY_OPTIONS = [
@@ -550,6 +634,14 @@ const ACTIVITY_GENRE_KEYWORDS: Record<
     "fusion",
     "art pop",
   ],
+  morning: ["pop", "soul", "indie pop", "funk", "acoustic", "disco"],
+  cook: ["soul", "funk", "jazz", "folk", "r&b", "latin", "disco"],
+  create: ["alternative", "art pop", "ambient", "electronic", "indie", "experimental"],
+  date: ["r&b", "neo soul", "soul", "jazz", "slow jam", "latin", "acoustic"],
+  outdoors: ["folk", "indie", "acoustic", "americana", "roots", "alternative"],
+  reading: ["classical", "ambient", "piano", "jazz", "instrumental", "lo-fi"],
+  gaming: ["electronic", "soundtrack", "hip hop", "rock", "drum and bass", "synthwave"],
+  recovery: ["ambient", "chill", "acoustic", "neo soul", "piano", "downtempo"],
 };
 
 const MOOD_GENRE_KEYWORDS: Record<
@@ -730,6 +822,16 @@ const MOOD_GENRE_KEYWORDS: Record<
     "industrial",
     "alternative",
   ],
+  serene: ["ambient", "classical", "piano", "chill", "acoustic", "meditation"],
+  hopeful: ["pop", "soul", "gospel", "indie pop", "folk", "dance"],
+  bittersweet: ["indie", "singer-songwriter", "soul", "folk", "alternative", "piano"],
+  cozy: ["soul", "folk", "acoustic", "jazz", "neo soul", "soft rock"],
+  fierce: ["rock", "metal", "punk", "hip hop", "rap", "electronic"],
+  curious: ["experimental", "art pop", "jazz", "electronic", "alternative", "world"],
+  sensual: ["r&b", "neo soul", "slow jam", "jazz", "latin", "trip hop"],
+  celebratory: ["dance", "pop", "disco", "funk", "afrobeats", "latin"],
+  rebellious: ["punk", "rock", "trap", "industrial", "post-punk", "hip hop"],
+  focused: ["ambient", "instrumental", "lo-fi", "classical", "piano", "minimal"],
 };
 
 const HIGH_ENERGY_GENRE_KEYWORDS = [

@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { sceneAtmosphere, scenePresentation, stagePresentation } from "../components/canal-ui/scene-signature";
-import { LIVING_COVER_RECIPES } from "../lib/living-covers";
-import { SCENE_MOOD_OPTIONS } from "../lib/scene-studio";
+import { classifyLivingCover, LIVING_COVER_RECIPES } from "../lib/living-covers";
+import { SCENE_ACTIVITY_OPTIONS, SCENE_MOOD_OPTIONS } from "../lib/scene-studio";
 
 const paletteCases = [
   { templateId: "living-solar", scene: { name: "Daylight Lift", activity: "morning", emotions: "happy", genres: "disco", energy: "high", createdAt: "2026-08-09T08:00:00" } },
@@ -42,6 +42,30 @@ describe("Scene ten-palette coverage", () => {
     const bases = new Set(paletteCases.map(({ scene }) => sceneAtmosphere(scene).base));
     expect(bases.size).toBe(10);
     expect(SCENE_MOOD_OPTIONS.some(({ value }) => value === "clear")).toBe(true);
+  });
+
+  it.each(SCENE_ACTIVITY_OPTIONS)("maps activity $label to its intentional palette", (option) => {
+    expect(classifyLivingCover({ activity: option.value }).templateId).toBe(option.palette);
+  });
+
+  it.each(SCENE_MOOD_OPTIONS)("maps mood $label to its intentional palette", (option) => {
+    expect(classifyLivingCover({ mood: option.value }).templateId).toBe(option.palette);
+  });
+
+  it.each(SCENE_ACTIVITY_OPTIONS)("keeps activity $label intact through Scene presentation", (option) => {
+    expect(scenePresentation({ name: "", activity: option.value, emotions: "", genres: "", energy: "medium" }).templateId)
+      .toBe(option.palette);
+  });
+
+  it.each(SCENE_MOOD_OPTIONS)("keeps mood $label intact through Scene presentation", (option) => {
+    expect(scenePresentation({ name: "", activity: "", emotions: option.value, genres: "", energy: "medium" }).templateId)
+      .toBe(option.palette);
+  });
+
+  it("does not color ordinary names as Date, Read, Art, or Work signals", () => {
+    expect(classifyLivingCover({ name: "Updated and ready" }).templateId).toBe("living-midnight");
+    expect(classifyLivingCover({ name: "Heart Start" }).templateId).toBe("living-midnight");
+    expect(classifyLivingCover({ activity: "workout" }).templateId).toBe("living-ember");
   });
 
   it("uses the shared palette visual on Home, Explore, and Library", () => {
