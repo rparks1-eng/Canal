@@ -183,6 +183,8 @@ describe(
                   "Ari",
                 handle:
                   "@ari",
+                avatarUrl:
+                  null,
                 isVerified:
                   true,
                 isCanal:

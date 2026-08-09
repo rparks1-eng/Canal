@@ -1401,13 +1401,11 @@ function ProfileScreenContent() {
             }
           >
             <View style={styles.identitySummary}>
-              <View style={styles.avatarFrame}>
-                <ProfileAvatar
-                  avatarUrl={displayProfile.avatarUrl}
-                  displayName={displayProfile.displayName}
-                  size={88}
-                />
-              </View>
+              <ProfileAvatar
+                avatarUrl={displayProfile.avatarUrl}
+                displayName={displayProfile.displayName}
+                size={88}
+              />
 
               <View style={styles.identityCopy}>
                 <View style={styles.profileNameRow}>
@@ -2682,17 +2680,6 @@ const styles =
       lineHeight: 18,
       textAlign: "center",
       marginTop: 6,
-    },
-
-    avatarFrame: {
-      width: 86,
-      height: 86,
-      borderRadius: 28,
-      borderCurve: "continuous",
-      padding: 3,
-      backgroundColor: "rgba(229, 255, 249, 0.16)",
-      borderWidth: 1,
-      borderColor: "rgba(229, 255, 249, 0.28)",
     },
 
     avatar: {

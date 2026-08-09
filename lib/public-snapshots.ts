@@ -24,6 +24,7 @@ export type PublicSnapshotCreator = {
   id: string;
   displayName: string;
   handle: string;
+  avatarUrl: string | null;
   isVerified: boolean;
   isCanal: boolean;
 };
@@ -67,6 +68,7 @@ type ProfileRow = {
   id: string;
   display_name: string | null;
   handle: string | null;
+  avatar_url: string | null;
   is_verified: boolean | null;
   is_canal: boolean | null;
 };
@@ -97,7 +99,7 @@ const SNAPSHOT_COLUMNS = [
 ].join(", ");
 
 const PROFILE_COLUMNS =
-  "id, display_name, handle, is_verified, is_canal";
+  "id, display_name, handle, avatar_url, is_verified, is_canal";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -659,6 +661,11 @@ function normalizeCreator(
       handle
         ? `@${handle.replace(/^@+/, "")}`
         : "@canal_listener",
+
+    avatarUrl:
+      cleanOptionalString(
+        row?.avatar_url,
+      ) ?? null,
 
     isVerified:
       row?.is_verified ===
