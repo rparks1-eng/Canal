@@ -37,9 +37,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { ProfileAvatar } from "../../components/profile-avatar";
-import { SceneEnergySignature } from "../../components/canal-ui/scene-energy-signature";
-import { SceneMoodBreakdown } from "../../components/canal-ui/scene-mood-breakdown";
-import { SceneGenreBreakdown } from "../../components/canal-ui/scene-genre-breakdown";
+import { SceneCardProfile } from "../../components/canal-ui/scene-card-profile";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
 import {
   scenePresentation,
@@ -280,61 +278,13 @@ function PublicSceneCard(
             styles.pressed,
         ]}
       >
-        <View
-          style={
-            styles.cardTop
-          }
-        >
-          <View
-            style={
-              styles.cardText
-            }
-          >
-            <Text
-              numberOfLines={
-                1
-              }
-              style={
-                styles.sceneName
-              }
-            >
-              {item.scene.name}
-            </Text>
-
-            <Text
-              numberOfLines={
-                1
-              }
-              style={
-                styles.sceneMeta
-              }
-            >
-              {item.scene.activity ||
-                "Any activity"}{" "}
-              ·{" "}
-              {item.scene.tracks.length}{" "}
-              tracks
-            </Text>
-
-            <Text
-              numberOfLines={
-                1
-              }
-              style={
-                styles.artistText
-              }
-            >
-              {artistPreview ||
-                item.scene.emotions ||
-                "Canal Scene"}
-            </Text>
-          </View>
-        </View>
-        <SceneEnergySignature accent={presentation.accent} compact scene={item.scene} style={styles.publicSceneEnergy} />
-        <View style={styles.publicSceneBreakdowns}>
-          <SceneMoodBreakdown compact scene={item.scene} style={styles.publicSceneBreakdown} />
-          <SceneGenreBreakdown compact scene={item.scene} style={styles.publicSceneBreakdown} />
-        </View>
+        <SceneCardProfile
+          accent={presentation.accent}
+          metadata={`${item.scene.activity || "Any activity"} · ${item.scene.tracks.length} tracks`}
+          scene={item.scene}
+          secondary={artistPreview || item.scene.emotions || "Canal Scene"}
+          variant="compact"
+        />
       </Pressable>
 
       <View

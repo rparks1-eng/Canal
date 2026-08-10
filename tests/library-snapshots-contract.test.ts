@@ -19,15 +19,9 @@ describe("Library Snapshot collection contract", () => {
   });
 
   it("uses a dedicated bounded composition for Scene grid cards", () => {
-    expect(source).toContain('layout === "grid" && styles.sceneNameGrid');
-    expect(source).toContain('layout === "grid" && styles.sceneMetaGrid');
-    expect(source).toContain('layout === "grid" && styles.sourceTextGrid');
+    expect(source).toContain("<SceneCardProfile");
+    expect(source).toContain('variant={layout === "grid" ? "grid" : "list"}');
     expect(source).toMatch(/sceneCardGrid:\s*\{[\s\S]*?minHeight:\s*202,/u);
-    expect(source).toMatch(/sceneMainGrid:\s*\{[\s\S]*?flexDirection:\s*"column",[\s\S]*?alignItems:\s*"stretch",/u);
-    expect(source).toMatch(/sceneBreakdownsGrid:\s*\{[\s\S]*?flexDirection:\s*"column",[\s\S]*?maxWidth:\s*"100%",/u);
-    expect(source).toMatch(/sceneBreakdownsGrid:\s*\{[\s\S]*?height:\s*40,/u);
-    expect(source).toContain('reserveSpace={layout === "grid"}');
-    expect(source).toMatch(/sourceTextGrid:\s*\{[\s\S]*?display:\s*"none",/u);
   });
 
   it("loads the full account-scoped Snapshot collection whenever Library focuses", () => {

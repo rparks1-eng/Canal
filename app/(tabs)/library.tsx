@@ -53,9 +53,7 @@ import {
 } from "../../components/canal-ui/scene-signature";
 
 import { SceneCardBackdrop } from "../../components/canal-ui/scene-card-visual";
-import { SceneEnergySignature } from "../../components/canal-ui/scene-energy-signature";
-import { SceneMoodBreakdown } from "../../components/canal-ui/scene-mood-breakdown";
-import { SceneGenreBreakdown } from "../../components/canal-ui/scene-genre-breakdown";
+import { SceneCardProfile } from "../../components/canal-ui/scene-card-profile";
 
 import {
   useReconnectReload,
@@ -1151,67 +1149,13 @@ export default function LibraryScreen() {
                         layout === "grid" && styles.sceneMainGrid,
                       ]}
                     >
-                      <SceneEnergySignature
+                      <SceneCardProfile
                         accent={presentation.accent}
-                        compact={layout === "grid"}
+                        metadata={`${scene.activity || "Any activity"} · ${sceneDurationMinutes(scene)} min · ${scene.tracks.length} tracks`}
                         scene={scene}
-                        style={layout === "grid" ? styles.sceneEnergyGrid : styles.sceneEnergy}
+                        secondary={scene.libraryType === "saved" ? `Saved from ${sourceHandle || "another creator"}` : "Created by you"}
+                        variant={layout === "grid" ? "grid" : "list"}
                       />
-                      <View
-                        style={[
-                          styles.sceneText,
-                          layout === "grid" && styles.sceneTextGrid,
-                        ]}
-                      >
-                        <Text
-                          numberOfLines={
-                            1
-                          }
-                          style={[
-                            styles.sceneName,
-                            layout === "grid" && styles.sceneNameGrid,
-                            {
-                              color:
-                                "#FFFFFF",
-                            },
-                          ]}
-                        >
-                          {scene.name}
-                        </Text>
-
-                        <Text
-                          numberOfLines={
-                            1
-                          }
-                          style={[styles.sceneMeta, layout === "grid" && styles.sceneMetaGrid, { color: `${presentation.accent}CC` }]}
-                        >
-                          {scene.activity ||
-                            "Any activity"}{" "}
-                          ·{" "}
-                          {sceneDurationMinutes(
-                            scene,
-                          )}{" "}
-                          min ·{" "}
-                          {scene.tracks.length}{" "}
-                          tracks
-                        </Text>
-
-                        <Text
-                          numberOfLines={
-                            1
-                          }
-                          style={[styles.sourceText, layout === "grid" && styles.sourceTextGrid, { color: "rgba(255,255,255,0.64)" }]}
-                        >
-                          {scene.libraryType ===
-                          "saved"
-                            ? `Saved from ${sourceHandle || "another creator"}`
-                            : "Created by you"}
-                        </Text>
-                        <View style={[styles.sceneBreakdowns, layout === "grid" && styles.sceneBreakdownsGrid]}>
-                          <SceneMoodBreakdown compact reserveSpace={layout === "grid"} scene={scene} style={styles.sceneBreakdown} />
-                          <SceneGenreBreakdown compact reserveSpace={layout === "grid"} scene={scene} style={styles.sceneBreakdown} />
-                        </View>
-                      </View>
 
                       <Pressable
                         accessibilityLabel={`Manage ${scene.name}`}

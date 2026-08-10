@@ -38,6 +38,7 @@ import {
 import {
   SceneCardBackdrop,
 } from "../../components/canal-ui/scene-card-visual";
+import { SceneCardProfile } from "../../components/canal-ui/scene-card-profile";
 
 import {
   RecoveryNotice,
@@ -128,40 +129,12 @@ function SceneCard(props: {
       ]}
     >
       <SceneCardBackdrop presentation={presentation} scene={props.scene} />
-      <Text
-        style={[styles.sceneActivity, { color: presentation.accent }]}
-      >
-        {props.scene.activity}
-      </Text>
-
-      <Text
-        numberOfLines={2}
-        style={[styles.sceneName, { color: "#FFFFFF" }]}
-      >
-        {props.scene.name}
-      </Text>
-
-      <Text
-        numberOfLines={2}
-        style={[styles.sceneMood, { color: "rgba(255,255,255,0.7)" }]}
-      >
-        {props.scene.emotions ||
-          `${props.scene.energy} energy`}
-      </Text>
-
-      <Text
-        style={[styles.sceneMeta, { color: `${presentation.accent}C7` }]}
-      >
-        {
-          props.scene.tracks
-            .length
-        }{" "}
-        tracks •{" "}
-        {sceneDurationMinutes(
-          props.scene,
-        )}{" "}
-        min
-      </Text>
+      <SceneCardProfile
+        accent={presentation.accent}
+        metadata={`${props.scene.activity || "Any activity"} · ${props.scene.tracks.length} tracks · ${sceneDurationMinutes(props.scene)} min`}
+        scene={props.scene}
+        variant={props.compact ? "grid" : "compact"}
+      />
 
       {props.scene.favorite ? (
         <Text
