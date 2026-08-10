@@ -88,8 +88,7 @@ function CategoryStageCard({ stage }: { stage: LiveStage }) {
 }
 
 export default function ExploreCategoryScreen() {
-  const params = useLocalSearchParams<{ content?: string; kind?: string; value?: string }>();
-  const content = params.content === "stages" ? "stages" : "scenes";
+  const params = useLocalSearchParams<{ kind?: string; value?: string }>();
   const kind = isExploreCategoryKind(params.kind) ? params.kind : null;
   const value = typeof params.value === "string" ? params.value.trim() : "";
   const [query, setQuery] = useState("");
@@ -102,9 +101,9 @@ export default function ExploreCategoryScreen() {
   const goBack = useCallback(() => {
     router.replace({
       pathname: "/(tabs)/explore",
-      params: { content },
+      params: { content: "scenes" },
     });
-  }, [content]);
+  }, []);
 
   const load = useCallback(async (refresh = false) => {
     if (!kind || !value) {
@@ -139,8 +138,8 @@ export default function ExploreCategoryScreen() {
   );
   const highlighted = useMemo(() => highlightedExploreCategoryScenes(results), [results]);
   const popularScenes = useMemo(() => popularExploreCategoryScenes(results), [results]);
-  const stageResults = useMemo(() => {
-    if (!kind) return [];
+  const popularStages = useMemo(() => {
+    if (!kind || kind === "genre") return [];
     const category = value.toLowerCase();
     return stages
       .filter((stage) => {
@@ -155,18 +154,11 @@ export default function ExploreCategoryScreen() {
           stage.activity,
           ...(stage.atmosphereSignals ?? []),
         ].join(" ").toLowerCase().includes(query.trim().toLowerCase());
-        return matches && matchesQuery;
+        return matches && matchesQuery && stage.participantCount > 0;
       })
-      .sort((left, right) => right.participantCount - left.participantCount || right.updatedAt.localeCompare(left.updatedAt));
+      .sort((left, right) => right.participantCount - left.participantCount)
+      .slice(0, 4);
   }, [kind, query, stages, value]);
-  const highlightedStages = useMemo(
-    () => stageResults.filter((stage) => stage.hostIsVerified || stage.hostIsCanal),
-    [stageResults],
-  );
-  const popularStages = useMemo(
-    () => stageResults.filter((stage) => stage.participantCount > 0).slice(0, 6),
-    [stageResults],
-  );
 
   if (!kind || !value) return null;
   const accent = kind === "activity" ? "#7FE3CF" : kind === "mood" ? "#FFB7C4" : "#FFD37D";
@@ -188,19 +180,19 @@ export default function ExploreCategoryScreen() {
             <View style={[styles.heroOrb, { backgroundColor: `${accent}55` }]} />
             <Ionicons color={accent} name={icon as never} size={34} />
           </View>
-          <Text style={styles.eyebrow}>{kind.toUpperCase()} {content === "stages" ? "STAGES" : "SCENES"}</Text>
+          <Text style={styles.eyebrow}>{kind.toUpperCase()} SCENES</Text>
           <Text style={styles.title}>{value}</Text>
           <Text accessibilityLiveRegion="polite" style={styles.subtitle}>
-            {content === "stages" ? stageResults.length : results.length} public {content === "stages" ? (stageResults.length === 1 ? "Stage" : "Stages") : (results.length === 1 ? "Scene" : "Scenes")} in this category
+            {results.length} public {results.length === 1 ? "Scene" : "Scenes"} in this category
           </Text>
         </Animated.View>
 
         <TextInput
-          accessibilityLabel={`Search ${value} ${content === "stages" ? "Stages" : "Scenes"}`}
+          accessibilityLabel={`Search ${value} Scenes`}
           autoCapitalize="none"
           autoCorrect={false}
           onChangeText={setQuery}
-          placeholder={`Search ${value} ${content === "stages" ? "Stages" : "Scenes"}`}
+          placeholder={`Search ${value} Scenes`}
           placeholderTextColor={canalDynamicColors.muted}
           style={styles.searchInput}
           value={query}
@@ -215,33 +207,11 @@ export default function ExploreCategoryScreen() {
           </View>
         ) : loading ? (
           <View style={styles.loading}><ActivityIndicator color={accent} size="large" /></View>
-        ) : (content === "stages" ? stageResults.length : results.length) === 0 ? (
+        ) : results.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No matching {content === "stages" ? "Stages" : "Scenes"}</Text>
+            <Text style={styles.emptyTitle}>No matching Scenes</Text>
             <Text style={styles.emptyText}>Try another search or return to Explore for a different category.</Text>
           </View>
-        ) : content === "stages" ? (
-          <>
-            {highlightedStages.length > 0 ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeading}><VerifiedAccountBadge size={17} /><Text style={styles.sectionTitle}>Highlighted Stages</Text></View>
-                <Text style={styles.sectionSubtitle}>Live rooms hosted by verified creators and Canal.</Text>
-                <View style={styles.results}>{highlightedStages.map((stage) => <CategoryStageCard key={`highlight-stage:${stage.id}`} stage={stage} />)}</View>
-              </View>
-            ) : null}
-            {popularStages.length > 0 ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeading}><Ionicons color={accent} name="trending-up-outline" size={19} /><Text style={styles.sectionTitle}>Popular Now</Text></View>
-                <Text style={styles.sectionSubtitle}>The most-listened-to live Stages in this category.</Text>
-                <View style={styles.results}>{popularStages.map((stage) => <CategoryStageCard key={`popular-stage:${stage.id}`} stage={stage} />)}</View>
-              </View>
-            ) : null}
-            <View style={styles.section}>
-              <View style={styles.sectionHeading}><Ionicons color={accent} name="radio-outline" size={19} /><Text style={styles.sectionTitle}>All Live Stages</Text></View>
-              <Text style={styles.sectionSubtitle}>Every public live Stage in this category.</Text>
-              <View style={styles.results}>{stageResults.map((stage) => <CategoryStageCard key={`all-stage:${stage.id}`} stage={stage} />)}</View>
-            </View>
-          </>
         ) : (
           <>
             {highlighted.length > 0 ? (

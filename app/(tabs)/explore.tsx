@@ -480,12 +480,14 @@ function FacetRail(props: {
   );
 }
 
-function StageCategoryRail(props: {
+function StageFacetRail(props: {
   title: string;
   icon: keyof typeof Ionicons.glyphMap;
   accent: string;
-  kind: "activity" | "mood" | "genre";
+  kind: "activity" | "mood";
   values: string[];
+  selected: StageFacet;
+  onSelect: (facet: StageFacet) => void;
 }) {
   if (props.values.length === 0) return null;
   return (
@@ -497,28 +499,18 @@ function StageCategoryRail(props: {
         <Text style={styles.discoveryTitle}>{props.title}</Text>
       </View>
       <ScrollView horizontal contentContainerStyle={styles.discoveryRail} showsHorizontalScrollIndicator={false}>
-        {props.values.map((value, index) => (
+        <Pressable accessibilityRole="button" onPress={() => props.onSelect({ kind: "all" })} style={styles.discoveryChip}>
+          <Text style={styles.discoveryChipText}>All</Text>
+        </Pressable>
+        {props.values.map((value) => (
           <Pressable
             key={`${props.kind}:${value}`}
-            accessibilityLabel={`Open ${value} ${props.kind} live Stages`}
             accessibilityRole="button"
-            onPress={() => router.push({
-              pathname: "/explore-category",
-              params: { content: "stages", kind: props.kind, value },
-            })}
-            style={({ pressed }) => [
-              styles.categoryCard,
-              { borderColor: `${props.accent}55`, backgroundColor: `${props.accent}16` },
-              pressed && styles.pressed,
-            ]}
+            accessibilityState={{ selected: props.selected.kind === props.kind && props.selected.value === value }}
+            onPress={() => props.onSelect({ kind: props.kind, value })}
+            style={styles.discoveryChip}
           >
-            <View style={[styles.categoryArtwork, { backgroundColor: `${props.accent}24` }]}>
-              <View style={[styles.categoryOrb, styles.categoryOrbOne, { backgroundColor: `${props.accent}68` }]} />
-              <View style={[styles.categoryOrb, styles.categoryOrbTwo, { backgroundColor: `${props.accent}38` }]} />
-              <Ionicons color={props.accent} name={exploreCategoryIcon(props.kind, value) as never} size={28 + (index % 2)} />
-            </View>
-            <Text numberOfLines={2} style={styles.categoryCardLabel}>{value}</Text>
-            <Text style={styles.categoryCardHint}>View Stages</Text>
+            <Text numberOfLines={1} style={styles.discoveryChipText}>{value}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -579,6 +571,7 @@ export default function ExploreScreen() {
 
   const [stages, setStages] = useState<LiveStage[]>([]);
   const [stageFilter, setStageFilter] = useState<StageFilter>("all");
+  const [stageFacet, setStageFacet] = useState<StageFacet>({ kind: "all" });
 
   const [
     activeContent,
@@ -787,8 +780,8 @@ export default function ExploreScreen() {
   );
 
   const filteredStages = useMemo(() => {
-    return filterExploreStages(stages, query, stageFilter, { kind: "all" });
-  }, [query, stageFilter, stages]);
+    return filterExploreStages(stages, query, stageFilter, stageFacet);
+  }, [query, stageFacet, stageFilter, stages]);
 
   const stageActivityFacets = useMemo(
     () => topFacetValues(stages.map((stage) => stage.activity).filter(Boolean)),
@@ -798,17 +791,9 @@ export default function ExploreScreen() {
     () => topFacetValues(
       stages
         .flatMap((stage) => stage.atmosphereSignals ?? [])
-        .filter((value) => moodFacets.some((mood) => mood.toLowerCase() === value.trim().toLowerCase())),
+        .filter((value) => value.trim().length > 1),
     ),
-    [moodFacets, stages],
-  );
-  const stageGenreFacets = useMemo(
-    () => topFacetValues(
-      stages
-        .flatMap((stage) => stage.atmosphereSignals ?? [])
-        .filter((value) => genreFacets.some((genre) => genre.toLowerCase() === value.trim().toLowerCase())),
-    ),
-    [genreFacets, stages],
+    [stages],
   );
 
   const activeError =
@@ -1023,26 +1008,31 @@ export default function ExploreScreen() {
               ))}
             </View>
             <View style={styles.discoveryCatalog}>
-              <StageCategoryRail
+              <StageFacetRail
                 title="Live activities"
                 icon="walk-outline"
                 accent="#7FE3CF"
                 kind="activity"
                 values={stageActivityFacets}
+                selected={stageFacet}
+                onSelect={(facet) => setStageFacet(
+                  facet.kind === "activity"
+                    ? { kind: "activity", value: facet.value }
+                    : { kind: "all" },
+                )}
               />
-              <StageCategoryRail
+              <StageFacetRail
                 title="Live moods"
                 icon="sparkles-outline"
                 accent="#FFB7C4"
                 kind="mood"
                 values={stageMoodFacets}
-              />
-              <StageCategoryRail
-                title="Live genres"
-                icon="musical-notes-outline"
-                accent="#FFD37D"
-                kind="genre"
-                values={stageGenreFacets}
+                selected={stageFacet}
+                onSelect={(facet) => setStageFacet(
+                  facet.kind === "mood"
+                    ? { kind: "mood", value: facet.value }
+                    : { kind: "all" },
+                )}
               />
             </View>
           </Animated.View>
@@ -1125,12 +1115,12 @@ export default function ExploreScreen() {
         ) ? null : activeContent === "stages" && filteredStages.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>
-              {query.trim() || stageFilter !== "all"
+              {query.trim() || stageFilter !== "all" || stageFacet.kind !== "all"
                 ? "No matching live Stages"
                 : "No public Stages are live"}
             </Text>
             <Text style={styles.emptyText}>
-              {query.trim() || stageFilter !== "all"
+              {query.trim() || stageFilter !== "all" || stageFacet.kind !== "all"
                 ? "Try another host, activity, song, artist, or Stage type."
                 : "Pull down to refresh. Public Stages will appear here as soon as they go live."}
             </Text>
