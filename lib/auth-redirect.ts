@@ -1,35 +1,41 @@
+import {
+  Platform,
+} from "react-native";
+
+import {
+  canalPublicOrigin,
+} from "./public-linking";
+
 export const AUTH_CALLBACK_URL =
   "canal:///auth/callback";
 
 export const PASSWORD_RESET_URL =
   "canal:///auth/reset-password";
 
-export function getPasswordResetRedirectUrl(): string {
-  const webOrigin =
-    process.env
-      .EXPO_PUBLIC_CANAL_WEB_URL
-      ?.trim();
-
-  if (webOrigin) {
-    try {
-      const url =
-        new URL(
-          "/auth/reset-password",
-          webOrigin,
-        );
-
-      if (
-        url.protocol ===
-        "https:"
-      ) {
-        return url.toString();
-      }
-    } catch {
-      // Fall through to the installed app URL.
-    }
+export function getAuthCallbackUrl(
+  platform: typeof Platform.OS | "web" = Platform.OS,
+): string {
+  if (platform !== "web") {
+    return AUTH_CALLBACK_URL;
   }
 
-  return PASSWORD_RESET_URL;
+  return new URL(
+    "/auth/callback",
+    `${canalPublicOrigin()}/`,
+  ).toString();
+}
+
+export function getPasswordResetRedirectUrl(
+  platform: typeof Platform.OS | "web" = Platform.OS,
+): string {
+  if (platform !== "web") {
+    return PASSWORD_RESET_URL;
+  }
+
+  return new URL(
+    "/auth/reset-password",
+    `${canalPublicOrigin()}/`,
+  ).toString();
 }
 
 export function rewriteIncomingCanalAuthPath(

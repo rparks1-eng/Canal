@@ -32,6 +32,16 @@ export type ShareSceneInput = {
   }[];
 };
 
+export type ShareStageInput = {
+  stageId: string;
+  inviteToken: string;
+  name: string;
+  hostName?: string;
+  activity?: string;
+  status?: "live" | "ended";
+  visibility?: "public" | "private";
+};
+
 export type ShareSoundscapeInput = {
   username: string;
   displayName: string;
@@ -73,12 +83,13 @@ type WebNavigator = {
 export async function shareScene(
   scene: ShareSceneInput,
 ): Promise<CanalShareResult> {
-  const url =
-    buildCanalUrl(
+  const url = scene.visibility === "public"
+    ? buildCanalUrl(
       `/scenes/${encodeURIComponent(
         scene.id,
       )}`,
-    );
+    )
+    : undefined;
 
   const trackLines =
     (scene.tracks ?? [])
@@ -184,12 +195,13 @@ export async function shareSoundscape(
 export async function shareSnapshot(
   snapshot: ShareSnapshotInput,
 ): Promise<CanalShareResult> {
-  const url =
-    buildCanalUrl(
+  const url = snapshot.visibility === "public"
+    ? buildCanalUrl(
       `/snapshots/${encodeURIComponent(
         snapshot.id,
       )}`,
-    );
+    )
+    : undefined;
 
   const message = [
     `Snapshot from ${snapshot.sceneName}`,
@@ -224,6 +236,20 @@ export async function shareSnapshot(
     message,
     url,
   });
+}
+
+export async function shareStage(stage: ShareStageInput): Promise<CanalShareResult> {
+  const baseUrl = canalCanonicalUrl("/");
+  const url = baseUrl && isStageShareIdentity(stage.stageId, stage.inviteToken)
+    ? `${baseUrl.replace(/\/+$/u, "")}/stages/${encodeURIComponent(stage.stageId)}/join?invite=${encodeURIComponent(stage.inviteToken)}`
+    : undefined;
+  const message = [
+    `${stage.name} on Canal`,
+    stage.hostName ? `Hosted by ${stage.hostName}` : "",
+    stage.activity ? `Moment: ${stage.activity}` : "",
+    stage.status === "ended" ? "This Stage has ended." : "Join the live Stage.",
+  ].filter(Boolean).join("\n");
+  return shareContent({ title: stage.name, message, url });
 }
 
 async function shareContent({
@@ -305,21 +331,39 @@ async function shareContent({
   );
 }
 
-function buildCanalUrl(
+export function canalCanonicalUrl(
   path: string,
 ): string | undefined {
-  const baseUrl =
-    process.env
-      .EXPO_PUBLIC_CANAL_SHARE_BASE_URL?.replace(
-        /\/+$/,
-        "",
-      );
+  const configured = (process.env.EXPO_PUBLIC_CANAL_SHARE_BASE_URL ?? "").trim();
+
+  if (!configured || !path.startsWith("/") || path.startsWith("//")) return undefined;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(configured);
+  } catch {
+    return undefined;
+  }
+
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    return undefined;
+  }
+
+  const normalizedPath = parsed.pathname.replace(/\/+$/, "");
+  const baseUrl = `${parsed.protocol}//${parsed.host.toLowerCase()}${normalizedPath}`;
 
   if (!baseUrl) {
     return undefined;
   }
 
   return `${baseUrl}${path}`;
+}
+
+const buildCanalUrl = canalCanonicalUrl;
+
+function isStageShareIdentity(stageId: string, inviteToken: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(stageId)
+    && /^[A-Za-z0-9_-]{43}$/u.test(inviteToken);
 }
 
 function capitalize(

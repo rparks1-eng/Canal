@@ -69,6 +69,14 @@ import {
   rememberPublicSceneReturn,
 } from "../lib/auth-return";
 
+import {
+  restoreDeferredDestination,
+} from "../lib/deferred-destination";
+
+import {
+  publicDestinationFromRoute,
+} from "../lib/public-linking";
+
 type OnboardingState =
   | "checking"
   | "required"
@@ -110,8 +118,11 @@ function CanalNavigator() {
 
   const routeParams =
     useGlobalSearchParams<{
+      invite?: string;
       ownerId?: string;
       sceneId?: string;
+      snapshotId?: string;
+      stageId?: string;
     }>();
 
   const {
@@ -343,6 +354,21 @@ function CanalNavigator() {
       !session &&
       !isAccountRoute
     ) {
+      const deferredDestination =
+        publicDestinationFromRoute(
+          rootSegment,
+          {
+            invite: routeParams.invite,
+            sceneId: routeParams.sceneId,
+            snapshotId: routeParams.snapshotId,
+            stageId: routeParams.stageId,
+          },
+        );
+
+      if (deferredDestination) {
+        return;
+      }
+
       if (
         rootSegment ===
           "public-scene" &&
@@ -444,6 +470,15 @@ function CanalNavigator() {
               activeUserIdRef.current !==
                 expectedUserId
             ) {
+              if (
+                typeof returnDestination ===
+                  "string"
+              ) {
+                void restoreDeferredDestination(
+                  returnDestination,
+                );
+              }
+
               return;
             }
 
@@ -495,7 +530,10 @@ function CanalNavigator() {
     onboardingDestination,
     onboardingState,
     routeParams.ownerId,
+    routeParams.invite,
     routeParams.sceneId,
+    routeParams.snapshotId,
+    routeParams.stageId,
     routeKey,
     segments,
     session,

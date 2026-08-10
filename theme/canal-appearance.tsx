@@ -55,7 +55,9 @@ function isMode(value: string | null): value is CanalAppearanceMode {
 }
 
 function applyMode(mode: CanalAppearanceMode): void {
-  Appearance.setColorScheme(mode === "system" ? null : mode);
+  if (typeof Appearance.setColorScheme === "function") {
+    Appearance.setColorScheme(mode === "system" ? null : mode);
+  }
 }
 
 export function CanalAppearanceProvider({ children }: { children: ReactNode }) {

@@ -163,9 +163,16 @@ function PublicStageCard({ stage }: { stage: LiveStage }) {
         <Text style={styles.stageAudience}>{stage.participantCount} in room</Text>
       </View>
       <Text numberOfLines={2} style={styles.stageResultName}>{stage.name}</Text>
-      <Text numberOfLines={1} style={styles.stageResultMeta}>
-        @{stage.hostUsername} · {stage.activity || "Live music"} · {stage.tracks.length} tracks
-      </Text>
+      <View style={styles.stageHostIdentity}>
+        <ProfileAvatar
+          avatarUrl={stage.hostAvatarUrl}
+          displayName={stage.hostName}
+          size={30}
+        />
+        <Text numberOfLines={1} style={styles.stageResultMeta}>
+          @{stage.hostUsername} · {stage.activity || "Live music"} · {stage.tracks.length} tracks
+        </Text>
+      </View>
       <View style={styles.stageNowPlaying}>
         {track?.imageUrl ? (
           <Image
@@ -1601,9 +1608,16 @@ const styles =
     },
 
     stageResultMeta: {
+      flex: 1,
       color: canalDynamicColors.muted,
       fontSize: 11,
-      marginTop: 5,
+    },
+
+    stageHostIdentity: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      marginTop: 8,
     },
 
     stageNowPlaying: {

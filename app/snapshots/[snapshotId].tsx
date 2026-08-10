@@ -29,10 +29,12 @@ import {
     RecoveryNotice,
 } from "../../components/recovery-notice";
 import { SnapshotComposition } from "../../components/snapshot-composition";
+import { ProfileAvatar } from "../../components/profile-avatar";
 import {
     useReconnectReload,
 } from "../../hooks/use-reconnect-reload";
 import { shareFinishedSnapshot } from "../../lib/snapshot-media-production";
+import { canalCanonicalUrl } from "../../lib/canal-share";
 import {
     classifyRecoveryIssue,
 } from "../../lib/recovery-issue";
@@ -69,6 +71,8 @@ import type {
   SnapshotSocialState,
 } from "../../lib/snapshot-social";
 import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
+import { PublicPreviewActions, PublicPreviewState } from "../../components/public-preview";
+import { getOrCreatePublicSnapshotShareId, getPublicSnapshotLinkPreview, type PublicLinkPreview } from "../../lib/public-link-previews";
 
 function closeSnapshot(): void {
   const action =
@@ -92,12 +96,88 @@ export default function SnapshotDetailScreen() {
   const params = useLocalSearchParams();
   const snapshotId = firstParam(params.snapshotId);
 
+  const isPublicShareId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(snapshotId);
+  if (isPublicShareId) {
+    return <SnapshotUuidRoute signedIn={Boolean(user)} snapshotId={snapshotId} />;
+  }
+  if (!user) {
+    return <PublicSnapshotPreview signedIn={Boolean(user)} snapshotId={snapshotId} />;
+  }
+
   return (
     <SnapshotDetailContent
       key={`${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration ?? "session-pending"}:${snapshotId}`}
     />
   );
 }
+
+function SnapshotUuidRoute({ signedIn, snapshotId }: { signedIn: boolean; snapshotId: string }) {
+  const [internalSnapshot, setInternalSnapshot] = useState<boolean | null>(signedIn ? null : false);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    if (!signedIn) {
+      setInternalSnapshot(false);
+      return () => { active = false; };
+    }
+    setInternalSnapshot(null);
+    void readSnapshotWithStatus(snapshotId)
+      .then((result) => { if (active) setInternalSnapshot(Boolean(result.value)); })
+      .catch(() => { if (active) setInternalSnapshot(false); });
+    return () => { active = false; };
+  }, [signedIn, snapshotId]));
+
+  if (internalSnapshot === null) {
+    return <SafeAreaView style={publicStyles.safe}><PublicPreviewState status="loading" /></SafeAreaView>;
+  }
+  return internalSnapshot
+    ? <SnapshotDetailContent />
+    : <PublicSnapshotPreview signedIn={signedIn} snapshotId={snapshotId} />;
+}
+
+function PublicSnapshotPreview({ signedIn, snapshotId }: { signedIn: boolean; snapshotId: string }) {
+  const [preview, setPreview] = useState<PublicLinkPreview | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    setLoading(true);
+    void getPublicSnapshotLinkPreview(snapshotId)
+      .then((value) => { if (active) setPreview(value); })
+      .catch(() => { if (active) setPreview(null); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [snapshotId]));
+
+  if (loading) return <SafeAreaView style={publicStyles.safe}><PublicPreviewState status="loading" /></SafeAreaView>;
+  if (!preview) return <SafeAreaView style={publicStyles.safe}><PublicPreviewState status="not-found" /></SafeAreaView>;
+
+  const sceneName = typeof preview.sceneName === "string" ? preview.sceneName : "Canal Snapshot";
+  const trackTitle = typeof preview.trackTitle === "string" ? preview.trackTitle : "A Scene moment";
+  const trackArtist = typeof preview.trackArtist === "string" ? preview.trackArtist : "";
+  const creator = typeof preview.ownerDisplayName === "string" ? preview.ownerDisplayName : "Canal listener";
+
+  return (
+    <SafeAreaView style={publicStyles.safe}>
+      <View style={publicStyles.content}>
+        <Text style={publicStyles.eyebrow}>PUBLIC SNAPSHOT</Text>
+        <Text accessibilityRole="header" style={publicStyles.title}>{sceneName}</Text>
+        <Text style={publicStyles.track}>{trackTitle}{trackArtist ? ` · ${trackArtist}` : ""}</Text>
+        <Text style={publicStyles.byline}>Captured by {creator}</Text>
+        <PublicPreviewActions destination={`/snapshots/${snapshotId}`} signedIn={signedIn} primaryLabel="Open Snapshots" onPrimary={() => router.push("/snapshots")} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const publicStyles = StyleSheet.create({
+  safe: { backgroundColor: "#0A2030", flex: 1 },
+  content: { flex: 1, gap: 13, justifyContent: "center", padding: 28 },
+  eyebrow: { color: "#72D8C4", fontSize: 11, fontWeight: "900", letterSpacing: 1.4 },
+  title: { color: canalDynamicColors.text, fontFamily: "Georgia", fontSize: 38, fontWeight: "700" },
+  track: { color: "#FFFFFF", fontSize: 17, fontWeight: "800" },
+  byline: { color: "rgba(255,255,255,.68)", fontSize: 14, marginBottom: 8 },
+});
 
 function SnapshotDetailContent() {
   const { user } = useAuth();
@@ -636,12 +716,19 @@ function SnapshotDetailContent() {
     }
 
     try {
+      const publicShareId = snapshot.visibility === "public"
+        ? await getOrCreatePublicSnapshotShareId(snapshot.id)
+        : null;
       await shareFinishedSnapshot({
         mediaUri: snapshot.mediaUri,
         mediaType: snapshot.mediaType,
         compositionRef,
         overlayRef,
         dialogTitle: `Snapshot from ${snapshot.sceneName}`,
+        canonicalUrl:
+          publicShareId
+            ? canalCanonicalUrl(`/snapshots/${encodeURIComponent(publicShareId)}`)
+            : undefined,
       });
     } catch (error) {
       Alert.alert(
@@ -1032,9 +1119,11 @@ function SnapshotDetailContent() {
           ) : null}
           {social.comments.map((comment) => (
             <View key={comment.id} style={[styles.commentRow, comment.parentCommentId && styles.replyRow]}>
-              <View style={styles.commentAvatar}>
-                <Text style={styles.commentAvatarText}>{(comment.displayName || comment.handle || "C").slice(0, 1).toUpperCase()}</Text>
-              </View>
+              <ProfileAvatar
+                avatarUrl={comment.avatarUrl}
+                displayName={comment.displayName || comment.handle || "Canal listener"}
+                size={36}
+              />
               <View style={styles.commentContent}>
                 <Text style={styles.commentName}>{comment.displayName || comment.handle || "Canal listener"}</Text>
                 <Text style={styles.commentBody}>{comment.body}</Text>

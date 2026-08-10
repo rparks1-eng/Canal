@@ -137,7 +137,7 @@ import {
 
 import {
   CanalAtmosphereContext,
-  CANAL_ATMOSPHERE_TRANSITION_MS,
+  CANAL_STUDIO_ATMOSPHERE_TRANSITION_MS,
 } from "../theme/canal-atmosphere-context";
 
 import {
@@ -148,6 +148,11 @@ import {
 } from "react-native-reanimated";
 
 type StudioStep = "moment" | "sound" | "flow" | "review";
+
+// The recipe array is ordered for classification priority. Studio needs a
+// different order so adjacent frames stay near one another on the hue wheel.
+// Ember closes the path back into Solar without a visible loop reset.
+const STUDIO_PALETTE_SEQUENCE = [0, 6, 5, 4, 9, 3, 2, 8, 7, 1] as const;
 
 function freshDraft(): SceneStudioDraft {
   return createSceneStudioDraft();
@@ -338,13 +343,18 @@ export default function SceneStudioScreen() {
   const palettePreviewIndexRef = useRef(0);
 
   const applyStudioPalette = useCallback((index: number): void => {
-    const recipe = LIVING_COVER_RECIPES[index % LIVING_COVER_RECIPES.length];
-    setOverride(sceneAtmosphere({
-      name: recipe.name,
-      activity: recipe.activity,
-      emotions: recipe.mood,
-      energy: recipe.energy,
-    }));
+    const recipe = LIVING_COVER_RECIPES[
+      STUDIO_PALETTE_SEQUENCE[index % STUDIO_PALETTE_SEQUENCE.length]
+    ];
+    setOverride({
+      ...sceneAtmosphere({
+        name: recipe.name,
+        activity: recipe.activity,
+        emotions: recipe.mood,
+        energy: recipe.energy,
+      }),
+      transitionMs: CANAL_STUDIO_ATMOSPHERE_TRANSITION_MS,
+    });
   }, [setOverride]);
 
   useEffect(() => {
@@ -355,9 +365,9 @@ export default function SceneStudioScreen() {
       ? null
       : setInterval(() => {
           palettePreviewIndexRef.current =
-            (palettePreviewIndexRef.current + 1) % LIVING_COVER_RECIPES.length;
+            (palettePreviewIndexRef.current + 1) % STUDIO_PALETTE_SEQUENCE.length;
           applyStudioPalette(palettePreviewIndexRef.current);
-        }, CANAL_ATMOSPHERE_TRANSITION_MS);
+        }, CANAL_STUDIO_ATMOSPHERE_TRANSITION_MS);
 
     return () => {
       if (interval) clearInterval(interval);

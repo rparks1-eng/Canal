@@ -13,7 +13,6 @@ import {
   Linking,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -78,9 +77,11 @@ import {
   duplicateScene,
   getSceneById,
   sceneDurationMinutes,
-  sceneShareText,
   toggleSceneFavorite,
 } from "../../lib/scenes";
+import { shareScene } from "../../lib/canal-share";
+import { getOrCreatePublicSceneShareId, getPublicSceneLinkPreview, type PublicLinkPreview } from "../../lib/public-link-previews";
+import { PublicPreviewActions, PublicPreviewState } from "../../components/public-preview";
 
 import {
   syncScenesWithCloud,
@@ -147,7 +148,81 @@ async function openTrack(
   }
 }
 
+const PUBLIC_SHARE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
 export default function SceneDetailScreen() {
+  const params = useLocalSearchParams<{ sceneId?: string }>();
+  const sceneId = typeof params.sceneId === "string" ? params.sceneId : "";
+  if (PUBLIC_SHARE_ID_PATTERN.test(sceneId)) {
+    return <SceneUuidRoute sceneId={sceneId} />;
+  }
+  return <SceneDetailContent />;
+}
+
+function SceneUuidRoute({ sceneId }: { sceneId: string }) {
+  const { user } = useAuth();
+  const [internalScene, setInternalScene] = useState<boolean | null>(user ? null : false);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    if (!user) {
+      setInternalScene(false);
+      return () => { active = false; };
+    }
+    setInternalScene(null);
+    void getSceneById(sceneId)
+      .then((value) => { if (active) setInternalScene(Boolean(value)); })
+      .catch(() => { if (active) setInternalScene(false); });
+    return () => { active = false; };
+  }, [sceneId, user]));
+
+  if (internalScene === null) {
+    return <SafeAreaView style={publicSceneStyles.safe}><PublicPreviewState status="loading" /></SafeAreaView>;
+  }
+  return internalScene ? <SceneDetailContent /> : <PublicScenePreview publicShareId={sceneId} />;
+}
+
+function PublicScenePreview({ publicShareId }: { publicShareId: string }) {
+  const { user } = useAuth();
+  const [preview, setPreview] = useState<PublicLinkPreview | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    void getPublicSceneLinkPreview(publicShareId)
+      .then((value) => { if (active) setPreview(value); })
+      .catch(() => { if (active) setPreview(null); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [publicShareId]));
+
+  if (loading) return <SafeAreaView style={publicSceneStyles.safe}><PublicPreviewState status="loading" /></SafeAreaView>;
+  if (!preview) return <SafeAreaView style={publicSceneStyles.safe}><PublicPreviewState status="not-found" /></SafeAreaView>;
+
+  const title = typeof preview.title === "string" ? preview.title : "Public Scene";
+  const activity = typeof preview.activity === "string" ? preview.activity : "Listening";
+  const creator = typeof preview.ownerDisplayName === "string" ? preview.ownerDisplayName : "Canal listener";
+  return (
+    <SafeAreaView style={publicSceneStyles.safe}>
+      <View style={publicSceneStyles.content}>
+        <Text style={publicSceneStyles.eyebrow}>PUBLIC SCENE</Text>
+        <Text accessibilityRole="header" style={publicSceneStyles.title}>{title}</Text>
+        <Text style={publicSceneStyles.body}>{activity} · by {creator}</Text>
+        <PublicPreviewActions destination={`/scenes/${publicShareId}`} signedIn={Boolean(user)} primaryLabel="Create a Scene like this" onPrimary={() => router.push("/scene-studio")} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const publicSceneStyles = StyleSheet.create({
+  safe: { backgroundColor: "#0A2030", flex: 1 },
+  content: { flex: 1, gap: 14, justifyContent: "center", padding: 28 },
+  eyebrow: { color: "#72D8C4", fontSize: 11, fontWeight: "900", letterSpacing: 1.4 },
+  title: { color: canalDynamicColors.text, fontFamily: "Georgia", fontSize: 38, fontWeight: "700" },
+  body: { color: canalDynamicColors.muted, fontSize: 15, lineHeight: 22, marginBottom: 8 },
+});
+
+function SceneDetailContent() {
   const {
     setOverride,
   } = use(CanalAtmosphereContext);
@@ -443,11 +518,24 @@ export default function SceneDetailScreen() {
         return;
       }
 
-      await Share.share({
-        message:
-          sceneShareText(
-            scene,
-          ),
+      const publicShareId = scene.visibility === "public"
+        ? await getOrCreatePublicSceneShareId(scene.id)
+        : scene.id;
+      await shareScene({
+        id: publicShareId,
+        name: scene.name,
+        activity: scene.activity,
+        duration: scene.duration,
+        emotions: scene.emotions,
+        genres: scene.genres,
+        energy: scene.energy,
+        artists: scene.artists,
+        visibility: scene.visibility,
+        tracks: scene.tracks.map((track) => ({
+          title: track.title,
+          artist: track.artist,
+          spotifyUrl: canonicalSpotifyTrackUrl(track.spotifyUrl, track.spotifyUri) ?? undefined,
+        })),
       });
     };
 

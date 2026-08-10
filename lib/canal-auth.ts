@@ -11,6 +11,7 @@ import {
 
 import {
   AUTH_CALLBACK_URL,
+  getAuthCallbackUrl,
   getPasswordResetRedirectUrl,
   PASSWORD_RESET_URL,
 } from "./auth-redirect";
@@ -974,7 +975,7 @@ export async function signUpWithEmail(
 
           options: {
             emailRedirectTo:
-              AUTH_CALLBACK_URL,
+              getAuthCallbackUrl(),
 
             data: {
               display_name:
@@ -1060,6 +1061,9 @@ export async function signInWithSocial(
 ): Promise<Session> {
   requireSupabaseConfiguration();
 
+  const callbackUrl =
+    getAuthCallbackUrl();
+
   const {
     data,
     error,
@@ -1071,7 +1075,7 @@ export async function signInWithSocial(
 
           options: {
             redirectTo:
-              AUTH_CALLBACK_URL,
+              callbackUrl,
 
             skipBrowserRedirect:
               true,
@@ -1092,7 +1096,7 @@ export async function signInWithSocial(
   const result =
     await WebBrowser.openAuthSessionAsync(
       data.url,
-      AUTH_CALLBACK_URL,
+      callbackUrl,
     );
 
   if (

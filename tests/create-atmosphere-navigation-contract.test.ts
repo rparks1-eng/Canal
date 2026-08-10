@@ -8,9 +8,11 @@ describe("Create atmosphere and navigation contract", () => {
   it("cycles every Canal palette in Studio and cleans up on exit", () => {
     const studio = read("app/scene-studio.tsx");
     expect(studio).toContain("LIVING_COVER_RECIPES");
-    expect(studio).toContain("setOverride(sceneAtmosphere({");
-    expect(studio).toContain("(palettePreviewIndexRef.current + 1) % LIVING_COVER_RECIPES.length");
-    expect(studio).toContain("}, CANAL_ATMOSPHERE_TRANSITION_MS)");
+    expect(studio).toContain("STUDIO_PALETTE_SEQUENCE = [0, 6, 5, 4, 9, 3, 2, 8, 7, 1]");
+    expect(studio).toContain("...sceneAtmosphere({");
+    expect(studio).toContain("(palettePreviewIndexRef.current + 1) % STUDIO_PALETTE_SEQUENCE.length");
+    expect(studio).toContain("}, CANAL_STUDIO_ATMOSPHERE_TRANSITION_MS)");
+    expect(studio).toContain("transitionMs: CANAL_STUDIO_ATMOSPHERE_TRANSITION_MS");
     expect(studio).toContain("if (interval) clearInterval(interval)");
     expect(studio).toContain("setOverride(null)");
   });
@@ -24,6 +26,7 @@ describe("Create atmosphere and navigation contract", () => {
     const ambient = read("components/canal-ui/canal-ambient-background.tsx");
     const navigation = read("components/CanalBottomNav.tsx");
     expect(ambient).toContain("CANAL_ATMOSPHERE_TRANSITION_MS");
+    expect(ambient).toContain("override?.transitionMs ?? CANAL_ATMOSPHERE_TRANSITION_MS");
     expect(ambient).toContain("baseColor.value = withTiming");
     expect(ambient).not.toContain("key={`${pathname}");
     expect(ambient).toContain("ambientPhase.value = withRepeat");
@@ -33,7 +36,15 @@ describe("Create atmosphere and navigation contract", () => {
     expect(ambient).toContain("atmosphere.base");
     expect(navigation).toContain("override.navigation");
     expect(navigation).toContain("override.accent");
+    expect(navigation).toContain("override?.transitionMs ?? CANAL_ATMOSPHERE_TRANSITION_MS");
     expect(navigation).toContain("glassColor.value = withTiming");
+    expect(navigation).toContain("animatedAccentTarget");
+    expect(navigation).toContain("override ? 0.42 : 0.44");
+    expect(navigation).toContain('intensity={override ? 28 : 46}');
+    expect(navigation).toContain('override ? "light"');
+    expect(navigation).toContain('rgba(248, 255, 255, 0.70)');
+    expect(navigation).toContain('rgba(250, 255, 255, 0.84)');
+    expect(navigation).toMatch(/primarySymbolContainer:[\s\S]*borderWidth:\s*1[\s\S]*boxShadow:\s*"0 3px 10px rgba\(0, 18, 32, 0\.10\)"/u);
   });
 
   it("keeps Home notification-only and centers the Stage back control", () => {

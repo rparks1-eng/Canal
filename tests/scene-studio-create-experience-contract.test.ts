@@ -17,7 +17,7 @@ describe("Create Scene Living Glass experience", () => {
 
   it("keeps the cycling atmosphere active until the route leaves after Generate", () => {
     expect(source).toContain("LIVING_COVER_RECIPES");
-    expect(source).toContain("CANAL_ATMOSPHERE_TRANSITION_MS");
+    expect(source).toContain("CANAL_STUDIO_ATMOSPHERE_TRANSITION_MS");
     expect(source).toMatch(/setInterval\([\s\S]*applyStudioPalette\(palettePreviewIndexRef\.current\)/u);
     expect(source).toMatch(/return \(\) => \{[\s\S]*setOverride\(null\)/u);
     expect(source).toMatch(/router\.push\([\s\S]{0,160}["']\/scene-preview["']/u);

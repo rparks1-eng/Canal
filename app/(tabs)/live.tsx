@@ -31,6 +31,7 @@ import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
+import { ProfileAvatar } from "../../components/profile-avatar";
 import {
   useReconnectReload,
 } from "../../hooks/use-reconnect-reload";
@@ -191,6 +192,11 @@ function StageCard(
       </Text>
 
           <View style={styles.stageHostRow}>
+            <ProfileAvatar
+              avatarUrl={props.stage.hostAvatarUrl}
+              displayName={props.stage.hostName}
+              size={30}
+            />
             <Text numberOfLines={1} style={styles.stageHost}>@{props.stage.hostUsername} · {props.stage.activity}</Text>
             {props.stage.hostIsVerified ? <VerifiedAccountBadge size={16} /> : null}
           </View>
@@ -1523,6 +1529,7 @@ const styles =
     },
 
     stageHost: {
+      flex: 1,
       color: "#AFA198",
       fontSize: 13,
       lineHeight: 18,

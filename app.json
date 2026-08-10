@@ -14,12 +14,44 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.raishawnparks.canal",
+      "associatedDomains": [
+        "applinks:canal.app"
+      ],
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Canal to take photos and videos for Snapshots.",
-        "NSMicrophoneUsageDescription": "Allow Canal to record audio with Snapshot videos."
+        "NSMicrophoneUsageDescription": "Allow Canal to record audio with Snapshot videos.",
+        "NSPhotoLibraryUsageDescription": "Allow Canal to choose a profile photo and Snapshot media from your library."
       }
     },
     "android": {
+      "package": "com.raishawnparks.canal",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "https",
+              "host": "canal.app",
+              "pathPrefix": "/scenes/"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.app",
+              "pathPrefix": "/snapshots/"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.app",
+              "pathPrefix": "/stages/"
+            }
+          ]
+        }
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -50,6 +82,22 @@
       "expo-secure-store",
       "expo-web-browser",
       "@react-native-community/datetimepicker",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Canal to take photos and videos for Snapshots.",
+          "microphonePermission": "Allow Canal to record audio with Snapshot videos.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Canal to choose a profile photo and Snapshot media from your library.",
+          "cameraPermission": "Allow Canal to take photos and videos for Snapshots.",
+          "microphonePermission": "Allow Canal to record audio with Snapshot videos."
+        }
+      ],
       "expo-video"
     ],
     "experiments": {

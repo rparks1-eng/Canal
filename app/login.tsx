@@ -1,5 +1,6 @@
 import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -18,7 +19,12 @@ import {
 
 import {
   router,
+  useLocalSearchParams,
 } from "expo-router";
+
+import {
+  rememberDeferredDestination,
+} from "../lib/deferred-destination";
 
 import type {
   Session,
@@ -92,6 +98,10 @@ function isFirstSocialSignIn(
 }
 
 export default function LoginScreen() {
+  const params = useLocalSearchParams<{
+    destination?: string;
+  }>();
+
   const {
     configured,
   } =
@@ -132,6 +142,14 @@ export default function LoginScreen() {
 
   const submissionInFlight =
     useRef(false);
+
+  useEffect(() => {
+    if (typeof params.destination === "string") {
+      void rememberDeferredDestination(
+        params.destination,
+      );
+    }
+  }, [params.destination]);
 
   const [
     message,

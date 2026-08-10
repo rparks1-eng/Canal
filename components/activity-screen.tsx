@@ -22,6 +22,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   RecoveryNotice,
 } from "./recovery-notice";
+import { ProfileAvatar } from "./profile-avatar";
 
 import {
   useReconnectReload,
@@ -514,22 +515,30 @@ export default function ActivityScreen() {
                       styles.pressed,
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.activityIcon,
-                      getActivityIconStyle(
-                        item.type,
-                      ),
-                    ]}
-                  >
-                    <Ionicons
-                      name={icon}
-                      size={21}
-                      color={getActivityColor(
-                        item.type,
-                      )}
+                  {item.username ? (
+                    <ProfileAvatar
+                      avatarUrl={item.avatarUrl}
+                      displayName={item.displayName || item.username}
+                      size={42}
                     />
-                  </View>
+                  ) : (
+                    <View
+                      style={[
+                        styles.activityIcon,
+                        getActivityIconStyle(
+                          item.type,
+                        ),
+                      ]}
+                    >
+                      <Ionicons
+                        name={icon}
+                        size={21}
+                        color={getActivityColor(
+                          item.type,
+                        )}
+                      />
+                    </View>
+                  )}
 
                   <View
                     style={

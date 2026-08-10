@@ -49,6 +49,7 @@ import {
 import {
   useConnectivity,
 } from "../../providers/connectivity-provider";
+import { ProfileAvatar } from "../../components/profile-avatar";
 
 function first(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -204,7 +205,11 @@ export default function StageLobbyScreen() {
         <Text style={styles.sectionLabel}>ROOM CONTRIBUTIONS</Text>
         {contributions.map((item) => (
           <View key={item.userId} style={styles.personRow}>
-            <View style={styles.avatar}><Text style={styles.avatarText}>{item.displayName.split(/\s+/u).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</Text></View>
+            <ProfileAvatar
+              avatarUrl={item.avatarUrl}
+              displayName={item.displayName}
+              size={44}
+            />
             <View style={styles.grow}><Text style={styles.personName}>{item.displayName}</Text><Text style={styles.personMeta}>{item.ready ? `${item.sceneName ?? "Scene"} · ${item.trackCount} tracks` : "Choosing what to contribute…"}</Text></View>
             <View style={styles.contributionState}>
               <Text style={[styles.ready, !item.ready && item.revision === 0 && styles.waiting]}>{item.revision > 0 ? item.moderationStatus.toUpperCase() : "WAITING"}</Text>
