@@ -151,31 +151,36 @@ function LibraryActionLedge(props: {
 }) {
   return (
     <Animated.View
-      accessibilityLabel={props.label}
-      accessibilityRole="menu"
       entering={FadeInRight.duration(170)}
       exiting={FadeOutRight.duration(130)}
-      onTouchStart={(event) => event.stopPropagation()}
-      style={styles.actionLedge}
+      style={styles.actionLedgeAnchor}
     >
-      {props.actions.map((action) => (
-        <Pressable
-          key={action.label}
-          accessibilityLabel={action.label}
-          accessibilityRole="button"
-          onPress={action.onPress}
-          style={({ pressed }) => [
-            styles.actionLedgeButton,
-            pressed && styles.actionLedgeButtonPressed,
-          ]}
-        >
-          <Ionicons
-            color={action.destructive ? "#FF655F" : canalDynamicColors.text}
-            name={action.icon as never}
-            size={17}
-          />
-        </Pressable>
-      ))}
+      <View
+        accessibilityLabel={props.label}
+        accessibilityRole="menu"
+        onTouchStart={(event) => event.stopPropagation()}
+        onTouchEnd={(event) => event.stopPropagation()}
+        style={styles.actionLedge}
+      >
+        {props.actions.map((action) => (
+          <Pressable
+            key={action.label}
+            accessibilityLabel={action.label}
+            accessibilityRole="button"
+            onPress={action.onPress}
+            style={({ pressed }) => [
+              styles.actionLedgeButton,
+              pressed && styles.actionLedgeButtonPressed,
+            ]}
+          >
+            <Ionicons
+              color={action.destructive ? "#FF655F" : canalDynamicColors.text}
+              name={action.icon as never}
+              size={17}
+            />
+          </Pressable>
+        ))}
+      </View>
     </Animated.View>
   );
 }
@@ -627,6 +632,25 @@ export default function LibraryScreen() {
     );
   };
 
+  const confirmSceneDelete = (scene: StoredScene): void => {
+    const removingSavedScene = scene.libraryType === "saved";
+
+    Alert.alert(
+      removingSavedScene ? "Remove Scene?" : "Delete Scene?",
+      removingSavedScene
+        ? `"${scene.name}" will be removed from your Library and saved Scenes.`
+        : `"${scene.name}" will be permanently removed from your account and Soundscape.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: removingSavedScene ? "Remove" : "Delete",
+          style: "destructive",
+          onPress: () => void performDelete(scene),
+        },
+      ],
+    );
+  };
+
   const updateSnapshotVisibility = async (
     snapshot: Snapshot,
   ): Promise<void> => {
@@ -686,6 +710,9 @@ export default function LibraryScreen() {
 
   return (
     <SafeAreaView
+      onTouchEnd={() => {
+        if (openActions) setOpenActions(null);
+      }}
       style={
         styles.safeArea
       }
@@ -714,9 +741,6 @@ export default function LibraryScreen() {
         }}
         onScrollEndDrag={() => {
           scrollStartY.current = null;
-        }}
-        onTouchStart={() => {
-          if (openActions) setOpenActions(null);
         }}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={
@@ -1189,6 +1213,7 @@ export default function LibraryScreen() {
                         accessibilityState={{ expanded: actionsOpen }}
                         disabled={busy}
                         onTouchStart={(event) => event.stopPropagation()}
+                        onTouchEnd={(event) => event.stopPropagation()}
                         onPress={(event) => {
                           event.stopPropagation();
                           openSceneActions(scene);
@@ -1235,7 +1260,7 @@ export default function LibraryScreen() {
                             destructive: true,
                             onPress: () => {
                               setOpenActions(null);
-                              void performDelete(scene);
+                              confirmSceneDelete(scene);
                             },
                           },
                         ]}
@@ -1280,6 +1305,7 @@ export default function LibraryScreen() {
                       expanded: openActions?.kind === "snapshot" && openActions.id === snapshot.id,
                     }}
                     onTouchStart={(event) => event.stopPropagation()}
+                    onTouchEnd={(event) => event.stopPropagation()}
                     onPress={(event) => {
                       event.stopPropagation();
                       openSnapshotActions(snapshot);
@@ -1606,12 +1632,15 @@ const styles =
       zIndex: 20,
     },
 
-    actionLedge: {
+    actionLedgeAnchor: {
       position: "absolute",
       right: 48,
       top: 4,
       zIndex: 30,
       maxWidth: 156,
+    },
+
+    actionLedge: {
       minHeight: 48,
       flexDirection: "row",
       alignItems: "center",

@@ -63,6 +63,8 @@ describe("Library Snapshot collection contract", () => {
     expect(source).toContain('right: 48');
     expect(source).toContain('maxWidth: 156');
     expect(source).toContain('entering={FadeInRight.duration(170)}');
+    expect(source).toContain('style={styles.actionLedgeAnchor}');
+    expect(source).toContain('style={styles.actionLedge}');
     expect(source).not.toContain("accessibilityViewIsModal");
     expect(source).toContain('label: snapshot.visibility === "public" ? "Make Private" : "Make Public"');
     expect(source).toContain('label: "Share Snapshot"');
@@ -72,8 +74,9 @@ describe("Library Snapshot collection contract", () => {
   it("executes Scene actions from the anchored ledge while keeping destructive confirmation bounded", () => {
     expect(source).toContain('label: scene.libraryType === "saved" ? "Remove from Library" : "Delete Scene"');
     expect(source).toContain("void performDelete(scene)");
-    expect(source).not.toContain("Alert.alert(\n      scene.name");
-    expect(source).not.toContain("onPress: () => confirmDelete(scene)");
+    expect(source).toContain("const confirmSceneDelete = (scene: StoredScene): void => {");
+    expect(source).toContain('removingSavedScene ? "Remove Scene?" : "Delete Scene?"');
+    expect(source).toContain("confirmSceneDelete(scene)");
   });
 
   it("dismisses the ledge after a meaningful drag or any outside tap", () => {
@@ -81,9 +84,11 @@ describe("Library Snapshot collection contract", () => {
     expect(source).toContain("scrollStartY.current = event.nativeEvent.contentOffset.y");
     expect(source).toContain("LIBRARY_MENU_SCROLL_DISMISS_DISTANCE");
     expect(source).toContain("scrollEventThrottle={16}");
-    expect(source).toContain("onTouchStart={() => {");
+    expect(source).toContain("onTouchEnd={() => {");
     expect(source).toContain("if (openActions) setOpenActions(null)");
     expect(source).toContain('onTouchStart={(event) => event.stopPropagation()}');
+    expect(source).toContain('onTouchEnd={(event) => event.stopPropagation()}');
+    expect(source).not.toContain("onTouchStart={() => {");
     expect(source).not.toContain("onScrollBeginDrag={() => setOpenActions(null)}");
   });
 });
