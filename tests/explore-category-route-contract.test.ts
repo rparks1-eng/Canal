@@ -11,6 +11,8 @@ describe("Explore category route", () => {
     expect(exploreSource).toContain('pathname: "/explore-category"');
     expect(exploreSource).toContain("Open ${value} ${props.kind} Scenes");
     expect(exploreSource).toContain("exploreCategoryIcon(props.kind, value)");
+    expect(exploreSource).toContain("StageCategoryRail");
+    expect(exploreSource).toContain('params: { content: "stages", kind: props.kind, value }');
     expect(layoutSource).toContain('name="explore-category"');
     expect(layoutSource).toMatch(/name="explore-category"[\s\S]*?href: null/u);
   });
@@ -24,6 +26,8 @@ describe("Explore category route", () => {
     expect(categorySource).toContain("Highlighted Scenes");
     expect(categorySource).toContain("Popular Now");
     expect(categorySource).toContain("All Scenes");
+    expect(categorySource).toContain("Highlighted Stages");
+    expect(categorySource).toContain("All Live Stages");
     expect(categorySource).not.toContain('accessibilityRole="radiogroup"');
     expect(categorySource).not.toContain("Show verified Scenes");
     expect(categorySource).toContain('pathname: "/public-scene"');
@@ -35,11 +39,11 @@ describe("Explore category route", () => {
   it("has safe back, loading, error, retry, empty, search, and 48pt controls", () => {
     expect(categorySource).toContain('accessibilityLabel="Back to Explore"');
     expect(categorySource).toContain('pathname: "/(tabs)/explore"');
-    expect(categorySource).toContain('params: { content: "scenes" }');
+    expect(categorySource).toContain("params: { content }");
     expect(categorySource).not.toContain("router.canGoBack()");
     expect(categorySource).not.toContain("router.back()");
     expect(categorySource).toContain('accessibilityLabel="Retry category"');
-    expect(categorySource).toContain("No matching Scenes");
+    expect(categorySource).toContain('No matching {content === "stages" ? "Stages" : "Scenes"}');
     expect(categorySource).toContain("width: 48, height: 48");
     expect(categorySource).toContain("minHeight: 48");
   });

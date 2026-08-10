@@ -84,6 +84,9 @@ describe(
         expect(source).toContain('title="Activities"');
         expect(source).toContain('title="Moods"');
         expect(source).toContain('title="Genres"');
+        expect(source).toContain('title="Live activities"');
+        expect(source).toContain('title="Live moods"');
+        expect(source).toContain('title="Live genres"');
         expect(source).toContain("Verified creators");
         expect(source).not.toContain("loadPublicSnapshotFeed");
       },
