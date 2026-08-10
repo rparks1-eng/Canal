@@ -23,14 +23,17 @@ import { VerifiedAccountBadge } from "../../components/verified-account-badge";
 import {
   exploreCategoryIcon,
   filterExploreCategoryScenes,
+  highlightedExploreCategoryScenes,
   isExploreCategoryKind,
+  popularExploreCategoryScenes,
 } from "../../lib/explore-categories";
-import type { ExploreCategoryScope } from "../../lib/explore-categories";
+import { readLiveStages } from "../../lib/live-stages";
+import type { LiveStage } from "../../lib/live-stages";
 import { loadExploreScenes } from "../../lib/social";
 import type { PublicCanalScene } from "../../lib/social";
 import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 
-function CategorySceneCard({ item }: { item: PublicCanalScene }) {
+function CategorySceneCard({ item, showPlays = false }: { item: PublicCanalScene; showPlays?: boolean }) {
   const presentation = scenePresentation(item.scene);
   return (
     <Pressable
@@ -49,7 +52,9 @@ function CategorySceneCard({ item }: { item: PublicCanalScene }) {
       <SceneCardBackdrop presentation={presentation} />
       <View style={styles.sceneHeader}>
         <Text numberOfLines={1} style={styles.sceneName}>{item.scene.name}</Text>
-        <Text style={[styles.sceneCount, { color: presentation.accent }]}>{item.scene.tracks.length} tracks</Text>
+        <Text style={[styles.sceneCount, { color: presentation.accent }]}>
+          {showPlays ? `${item.scene.playCount ?? 0} plays` : `${item.scene.tracks.length} tracks`}
+        </Text>
       </View>
       <Text numberOfLines={1} style={styles.sceneMeta}>
         {item.scene.activity || "Any activity"} · {item.scene.emotions || "Open mood"}
@@ -64,14 +69,31 @@ function CategorySceneCard({ item }: { item: PublicCanalScene }) {
   );
 }
 
+function CategoryStageCard({ stage }: { stage: LiveStage }) {
+  return (
+    <Pressable
+      accessibilityLabel={`Open ${stage.name} live Stage`}
+      accessibilityRole="button"
+      onPress={() => router.push({ pathname: "/live-stage/[stageId]", params: { stageId: stage.id } })}
+      style={({ pressed }) => [styles.stageCard, pressed && styles.pressed]}
+    >
+      <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>LIVE</Text></View>
+      <View style={styles.stageCopy}>
+        <Text numberOfLines={1} style={styles.stageName}>{stage.name}</Text>
+        <Text numberOfLines={1} style={styles.stageMeta}>{stage.hostName} · {stage.participantCount} listening</Text>
+      </View>
+      <Ionicons color={canalDynamicColors.muted} name="chevron-forward" size={18} />
+    </Pressable>
+  );
+}
+
 export default function ExploreCategoryScreen() {
-  const params = useLocalSearchParams<{ kind?: string; value?: string; scope?: string }>();
+  const params = useLocalSearchParams<{ kind?: string; value?: string }>();
   const kind = isExploreCategoryKind(params.kind) ? params.kind : null;
   const value = typeof params.value === "string" ? params.value.trim() : "";
-  const initialScope: ExploreCategoryScope = params.scope === "verified" ? "verified" : "public";
-  const [scope, setScope] = useState<ExploreCategoryScope>(initialScope);
   const [query, setQuery] = useState("");
   const [scenes, setScenes] = useState<PublicCanalScene[]>([]);
+  const [stages, setStages] = useState<LiveStage[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -92,7 +114,12 @@ export default function ExploreCategoryScreen() {
     else setLoading(true);
     setErrorMessage("");
     try {
-      setScenes(await loadExploreScenes({ force: refresh }));
+      const [nextScenes, nextStages] = await Promise.all([
+        loadExploreScenes({ force: refresh }),
+        readLiveStages(),
+      ]);
+      setScenes(nextScenes);
+      setStages(nextStages);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Canal could not load this category.");
     } finally {
@@ -106,9 +133,32 @@ export default function ExploreCategoryScreen() {
   }, [load]));
 
   const results = useMemo(
-    () => kind ? filterExploreCategoryScenes(scenes, { kind, value, scope, query }) : [],
-    [kind, query, scenes, scope, value],
+    () => kind ? filterExploreCategoryScenes(scenes, { kind, value, query }) : [],
+    [kind, query, scenes, value],
   );
+  const highlighted = useMemo(() => highlightedExploreCategoryScenes(results), [results]);
+  const popularScenes = useMemo(() => popularExploreCategoryScenes(results), [results]);
+  const popularStages = useMemo(() => {
+    if (!kind || kind === "genre") return [];
+    const category = value.toLowerCase();
+    return stages
+      .filter((stage) => {
+        if (stage.visibility !== "public" || stage.status !== "live") return false;
+        const matches = kind === "activity"
+          ? stage.activity.toLowerCase() === category
+          : (stage.atmosphereSignals ?? []).some((signal) => signal.toLowerCase() === category);
+        const matchesQuery = !query.trim() || [
+          stage.name,
+          stage.hostName,
+          stage.hostUsername,
+          stage.activity,
+          ...(stage.atmosphereSignals ?? []),
+        ].join(" ").toLowerCase().includes(query.trim().toLowerCase());
+        return matches && matchesQuery && stage.participantCount > 0;
+      })
+      .sort((left, right) => right.participantCount - left.participantCount)
+      .slice(0, 4);
+  }, [kind, query, stages, value]);
 
   if (!kind || !value) return null;
   const accent = kind === "activity" ? "#7FE3CF" : kind === "mood" ? "#FFB7C4" : "#FFD37D";
@@ -137,25 +187,6 @@ export default function ExploreCategoryScreen() {
           </Text>
         </Animated.View>
 
-        <View accessibilityRole="radiogroup" style={styles.scopeSwitch}>
-          {(["public", "verified"] as ExploreCategoryScope[]).map((option) => (
-            <Pressable
-              key={option}
-              accessibilityLabel={option === "public" ? "Show all public Scenes" : "Show verified Scenes"}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: scope === option }}
-              onPress={() => {
-                setScope(option);
-                router.setParams({ scope: option });
-              }}
-              style={[styles.scopeButton, scope === option && { backgroundColor: `${accent}2B`, borderColor: `${accent}77` }]}
-            >
-              {option === "verified" ? <VerifiedAccountBadge size={15} /> : <Ionicons color={accent} name="globe-outline" size={17} />}
-              <Text style={styles.scopeText}>{option === "public" ? "All public" : "Verified"}</Text>
-            </Pressable>
-          ))}
-        </View>
-
         <TextInput
           accessibilityLabel={`Search ${value} Scenes`}
           autoCapitalize="none"
@@ -179,16 +210,39 @@ export default function ExploreCategoryScreen() {
         ) : results.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>No matching Scenes</Text>
-            <Text style={styles.emptyText}>Try All public, another search, or return to Explore for a different category.</Text>
+            <Text style={styles.emptyText}>Try another search or return to Explore for a different category.</Text>
           </View>
         ) : (
-          <View style={styles.results}>
-            {results.map((item, index) => (
-              <Animated.View entering={FadeInUp.duration(260).delay(Math.min(index, 8) * 35)} key={`${item.ownerId}:${item.sceneId}`}>
-                <CategorySceneCard item={item} />
-              </Animated.View>
-            ))}
-          </View>
+          <>
+            {highlighted.length > 0 ? (
+              <View style={styles.section}>
+                <View style={styles.sectionHeading}><VerifiedAccountBadge size={17} /><Text style={styles.sectionTitle}>Highlighted Scenes</Text></View>
+                <Text style={styles.sectionSubtitle}>Selected from verified creators in this category.</Text>
+                <View style={styles.results}>{highlighted.map((item) => <CategorySceneCard item={item} key={`highlight:${item.ownerId}:${item.sceneId}`} />)}</View>
+              </View>
+            ) : null}
+            {popularScenes.length > 0 || popularStages.length > 0 ? (
+              <View style={styles.section}>
+                <View style={styles.sectionHeading}><Ionicons color={accent} name="trending-up-outline" size={19} /><Text style={styles.sectionTitle}>Popular Now</Text></View>
+                <Text style={styles.sectionSubtitle}>The most-played Scenes and most-listened-to live Stages here.</Text>
+                <View style={styles.results}>
+                  {popularScenes.map((item) => <CategorySceneCard item={item} key={`popular:${item.ownerId}:${item.sceneId}`} showPlays />)}
+                  {popularStages.map((stage) => <CategoryStageCard key={`stage:${stage.id}`} stage={stage} />)}
+                </View>
+              </View>
+            ) : null}
+            <View style={styles.section}>
+              <View style={styles.sectionHeading}><Ionicons color={accent} name="albums-outline" size={19} /><Text style={styles.sectionTitle}>All Scenes</Text></View>
+              <Text style={styles.sectionSubtitle}>Every public Scene in this category.</Text>
+              <View style={styles.results}>
+                {results.map((item, index) => (
+                  <Animated.View entering={FadeInUp.duration(260).delay(Math.min(index, 8) * 35)} key={`${item.ownerId}:${item.sceneId}`}>
+                    <CategorySceneCard item={item} />
+                  </Animated.View>
+                ))}
+              </View>
+            </View>
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -205,10 +259,11 @@ const styles = StyleSheet.create({
   eyebrow: { color: canalDynamicColors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.7, marginTop: 14 },
   title: { color: canalDynamicColors.text, fontFamily: "Georgia", fontSize: 38, fontWeight: "500", letterSpacing: -0.8, marginTop: 3, textTransform: "capitalize" },
   subtitle: { color: canalDynamicColors.muted, fontSize: 13, marginTop: 5 },
-  scopeSwitch: { flexDirection: "row", gap: 8 },
-  scopeButton: { minHeight: 48, flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 17, borderCurve: "continuous", borderWidth: 1, borderColor: canalDynamicColors.line, backgroundColor: canalDynamicColors.surface },
-  scopeText: { color: canalDynamicColors.text, fontSize: 12, fontWeight: "900" },
   searchInput: { minHeight: 50, color: canalDynamicColors.text, backgroundColor: canalDynamicColors.elevated, borderRadius: 17, borderCurve: "continuous", paddingHorizontal: 16, fontSize: 14 },
+  section: { gap: 9, marginTop: 4 },
+  sectionHeading: { minHeight: 28, flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionTitle: { color: canalDynamicColors.text, fontSize: 18, fontWeight: "900" },
+  sectionSubtitle: { color: canalDynamicColors.muted, fontSize: 11, lineHeight: 16 },
   results: { gap: 10 },
   sceneCard: { minHeight: 132, overflow: "hidden", gap: 10, borderRadius: 23, borderCurve: "continuous", borderWidth: 1, padding: 16, boxShadow: "0 12px 30px rgba(2, 28, 47, 0.16)" },
   sceneHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -217,6 +272,13 @@ const styles = StyleSheet.create({
   sceneMeta: { color: canalDynamicColors.muted, fontSize: 11 },
   creatorRow: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 8 },
   creatorName: { flex: 1, color: canalDynamicColors.text, fontSize: 12, fontWeight: "800" },
+  stageCard: { minHeight: 74, flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 20, borderCurve: "continuous", borderWidth: 1, borderColor: canalDynamicColors.line, backgroundColor: canalDynamicColors.surface, paddingHorizontal: 14 },
+  livePill: { minHeight: 28, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 14, backgroundColor: canalDynamicColors.dangerSurface, paddingHorizontal: 9 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: canalDynamicColors.danger },
+  liveText: { color: canalDynamicColors.danger, fontSize: 8, fontWeight: "900", letterSpacing: 1 },
+  stageCopy: { flex: 1, minWidth: 0 },
+  stageName: { color: canalDynamicColors.text, fontSize: 14, fontWeight: "900" },
+  stageMeta: { color: canalDynamicColors.muted, fontSize: 10, marginTop: 3 },
   notice: { gap: 12, borderRadius: 18, padding: 16, backgroundColor: canalDynamicColors.warningSurface },
   noticeText: { color: canalDynamicColors.text, fontSize: 13 },
   retryButton: { minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: canalDynamicColors.surface },

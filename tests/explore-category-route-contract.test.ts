@@ -15,11 +15,17 @@ describe("Explore category route", () => {
     expect(layoutSource).toMatch(/name="explore-category"[\s\S]*?href: null/u);
   });
 
-  it("populates matching public Scenes with an explicit verified filter", () => {
+  it("populates one unified category page with verified highlights and real popularity", () => {
     expect(categorySource).toContain("loadExploreScenes({ force: refresh })");
+    expect(categorySource).toContain("readLiveStages()");
     expect(categorySource).toContain("filterExploreCategoryScenes");
-    expect(categorySource).toContain('option === "public" ? "Show all public Scenes" : "Show verified Scenes"');
-    expect(categorySource).toContain('accessibilityRole="radiogroup"');
+    expect(categorySource).toContain("highlightedExploreCategoryScenes");
+    expect(categorySource).toContain("popularExploreCategoryScenes");
+    expect(categorySource).toContain("Highlighted Scenes");
+    expect(categorySource).toContain("Popular Now");
+    expect(categorySource).toContain("All Scenes");
+    expect(categorySource).not.toContain('accessibilityRole="radiogroup"');
+    expect(categorySource).not.toContain("Show verified Scenes");
     expect(categorySource).toContain('pathname: "/public-scene"');
     expect(socialSource).toContain('"payload->>visibility"');
     expect(socialSource).toContain("await assertSceneCacheOwner(sceneCacheOwner)");

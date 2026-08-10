@@ -1,4 +1,8 @@
-import { filterExploreCategoryScenes } from "../lib/explore-categories";
+import {
+  filterExploreCategoryScenes,
+  highlightedExploreCategoryScenes,
+  popularExploreCategoryScenes,
+} from "../lib/explore-categories";
 import type { PublicCanalScene } from "../lib/social";
 
 function publicScene(overrides: {
@@ -7,6 +11,7 @@ function publicScene(overrides: {
   moods: string;
   genres: string;
   verified?: boolean;
+  plays?: number;
 }): PublicCanalScene {
   return {
     ownerId: `owner-${overrides.id}`,
@@ -31,6 +36,7 @@ function publicScene(overrides: {
       activity: overrides.activity,
       emotions: overrides.moods,
       genres: overrides.genres,
+      playCount: overrides.plays ?? 0,
       tracks: [{ id: `track-${overrides.id}`, title: "Signal", artist: "Artist" }],
     } as PublicCanalScene["scene"],
   };
@@ -44,14 +50,24 @@ describe("Explore category filtering", () => {
   ];
 
   it("matches exact normalized activity, mood, and genre categories", () => {
-    expect(filterExploreCategoryScenes(scenes, { kind: "activity", value: "workout", scope: "public" })).toHaveLength(2);
-    expect(filterExploreCategoryScenes(scenes, { kind: "mood", value: "energized", scope: "public" })).toHaveLength(1);
-    expect(filterExploreCategoryScenes(scenes, { kind: "genre", value: "R&B", scope: "public" })).toHaveLength(1);
+    expect(filterExploreCategoryScenes(scenes, { kind: "activity", value: "workout" })).toHaveLength(2);
+    expect(filterExploreCategoryScenes(scenes, { kind: "mood", value: "energized" })).toHaveLength(1);
+    expect(filterExploreCategoryScenes(scenes, { kind: "genre", value: "R&B" })).toHaveLength(1);
   });
 
-  it("narrows to verified creators and composes category search", () => {
-    expect(filterExploreCategoryScenes(scenes, { kind: "activity", value: "Workout", scope: "verified" })).toHaveLength(1);
-    expect(filterExploreCategoryScenes(scenes, { kind: "activity", value: "Workout", scope: "public", query: "community" })).toHaveLength(1);
-    expect(filterExploreCategoryScenes(scenes, { kind: "genre", value: "Jazz", scope: "public" })).toEqual([]);
+  it("composes category search and derives verified highlights separately", () => {
+    const workout = filterExploreCategoryScenes(scenes, { kind: "activity", value: "Workout" });
+    expect(highlightedExploreCategoryScenes(workout)).toHaveLength(1);
+    expect(filterExploreCategoryScenes(scenes, { kind: "activity", value: "Workout", query: "community" })).toHaveLength(1);
+    expect(filterExploreCategoryScenes(scenes, { kind: "genre", value: "Jazz" })).toEqual([]);
+  });
+
+  it("ranks only genuinely played Scenes by play count", () => {
+    const ranked = popularExploreCategoryScenes([
+      publicScene({ id: "quiet", activity: "Workout", moods: "Calm", genres: "Ambient", plays: 0 }),
+      publicScene({ id: "popular", activity: "Workout", moods: "Calm", genres: "Ambient", plays: 21 }),
+      publicScene({ id: "middle", activity: "Workout", moods: "Calm", genres: "Ambient", plays: 8 }),
+    ]);
+    expect(ranked.map((item) => item.sceneId)).toEqual(["popular", "middle"]);
   });
 });

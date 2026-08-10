@@ -1,8 +1,6 @@
 import type { PublicCanalScene } from "./social";
 
 export type ExploreCategoryKind = "activity" | "mood" | "genre";
-export type ExploreCategoryScope = "public" | "verified";
-
 export function exploreCategoryValues(value: string | undefined): string[] {
   return (value ?? "")
     .split(/[,•|/]/u)
@@ -58,7 +56,6 @@ export function filterExploreCategoryScenes(
   options: {
     kind: ExploreCategoryKind;
     value: string;
-    scope: ExploreCategoryScope;
     query?: string;
   },
 ): PublicCanalScene[] {
@@ -67,9 +64,6 @@ export function filterExploreCategoryScenes(
   if (!category) return [];
 
   return scenes.filter((item) => {
-    if (options.scope === "verified" && !item.creator.isVerified && !item.creator.isCanal) {
-      return false;
-    }
     const values = options.kind === "activity"
       ? [item.scene.activity]
       : exploreCategoryValues(options.kind === "mood" ? item.scene.emotions : item.scene.genres);
@@ -85,4 +79,23 @@ export function filterExploreCategoryScenes(
       ...item.scene.tracks.map((track) => `${track.title} ${track.artist}`),
     ].join(" ").toLowerCase().includes(query);
   });
+}
+
+export function highlightedExploreCategoryScenes(
+  scenes: readonly PublicCanalScene[],
+): PublicCanalScene[] {
+  return scenes.filter((item) => item.creator.isVerified || item.creator.isCanal);
+}
+
+export function popularExploreCategoryScenes(
+  scenes: readonly PublicCanalScene[],
+  limit = 6,
+): PublicCanalScene[] {
+  return [...scenes]
+    .filter((item) => (item.scene.playCount ?? 0) > 0)
+    .sort((left, right) =>
+      (right.scene.playCount ?? 0) - (left.scene.playCount ?? 0) ||
+      right.updatedAt.localeCompare(left.updatedAt),
+    )
+    .slice(0, limit);
 }
