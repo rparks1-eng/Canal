@@ -32,6 +32,9 @@ import {
 import { ProfileAvatar } from "../components/profile-avatar";
 import { PublicSnapshotGrid } from "../components/PublicSnapshotCard";
 import { Image } from "expo-image";
+import { SceneCardBackdrop } from "../components/canal-ui/scene-card-visual";
+import { SceneDnaPanel } from "../components/canal-ui/scene-dna-panel";
+import { scenePresentation } from "../components/canal-ui/scene-signature";
 
 import {
   classifyAnalyticsFailure,
@@ -664,6 +667,7 @@ export default function PublicSceneScreen() {
                   styles.hero
                 }
               >
+                <SceneCardBackdrop presentation={scenePresentation(item.scene)} scene={item.scene} />
                 <Text
                   style={
                     styles.sceneName
@@ -683,6 +687,8 @@ export default function PublicSceneScreen() {
                   {item.scene.tracks.length}{" "}
                   tracks
                 </Text>
+
+                <SceneDnaPanel accent={scenePresentation(item.scene).accent} scene={item.scene} />
 
                 <Pressable
                   accessibilityRole="button"
@@ -1167,6 +1173,7 @@ const styles =
         "center",
       backgroundColor: canalDynamicColors.surface,
       borderRadius: 24,
+      overflow: "hidden",
       padding: 22,
     },
 

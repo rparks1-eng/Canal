@@ -121,6 +121,8 @@ import {
   sceneAtmosphere,
   scenePresentation,
 } from "../../components/canal-ui/scene-signature";
+import { SceneCardBackdrop } from "../../components/canal-ui/scene-card-visual";
+import { SceneDnaPanel } from "../../components/canal-ui/scene-dna-panel";
 
 async function openTrack(
   url?: string,
@@ -968,6 +970,7 @@ function SceneDetailContent() {
             ? styles.solidSurface
             : styles.heroGlass,
         ]}>
+          <SceneCardBackdrop presentation={presentation} scene={scene} />
           <View
             style={[
               styles.heroAccentLine,
@@ -992,15 +995,6 @@ function SceneDetailContent() {
             }
           >
             {scene.name}
-          </Text>
-
-          <Text
-            style={
-              styles.heroMood
-            }
-          >
-            {scene.emotions ||
-              `${scene.energy} energy`}
           </Text>
 
           <View style={styles.heroMeta}>
@@ -1047,6 +1041,8 @@ function SceneDetailContent() {
               {scene.playCount ?? 0} plays
             </Text>
           </View>
+
+          <SceneDnaPanel accent={presentation.accent} scene={scene} />
 
           <Pressable
             accessibilityLabel="Start Scene"
@@ -1609,6 +1605,7 @@ const styles =
     hero: {
       alignItems: "center",
       borderRadius: 27,
+      overflow: "hidden",
       paddingHorizontal: 20,
       paddingVertical: 27,
     },
@@ -1699,15 +1696,6 @@ const styles =
       textAlign: "center",
       letterSpacing: -0.8,
       marginTop: 6,
-    },
-
-    heroMood: {
-      color: "#DEC7BC",
-      fontSize: 13,
-      lineHeight: 19,
-      textAlign: "center",
-      marginTop: 7,
-      paddingHorizontal: 28,
     },
 
     heroMeta: {
