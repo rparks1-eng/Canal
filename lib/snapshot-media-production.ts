@@ -136,10 +136,17 @@ export async function shareFinishedSnapshot(input: {
   compositionRef: RefObject<View | null>;
   overlayRef: RefObject<View | null>;
   dialogTitle: string;
+  canonicalUrl?: string;
 }): Promise<void> {
   const runtimePaths = Paths as typeof Paths | undefined;
   if (!runtimePaths?.cache || typeof Sharing.isAvailableAsync !== "function") {
-    await Share.share({ title: input.dialogTitle, message: input.dialogTitle });
+    await Share.share({
+      title: input.dialogTitle,
+      message: input.canonicalUrl
+        ? `${input.dialogTitle}\n\n${input.canonicalUrl}`
+        : input.dialogTitle,
+      url: input.canonicalUrl,
+    });
     return;
   }
   if (!(await Sharing.isAvailableAsync())) {
@@ -164,6 +171,7 @@ export async function shareFinishedSnapshot(input: {
         mimeType: "image/png",
         UTI: "public.png",
       });
+      await presentSnapshotCanonicalLink(input.canonicalUrl, input.dialogTitle);
       return;
     }
 
@@ -190,11 +198,28 @@ export async function shareFinishedSnapshot(input: {
       mimeType: "video/mp4",
       UTI: "public.mpeg-4",
     });
+    await presentSnapshotCanonicalLink(input.canonicalUrl, input.dialogTitle);
   } finally {
     cleanupTransientCapture(captured);
     cleanupOwnedExport(finished);
     if (sourceTemporary) cleanupOwnedExport(localSource);
   }
+}
+
+async function presentSnapshotCanonicalLink(
+  canonicalUrl: string | undefined,
+  title: string,
+): Promise<void> {
+  if (!canonicalUrl) return;
+
+  // Expo Sharing exports the finished local file but cannot attach arbitrary
+  // link text to that same native payload. Present the canonical link as a
+  // second, explicit system share action after the media export completes.
+  await Share.share({
+    title,
+    message: canonicalUrl,
+    url: canonicalUrl,
+  });
 }
 function draftDirectory(scopeKey: string): Directory {
   return new Directory(draftRootDirectory(), safeScopeKey(scopeKey));

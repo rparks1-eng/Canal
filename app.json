@@ -14,6 +14,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.raishawnparks.canal",
+      "associatedDomains": [
+        "applinks:canal.app"
+      ],
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Canal to take photos and videos for Snapshots.",
         "NSMicrophoneUsageDescription": "Allow Canal to record audio with Snapshot videos.",
@@ -21,6 +24,34 @@
       }
     },
     "android": {
+      "package": "com.raishawnparks.canal",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "https",
+              "host": "canal.app",
+              "pathPrefix": "/scenes/"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.app",
+              "pathPrefix": "/snapshots/"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.app",
+              "pathPrefix": "/stages/"
+            }
+          ]
+        }
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

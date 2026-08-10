@@ -1,5 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import {
+  consumeDeferredDestination,
+} from "./deferred-destination";
+
+import type {
+  PublicDestination,
+} from "./public-linking";
+
 export type PublicSceneReturnRoute = {
   pathname: "/public-scene";
   params: {
@@ -49,8 +57,16 @@ export async function rememberPublicSceneReturn(
 
 export async function consumePublicSceneReturn(): Promise<
   | PublicSceneReturnRoute
+  | PublicDestination
   | null
 > {
+  const deferredDestination =
+    await consumeDeferredDestination();
+
+  if (deferredDestination) {
+    return deferredDestination;
+  }
+
   const stored =
     await AsyncStorage.getItem(
       PUBLIC_SCENE_RETURN_KEY,

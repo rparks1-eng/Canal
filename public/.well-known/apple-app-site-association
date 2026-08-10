@@ -1,0 +1,27 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "6UBGGFVD92.com.raishawnparks.canal",
+        "components": [
+          {
+            "/": "/scenes/*",
+            "comment": "Public Canal Scene links"
+          },
+          {
+            "/": "/snapshots/*",
+            "comment": "Public Canal Snapshot links"
+          },
+          {
+            "/": "/stages/*/join",
+            "?": {
+              "invite": "*"
+            },
+            "comment": "Invite-bearing Canal Stage joins"
+          }
+        ]
+      }
+    ]
+  }
+}

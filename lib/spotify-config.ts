@@ -5,6 +5,10 @@ import {
   Platform,
 } from "react-native";
 
+import {
+  canalPublicOrigin,
+} from "./public-linking";
+
 export const SPOTIFY_NATIVE_REDIRECT_URI =
   "com.raishawnparks.canal.spotify://callback";
 
@@ -60,19 +64,29 @@ export function getSpotifyRedirectUri(
   }
 
   const configuredRedirect =
-    process.env
-      .EXPO_PUBLIC_SPOTIFY_REDIRECT_URI
-      ?.trim() ?? "";
+    process.env.EXPO_PUBLIC_SPOTIFY_REDIRECT_URI?.trim();
 
-  if (
-    configuredRedirect.startsWith(
-      "https://",
-    )
-  ) {
-    return configuredRedirect;
+  if (configuredRedirect) {
+    try {
+      const url = new URL(configuredRedirect);
+
+      if (
+        url.protocol === "https:" &&
+        !url.username &&
+        !url.password &&
+        !url.hash
+      ) {
+        return url.toString();
+      }
+    } catch {
+      // Fall through to Canal's canonical HTTPS callback.
+    }
   }
 
-  return SPOTIFY_NATIVE_REDIRECT_URI;
+  return new URL(
+    "/spotify-callback",
+    `${canalPublicOrigin()}/`,
+  ).toString();
 }
 
 export function requireSpotifyConfiguration(): {

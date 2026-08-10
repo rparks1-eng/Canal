@@ -32,6 +32,16 @@ describe("finished Snapshot media production", () => {
     expect(composition).toContain("SnapshotMediaPreview");
   });
 
+  it("presents the canonical link after exporting finished media", () => {
+    const production = read("lib/snapshot-media-production.ts");
+    const detail = read("app/snapshots/[snapshotId].tsx");
+    expect(production).toContain("presentSnapshotCanonicalLink(input.canonicalUrl");
+    expect(production).toContain("Expo Sharing exports the finished local file");
+    expect(detail).toContain("getOrCreatePublicSnapshotShareId(snapshot.id)");
+    expect(detail).toContain("canalCanonicalUrl(`/snapshots/${encodeURIComponent(publicShareId)}`)");
+    expect(detail).toContain('snapshot.visibility === "public"');
+  });
+
   it("owns durable drafts, retryable cloud writes, and exact cleanup", () => {
     const camera = read("app/snapshot-camera.tsx");
     const production = read("lib/snapshot-media-production.ts");
