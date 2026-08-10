@@ -59,14 +59,20 @@ describe("Library Snapshot collection contract", () => {
     expect(source).toContain('name="ellipsis-horizontal"');
     expect(source).toContain("openSnapshotActions(snapshot)");
     expect(source).not.toContain('text: "Edit"');
-    expect(source).toContain('text: snapshot.visibility === "public" ? "Make Private" : "Make Public"');
-    expect(source).toContain('text: "Share"');
-    expect(source).toContain('text: "Delete"');
+    expect(source).toContain("<LibraryActionLedge");
+    expect(source).toContain('right: 48');
+    expect(source).toContain('maxWidth: 156');
+    expect(source).toContain('entering={FadeInRight.duration(170)}');
+    expect(source).not.toContain("accessibilityViewIsModal");
+    expect(source).toContain('label: snapshot.visibility === "public" ? "Make Private" : "Make Public"');
+    expect(source).toContain('label: "Share Snapshot"');
+    expect(source).toContain('label: "Delete Snapshot"');
   });
 
-  it("executes Scene deletion directly from the open management alert", () => {
-    expect(source).toContain('text: scene.libraryType === "saved" ? "Remove from Library" : "Delete Scene"');
-    expect(source).toContain("onPress: () => void performDelete(scene)");
+  it("executes Scene actions from the anchored ledge while keeping destructive confirmation bounded", () => {
+    expect(source).toContain('label: scene.libraryType === "saved" ? "Remove from Library" : "Delete Scene"');
+    expect(source).toContain("void performDelete(scene)");
+    expect(source).not.toContain("Alert.alert(\n      scene.name");
     expect(source).not.toContain("onPress: () => confirmDelete(scene)");
   });
 });

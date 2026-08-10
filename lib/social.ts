@@ -953,65 +953,85 @@ export async function setOwnSceneVisibility(
     );
   }
 
-  const updated: StoredScene = {
-    ...scene,
+  let updated: StoredScene | null = null;
 
-    visibility,
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await assertSceneCacheOwner(sceneCacheOwner);
+    const { data: remoteData, error: remoteError } = await supabase
+      .from("scenes")
+      .select("user_id, id, payload, revision, created_at, updated_at, deleted_at")
+      .eq("user_id", userId)
+      .eq("id", sceneId)
+      .maybeSingle();
 
-    updatedAt:
-      new Date().toISOString(),
-  };
+    await assertSceneCacheOwner(sceneCacheOwner);
+    if (remoteError) {
+      throw new Error(`Canal could not refresh the Scene before changing visibility: ${remoteError.message}`);
+    }
 
-  await assertSceneCacheOwner(
-    sceneCacheOwner,
-  );
+    const remoteRow = remoteData as (SceneRow & { revision: number }) | null;
+    if (!remoteRow || remoteRow.deleted_at) {
+      throw new Error("This Scene is no longer available. Refresh your Library to remove the stale copy.");
+    }
 
-  const {
-    error,
-  } =
-    await supabase
-      .from(
-        "scenes",
-      )
-      .upsert(
-        {
-          user_id:
-            userId,
+    const canonicalScene = normalizeScene(remoteRow);
+    if (!canonicalScene || !Number.isSafeInteger(remoteRow.revision) || remoteRow.revision < 1) {
+      throw new Error("Canal received an invalid cloud Scene while changing visibility.");
+    }
 
-          id:
-            updated.id,
+    const requestedScene: StoredScene = {
+      ...canonicalScene,
+      visibility,
+      revision: remoteRow.revision,
+      updatedAt: new Date().toISOString(),
+    };
 
-          payload:
-            updated,
-
-          created_at:
-            updated.createdAt,
-
-          updated_at:
-            updated.updatedAt,
-
-          deleted_at:
-            null,
-        },
-        {
-          onConflict:
-            "user_id,id",
-        },
-      );
-
-  if (error) {
-    throw new Error(
-      `Canal could not update the Scene's cloud visibility: ${error.message}`,
+    const { data: savedData, error: savedError } = await supabase.rpc(
+      "update_collaborative_scene",
+      {
+        scene_owner_id_value: userId,
+        scene_id_value: sceneId,
+        expected_revision_value: remoteRow.revision,
+        scene_payload_value: requestedScene,
+      },
     );
+
+    await assertSceneCacheOwner(sceneCacheOwner);
+    if (savedError) {
+      const conflict =
+        (savedError.code === "40001" || savedError.code === "P0001") &&
+        savedError.message.includes("SCENE_REVISION_CONFLICT");
+      if (conflict && attempt === 0) continue;
+      throw new Error(
+        conflict
+          ? "This Scene changed on another device. Refresh your Library and try again."
+          : `Canal could not update the Scene's cloud visibility: ${savedError.message}`,
+      );
+    }
+
+    const savedRow = (Array.isArray(savedData) ? savedData[0] : savedData) as SceneRow | null;
+    updated = savedRow ? normalizeScene(savedRow) : null;
+    if (!updated) {
+      updated = { ...requestedScene, revision: remoteRow.revision + 1 };
+    }
+    break;
+  }
+
+  if (!updated) {
+    throw new Error("Canal could not update the Scene visibility.");
   }
 
   await assertSceneCacheOwner(
     sceneCacheOwner,
   );
 
+  const latestScenes = await readScenes();
+
+  await assertSceneCacheOwner(sceneCacheOwner);
+
   await writeScenesForSceneCacheOwner(
     sceneCacheOwner,
-    scenes.map(
+    latestScenes.map(
       (candidate) =>
         candidate.id ===
         updated.id

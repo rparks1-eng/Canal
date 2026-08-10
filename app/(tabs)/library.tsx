@@ -30,7 +30,9 @@ import {
 import { CanalAmbientBackground } from "../../components/canal-ui/canal-ambient-background";
 
 import Animated, {
+  FadeInRight,
   FadeInUp,
+  FadeOutRight,
 } from "react-native-reanimated";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -129,6 +131,52 @@ type SnapshotFilter =
   | "photo"
   | "video";
 
+type OpenLibraryActions = {
+  kind: "scene" | "snapshot";
+  id: string;
+} | null;
+
+type LibraryLedgeAction = {
+  label: string;
+  icon: string;
+  destructive?: boolean;
+  onPress: () => void;
+};
+
+function LibraryActionLedge(props: {
+  label: string;
+  actions: LibraryLedgeAction[];
+}) {
+  return (
+    <Animated.View
+      accessibilityLabel={props.label}
+      accessibilityRole="menu"
+      entering={FadeInRight.duration(170)}
+      exiting={FadeOutRight.duration(130)}
+      style={styles.actionLedge}
+    >
+      {props.actions.map((action) => (
+        <Pressable
+          key={action.label}
+          accessibilityLabel={action.label}
+          accessibilityRole="button"
+          onPress={action.onPress}
+          style={({ pressed }) => [
+            styles.actionLedgeButton,
+            pressed && styles.actionLedgeButtonPressed,
+          ]}
+        >
+          <Ionicons
+            color={action.destructive ? "#FF655F" : canalDynamicColors.text}
+            name={action.icon as never}
+            size={17}
+          />
+        </Pressable>
+      ))}
+    </Animated.View>
+  );
+}
+
 export default function LibraryScreen() {
   const {
     refresh:
@@ -200,6 +248,8 @@ export default function LibraryScreen() {
     busySceneId,
     setBusySceneId,
   ] = useState("");
+
+  const [openActions, setOpenActions] = useState<OpenLibraryActions>(null);
 
   const [
     message,
@@ -566,36 +616,10 @@ export default function LibraryScreen() {
     };
 
   const openSceneActions = (scene: StoredScene): void => {
-    const options = [
-      {
-        text: "Open Scene",
-        onPress: () => router.push({
-          pathname: "/scenes/[sceneId]",
-          params: { sceneId: scene.id },
-        } as never),
-      },
-      ...(scene.libraryType === "saved"
-        ? []
-        : [{
-            text: scene.visibility === "public" ? "Make Private" : "Make Public",
-            onPress: () => void changeVisibility(
-              scene,
-              scene.visibility === "public" ? "private" : "public",
-            ),
-          }]),
-      {
-        text: scene.libraryType === "saved" ? "Remove from Library" : "Delete Scene",
-        style: "destructive" as const,
-        onPress: () => void performDelete(scene),
-      },
-      { text: "Cancel", style: "cancel" as const },
-    ];
-    Alert.alert(
-      scene.name,
-      scene.libraryType === "saved"
-        ? "Manage this Scene. Remove from Library only affects this account."
-        : "Manage this Scene. Delete Scene permanently removes it from this account.",
-      options,
+    setOpenActions((current) =>
+      current?.kind === "scene" && current.id === scene.id
+        ? null
+        : { kind: "scene", id: scene.id },
     );
   };
 
@@ -649,27 +673,10 @@ export default function LibraryScreen() {
   };
 
   const openSnapshotActions = (snapshot: Snapshot): void => {
-    Alert.alert(
-      snapshot.sceneName,
-      "Manage this Snapshot.",
-      [
-        {
-          text: snapshot.visibility === "public" ? "Make Private" : "Make Public",
-          onPress: () => void updateSnapshotVisibility(snapshot),
-        },
-        {
-          text: "Share",
-          onPress: () => void shareSnapshot(snapshot).catch((error: unknown) => {
-            setErrorMessage(error instanceof Error ? error.message : "Canal could not share this Snapshot.");
-          }),
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => confirmSnapshotDelete(snapshot),
-        },
-        { text: "Cancel", style: "cancel" },
-      ],
+    setOpenActions((current) =>
+      current?.kind === "snapshot" && current.id === snapshot.id
+        ? null
+        : { kind: "snapshot", id: snapshot.id },
     );
   };
 
@@ -688,6 +695,7 @@ export default function LibraryScreen() {
           styles.content
         }
         keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={() => setOpenActions(null)}
         showsVerticalScrollIndicator={
           false
         }
@@ -1010,6 +1018,9 @@ export default function LibraryScreen() {
                     scene.id,
                   );
 
+                const actionsOpen =
+                  openActions?.kind === "scene" && openActions.id === scene.id;
+
                 return (
                   <Animated.View
                     key={`${animationRevision}:${scene.id}`}
@@ -1017,6 +1028,7 @@ export default function LibraryScreen() {
                     style={[
                       styles.sceneWrapper,
                       layout === "grid" && styles.sceneWrapperGrid,
+                      actionsOpen && styles.libraryWrapperMenuOpen,
                     ]}
                   >
                     <NativeAnimated.View
@@ -1149,7 +1161,9 @@ export default function LibraryScreen() {
 
                       <Pressable
                         accessibilityLabel={`Manage ${scene.name}`}
+                        accessibilityHint="Shows Scene actions"
                         accessibilityRole="button"
+                        accessibilityState={{ expanded: actionsOpen }}
                         disabled={busy}
                         onPress={(event) => {
                           event.stopPropagation();
@@ -1165,6 +1179,44 @@ export default function LibraryScreen() {
                       </Pressable>
                     </Pressable>
                     </NativeAnimated.View>
+                    {actionsOpen ? (
+                      <LibraryActionLedge
+                        label={`${scene.name} actions`}
+                        actions={[
+                          {
+                            label: `Open ${scene.name}`,
+                            icon: "arrow-forward-circle-outline",
+                            onPress: () => {
+                              setOpenActions(null);
+                              router.push({
+                                pathname: "/scenes/[sceneId]",
+                                params: { sceneId: scene.id },
+                              } as never);
+                            },
+                          },
+                          ...(scene.libraryType === "saved" ? [] : [{
+                            label: scene.visibility === "public" ? "Make Private" : "Make Public",
+                            icon: scene.visibility === "public" ? "eye-off-outline" : "eye-outline",
+                            onPress: () => {
+                              setOpenActions(null);
+                              void changeVisibility(
+                                scene,
+                                scene.visibility === "public" ? "private" : "public",
+                              );
+                            },
+                          }]),
+                          {
+                            label: scene.libraryType === "saved" ? "Remove from Library" : "Delete Scene",
+                            icon: "trash-outline",
+                            destructive: true,
+                            onPress: () => {
+                              setOpenActions(null);
+                              void performDelete(scene);
+                            },
+                          },
+                        ]}
+                      />
+                    ) : null}
                   </Animated.View>
                 );
               },
@@ -1175,6 +1227,7 @@ export default function LibraryScreen() {
                 style={[
                   styles.snapshotWrapper,
                   layout === "grid" && styles.snapshotWrapperGrid,
+                  openActions?.kind === "snapshot" && openActions.id === snapshot.id && styles.libraryWrapperMenuOpen,
                 ]}
               >
                 <Pressable
@@ -1198,7 +1251,10 @@ export default function LibraryScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Manage ${snapshot.sceneName} Snapshot`}
-                    accessibilityHint="Shows edit, visibility, share, and delete options"
+                    accessibilityHint="Shows visibility, share, and delete options"
+                    accessibilityState={{
+                      expanded: openActions?.kind === "snapshot" && openActions.id === snapshot.id,
+                    }}
                     onPress={(event) => {
                       event.stopPropagation();
                       openSnapshotActions(snapshot);
@@ -1208,6 +1264,40 @@ export default function LibraryScreen() {
                     <Ionicons name="ellipsis-horizontal" size={19} color={canalDynamicColors.text} />
                   </Pressable>
                 </Pressable>
+                {openActions?.kind === "snapshot" && openActions.id === snapshot.id ? (
+                  <LibraryActionLedge
+                    label={`${snapshot.sceneName} Snapshot actions`}
+                    actions={[
+                      {
+                        label: snapshot.visibility === "public" ? "Make Private" : "Make Public",
+                        icon: snapshot.visibility === "public" ? "eye-off-outline" : "eye-outline",
+                        onPress: () => {
+                          setOpenActions(null);
+                          void updateSnapshotVisibility(snapshot);
+                        },
+                      },
+                      {
+                        label: "Share Snapshot",
+                        icon: "share-outline",
+                        onPress: () => {
+                          setOpenActions(null);
+                          void shareSnapshot(snapshot).catch((error: unknown) => {
+                            setErrorMessage(error instanceof Error ? error.message : "Canal could not share this Snapshot.");
+                          });
+                        },
+                      },
+                      {
+                        label: "Delete Snapshot",
+                        icon: "trash-outline",
+                        destructive: true,
+                        onPress: () => {
+                          setOpenActions(null);
+                          confirmSnapshotDelete(snapshot);
+                        },
+                      },
+                    ]}
+                  />
+                ) : null}
               </Animated.View>
             ))}
           </View>
@@ -1475,6 +1565,7 @@ const styles =
 
     sceneWrapper: {
       width: "100%",
+      position: "relative",
     },
 
     sceneWrapperGrid: {
@@ -1483,6 +1574,40 @@ const styles =
 
     snapshotWrapper: {
       width: "100%",
+      position: "relative",
+    },
+
+    libraryWrapperMenuOpen: {
+      zIndex: 20,
+    },
+
+    actionLedge: {
+      position: "absolute",
+      right: 48,
+      top: 4,
+      zIndex: 30,
+      maxWidth: 156,
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      overflow: "hidden",
+      borderRadius: 16,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.surface,
+      boxShadow: "0 8px 24px rgba(2, 30, 45, 0.2)",
+    },
+
+    actionLedgeButton: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    actionLedgeButtonPressed: {
+      backgroundColor: canalDynamicColors.elevated,
     },
 
     snapshotWrapperGrid: {
