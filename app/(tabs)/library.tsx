@@ -1871,9 +1871,8 @@ const styles =
       position: "absolute",
       top: -3,
       right: -3,
-      width: 40,
-      height: 40,
-      backgroundColor: "rgba(5, 15, 34, 0.34)",
+      width: 48,
+      height: 48,
     },
 
     actionRow: {
