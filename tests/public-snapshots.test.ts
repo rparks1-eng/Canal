@@ -8,6 +8,7 @@ import {
 
 import {
   loadPublicSnapshotFeed,
+  loadPublicSourceSnapshots,
   normalizePublicSnapshotRows,
 } from "../lib/public-snapshots";
 
@@ -164,6 +165,35 @@ describe(
         "https://media.test/photo",
         "https://media.test/video",
       ]);
+    });
+
+    it("limits nested Snapshot galleries to their exact Scene or Stage source", async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: "viewer" } },
+        error: null,
+      } as never);
+      const snapshotsQuery = {
+        select: jest.fn(() => snapshotsQuery),
+        eq: jest.fn(() => snapshotsQuery),
+        order: jest.fn(() => snapshotsQuery),
+        limit: jest.fn(async () => ({
+          data: [snapshotRow({ scene_id: "stage-stage-1", user_id: "viewer" })],
+          error: null,
+        })),
+      };
+      const creatorsQuery = {
+        select: jest.fn(() => creatorsQuery),
+        in: jest.fn(async () => ({ data: [], error: null })),
+      };
+      mockFrom
+        .mockReturnValueOnce(snapshotsQuery as never)
+        .mockReturnValueOnce(creatorsQuery as never);
+
+      const result = await loadPublicSourceSnapshots("stage-stage-1");
+
+      expect(snapshotsQuery.eq).toHaveBeenCalledWith("visibility", "public");
+      expect(snapshotsQuery.eq).toHaveBeenCalledWith("scene_id", "stage-stage-1");
+      expect(result).toHaveLength(1);
     });
 
     it(

@@ -30,6 +30,7 @@ import {
   RecoveryNotice,
 } from "../components/recovery-notice";
 import { ProfileAvatar } from "../components/profile-avatar";
+import { PublicSnapshotGrid } from "../components/PublicSnapshotCard";
 import { Image } from "expo-image";
 
 import {
@@ -60,6 +61,12 @@ import {
 import type {
   PublicCanalScene,
 } from "../lib/social";
+import {
+  loadPublicSourceSnapshots,
+} from "../lib/public-snapshots";
+import type {
+  PublicCanalSnapshot,
+} from "../lib/public-snapshots";
 
 import {
   exportSceneToMusicProvider,
@@ -122,6 +129,8 @@ export default function PublicSceneScreen() {
       null,
     );
 
+  const [sceneSnapshots, setSceneSnapshots] = useState<PublicCanalSnapshot[]>([]);
+
   const [
     loading,
     setLoading,
@@ -181,9 +190,12 @@ export default function PublicSceneScreen() {
     useRef(false);
   const shareInFlight =
     useRef(false);
+  const loadGeneration =
+    useRef(0);
   const load =
     useCallback(
       async (): Promise<void> => {
+        const generation = ++loadGeneration.current;
         if (
           !ownerId ||
           !sceneId
@@ -202,6 +214,8 @@ export default function PublicSceneScreen() {
         setLoading(
           true,
         );
+        setItem(null);
+        setSceneSnapshots([]);
 
         try {
           const publicScene =
@@ -210,23 +224,28 @@ export default function PublicSceneScreen() {
               sceneId,
             );
 
-          setItem(
-            publicScene,
-          );
+          if (generation !== loadGeneration.current) return;
+          setItem(publicScene);
 
-          setErrorMessage(
-            "",
-          );
+          try {
+            const snapshots = await loadPublicSourceSnapshots(sceneId, ownerId);
+            if (generation !== loadGeneration.current) return;
+            setSceneSnapshots(snapshots);
+          } catch (snapshotError) {
+            console.warn("Public Scene Snapshots are temporarily unavailable:", snapshotError);
+            if (generation === loadGeneration.current) setSceneSnapshots([]);
+          }
+
+          if (generation === loadGeneration.current) setErrorMessage("");
         } catch (error) {
+          if (generation !== loadGeneration.current) return;
           setErrorMessage(
             error instanceof Error
               ? error.message
               : "Canal could not load this public Scene.",
           );
         } finally {
-          setLoading(
-            false,
-          );
+          if (generation === loadGeneration.current) setLoading(false);
         }
       },
       [
@@ -237,6 +256,9 @@ export default function PublicSceneScreen() {
 
   useEffect(() => {
     void load();
+    return () => {
+      loadGeneration.current += 1;
+    };
   }, [
     load,
   ]);
@@ -966,6 +988,16 @@ export default function PublicSceneScreen() {
                 />
               </View>
 
+              {sceneSnapshots.length > 0 ? (
+                <View style={styles.detailCard}>
+                  <Text style={styles.sectionTitle}>Snapshots from this Scene</Text>
+                  <Text style={styles.sectionDescription}>
+                    Visual moments published from this Scene.
+                  </Text>
+                  <PublicSnapshotGrid snapshots={sceneSnapshots} />
+                </View>
+              ) : null}
+
               <View
                 style={
                   styles.detailCard
@@ -1326,6 +1358,13 @@ const styles =
       fontSize: 22,
       lineHeight: 27,
       marginBottom: 8,
+    },
+
+    sectionDescription: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginBottom: 12,
     },
 
     detailRow: {

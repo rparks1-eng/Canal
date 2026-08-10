@@ -143,9 +143,24 @@ export async function loadPublicProfileSnapshots(
   });
 }
 
+export async function loadPublicSourceSnapshots(
+  sceneId: string,
+  ownerId?: string,
+): Promise<PublicCanalSnapshot[]> {
+  const normalizedSceneId = sceneId.trim();
+  const normalizedOwnerId = ownerId?.trim();
+  if (!normalizedSceneId) return [];
+  return loadPublicSnapshots({
+    sceneId: normalizedSceneId,
+    ownerId: normalizedOwnerId || undefined,
+    limit: 100,
+  });
+}
+
 async function loadPublicSnapshots(
   options: {
     ownerId?: string;
+    sceneId?: string;
     limit: number;
   },
 ): Promise<PublicCanalSnapshot[]> {
@@ -180,6 +195,10 @@ async function loadPublicSnapshots(
         "user_id",
         options.ownerId,
       );
+  }
+
+  if (options.sceneId) {
+    query = query.eq("scene_id", options.sceneId);
   }
 
   const {

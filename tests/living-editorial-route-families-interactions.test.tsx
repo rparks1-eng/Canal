@@ -209,9 +209,8 @@ describe("Living Editorial primary route families", () => {
     expect(mockRouter.push).toHaveBeenCalledWith("/settings");
 
     expect(explore.root.findByType(RefreshControl).props.refreshing).toBe(false);
-    expect48(explore.root.findByProps({ accessibilityLabel: "Show Snapshots" }));
     expect48(explore.root.findByProps({ accessibilityLabel: "Show Scenes" }));
-    await act(async () => explore.root.findByProps({ accessibilityLabel: "Show Scenes" }).props.onPress());
+    expect48(explore.root.findByProps({ accessibilityLabel: "Show Live Stages" }));
     const creatorButton = explore.root.findByProps({ accessibilityLabel: "Open creator Creator A" });
     expect48(creatorButton);
     await act(async () => creatorButton.props.onPress());

@@ -39,6 +39,7 @@ import {
   RecoveryNotice,
 } from "../../components/recovery-notice";
 import { ProfileAvatar } from "../../components/profile-avatar";
+import { PublicSnapshotGrid } from "../../components/PublicSnapshotCard";
 import {
   LinerNotesOverlay,
   type LinerNotesTrack,
@@ -83,6 +84,12 @@ import {
 import {
   addSpotifyArtworkToLiveStage,
 } from "../../lib/spotify-scene-artwork";
+import {
+  loadPublicSourceSnapshots,
+} from "../../lib/public-snapshots";
+import type {
+  PublicCanalSnapshot,
+} from "../../lib/public-snapshots";
 import {
   useAuth,
 } from "../../providers/auth-provider";
@@ -585,6 +592,8 @@ export default function LiveStageScreen() {
     LiveStageMessage[]
   >([]);
 
+  const [stageSnapshots, setStageSnapshots] = useState<PublicCanalSnapshot[]>([]);
+
   const [
     loading,
     setLoading,
@@ -699,6 +708,28 @@ export default function LiveStageScreen() {
     roomKey
       ? storedStage
       : null;
+
+  const publicStageSnapshotSource =
+    stage?.visibility === "public"
+      ? `stage-${stage.id}`
+      : "";
+
+  useEffect(() => {
+    let active = true;
+    if (!publicStageSnapshotSource) {
+      setStageSnapshots([]);
+      return () => { active = false; };
+    }
+    void loadPublicSourceSnapshots(publicStageSnapshotSource)
+      .then((snapshots) => {
+        if (active) setStageSnapshots(snapshots);
+      })
+      .catch((snapshotError) => {
+        console.warn("Live Stage Snapshots are temporarily unavailable:", snapshotError);
+        if (active) setStageSnapshots([]);
+    });
+    return () => { active = false; };
+  }, [publicStageSnapshotSource]);
 
   useEffect(() => {
     if (!stage) return;
@@ -2087,7 +2118,7 @@ export default function LiveStageScreen() {
       params: {
         source: "stage",
         stageId: stage.id,
-        sceneId: stage.sceneId ?? `stage-${stage.id}`,
+        sceneId: `stage-${stage.id}`,
         sceneName: stage.name,
         trackId: currentTrack?.id ?? "",
         trackTitle: currentTrack?.title ?? "",
@@ -3100,6 +3131,19 @@ export default function LiveStageScreen() {
           />
         ) : null}
 
+        {stageSnapshots.length > 0 ? (
+          <View style={styles.stageSnapshotsSection}>
+            <View style={styles.stageSnapshotsHeading}>
+              <Ionicons color={canalDynamicColors.mint} name="camera-outline" size={19} />
+              <View style={styles.stageSnapshotsHeadingCopy}>
+                <Text style={styles.stageSnapshotsTitle}>Snapshots from this Stage</Text>
+                <Text style={styles.stageSnapshotsSubtitle}>Visual moments published while this Stage was live.</Text>
+              </View>
+            </View>
+            <PublicSnapshotGrid snapshots={stageSnapshots} />
+          </View>
+        ) : null}
+
         {isHost ? (
           <Pressable
             accessibilityLabel={isEnded ? "Stage ended" : "End this Stage"}
@@ -3921,6 +3965,35 @@ const styles =
       gap: 10,
       paddingTop: 6,
       paddingBottom: 14,
+    },
+
+    stageSnapshotsSection: {
+      gap: 12,
+      paddingTop: 12,
+      paddingBottom: 4,
+    },
+
+    stageSnapshotsHeading: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+
+    stageSnapshotsHeadingCopy: {
+      flex: 1,
+    },
+
+    stageSnapshotsTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+
+    stageSnapshotsSubtitle: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 2,
     },
 
     stageIdentity: {
