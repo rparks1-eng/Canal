@@ -127,7 +127,7 @@ function SceneCard(props: {
           styles.pressed,
       ]}
     >
-      <SceneCardBackdrop presentation={presentation} />
+      <SceneCardBackdrop presentation={presentation} scene={props.scene} />
       <Text
         style={[styles.sceneActivity, { color: presentation.accent }]}
       >

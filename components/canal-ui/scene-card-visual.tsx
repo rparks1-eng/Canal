@@ -7,16 +7,21 @@ import type {
   StyleProp,
   ViewStyle,
 } from "react-native";
+import type { StoredScene } from "../../lib/scenes";
+import { sceneGenreSignals } from "./scene-genre-breakdown";
 
 import {
+  scenePresentation,
   SceneSignature,
   type ScenePresentation,
 } from "./scene-signature";
 
 export function SceneCardBackdrop(props: Readonly<{
   presentation: ScenePresentation;
+  scene?: Pick<StoredScene, "activity" | "energy" | "genres" | "id" | "name">;
 }>) {
-  const { presentation } = props;
+  const { presentation, scene } = props;
+  const atmosphere = scene ? sceneCardAtmosphere(scene) : null;
 
   return (
     <View
@@ -28,6 +33,37 @@ export function SceneCardBackdrop(props: Readonly<{
       <View style={[styles.base, { backgroundColor: presentation.colors[2] }]} />
       <View style={[styles.glow, styles.glowOne, { backgroundColor: presentation.colors[0] }]} />
       <View style={[styles.glow, styles.glowTwo, { backgroundColor: presentation.colors[1] }]} />
+      {atmosphere ? (
+        <>
+          <View
+            style={[
+              styles.energyHalo,
+              {
+                backgroundColor: presentation.accent,
+                left: atmosphere.haloLeft,
+                opacity: atmosphere.haloOpacity,
+                top: atmosphere.haloTop,
+                transform: [{ rotate: `${atmosphere.rotation}deg` }, { scale: atmosphere.haloScale }],
+              },
+            ]}
+          />
+          {atmosphere.genreColors.map((color, index) => (
+            <View
+              key={`${color}-${index}`}
+              style={[
+                styles.genreRibbon,
+                {
+                  backgroundColor: color,
+                  opacity: index === 0 ? 0.22 : 0.14,
+                  right: `${-18 + index * 20}%`,
+                  top: `${18 + index * 27}%`,
+                  transform: [{ rotate: `${atmosphere.rotation + (index === 0 ? -8 : 10)}deg` }],
+                },
+              ]}
+            />
+          ))}
+        </>
+      ) : null}
       <View style={[styles.softLight, { backgroundColor: presentation.accent }]} />
       <SceneSignature
         color={`${presentation.accent}52`}
@@ -37,6 +73,33 @@ export function SceneCardBackdrop(props: Readonly<{
       <View style={styles.readabilityWash} />
     </View>
   );
+}
+
+export function sceneCardAtmosphere(
+  scene: Pick<StoredScene, "activity" | "energy" | "genres" | "id" | "name">,
+) {
+  const seedText = `${scene.id}|${scene.name}|${scene.activity}`;
+  const seed = Array.from(seedText).reduce((total, character) => ((total * 31) + character.charCodeAt(0)) % 997, 17);
+  const energy = scene.energy.trim().toLowerCase();
+  const high = /high|peak|intense|energetic|maximum/u.test(energy);
+  const low = /low|soft|calm|quiet|gentle/u.test(energy);
+  const genres = sceneGenreSignals(scene.genres);
+  const genreColors = genres.slice(0, 2).map((genre) => scenePresentation({
+    name: "",
+    activity: "",
+    emotions: "",
+    genres: genre,
+    energy: "medium",
+  }).accent);
+
+  return {
+    genreColors: genreColors.length > 0 ? genreColors : [scenePresentation({ ...scene, emotions: "" }).accent],
+    haloLeft: `${-28 + (seed % 38)}%` as `${number}%`,
+    haloOpacity: high ? 0.2 : low ? 0.09 : 0.14,
+    haloScale: high ? 1.2 : low ? 0.82 : 1,
+    haloTop: `${-30 + (seed % 42)}%` as `${number}%`,
+    rotation: -18 + (seed % 37),
+  };
 }
 
 export function ScenePaletteMark(props: Readonly<{
@@ -99,6 +162,18 @@ const styles = StyleSheet.create({
     borderRadius: 80,
     opacity: 0.07,
     transform: [{ rotate: "-5deg" }],
+  },
+  energyHalo: {
+    position: "absolute",
+    width: "86%",
+    aspectRatio: 1,
+    borderRadius: 999,
+  },
+  genreRibbon: {
+    position: "absolute",
+    width: "86%",
+    height: "18%",
+    borderRadius: 999,
   },
   signature: {
     position: "absolute",

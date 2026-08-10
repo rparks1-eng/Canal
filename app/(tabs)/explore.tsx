@@ -39,6 +39,7 @@ import Animated, {
 import { ProfileAvatar } from "../../components/profile-avatar";
 import { SceneEnergySignature } from "../../components/canal-ui/scene-energy-signature";
 import { SceneMoodBreakdown } from "../../components/canal-ui/scene-mood-breakdown";
+import { SceneGenreBreakdown } from "../../components/canal-ui/scene-genre-breakdown";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
 import {
   scenePresentation,
@@ -252,7 +253,7 @@ function PublicSceneCard(
         },
       ]}
     >
-      <SceneCardBackdrop presentation={presentation} />
+      <SceneCardBackdrop presentation={presentation} scene={item.scene} />
       <Pressable
         accessibilityLabel={`Open ${item.scene.name}`}
         accessibilityRole="button"
@@ -330,7 +331,10 @@ function PublicSceneCard(
           </View>
         </View>
         <SceneEnergySignature accent={presentation.accent} compact scene={item.scene} style={styles.publicSceneEnergy} />
-        <SceneMoodBreakdown compact scene={item.scene} style={styles.publicSceneMood} />
+        <View style={styles.publicSceneBreakdowns}>
+          <SceneMoodBreakdown compact scene={item.scene} style={styles.publicSceneBreakdown} />
+          <SceneGenreBreakdown compact scene={item.scene} style={styles.publicSceneBreakdown} />
+        </View>
       </Pressable>
 
       <View
@@ -1858,10 +1862,13 @@ const styles =
           width: 112,
           marginTop: 10,
         },
-        publicSceneMood: {
+        publicSceneBreakdowns: {
+          flexDirection: "row",
+          gap: 10,
           marginTop: 8,
           maxWidth: 220,
         },
+        publicSceneBreakdown: { flex: 1 },
 
     artwork: {
       width: 64,

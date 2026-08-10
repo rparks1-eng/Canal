@@ -21,6 +21,7 @@ import { scenePresentation } from "../../components/canal-ui/scene-signature";
 import { ProfileAvatar } from "../../components/profile-avatar";
 import { SceneEnergySignature } from "../../components/canal-ui/scene-energy-signature";
 import { SceneMoodBreakdown } from "../../components/canal-ui/scene-mood-breakdown";
+import { SceneGenreBreakdown } from "../../components/canal-ui/scene-genre-breakdown";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
 import {
   exploreCategoryIcon,
@@ -51,7 +52,7 @@ function CategorySceneCard({ item, showPlays = false }: { item: PublicCanalScene
         pressed && styles.pressed,
       ]}
     >
-      <SceneCardBackdrop presentation={presentation} />
+      <SceneCardBackdrop presentation={presentation} scene={item.scene} />
       <View style={styles.sceneHeader}>
         <Text numberOfLines={1} style={styles.sceneName}>{item.scene.name}</Text>
         <Text style={[styles.sceneCount, { color: presentation.accent }]}>
@@ -63,6 +64,7 @@ function CategorySceneCard({ item, showPlays = false }: { item: PublicCanalScene
       </Text>
       <SceneEnergySignature accent={presentation.accent} compact scene={item.scene} />
       <SceneMoodBreakdown compact scene={item.scene} />
+      <SceneGenreBreakdown compact scene={item.scene} />
       <View style={styles.creatorRow}>
         <ProfileAvatar avatarUrl={item.creator.avatarUrl} displayName={item.creator.displayName} size={32} />
         <Text numberOfLines={1} style={styles.creatorName}>{item.creator.displayName}</Text>

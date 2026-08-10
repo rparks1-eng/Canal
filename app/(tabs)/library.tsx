@@ -55,6 +55,7 @@ import {
 import { SceneCardBackdrop } from "../../components/canal-ui/scene-card-visual";
 import { SceneEnergySignature } from "../../components/canal-ui/scene-energy-signature";
 import { SceneMoodBreakdown } from "../../components/canal-ui/scene-mood-breakdown";
+import { SceneGenreBreakdown } from "../../components/canal-ui/scene-genre-breakdown";
 
 import {
   useReconnectReload,
@@ -1107,7 +1108,7 @@ export default function LibraryScreen() {
                         },
                       ]}
                     >
-                    <SceneCardBackdrop presentation={presentation} />
+                    <SceneCardBackdrop presentation={presentation} scene={scene} />
                     <Pressable
                       accessibilityRole="button"
                       onHoverIn={() =>
@@ -1205,7 +1206,10 @@ export default function LibraryScreen() {
                             ? `Saved from ${sourceHandle || "another creator"}`
                             : "Created by you"}
                         </Text>
-                        <SceneMoodBreakdown compact={layout === "grid"} scene={scene} style={styles.sceneMoodMix} />
+                        <View style={[styles.sceneBreakdowns, layout === "grid" && styles.sceneBreakdownsGrid]}>
+                          <SceneMoodBreakdown compact scene={scene} style={styles.sceneBreakdown} />
+                          <SceneGenreBreakdown compact scene={scene} style={styles.sceneBreakdown} />
+                        </View>
                       </View>
 
                       <Pressable
@@ -1833,9 +1837,20 @@ const styles =
       marginTop: 4,
     },
 
-    sceneMoodMix: {
+    sceneBreakdowns: {
+      flexDirection: "row",
+      gap: 10,
       marginTop: 6,
-      maxWidth: 190,
+      maxWidth: 330,
+    },
+
+    sceneBreakdownsGrid: {
+      flexDirection: "column",
+      gap: 5,
+    },
+
+    sceneBreakdown: {
+      flex: 1,
     },
 
     arrow: {
