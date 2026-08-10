@@ -133,26 +133,8 @@ export default function SoundscapeScreen() {
 
   const featuredSnapshots =
     useMemo(() => {
-      if (!profile) {
-        return [];
-      }
-
-      return profile.snapshotIds
-        .map((snapshotId) =>
-          snapshots.find(
-            (snapshot) =>
-              snapshot.id ===
-              snapshotId,
-          ),
-        )
-        .filter(
-          (
-            snapshot,
-          ): snapshot is Snapshot =>
-            snapshot !== undefined,
-        );
+      return snapshots;
     }, [
-      profile,
       snapshots,
     ]);
 
@@ -315,42 +297,6 @@ export default function SoundscapeScreen() {
       Alert.alert(
         "Unable to update",
         "Canal could not change your Soundscape visibility.",
-      );
-    }
-  }
-
-  async function removeFeaturedSnapshot(
-    snapshotId: string,
-  ) {
-    if (!profile) {
-      return;
-    }
-
-    try {
-      const savedProfile =
-        await saveSoundscape({
-          ...profile,
-
-          snapshotIds:
-            profile.snapshotIds.filter(
-              (id) =>
-                id !==
-                snapshotId,
-            ),
-        });
-
-      setProfile(
-        savedProfile,
-      );
-    } catch (error) {
-      console.error(
-        "Unable to remove Snapshot:",
-        error,
-      );
-
-      Alert.alert(
-        "Unable to update",
-        "Canal could not remove this Snapshot from your Soundscape.",
       );
     }
   }
@@ -765,7 +711,7 @@ export default function SoundscapeScreen() {
                         styles.sectionTitle
                       }
                     >
-                      Featured Snapshots
+                      Your Snapshots
                     </Text>
 
                     <Text
@@ -773,8 +719,7 @@ export default function SoundscapeScreen() {
                         styles.sectionDescription
                       }
                     >
-                      Moments displayed
-                      on your Soundscape.
+                      Every moment is saved here automatically. Public visibility is controlled per Snapshot.
                     </Text>
                   </View>
 
@@ -815,8 +760,7 @@ export default function SoundscapeScreen() {
                         styles.emptyTitle
                       }
                     >
-                      No featured
-                      Snapshots
+                      No Snapshots yet
                     </Text>
 
                     <Text
@@ -824,9 +768,7 @@ export default function SoundscapeScreen() {
                         styles.emptyText
                       }
                     >
-                      Open a Snapshot
-                      and add it to your
-                      Soundscape.
+                      Capture a Snapshot from a Scene or Stage and it will appear here automatically.
                     </Text>
 
                     <Pressable
@@ -933,26 +875,6 @@ export default function SoundscapeScreen() {
                             </View>
                           </Pressable>
 
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel="Remove from Soundscape"
-                            onPress={() => {
-                              void removeFeaturedSnapshot(
-                                snapshot.id,
-                              );
-                            }}
-                            style={({ pressed }) => [
-                              styles.removeButton,
-                              pressed &&
-                                styles.pressed,
-                            ]}
-                          >
-                            <Ionicons
-                              name="close"
-                              size={18}
-                              color={canalDynamicColors.danger}
-                            />
-                          </Pressable>
                         </View>
                       ),
                     )}

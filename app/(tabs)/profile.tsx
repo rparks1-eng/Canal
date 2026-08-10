@@ -311,12 +311,17 @@ function ProfileScreenContent() {
     >(initialNetworkCache?.exports ?? []);
 
   const [
-    publicSnapshots,
-    setPublicSnapshots,
+    soundscapeSnapshots,
+    setSoundscapeSnapshots,
   ] =
     useState<
       Snapshot[]
     >([]);
+
+  const [
+    snapshotVisibilityFilter,
+    setSnapshotVisibilityFilter,
+  ] = useState<"all" | "public" | "private">("all");
 
   const [
     collections,
@@ -645,13 +650,7 @@ function ProfileScreenContent() {
                       return;
                     }
 
-                    setPublicSnapshots(
-                      snapshotResult.value.filter(
-                        (snapshot) =>
-                          snapshot.visibility ===
-                          "public",
-                      ),
-                    );
+                    setSoundscapeSnapshots(snapshotResult.value);
 
                     setSnapshotDataResolved(
                       true,
@@ -2089,7 +2088,7 @@ function ProfileScreenContent() {
                     styles.snapshotSectionTitle
                   }
                 >
-                  Public Snapshots
+                  Your Soundscape
                 </Text>
 
                 <Text
@@ -2097,7 +2096,7 @@ function ProfileScreenContent() {
                     styles.snapshotSectionSubtitle
                   }
                 >
-                  Moments visible on your profile.
+                  Every Snapshot you create is saved here. Visibility only controls what other people can see.
                 </Text>
               </View>
 
@@ -2110,11 +2109,33 @@ function ProfileScreenContent() {
                   !snapshotDataResolved ||
                   snapshotIssue
                 ) &&
-                publicSnapshots.length ===
+                soundscapeSnapshots.length ===
                   0
                   ? "—"
-                  : publicSnapshots.length}
+                  : soundscapeSnapshots.length}
               </Text>
+            </View>
+
+            <View accessibilityRole="tablist" style={styles.snapshotVisibilityFilters}>
+              {(["all", "public", "private"] as const).map((value) => (
+                <Pressable
+                  key={value}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: snapshotVisibilityFilter === value }}
+                  onPress={() => setSnapshotVisibilityFilter(value)}
+                  style={[
+                    styles.snapshotVisibilityFilter,
+                    snapshotVisibilityFilter === value && styles.snapshotVisibilityFilterSelected,
+                  ]}
+                >
+                  <Text style={[
+                    styles.snapshotVisibilityFilterText,
+                    snapshotVisibilityFilter === value && styles.snapshotVisibilityFilterTextSelected,
+                  ]}>
+                    {value.charAt(0).toUpperCase() + value.slice(1)}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
 
             {snapshotIssue ? (
@@ -2133,11 +2154,15 @@ function ProfileScreenContent() {
               />
             ) : null}
 
-            {publicSnapshots.length >
+            {soundscapeSnapshots.filter((snapshot) =>
+              snapshotVisibilityFilter === "all" || snapshot.visibility === snapshotVisibilityFilter,
+            ).length >
             0 ? (
               <PublicSnapshotGrid
                 snapshots={
-                  publicSnapshots
+                  soundscapeSnapshots.filter((snapshot) =>
+                    snapshotVisibilityFilter === "all" || snapshot.visibility === snapshotVisibilityFilter,
+                  )
                 }
               />
             ) : snapshotDataResolved &&
@@ -2152,7 +2177,7 @@ function ProfileScreenContent() {
                     styles.snapshotEmptyTitle
                   }
                 >
-                  No public Snapshots
+                  No {snapshotVisibilityFilter === "all" ? "Snapshots" : `${snapshotVisibilityFilter} Snapshots`}
                 </Text>
 
                 <Text
@@ -2160,7 +2185,7 @@ function ProfileScreenContent() {
                     styles.snapshotEmptyText
                   }
                 >
-                  Publish a Snapshot from a Scene to add it to your profile.
+                  Create a Snapshot from a Scene or Stage. It will be saved here automatically.
                 </Text>
 
                 <Pressable
@@ -3301,6 +3326,38 @@ const styles =
       color: canalDynamicColors.mint,
       fontSize: 13,
       fontWeight: "900",
+    },
+
+    snapshotVisibilityFilters: {
+      minHeight: 48,
+      flexDirection: "row",
+      padding: 4,
+      borderRadius: 15,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.surface,
+    },
+
+    snapshotVisibilityFilter: {
+      flex: 1,
+      minHeight: 40,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 11,
+    },
+
+    snapshotVisibilityFilterSelected: {
+      backgroundColor: canalDynamicColors.warningSurface,
+    },
+
+    snapshotVisibilityFilterText: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+
+    snapshotVisibilityFilterTextSelected: {
+      color: canalDynamicColors.text,
     },
 
     snapshotEmpty: {

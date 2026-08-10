@@ -81,7 +81,9 @@ import {
 } from "../../lib/scene-sync";
 
 import {
+  deleteSnapshotWithStatus,
   readSnapshotsWithStatus,
+  updateSnapshotWithStatus,
 } from "../../lib/snapshots";
 
 import type {
@@ -95,6 +97,10 @@ import {
 import {
   setOwnSceneVisibility,
 } from "../../lib/social";
+
+import {
+  shareSnapshot,
+} from "../../lib/canal-share";
 
 import {
   useConnectivity,
@@ -626,6 +632,87 @@ export default function LibraryScreen() {
       { text: "Cancel", style: "cancel" as const },
     ];
     Alert.alert(scene.name, "Manage this Scene.", options);
+  };
+
+  const updateSnapshotVisibility = async (
+    snapshot: Snapshot,
+  ): Promise<void> => {
+    setMessage("");
+    setErrorMessage("");
+
+    try {
+      const result = await updateSnapshotWithStatus(snapshot.id, {
+        visibility: snapshot.visibility === "public" ? "private" : "public",
+      });
+
+      if (result.value) {
+        setSnapshots((current) => current.map((candidate) =>
+          candidate.id === result.value?.id ? result.value : candidate,
+        ));
+        setMessage(`"${snapshot.sceneName}" is now ${result.value.visibility}.`);
+      }
+
+      setSnapshotWarning(result.warning ?? "");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Canal could not update this Snapshot.");
+    }
+  };
+
+  const deleteLibrarySnapshot = async (snapshot: Snapshot): Promise<void> => {
+    setMessage("");
+    setErrorMessage("");
+
+    try {
+      const result = await deleteSnapshotWithStatus(snapshot.id);
+      setSnapshots((current) => current.filter((candidate) => candidate.id !== snapshot.id));
+      setSnapshotWarning(result.warning ?? "");
+      setMessage(`"${snapshot.sceneName}" was deleted.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Canal could not delete this Snapshot.");
+    }
+  };
+
+  const confirmSnapshotDelete = (snapshot: Snapshot): void => {
+    Alert.alert(
+      "Delete Snapshot?",
+      `"${snapshot.sceneName}" will be permanently removed from your account and Soundscape.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => void deleteLibrarySnapshot(snapshot) },
+      ],
+    );
+  };
+
+  const openSnapshotActions = (snapshot: Snapshot): void => {
+    Alert.alert(
+      snapshot.sceneName,
+      "Manage this Snapshot.",
+      [
+        {
+          text: "Edit",
+          onPress: () => router.push({
+            pathname: "/snapshots/[snapshotId]",
+            params: { snapshotId: snapshot.id },
+          } as never),
+        },
+        {
+          text: snapshot.visibility === "public" ? "Make Private" : "Make Public",
+          onPress: () => void updateSnapshotVisibility(snapshot),
+        },
+        {
+          text: "Share",
+          onPress: () => void shareSnapshot(snapshot).catch((error: unknown) => {
+            setErrorMessage(error instanceof Error ? error.message : "Canal could not share this Snapshot.");
+          }),
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => confirmSnapshotDelete(snapshot),
+        },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
   };
 
   return (
@@ -1183,7 +1270,18 @@ export default function LibraryScreen() {
                       </Text>
                     </View>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color={canalDynamicColors.muted} />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Manage ${snapshot.sceneName} Snapshot`}
+                    accessibilityHint="Shows edit, visibility, share, and delete options"
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      openSnapshotActions(snapshot);
+                    }}
+                    style={({ pressed }) => [styles.snapshotManageButton, pressed && styles.pressed]}
+                  >
+                    <Ionicons name="ellipsis-horizontal" size={19} color={canalDynamicColors.text} />
+                  </Pressable>
                 </Pressable>
               </Animated.View>
             ))}
@@ -1550,6 +1648,14 @@ const styles =
       color: canalDynamicColors.muted,
       fontSize: 10,
       textTransform: "capitalize",
+    },
+
+    snapshotManageButton: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      alignItems: "center",
+      justifyContent: "center",
     },
 
     sceneCard: {

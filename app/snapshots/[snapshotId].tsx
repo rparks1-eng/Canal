@@ -240,7 +240,6 @@ function SnapshotDetailContent() {
   ] = useState<
     | "save"
     | "visibility"
-    | "soundscape"
     | "delete"
     | ""
   >("");
@@ -645,71 +644,6 @@ function SnapshotDetailContent() {
     }
   }
 
-  async function toggleSoundscape() {
-    if (
-      !snapshot ||
-      !soundscape
-    ) {
-      return;
-    }
-
-    try {
-      setActiveAction(
-        "soundscape",
-      );
-
-      const alreadyAdded =
-        soundscape.snapshotIds.includes(
-          snapshot.id,
-        );
-
-      const updatedSoundscape =
-        await saveSoundscape({
-          ...soundscape,
-
-          snapshotIds:
-            alreadyAdded
-              ? soundscape.snapshotIds.filter(
-                  (id) =>
-                    id !==
-                    snapshot.id,
-                )
-              : Array.from(
-                  new Set([
-                    ...soundscape.snapshotIds,
-                    snapshot.id,
-                  ]),
-                ),
-        });
-
-      setSoundscape(
-        updatedSoundscape,
-      );
-
-      Alert.alert(
-        alreadyAdded
-          ? "Removed from Soundscape"
-          : "Added to Soundscape",
-
-        alreadyAdded
-          ? "This Snapshot no longer appears on your Soundscape."
-          : "This Snapshot now appears on your Soundscape.",
-      );
-    } catch (error) {
-      console.error(
-        "Unable to update Soundscape:",
-        error,
-      );
-
-      Alert.alert(
-        "Unable to update",
-        "Canal could not update your Soundscape.",
-      );
-    } finally {
-      setActiveAction("");
-    }
-  }
-
   async function handleShare() {
     if (!snapshot) {
       return;
@@ -949,11 +883,6 @@ function SnapshotDetailContent() {
       </SafeAreaView>
     );
   }
-
-  const isOnSoundscape =
-    soundscape?.snapshotIds.includes(
-      snapshot.id,
-    ) ?? false;
 
   const canEdit =
     snapshot.isMine !==
@@ -1347,66 +1276,12 @@ function SnapshotDetailContent() {
           </Pressable>
         </View>
 
-        <Pressable
-          accessibilityLabel={isOnSoundscape ? "Remove Snapshot from Soundscape" : "Add Snapshot to Soundscape"}
-          accessibilityRole="button"
-          accessibilityState={{
-            busy: activeAction === "soundscape",
-            disabled: activeAction === "soundscape",
-          }}
-          disabled={
-            activeAction ===
-            "soundscape"
-          }
-          onPress={() => {
-            void toggleSoundscape();
-          }}
-          style={({ pressed }) => [
-            styles.soundscapeButton,
-            isOnSoundscape &&
-              styles.onSoundscapeButton,
-            activeAction ===
-              "soundscape" &&
-              styles.disabled,
-            pressed &&
-              styles.pressed,
-          ]}
-        >
-          {activeAction ===
-          "soundscape" ? (
-            <ActivityIndicator
-              color="#ff9a50"
-            />
-          ) : (
-            <>
-              <Ionicons
-                name={
-                  isOnSoundscape
-                    ? "checkmark-circle"
-                    : "person-circle-outline"
-                }
-                size={21}
-                color={
-                  isOnSoundscape
-                    ? "#9ff3b5"
-                    : "#ff9a50"
-                }
-              />
-
-              <Text
-                style={[
-                  styles.soundscapeButtonText,
-                  isOnSoundscape &&
-                    styles.onSoundscapeButtonText,
-                ]}
-              >
-                {isOnSoundscape
-                  ? "Remove from Soundscape"
-                  : "Add to Soundscape"}
-              </Text>
-            </>
-          )}
-          </Pressable>
+        <View accessibilityLabel="Saved to your Soundscape" style={[styles.soundscapeButton, styles.onSoundscapeButton]}>
+          <Ionicons name="checkmark-circle" size={21} color="#9ff3b5" />
+          <Text style={[styles.soundscapeButtonText, styles.onSoundscapeButtonText]}>
+            Saved to your Soundscape
+          </Text>
+        </View>
 
           <Pressable
           accessibilityLabel="Share Snapshot"
