@@ -36,6 +36,7 @@ import {
 import {
   Ionicons,
 } from "@expo/vector-icons";
+import Animated, { FadeInRight, FadeOutRight } from "react-native-reanimated";
 
 import {
   RecoveryNotice,
@@ -317,6 +318,7 @@ function SceneDetailContent() {
     setMessage,
   ] = useState("");
   const [profileVisible, setProfileVisible] = useState(false);
+  const [heroActionsVisible, setHeroActionsVisible] = useState(false);
 
   const exportInFlight =
     useRef(false);
@@ -893,6 +895,9 @@ function SceneDetailContent() {
 
   return (
     <SafeAreaView
+      onTouchEnd={() => {
+        if (heroActionsVisible) setHeroActionsVisible(false);
+      }}
       style={styles.safeArea}
       edges={[
         "top",
@@ -928,33 +933,7 @@ function SceneDetailContent() {
           <Ionicons color={canalDynamicColors.text} name="chevron-back" size={24} />
         </Pressable>
 
-        <Pressable
-          accessibilityLabel={
-            scene.favorite
-              ? "Remove Scene from favorites"
-              : "Add Scene to favorites"
-          }
-          accessibilityRole="button"
-          accessibilityState={{
-            busy: favoriteBusy,
-            selected: scene.favorite,
-          }}
-          disabled={favoriteBusy}
-          onPress={() =>
-            void favorite()
-          }
-          style={({ pressed }) => [
-            styles.favoriteButton,
-            pressed &&
-              styles.pressed,
-          ]}
-        >
-          <Ionicons
-            color={scene.favorite ? presentation.accent : "#F7FFFC"}
-            name={scene.favorite ? "star" : "star-outline"}
-            size={22}
-          />
-        </Pressable>
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
@@ -964,6 +943,7 @@ function SceneDetailContent() {
         showsVerticalScrollIndicator={
           false
         }
+        onScrollBeginDrag={() => setHeroActionsVisible(false)}
       >
         <View style={[
           styles.hero,
@@ -972,6 +952,67 @@ function SceneDetailContent() {
             : styles.heroGlass,
         ]}>
           <SceneCardBackdrop presentation={presentation} scene={scene} />
+          <Pressable
+            accessibilityLabel={scene.favorite ? "Remove Scene from favorites" : "Add Scene to favorites"}
+            accessibilityRole="button"
+            accessibilityState={{ busy: favoriteBusy, selected: scene.favorite }}
+            disabled={favoriteBusy}
+            onPress={() => void favorite()}
+            style={({ pressed }) => [styles.heroFavorite, pressed && styles.pressed]}
+          >
+            <Ionicons
+              color={scene.favorite ? presentation.accent : canalDynamicColors.text}
+              name={scene.favorite ? "star" : "star-outline"}
+              size={21}
+            />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Manage Scene"
+            accessibilityRole="button"
+            accessibilityState={{ expanded: heroActionsVisible }}
+            onTouchStart={(event) => event.stopPropagation()}
+            onTouchEnd={(event) => event.stopPropagation()}
+            onPress={() => setHeroActionsVisible((current) => !current)}
+            style={({ pressed }) => [styles.heroMenuButton, pressed && styles.pressed]}
+          >
+            <Ionicons color={presentation.accent} name="ellipsis-vertical" size={19} />
+          </Pressable>
+          {heroActionsVisible ? (
+            <Animated.View
+              accessibilityLabel="Scene actions"
+              accessibilityRole="menu"
+              entering={FadeInRight.duration(160)}
+              exiting={FadeOutRight.duration(120)}
+              onTouchStart={(event) => event.stopPropagation()}
+              onTouchEnd={(event) => event.stopPropagation()}
+              style={styles.heroActionLedgeMotion}
+            >
+              <View style={styles.heroActionLedge}>
+                <Pressable
+                  accessibilityLabel="Share Scene"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setHeroActionsVisible(false);
+                    void share();
+                  }}
+                  style={styles.heroLedgeAction}
+                >
+                  <Ionicons color={canalDynamicColors.text} name="share-outline" size={18} />
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Delete Scene"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setHeroActionsVisible(false);
+                    confirmDelete();
+                  }}
+                  style={styles.heroLedgeAction}
+                >
+                  <Ionicons color={canalDynamicColors.danger} name="trash-outline" size={18} />
+                </Pressable>
+              </View>
+            </Animated.View>
+          ) : null}
           <View
             style={[
               styles.heroAccentLine,
@@ -1045,35 +1086,35 @@ function SceneDetailContent() {
 
           <SceneDnaPanel accent={presentation.accent} scene={scene} />
 
-          <Pressable
-            accessibilityLabel="Start Scene"
-            accessibilityRole="button"
-            onPress={() =>
-              void start()
-            }
-            style={({ pressed }) => [
-              styles.startButton,
-              {
-                backgroundColor:
-                  presentation.accent,
-              },
-
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.startButtonText,
-                {
-                  color:
-                    presentation.accentText,
-                },
+          <View style={styles.primaryActionRow}>
+            <Pressable
+              accessibilityLabel="Start Scene"
+              accessibilityRole="button"
+              onPress={() => void start()}
+              style={({ pressed }) => [
+                styles.startButton,
+                { backgroundColor: presentation.accent },
+                pressed && styles.pressed,
               ]}
             >
-              Start Scene
-            </Text>
-          </Pressable>
+              <Text style={[styles.startButtonText, { color: presentation.accentText }]}>Start Scene</Text>
+            </Pressable>
+            {scene.libraryType === "created" && user?.id ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Start a live Stage with ${scene.name}`}
+                accessibilityHint="Opens Stage creation with this Scene selected"
+                onPress={() => router.push({ pathname: "/create-stage", params: { sceneId: scene.id } } as never)}
+                style={({ pressed }) => [
+                  styles.stageStartButton,
+                  { backgroundColor: presentation.accent },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons color={presentation.accentText} name="radio-outline" size={22} />
+              </Pressable>
+            ) : null}
+          </View>
 
           {profileVisible ? (
             <View accessibilityLabel="Scene profile details" style={styles.heroProfile}>
@@ -1186,49 +1227,6 @@ function SceneDetailContent() {
               />
             </Pressable>
           ) : null}
-
-          {scene.libraryType === "created" && user?.id ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Start a live Stage with ${scene.name}`}
-              accessibilityHint="Opens Stage creation with this Scene selected"
-              onPress={() =>
-                router.push({
-                  pathname: "/create-stage",
-                  params: { sceneId: scene.id },
-                } as never)
-              }
-              style={({ pressed }) => [
-                styles.actionButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons
-                color={presentation.accent}
-                name="radio-outline"
-                size={23}
-              />
-            </Pressable>
-          ) : null}
-
-          <Pressable
-            accessibilityLabel="Share Scene"
-            accessibilityRole="button"
-            onPress={() =>
-              void share()
-            }
-            style={({ pressed }) => [
-              styles.actionButton,
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Ionicons
-              color={presentation.accent}
-              name="share-outline"
-              size={23}
-            />
-          </Pressable>
 
           <Pressable
             accessibilityLabel="Duplicate Scene"
@@ -1431,26 +1429,6 @@ function SceneDetailContent() {
           )}
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={
-            confirmDelete
-          }
-          style={({ pressed }) => [
-            styles.deleteButton,
-
-            pressed &&
-              styles.pressed,
-          ]}
-        >
-          <Text
-            style={
-              styles.deleteText
-            }
-          >
-            Delete Scene
-          </Text>
-        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -1501,15 +1479,9 @@ const styles =
       backgroundColor: "rgba(5, 42, 66, 0.42)",
     },
 
-    favoriteButton: {
+    headerSpacer: {
       width: 48,
       height: 48,
-      borderRadius: 24,
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
-      backgroundColor: "rgba(5, 42, 66, 0.42)",
     },
 
     content: {
@@ -1530,6 +1502,54 @@ const styles =
       backgroundColor: "rgba(5,42,66,0.58)",
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: "rgba(220,255,249,0.22)",
+    },
+
+    heroFavorite: {
+      position: "absolute",
+      zIndex: 5,
+      top: 8,
+      right: 8,
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    heroMenuButton: {
+      position: "absolute",
+      zIndex: 5,
+      top: 8,
+      right: 52,
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    heroActionLedgeMotion: {
+      position: "absolute",
+      zIndex: 6,
+      top: 8,
+      right: 100,
+    },
+
+    heroActionLedge: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      borderRadius: 16,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.surface,
+      boxShadow: "0 8px 24px rgba(2, 30, 45, 0.2)",
+    },
+
+    heroLedgeAction: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
     },
 
     heroAccentLine: {
@@ -1586,9 +1606,17 @@ const styles =
       marginHorizontal: 6,
     },
 
+    primaryActionRow: {
+      width: "100%",
+      minHeight: 54,
+      flexDirection: "row",
+      gap: 9,
+      marginTop: 16,
+    },
+
     startButton: {
       minHeight: 54,
-      width: "100%",
+      flex: 1,
       borderRadius: 19,
       borderCurve: "continuous",
       alignItems:
@@ -1597,8 +1625,17 @@ const styles =
         "center",
       backgroundColor:
         "#F47A24",
-      marginTop: 16,
       paddingHorizontal: 22,
+      boxShadow: "0 14px 30px rgba(3, 27, 58, 0.18)",
+    },
+
+    stageStartButton: {
+      width: 54,
+      minHeight: 54,
+      borderRadius: 19,
+      borderCurve: "continuous",
+      alignItems: "center",
+      justifyContent: "center",
       boxShadow: "0 14px 30px rgba(3, 27, 58, 0.18)",
     },
 
@@ -1610,8 +1647,9 @@ const styles =
 
     actionGrid: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      justifyContent: "center",
       alignItems: "center",
+      gap: 24,
       paddingVertical: 4,
     },
 
@@ -1813,26 +1851,6 @@ const styles =
       fontSize: 13,
       lineHeight: 19,
       paddingTop: 8,
-    },
-
-    deleteButton: {
-      minHeight: 49,
-      borderRadius: 16,
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
-      borderWidth: 1,
-      borderColor:
-        "rgba(255, 171, 176, 0.52)",
-      backgroundColor:
-        "rgba(92, 25, 38, 0.68)",
-    },
-
-    deleteText: {
-      color: "#FFD8DB",
-      fontSize: 14,
-      fontWeight: "800",
     },
 
     primaryButton: {

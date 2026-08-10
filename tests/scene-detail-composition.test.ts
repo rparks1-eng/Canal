@@ -13,13 +13,38 @@ describe("Scene detail composition", () => {
     expect(source).not.toMatch(/styles\.sectionCard[\s\S]{0,180}>\s*Scene profile/u);
   });
 
-  it("keeps the six utility controls visually free-standing", () => {
+  it("keeps the remaining utility controls visually free-standing", () => {
     const actionStyle = source.match(/actionButton:\s*\{([\s\S]*?)\n\s*\},/u)?.[1] ?? "";
     expect(actionStyle).toContain("width: 48");
     expect(actionStyle).toContain("height: 48");
     expect(actionStyle).not.toContain("backgroundColor");
     expect(actionStyle).not.toContain("borderWidth");
     expect(actionStyle).not.toContain("boxShadow");
+  });
+
+  it("consolidates favorite, share, and delete into the title card", () => {
+    expect(source).toContain("styles.heroFavorite");
+    expect(source).toContain('name="ellipsis-vertical"');
+    expect(source).toContain('accessibilityLabel="Scene actions"');
+    expect(source).toContain('accessibilityLabel="Share Scene"');
+    expect(source).toContain('accessibilityLabel="Delete Scene"');
+    expect(source).toContain("styles.heroActionLedge");
+    expect(source).toContain("entering={FadeInRight.duration(160)}");
+    expect(source).not.toContain("styles.deleteButton");
+    expect(source).not.toContain("styles.favoriteButton");
+  });
+
+  it("places the Stage action directly to the right of Start Scene", () => {
+    const primaryActions = source.match(
+      /<View style=\{styles\.primaryActionRow\}>([\s\S]*?)<\/View>/u,
+    )?.[1] ?? "";
+    expect(primaryActions).toContain('accessibilityLabel="Start Scene"');
+    expect(primaryActions).toContain("Start a live Stage with");
+    expect(primaryActions.indexOf('accessibilityLabel="Start Scene"')).toBeLessThan(
+      primaryActions.indexOf("Start a live Stage with"),
+    );
+    expect(source).toMatch(/primaryActionRow:\s*\{[\s\S]*?flexDirection:\s*"row"/u);
+    expect(source).toMatch(/stageStartButton:\s*\{[\s\S]*?width:\s*54/u);
   });
 
   it("makes First Up the playable lead row of Track sequence", () => {
