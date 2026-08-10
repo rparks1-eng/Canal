@@ -75,4 +75,15 @@ describe("Library Snapshot collection contract", () => {
     expect(source).not.toContain("Alert.alert(\n      scene.name");
     expect(source).not.toContain("onPress: () => confirmDelete(scene)");
   });
+
+  it("dismisses the ledge after a meaningful drag or any outside tap", () => {
+    expect(source).toContain("const LIBRARY_MENU_SCROLL_DISMISS_DISTANCE = 12");
+    expect(source).toContain("scrollStartY.current = event.nativeEvent.contentOffset.y");
+    expect(source).toContain("LIBRARY_MENU_SCROLL_DISMISS_DISTANCE");
+    expect(source).toContain("scrollEventThrottle={16}");
+    expect(source).toContain("onTouchStart={() => {");
+    expect(source).toContain("if (openActions) setOpenActions(null)");
+    expect(source).toContain('onTouchStart={(event) => event.stopPropagation()}');
+    expect(source).not.toContain("onScrollBeginDrag={() => setOpenActions(null)}");
+  });
 });

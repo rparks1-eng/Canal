@@ -131,6 +131,8 @@ type SnapshotFilter =
   | "photo"
   | "video";
 
+const LIBRARY_MENU_SCROLL_DISMISS_DISTANCE = 12;
+
 type OpenLibraryActions = {
   kind: "scene" | "snapshot";
   id: string;
@@ -153,6 +155,7 @@ function LibraryActionLedge(props: {
       accessibilityRole="menu"
       entering={FadeInRight.duration(170)}
       exiting={FadeOutRight.duration(130)}
+      onTouchStart={(event) => event.stopPropagation()}
       style={styles.actionLedge}
     >
       {props.actions.map((action) => (
@@ -272,6 +275,7 @@ export default function LibraryScreen() {
   const cardMotion = useRef(
     new Map<string, NativeAnimated.Value>(),
   ).current;
+  const scrollStartY = useRef<number | null>(null);
 
   const motionForScene = useCallback(
     (sceneId: string): NativeAnimated.Value => {
@@ -695,7 +699,26 @@ export default function LibraryScreen() {
           styles.content
         }
         keyboardShouldPersistTaps="handled"
-        onScrollBeginDrag={() => setOpenActions(null)}
+        onScroll={(event) => {
+          if (
+            openActions &&
+            scrollStartY.current !== null &&
+            Math.abs(event.nativeEvent.contentOffset.y - scrollStartY.current) >=
+              LIBRARY_MENU_SCROLL_DISMISS_DISTANCE
+          ) {
+            setOpenActions(null);
+          }
+        }}
+        onScrollBeginDrag={(event) => {
+          scrollStartY.current = event.nativeEvent.contentOffset.y;
+        }}
+        onScrollEndDrag={() => {
+          scrollStartY.current = null;
+        }}
+        onTouchStart={() => {
+          if (openActions) setOpenActions(null);
+        }}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={
           false
         }
@@ -1165,6 +1188,7 @@ export default function LibraryScreen() {
                         accessibilityRole="button"
                         accessibilityState={{ expanded: actionsOpen }}
                         disabled={busy}
+                        onTouchStart={(event) => event.stopPropagation()}
                         onPress={(event) => {
                           event.stopPropagation();
                           openSceneActions(scene);
@@ -1255,6 +1279,7 @@ export default function LibraryScreen() {
                     accessibilityState={{
                       expanded: openActions?.kind === "snapshot" && openActions.id === snapshot.id,
                     }}
+                    onTouchStart={(event) => event.stopPropagation()}
                     onPress={(event) => {
                       event.stopPropagation();
                       openSnapshotActions(snapshot);
