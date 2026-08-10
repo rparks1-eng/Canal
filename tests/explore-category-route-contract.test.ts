@@ -28,7 +28,10 @@ describe("Explore category route", () => {
 
   it("has safe back, loading, error, retry, empty, search, and 48pt controls", () => {
     expect(categorySource).toContain('accessibilityLabel="Back to Explore"');
-    expect(categorySource).toContain('router.replace("/(tabs)/explore")');
+    expect(categorySource).toContain('pathname: "/(tabs)/explore"');
+    expect(categorySource).toContain('params: { content: "scenes" }');
+    expect(categorySource).not.toContain("router.canGoBack()");
+    expect(categorySource).not.toContain("router.back()");
     expect(categorySource).toContain('accessibilityLabel="Retry category"');
     expect(categorySource).toContain("No matching Scenes");
     expect(categorySource).toContain("width: 48, height: 48");
