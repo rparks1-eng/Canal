@@ -11,6 +11,9 @@
     ],
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "developmentClient": {
+      "silentLaunch": true
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.raishawnparks.canal",
