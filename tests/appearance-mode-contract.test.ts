@@ -10,6 +10,7 @@ describe("Light, Dark and System appearance", () => {
     expect(source).toContain('"light" | "dark" | "system"');
     expect(source).toContain("AsyncStorage.getItem(APPEARANCE_STORAGE_KEY)");
     expect(source).toContain("AsyncStorage.setItem(APPEARANCE_STORAGE_KEY, nextMode)");
+    expect(source).toContain('typeof Appearance.setColorScheme === "function"');
     expect(source).toContain('Appearance.setColorScheme(mode === "system" ? null : mode)');
     expect(source).toContain("resolvedScheme");
     expect(source).toContain("SystemUI.setBackgroundColorAsync");
