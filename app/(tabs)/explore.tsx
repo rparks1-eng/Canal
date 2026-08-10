@@ -446,6 +446,14 @@ function FacetRail(props: {
           <Ionicons color={props.accent} name={props.icon} size={18} />
         </View>
         <Text style={styles.discoveryTitle}>{props.title}</Text>
+        <Pressable
+          accessibilityLabel={`View all ${props.title.toLowerCase()}`}
+          accessibilityRole="button"
+          onPress={() => router.push({ pathname: "/explore-category-directory", params: { kind: props.kind } })}
+          style={({ pressed }) => [styles.discoveryAllButton, pressed && styles.pressed]}
+        >
+          <Ionicons color={props.accent} name="chevron-forward" size={20} />
+        </Pressable>
       </View>
       <ScrollView horizontal contentContainerStyle={styles.discoveryRail} showsHorizontalScrollIndicator={false}>
         {props.values.map((value, index) => {
@@ -1409,8 +1417,9 @@ const styles =
       backgroundColor: "rgba(91, 175, 255, 0.17)",
     },
 
-    discoveryTitle: {
-      color: canalDynamicColors.text,
+        discoveryTitle: {
+          flex: 1,
+          color: canalDynamicColors.text,
       fontSize: 15,
       fontWeight: "900",
     },
@@ -1425,6 +1434,15 @@ const styles =
           minHeight: 82,
           alignItems: "center",
           justifyContent: "center",
+        },
+
+        discoveryAllButton: {
+          width: 48,
+          height: 48,
+          alignItems: "center",
+          justifyContent: "center",
+          marginVertical: -7,
+          marginRight: -8,
         },
 
         categoryArtwork: {
@@ -1461,7 +1479,7 @@ const styles =
           left: 6,
           right: 6,
           bottom: 7,
-          color: "#FFFFFF",
+          color: canalDynamicColors.text,
           fontSize: 10,
           fontWeight: "900",
           textAlign: "center",
@@ -1477,7 +1495,7 @@ const styles =
           right: 0,
           bottom: 0,
           height: 34,
-          backgroundColor: "rgba(4, 18, 34, 0.34)",
+          backgroundColor: canalDynamicColors.surface,
         },
 
     discoveryChip: {

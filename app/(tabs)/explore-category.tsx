@@ -88,9 +88,10 @@ function CategoryStageCard({ stage }: { stage: LiveStage }) {
 }
 
 export default function ExploreCategoryScreen() {
-  const params = useLocalSearchParams<{ kind?: string; value?: string }>();
+  const params = useLocalSearchParams<{ kind?: string; label?: string; value?: string }>();
   const kind = isExploreCategoryKind(params.kind) ? params.kind : null;
   const value = typeof params.value === "string" ? params.value.trim() : "";
+  const displayValue = typeof params.label === "string" && params.label.trim() ? params.label.trim() : value;
   const [query, setQuery] = useState("");
   const [scenes, setScenes] = useState<PublicCanalScene[]>([]);
   const [stages, setStages] = useState<LiveStage[]>([]);
@@ -181,18 +182,18 @@ export default function ExploreCategoryScreen() {
             <Ionicons color={accent} name={icon as never} size={34} />
           </View>
           <Text style={styles.eyebrow}>{kind.toUpperCase()} SCENES</Text>
-          <Text style={styles.title}>{value}</Text>
+          <Text style={styles.title}>{displayValue}</Text>
           <Text accessibilityLiveRegion="polite" style={styles.subtitle}>
             {results.length} public {results.length === 1 ? "Scene" : "Scenes"} in this category
           </Text>
         </Animated.View>
 
         <TextInput
-          accessibilityLabel={`Search ${value} Scenes`}
+          accessibilityLabel={`Search ${displayValue} Scenes`}
           autoCapitalize="none"
           autoCorrect={false}
           onChangeText={setQuery}
-          placeholder={`Search ${value} Scenes`}
+          placeholder={`Search ${displayValue} Scenes`}
           placeholderTextColor={canalDynamicColors.muted}
           style={styles.searchInput}
           value={query}
