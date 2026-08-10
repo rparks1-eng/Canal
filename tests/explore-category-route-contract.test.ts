@@ -38,6 +38,8 @@ describe("Explore category route", () => {
     expect(categorySource).toContain('accessibilityLabel="Back to Explore"');
     expect(categorySource).toContain('pathname: "/(tabs)/explore"');
     expect(categorySource).toContain('params: { content: "scenes" }');
+    expect(categorySource).toContain("router.navigate({");
+    expect(categorySource).not.toContain('router.replace({\n      pathname: "/(tabs)/explore"');
     expect(categorySource).not.toContain("router.canGoBack()");
     expect(categorySource).not.toContain("router.back()");
     expect(categorySource).toContain('accessibilityLabel="Retry category"');

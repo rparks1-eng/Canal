@@ -99,7 +99,7 @@ export default function ExploreCategoryScreen() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const goBack = useCallback(() => {
-    router.replace({
+    router.navigate({
       pathname: "/(tabs)/explore",
       params: { content: "scenes" },
     });
