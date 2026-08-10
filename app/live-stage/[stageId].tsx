@@ -3407,10 +3407,10 @@ export default function LiveStageScreen() {
           headerShadowVisible:
             false,
           headerTransparent:
-            true,
+            false,
           headerStyle: {
             backgroundColor:
-              "transparent",
+              "#082B3D",
           },
           headerTintColor:
             "#FFFFFF",

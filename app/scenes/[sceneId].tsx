@@ -1156,6 +1156,30 @@ function SceneDetailContent() {
             </Pressable>
           ) : null}
 
+          {scene.libraryType === "created" && user?.id ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Start a live Stage with ${scene.name}`}
+              accessibilityHint="Opens Stage creation with this Scene selected"
+              onPress={() =>
+                router.push({
+                  pathname: "/create-stage",
+                  params: { sceneId: scene.id },
+                } as never)
+              }
+              style={({ pressed }) => [
+                styles.actionButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                color={presentation.accent}
+                name="radio-outline"
+                size={23}
+              />
+            </Pressable>
+          ) : null}
+
           <Pressable
             accessibilityLabel="Share Scene"
             accessibilityRole="button"
