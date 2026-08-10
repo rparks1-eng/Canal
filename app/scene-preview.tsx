@@ -1,5 +1,6 @@
 import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
+  Fragment,
   use,
   useCallback,
   useEffect,
@@ -9,6 +10,9 @@ import {
 } from "react";
 
 import {
+  AccessibilityInfo,
+  findNodeHandle,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -74,6 +78,14 @@ import {
   readSceneRecommendationLearning,
   recordSceneRecommendationFeedback,
 } from "../lib/scene-recommendation-feedback";
+import {
+  MAX_SCENE_FEEDBACK_REASONS,
+  SCENE_FEEDBACK_REASONS,
+  SCENE_FEEDBACK_REASON_LABELS,
+} from "../lib/scene-recommendation-reasons";
+import type {
+  SceneFeedbackReason,
+} from "../lib/scene-recommendation-reasons";
 
 import type {
   SceneStudioScope,
@@ -140,6 +152,33 @@ import {
 import {
   readScenes,
 } from "../lib/scenes";
+
+type MismatchContext = {
+  artistIds: string[];
+  genres: string[];
+  explicit: boolean;
+};
+
+const MAX_REGENERATION_ATTEMPTS = 3;
+const MIN_REGENERATION_CHANGE_RATIO = 0.3;
+
+function regenerationChangeRatio(
+  current: GeneratedSceneResult,
+  candidate: GeneratedSceneResult,
+): number {
+  const currentIds = new Set(
+    current.trackSignals.map((signal) => signal.track.id),
+  );
+  const candidateIds = new Set(
+    candidate.trackSignals.map((signal) => signal.track.id),
+  );
+  const denominator = Math.max(currentIds.size, candidateIds.size, 1);
+  let overlap = 0;
+  candidateIds.forEach((trackId) => {
+    if (currentIds.has(trackId)) overlap += 1;
+  });
+  return 1 - overlap / denominator;
+}
 
 function returnToStudio(stageId?: string): void {
   router.replace({
@@ -228,6 +267,10 @@ export default function ScenePreviewScreen() {
     useState(false);
   const [generationBusy, setGenerationBusy] =
     useState(false);
+  const [pendingMismatch, setPendingMismatch] =
+    useState<({ trackId: string; trackName: string } & MismatchContext) | null>(null);
+  const [mismatchReasons, setMismatchReasons] =
+    useState<SceneFeedbackReason[]>([]);
   const previewRef =
     useRef<GeneratedSceneResult | null>(null);
   const revisionRef =
@@ -238,6 +281,10 @@ export default function ScenePreviewScreen() {
     useRef(false);
   const generationInFlightRef =
     useRef(false);
+  const reasonHeadingRef =
+    useRef<Text | null>(null);
+  const swapButtonRefs =
+    useRef(new Map<string, View | null>());
   const mutationSequenceRef =
     useRef(0);
   const saveSequenceRef =
@@ -290,6 +337,8 @@ export default function ScenePreviewScreen() {
     setSaveBusy(false);
     setCatalogBusy(false);
     setGenerationBusy(false);
+    setPendingMismatch(null);
+    setMismatchReasons([]);
     setCatalogQuery("");
     setCatalogResults([]);
     mutationSequenceRef.current += 1;
@@ -333,6 +382,8 @@ export default function ScenePreviewScreen() {
             setPreviewRevision(null);
             setUndoPreview(null);
             setEditorStatus(null);
+            setPendingMismatch(null);
+            setMismatchReasons([]);
 
             if (invalidation.reason === "device-clear") {
               setLoadedScope(operationScope);
@@ -552,6 +603,10 @@ export default function ScenePreviewScreen() {
     try {
       const savedScene = await saveGeneratedSceneToLibrary(
         preview,
+        {
+          scope: operationScope,
+          currentScope,
+        },
         "private",
       );
 
@@ -655,6 +710,7 @@ export default function ScenePreviewScreen() {
   const generateAlternative = useCallback(
     async (
       current: GeneratedSceneResult,
+      variationAttempt = 0,
     ): Promise<GeneratedSceneResult> => {
       const operationScope = scope;
 
@@ -707,7 +763,7 @@ export default function ScenePreviewScreen() {
         current.draft,
         snapshot,
         {
-          variationSeed: `${operationScope.userId}:${Date.now()}:${mutationSequenceRef.current}`,
+          variationSeed: `${operationScope.userId}:${Date.now()}:${mutationSequenceRef.current}:${variationAttempt}`,
           existingSceneNames,
           rejectedTrackIds: [
             ...(current.rejectedTrackIds ?? []),
@@ -720,6 +776,7 @@ export default function ScenePreviewScreen() {
             ),
           ],
           preferredTrackIds: learning.preferredTrackIds,
+          reasonBias: learning.reasonBias,
         },
       );
 
@@ -745,9 +802,25 @@ export default function ScenePreviewScreen() {
     setEditorStatus("Generating a different playlist…");
 
     try {
-      const generated = await generateAlternative(current);
+      let materiallyDifferent: GeneratedSceneResult | null = null;
+      for (let attempt = 0; attempt < MAX_REGENERATION_ATTEMPTS; attempt += 1) {
+        const candidate = await generateAlternative(current, attempt);
+        if (
+          regenerationChangeRatio(current, candidate) >=
+          MIN_REGENERATION_CHANGE_RATIO
+        ) {
+          materiallyDifferent = candidate;
+          break;
+        }
+      }
+      if (!materiallyDifferent) {
+        setEditorStatus(
+          "Canal could not find enough different matching tracks. Your playlist is unchanged.",
+        );
+        return;
+      }
       await mutatePreview(
-        (preview) => regenerateGeneratedSceneEditor(preview, generated),
+        (preview) => regenerateGeneratedSceneEditor(preview, materiallyDifferent),
         "A different editable playlist is ready.",
       );
     } catch (error) {
@@ -767,6 +840,8 @@ export default function ScenePreviewScreen() {
       trackId: string,
       trackName: string,
       mismatch: boolean,
+      reasons: SceneFeedbackReason[] = [],
+      context?: MismatchContext,
     ): Promise<void> => {
       const current = previewRef.current;
       const operationScope = scope;
@@ -786,6 +861,25 @@ export default function ScenePreviewScreen() {
       setEditorStatus(`Finding a better replacement for ${trackName}…`);
 
       try {
+        const feedbackResult = await recordSceneRecommendationFeedback({
+          scope: operationScope,
+          currentScope,
+          draft: current.draft,
+          action: mismatch ? "doesnt_match" : "remove",
+          reasons: mismatch ? reasons : [],
+          ...(mismatch && context ? context : {}),
+          trackId,
+          sceneId: current.scene.id,
+        });
+        if (!sameSceneStudioScope(operationScope, currentScope())) {
+          setEditorStatus("Your account changed, so Canal stopped this swap safely.");
+          return;
+        }
+        if (feedbackResult.outcome === "skipped") {
+          setEditorStatus("Canal could not save that feedback, so the track was not swapped.");
+          return;
+        }
+        const feedbackWasSaved = feedbackResult.outcome !== "failure";
         const generated = await generateAlternative(current);
         await mutatePreview(
           (preview) => replaceTrackInGeneratedSceneEditor(
@@ -794,27 +888,13 @@ export default function ScenePreviewScreen() {
             generated,
           ),
           mismatch
-            ? `${trackName} was rejected and replaced with a better fit.`
-            : `${trackName} was removed and replaced with a new track.`,
+            ? feedbackWasSaved
+              ? `${trackName} was rejected and replaced with a better fit.`
+              : `${trackName} was replaced, but your feedback could not be saved.`
+            : feedbackWasSaved
+              ? `${trackName} was removed and replaced with a new track.`
+              : `${trackName} was replaced, but your removal feedback could not be saved.`,
         );
-        await recordSceneRecommendationFeedback({
-          scope: operationScope,
-          currentScope,
-          draft: current.draft,
-          action: mismatch ? "swap" : "remove",
-          trackId,
-          sceneId: current.scene.id,
-        });
-        if (mismatch) {
-          await recordSceneRecommendationFeedback({
-            scope: operationScope,
-            currentScope,
-            draft: current.draft,
-            action: "doesnt_match",
-            trackId,
-            sceneId: current.scene.id,
-          });
-        }
       } catch (error) {
         setEditorStatus(
           error instanceof Error
@@ -828,6 +908,50 @@ export default function ScenePreviewScreen() {
     },
     [currentScope, generateAlternative, mutatePreview, scope],
   );
+
+  const toggleMismatchReason = useCallback((reason: SceneFeedbackReason): void => {
+    setMismatchReasons((current) => {
+      if (current.includes(reason)) {
+        return current.filter((item) => item !== reason);
+      }
+      if (current.length >= MAX_SCENE_FEEDBACK_REASONS) {
+        setEditorStatus(`Choose up to ${MAX_SCENE_FEEDBACK_REASONS} reasons.`);
+        return current;
+      }
+      setEditorStatus(null);
+      return [...current, reason];
+    });
+  }, []);
+
+  const confirmMismatchSwap = useCallback((reasons: SceneFeedbackReason[]): void => {
+    const pending = pendingMismatch;
+    if (!pending) return;
+    setPendingMismatch(null);
+    setMismatchReasons([]);
+    void replaceTrack(pending.trackId, pending.trackName, true, reasons, {
+      artistIds: pending.artistIds,
+      genres: pending.genres,
+      explicit: pending.explicit,
+    });
+  }, [pendingMismatch, replaceTrack]);
+
+  const restoreSwapFocus = useCallback((trackId: string): void => {
+    requestAnimationFrame(() => {
+      const target = swapButtonRefs.current.get(trackId) ?? null;
+      const handle = findNodeHandle(target);
+      if (handle !== null) {
+        AccessibilityInfo.setAccessibilityFocus(handle);
+      }
+    });
+  }, []);
+
+  const cancelMismatchSwap = useCallback((): void => {
+    const trackId = pendingMismatch?.trackId;
+    setPendingMismatch(null);
+    setMismatchReasons([]);
+    setEditorStatus("Swap canceled. The playlist is unchanged.");
+    if (trackId) restoreSwapFocus(trackId);
+  }, [pendingMismatch?.trackId, restoreSwapFocus]);
 
   const controlsBusy = editorBusy || saveBusy || catalogBusy || generationBusy;
 
@@ -946,7 +1070,8 @@ export default function ScenePreviewScreen() {
               const artworkUrl = signal.track.album?.imageUrl ?? signal.track.album?.images?.[0]?.url;
 
               return (
-                <View key={signal.track.id} style={styles.trackRow}>
+                <Fragment key={signal.track.id}>
+                <View style={styles.trackRow}>
                   {artworkUrl ? (
                     <Image
                       accessibilityLabel={`${signal.track.album?.name ?? signal.track.name} cover art from Spotify`}
@@ -985,12 +1110,27 @@ export default function ScenePreviewScreen() {
                       }
                     />
                     <Pressable
+                      ref={(node) => {
+                        swapButtonRefs.current.set(signal.track.id, node);
+                      }}
                       accessibilityLabel={`Swap ${signal.track.name}`}
                       accessibilityHint="Removes this track from the current Scene and generates a different replacement"
                       accessibilityRole="button"
                       accessibilityState={{ busy: generationBusy, disabled: controlsBusy }}
                       disabled={controlsBusy}
-                      onPress={() => void replaceTrack(signal.track.id, signal.track.name, true)}
+                      onPress={() => {
+                        setPendingMismatch({
+                          trackId: signal.track.id,
+                          trackName: signal.track.name,
+                          artistIds: (signal.track.artists ?? [])
+                            .map((artist) => artist.id)
+                            .filter((artistId): artistId is string => Boolean(artistId)),
+                          genres: [...signal.genres],
+                          explicit: signal.track.explicit === true,
+                        });
+                        setMismatchReasons([]);
+                        setEditorStatus(`Optionally tell Canal why ${signal.track.name} does not fit.`);
+                      }}
                       style={styles.mismatchButton}
                     >
                       <Ionicons
@@ -1008,7 +1148,6 @@ export default function ScenePreviewScreen() {
                         accessibilityRole="button"
                         accessibilityState={{ disabled: controlsBusy || index === 0 }}
                         disabled={controlsBusy || index === 0}
-                            hitSlop={{ bottom: 8, left: 4, right: 4, top: 8 }}
                         onPress={() => void mutatePreview(
                           (preview) => reorderTrackInGeneratedSceneEditor(preview, signal.track.id, "up"),
                           `${signal.track.name} moved up.`,
@@ -1022,7 +1161,6 @@ export default function ScenePreviewScreen() {
                         accessibilityRole="button"
                         accessibilityState={{ disabled: controlsBusy || index === visiblePreview.trackSignals.length - 1 }}
                         disabled={controlsBusy || index === visiblePreview.trackSignals.length - 1}
-                            hitSlop={{ bottom: 8, left: 4, right: 4, top: 8 }}
                         onPress={() => void mutatePreview(
                           (preview) => reorderTrackInGeneratedSceneEditor(preview, signal.track.id, "down"),
                           `${signal.track.name} moved down.`,
@@ -1038,7 +1176,6 @@ export default function ScenePreviewScreen() {
                       accessibilityRole="button"
                       accessibilityState={{ busy: generationBusy, disabled: controlsBusy }}
                       disabled={controlsBusy}
-                      hitSlop={{ left: 4, right: 4 }}
                       onPress={() => void replaceTrack(signal.track.id, signal.track.name, false)}
                       style={[styles.trashButton, controlsBusy && styles.disabled]}
                     >
@@ -1046,6 +1183,7 @@ export default function ScenePreviewScreen() {
                     </Pressable>
                   </View>
                 </View>
+                </Fragment>
               );
             })}
             <Text style={styles.spotifyAttribution}>
@@ -1098,6 +1236,86 @@ export default function ScenePreviewScreen() {
           </Text>
         </Pressable>
       </ScrollView>
+      <Modal
+        animationType="slide"
+        onRequestClose={cancelMismatchSwap}
+        onShow={() => {
+          const handle = findNodeHandle(reasonHeadingRef.current);
+          if (handle !== null) AccessibilityInfo.setAccessibilityFocus(handle);
+        }}
+        transparent
+        visible={Boolean(pendingMismatch)}
+      >
+        <SafeAreaView edges={["bottom"]} style={styles.reasonBackdrop}>
+          <View
+            accessibilityViewIsModal
+            style={styles.reasonPanel}
+          >
+            <View style={styles.reasonHeader}>
+              <Text ref={reasonHeadingRef} accessibilityRole="header" style={styles.reasonTitle}>
+                Why doesn’t {pendingMismatch?.trackName ?? "this track"} fit?
+              </Text>
+              <Pressable
+                accessibilityLabel="Cancel track swap"
+                accessibilityRole="button"
+                onPress={cancelMismatchSwap}
+                style={styles.reasonClose}
+              >
+                <Ionicons color={canalDynamicColors.text} name="close" size={20} />
+              </Pressable>
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.reasonScrollContent}
+              keyboardShouldPersistTaps="handled"
+              style={styles.reasonScroll}
+            >
+              <Text style={styles.reasonHelper}>Optional · choose up to {MAX_SCENE_FEEDBACK_REASONS}</Text>
+              <View style={styles.reasonWrap}>
+                {SCENE_FEEDBACK_REASONS.map((reason) => {
+                  const checked = mismatchReasons.includes(reason);
+                  return (
+                    <Pressable
+                      key={reason}
+                      accessibilityLabel={SCENE_FEEDBACK_REASON_LABELS[reason]}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked, disabled: controlsBusy }}
+                      disabled={controlsBusy}
+                      onPress={() => toggleMismatchReason(reason)}
+                      style={[styles.reasonChip, checked && styles.reasonChipSelected]}
+                    >
+                      <Text style={[styles.reasonChipText, checked && styles.reasonChipTextSelected]}>
+                        {SCENE_FEEDBACK_REASON_LABELS[reason]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View style={styles.reasonActions}>
+                <Pressable
+                  accessibilityLabel={`Skip reasons and swap ${pendingMismatch?.trackName ?? "track"}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: controlsBusy }}
+                  disabled={controlsBusy}
+                  onPress={() => confirmMismatchSwap([])}
+                  style={styles.reasonSecondary}
+                >
+                  <Text style={styles.reasonSecondaryText}>Skip reasons</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityLabel={`Swap ${pendingMismatch?.trackName ?? "track"}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: controlsBusy }}
+                  disabled={controlsBusy}
+                  onPress={() => confirmMismatchSwap(mismatchReasons)}
+                  style={styles.reasonPrimary}
+                >
+                  <Text style={styles.reasonPrimaryText}>Swap track</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
       <LinerNotesOverlay
         context={linerNotes.context}
         onClose={() => setContextTrack(null)}
@@ -1255,20 +1473,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   arrowStack: {
-    gap: 0,
+    gap: 2,
   },
   iconButton: {
     alignItems: "center",
-    height: 32,
+    height: 48,
     justifyContent: "center",
-    width: 40,
+    width: 48,
   },
   trashButton: {
     alignItems: "center",
     borderRadius: 9,
     height: 48,
     justifyContent: "center",
-    width: 40,
+    width: 48,
   },
   mismatchButton: {
     alignItems: "center",
@@ -1276,12 +1494,111 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 4,
     justifyContent: "center",
-    minHeight: 32,
+    minHeight: 48,
   },
   mismatchButtonText: {
     color: canalDynamicColors.mint,
     fontSize: 12,
     fontWeight: "700",
+  },
+  reasonPanel: {
+    backgroundColor: "rgba(255,255,255,.07)",
+    borderColor: "rgba(255,255,255,.15)",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+    maxHeight: "88%",
+    padding: 12,
+  },
+  reasonBackdrop: {
+    backgroundColor: "rgba(0,0,0,.58)",
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: 12,
+  },
+  reasonHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+  },
+  reasonClose: {
+    alignItems: "center",
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  reasonTitle: {
+    color: canalDynamicColors.text,
+    flex: 1,
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  reasonHelper: {
+    color: canalDynamicColors.muted,
+    fontSize: 12,
+  },
+  reasonScroll: {
+    flexShrink: 1,
+  },
+  reasonScrollContent: {
+    gap: 10,
+    paddingBottom: 2,
+  },
+  reasonWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+  reasonChip: {
+    alignItems: "center",
+    borderColor: "rgba(255,255,255,.18)",
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  reasonChipSelected: {
+    backgroundColor: canalDynamicColors.mint,
+  },
+  reasonChipText: {
+    color: canalDynamicColors.text,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  reasonChipTextSelected: {
+    color: "#103C46",
+  },
+  reasonActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  reasonSecondary: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  reasonSecondaryText: {
+    color: canalDynamicColors.mint,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  reasonPrimary: {
+    alignItems: "center",
+    backgroundColor: canalDynamicColors.mint,
+    borderRadius: 13,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 10,
+  },
+  reasonPrimaryText: {
+    color: "#103C46",
+    fontSize: 13,
+    fontWeight: "900",
   },
   spotifyAttribution: {
     color: "#A5AEA9",

@@ -57,6 +57,15 @@ import type {
 } from "../lib/scenes";
 
 import {
+  enqueueStoredSceneRecommendationFeedback,
+} from "../lib/scene-recommendation-feedback";
+
+import {
+  captureSceneStudioScope,
+  sameSceneStudioScope,
+} from "../lib/scene-studio-scope";
+
+import {
   canonicalSpotifyTrackUrl,
 } from "../lib/spotify-track-links";
 
@@ -67,14 +76,6 @@ import {
 import {
   recordListeningHistory,
 } from "../lib/canal-session";
-import {
-  recordStoredSceneRecommendationFeedback,
-} from "../lib/scene-recommendation-feedback";
-import {
-  captureSceneStudioScope,
-} from "../lib/scene-studio-scope";
-
-
 import {
   LinerNotesAction,
   LinerNotesOverlay,
@@ -165,10 +166,23 @@ function playerIssueMessage(
 export default function NowPlayingScreen() {
   const { setOverride } = use(CanalAtmosphereContext);
   const {
-    accountEpoch,
     user,
+    accountEpoch,
     sessionGeneration,
   } = useAuth();
+
+  const playbackScope =
+    captureSceneStudioScope({
+      userId: user?.id,
+      accountEpoch,
+      sessionGeneration,
+    });
+
+  const playbackScopeRef =
+    useRef(playbackScope);
+
+  playbackScopeRef.current =
+    playbackScope;
 
   const {
     status: connectivityStatus,
@@ -284,6 +298,9 @@ export default function NowPlayingScreen() {
     useRef(accountKey);
 
   const finishingRef =
+    useRef(false);
+
+  const playbackControlInFlightRef =
     useRef(false);
 
   const artworkWindowInFlightRef =
@@ -880,39 +897,92 @@ export default function NowPlayingScreen() {
     ): Promise<void> => {
       if (
         !session ||
-        !scene
+        !scene ||
+        playbackControlInFlightRef.current
       ) {
         return;
       }
 
+      const operationScope =
+        playbackScopeRef.current;
+      const operationGeneration =
+        playerLoadGenerationRef.current;
+      const operationSession = session;
+      const operationScene = scene;
+      const operationTrack =
+        operationScene.tracks[
+          operationSession.currentIndex
+        ];
+
+      const restartingCurrentTrack =
+        direction === -1 &&
+        operationSession.trackElapsedSeconds > 3;
+
       const nextSession =
-        movePlayerSession(
-          session,
-          scene,
-          direction,
-        );
+        restartingCurrentTrack
+          ? {
+              ...operationSession,
+              trackElapsedSeconds: 0,
+            }
+          : movePlayerSession(
+              operationSession,
+              operationScene,
+              direction,
+            );
 
       if (!nextSession) {
         return;
       }
 
-      await saveSession(
-        nextSession,
-      );
+      playbackControlInFlightRef.current = true;
 
-      const track =
-        scene.tracks[
-          nextSession.currentIndex
-        ];
+      try {
+        if (
+          operationScope &&
+          operationTrack &&
+          (direction === 1 || restartingCurrentTrack)
+        ) {
+          await enqueueStoredSceneRecommendationFeedback({
+            scope: operationScope,
+            currentScope: () => playbackScopeRef.current,
+            scene: operationScene,
+            action: direction === 1 ? "skip" : "replay",
+            trackIds: [operationTrack.id],
+          }).catch(() => []);
+        }
 
-      if (
-        session.isPlaying &&
-        track
-      ) {
-        await openSpotify(
-          track.spotifyUrl,
-          track.spotifyUri,
+        if (
+          !isCurrentPlayerLoad(operationGeneration) ||
+          !sameSceneStudioScope(
+            operationScope,
+            playbackScopeRef.current,
+          )
+        ) {
+          return;
+        }
+
+        await saveSession(
+          nextSession,
         );
+
+        const track =
+          operationScene.tracks[
+            nextSession.currentIndex
+          ];
+
+        if (
+          operationSession.isPlaying &&
+          track &&
+          isCurrentPlayerLoad(operationGeneration) &&
+          sameSceneStudioScope(operationScope, playbackScopeRef.current)
+        ) {
+          await openSpotify(
+            track.spotifyUrl,
+            track.spotifyUri,
+          );
+        }
+      } finally {
+        playbackControlInFlightRef.current = false;
       }
     };
 
@@ -1015,17 +1085,6 @@ export default function NowPlayingScreen() {
             scene.id,
           ),
         ]);
-
-        const feedbackScope = captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration });
-        if (feedbackScope) {
-          await recordStoredSceneRecommendationFeedback({
-            scope: feedbackScope,
-            currentScope: () => captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration }),
-            scene,
-            action: "replay",
-            trackIds: scene.tracks.slice(0, session.currentIndex + 1).map((track) => track.id),
-          });
-        }
 
         await clearPlayerSession(
           session.id,

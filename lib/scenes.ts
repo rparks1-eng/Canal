@@ -12,6 +12,17 @@ import {
   normalizeSpotifyTrackLinks,
 } from "./spotify-track-links";
 
+import {
+  sameSceneStudioScope,
+} from "./scene-studio-scope";
+import type {
+  SceneStudioScope,
+} from "./scene-studio-scope";
+
+import {
+  saveSceneToCloudForScope,
+} from "./scene-cloud";
+
 export type SceneVisibility =
   | "private"
   | "public";
@@ -647,6 +658,80 @@ export async function upsertScene(
   );
 
   return nextScene;
+}
+
+function sameSceneVersion(
+  left: StoredScene,
+  right: StoredScene,
+): boolean {
+  return left.id === right.id && left.updatedAt === right.updatedAt;
+}
+
+async function rollbackScopedLocalScene(
+  committedScene: StoredScene,
+  previousScene: StoredScene | null,
+): Promise<void> {
+  const currentScenes = await readScenes();
+  const currentIndex = currentScenes.findIndex(
+    (scene) => sameSceneVersion(scene, committedScene),
+  );
+  if (currentIndex < 0) return;
+
+  const repairedScenes = [...currentScenes];
+  if (previousScene) repairedScenes[currentIndex] = previousScene;
+  else repairedScenes.splice(currentIndex, 1);
+  await writeScenes(repairedScenes);
+}
+
+export async function upsertSceneForScope(
+  input: StoredScene,
+  scope: SceneStudioScope,
+  currentScope: () => SceneStudioScope | null,
+): Promise<StoredScene> {
+  const canCommit = (): boolean =>
+    sameSceneStudioScope(scope, currentScope());
+
+  if (!canCommit()) {
+    throw new Error("Canal stopped the Scene save because the active account changed.");
+  }
+
+  const normalized = normalizeScene(input);
+  if (!normalized) {
+    throw new Error("Canal could not save an invalid Scene.");
+  }
+
+  const nextScene: StoredScene = {
+    ...normalized,
+    updatedAt: new Date().toISOString(),
+  };
+  if (!canCommit()) {
+    throw new Error("Canal stopped the Scene save because the active account changed.");
+  }
+  const cloudScene =
+    await saveSceneToCloudForScope(nextScene, scope, currentScope) ?? nextScene;
+
+  // Cloud success belongs permanently to the captured owner. If the account
+  // changed while the request was in flight, leave the shared device cache
+  // untouched; that owner's next sync will hydrate the committed Scene.
+  if (!canCommit()) return cloudScene;
+
+  const previousScenes = await readScenes();
+  if (!canCommit()) return cloudScene;
+  const previousScene = previousScenes.find(
+    (scene) => scene.id === cloudScene.id,
+  ) ?? null;
+  const nextScenes = previousScenes.filter(
+    (scene) => scene.id !== cloudScene.id,
+  );
+  nextScenes.unshift(cloudScene);
+
+  if (!canCommit()) return cloudScene;
+  await writeScenes(nextScenes);
+  if (!canCommit()) {
+    await rollbackScopedLocalScene(cloudScene, previousScene);
+  }
+
+  return cloudScene;
 }
 
 export const updateScene =

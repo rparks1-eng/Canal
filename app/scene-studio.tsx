@@ -882,6 +882,7 @@ export default function SceneStudioScreen() {
             ],
             deprioritizedTrackIds: learning.deprioritizedTrackIds,
             preferredTrackIds: learning.preferredTrackIds,
+            reasonBias: learning.reasonBias,
           },
         );
         preview = refillGeneratedSceneToDuration(updated, candidates);
@@ -892,6 +893,7 @@ export default function SceneStudioScreen() {
           rejectedTrackIds: [...recentSceneTrackIds, ...learning.rejectedTrackIds],
           deprioritizedTrackIds: learning.deprioritizedTrackIds,
           preferredTrackIds: learning.preferredTrackIds,
+          reasonBias: learning.reasonBias,
         });
         preview.scene.visibility = "private";
       }

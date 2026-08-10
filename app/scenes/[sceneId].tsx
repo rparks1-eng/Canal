@@ -233,6 +233,20 @@ function SceneDetailContent() {
     user,
   } =
     useAuth();
+  const authScope = useMemo(
+    () => captureSceneStudioScope({
+      userId: user?.id,
+      accountEpoch,
+      sessionGeneration,
+    }),
+    [accountEpoch, sessionGeneration, user?.id],
+  );
+  const currentAuthScopeRef = useRef(authScope);
+  currentAuthScopeRef.current = authScope;
+  const currentAuthScope = useCallback(
+    () => currentAuthScopeRef.current,
+    [],
+  );
 
   const {
     refresh:
@@ -384,6 +398,7 @@ function SceneDetailContent() {
       setMessage("");
 
       const expectedSceneId = scene.id;
+      const feedbackScope = currentAuthScope();
       const optimisticFavorite = !scene.favorite;
       setScene((current) =>
         current?.id === expectedSceneId
@@ -408,15 +423,10 @@ function SceneDetailContent() {
               }
             : current,
         );
-        const feedbackScope = captureSceneStudioScope({
-          userId: user?.id,
-          accountEpoch,
-          sessionGeneration,
-        });
         if (feedbackScope) {
           void recordStoredSceneRecommendationFeedback({
             scope: feedbackScope,
-            currentScope: () => captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration }),
+            currentScope: currentAuthScope,
             scene: updated,
             action: updated.favorite ? "favorite" : "unfavorite",
           });
