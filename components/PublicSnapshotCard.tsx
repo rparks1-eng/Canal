@@ -49,20 +49,6 @@ export function PublicSnapshotCard(
     snapshot,
   } = props;
 
-  const trackLabel =
-    snapshot.trackTitle
-      ? [
-          snapshot.trackTitle,
-          snapshot.trackArtist,
-        ]
-          .filter(
-            Boolean,
-          )
-          .join(
-            " · ",
-          )
-      : "Scene moment";
-
   return (
     <View
       style={[
@@ -103,62 +89,14 @@ export function PublicSnapshotCard(
           compact={props.compact}
         />
 
-        {props.compact ? <Text
-          numberOfLines={
-            1
-          }
-          style={
-            styles.sceneName
-          }
-        >
-          {snapshot.sceneName}
-        </Text> : null}
-
-        {props.compact ? <Text
-          numberOfLines={
-            2
-          }
-          style={
-            styles.track
-          }
-        >
-          {trackLabel}
-        </Text> : null}
-
         {props.compact && snapshot.note ? (
-          <Text
-            numberOfLines={
-              props.compact
-                ? 2
-                : 3
-            }
-            style={
-              styles.note
-            }
-          >
-            {snapshot.note}
-          </Text>
-        ) : props.compact ? (
-          <Text
-            style={
-              styles.emptyNote
-            }
-          >
-            No note added
-          </Text>
-        ) : null}
-
-        {snapshot.templateBrandLabel ? (
           <Text
             numberOfLines={1}
             style={
-              styles.templateProvenance
+              styles.compactNote
             }
           >
-            Template ·{" "}
-            {
-              snapshot.templateBrandLabel
-            }
+            {snapshot.note}
           </Text>
         ) : null}
       </Pressable>
@@ -223,7 +161,7 @@ export function PublicSnapshotCard(
           </Pressable>
 
           {snapshot.note ? (
-            <Text numberOfLines={2} style={styles.feedCaption}>
+            <Text numberOfLines={1} style={styles.feedCaption}>
               {snapshot.note}
             </Text>
           ) : null}
@@ -351,11 +289,7 @@ export function PublicSnapshotGrid(
 const styles =
   StyleSheet.create({
     card: {
-      borderWidth: 1,
-      borderColor:
-        "#EEE5DE",
       borderRadius: 20,
-      backgroundColor: canalDynamicColors.surface,
       overflow:
         "hidden",
     },
@@ -371,7 +305,7 @@ const styles =
     },
 
     snapshotButton: {
-      padding: 13,
+      padding: 0,
     },
 
     pressed: {
@@ -461,43 +395,12 @@ const styles =
       letterSpacing: 0.5,
     },
 
-    sceneName: {
-      color: canalDynamicColors.text,
-      fontSize: 15,
-      fontWeight: "900",
-    },
-
-    track: {
-      minHeight: 30,
-      color: "#746D67",
-      fontSize: 11,
-      lineHeight: 15,
-      marginTop: 4,
-    },
-
-    note: {
-      color: "#4F4944",
+    compactNote: {
+      color: canalDynamicColors.muted,
       fontSize: 12,
       lineHeight: 17,
-      marginTop: 8,
-    },
-
-    emptyNote: {
-      color: "#A09993",
-      fontSize: 11,
-      fontStyle:
-        "italic",
-      marginTop: 8,
-    },
-
-    templateProvenance: {
-      color: canalDynamicColors.gold,
-      fontSize: 9,
-      fontWeight: "900",
-      letterSpacing: 0.2,
-      marginTop: 9,
-      textTransform:
-        "uppercase",
+      paddingTop: 7,
+      paddingHorizontal: 9,
     },
 
     creatorButton: {

@@ -34,7 +34,9 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
+import {
+  SnapshotComposition,
+} from "../../components/snapshot-composition";
 
 import {
   RecoveryNotice,
@@ -1188,44 +1190,16 @@ export default function LibraryScreen() {
                     pressed && styles.pressed,
                   ]}
                 >
-                  <View style={[
-                    styles.snapshotArtwork,
-                    layout === "grid" && styles.snapshotArtworkGrid,
-                  ]}>
-                    {snapshot.mediaUri || snapshot.trackImageUrl ? (
-                      <Image
-                        source={{ uri: snapshot.mediaUri || snapshot.trackImageUrl }}
-                        contentFit="cover"
-                        transition={160}
-                        style={styles.snapshotImage}
-                      />
-                    ) : (
-                      <Ionicons name="camera-outline" size={23} color={canalDynamicColors.gold} />
-                    )}
-                    {snapshot.mediaType === "video" ? (
-                      <View style={styles.videoBadge}>
-                        <Ionicons name="play" size={12} color={canalDynamicColors.text} />
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.snapshotCopy}>
-                    <Text numberOfLines={1} style={styles.snapshotName}>{snapshot.sceneName}</Text>
-                    <Text numberOfLines={1} style={styles.snapshotTrack}>
-                      {snapshot.trackTitle
-                        ? `${snapshot.trackTitle}${snapshot.trackArtist ? ` · ${snapshot.trackArtist}` : ""}`
-                        : "Scene moment"}
+                  <SnapshotComposition
+                    compact
+                    height={layout === "grid" ? 176 : 116}
+                    snapshot={snapshot}
+                  />
+                  {snapshot.note ? (
+                    <Text numberOfLines={1} style={styles.snapshotNote}>
+                      {snapshot.note}
                     </Text>
-                    <View style={styles.snapshotMetaRow}>
-                      <Ionicons
-                        name={snapshot.visibility === "public" ? "globe-outline" : "lock-closed-outline"}
-                        size={13}
-                        color={canalDynamicColors.muted}
-                      />
-                      <Text numberOfLines={1} style={styles.snapshotMeta}>
-                        {snapshot.visibility} · {snapshot.mediaType ?? "template"}
-                      </Text>
-                    </View>
-                  </View>
+                  ) : null}
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Manage ${snapshot.sceneName} Snapshot`}
@@ -1521,92 +1495,27 @@ const styles =
     },
 
     snapshotCard: {
-      minHeight: 82,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      padding: 11,
+      minHeight: 116,
       borderRadius: 19,
-      borderWidth: 1,
-      borderColor: canalDynamicColors.line,
-      backgroundColor: canalDynamicColors.surface,
       overflow: "hidden",
-      boxShadow: "0 12px 28px rgba(2, 30, 45, 0.11)",
     },
 
     snapshotCardGrid: {
-      minHeight: 205,
-      flexDirection: "column",
-      alignItems: "stretch",
-      gap: 9,
-      padding: 10,
+      minHeight: 176,
     },
 
-    snapshotArtwork: {
-      width: 60,
-      height: 60,
-      borderRadius: 14,
-      alignItems: "center",
-      justifyContent: "center",
-      overflow: "hidden",
-      backgroundColor: canalDynamicColors.warningSurface,
-    },
-
-    snapshotArtworkGrid: {
-      width: "100%",
-      height: 116,
-      borderRadius: 14,
-    },
-
-    snapshotImage: {
-      width: "100%",
-      height: "100%",
-    },
-
-    videoBadge: {
-      position: "absolute",
-      right: 6,
-      bottom: 6,
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: "rgba(4, 19, 29, 0.72)",
-    },
-
-    snapshotCopy: {
-      flex: 1,
-      minWidth: 0,
-    },
-
-    snapshotName: {
-      color: canalDynamicColors.text,
-      fontSize: 14,
-      fontWeight: "900",
-    },
-
-    snapshotTrack: {
-      marginTop: 4,
+    snapshotNote: {
+      paddingTop: 7,
+      paddingHorizontal: 9,
       color: canalDynamicColors.muted,
-      fontSize: 11,
-    },
-
-    snapshotMetaRow: {
-      marginTop: 7,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-    },
-
-    snapshotMeta: {
-      flex: 1,
-      color: canalDynamicColors.muted,
-      fontSize: 10,
-      textTransform: "capitalize",
+      fontSize: 12,
+      lineHeight: 17,
     },
 
     snapshotManageButton: {
+      position: "absolute",
+      top: 4,
+      right: 4,
       width: 48,
       height: 48,
       borderRadius: 24,

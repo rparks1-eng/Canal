@@ -21,6 +21,14 @@ describe("published Snapshot composition", () => {
     expect(composition).toContain("snapshot.trackTitle");
   });
 
+  it("keeps compact cards free of duplicate metadata and empty-note placeholders", () => {
+    const feed = read("components/PublicSnapshotCard.tsx");
+
+    expect(feed).not.toContain("No note added");
+    expect(feed).not.toContain("Template ·");
+    expect(feed).toContain("styles.compactNote");
+  });
+
   it("uses the Canal verification icon instead of a text badge in Explore", () => {
     const feed = read("components/PublicSnapshotCard.tsx");
 

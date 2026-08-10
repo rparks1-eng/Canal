@@ -26,7 +26,7 @@ describe("Library Snapshot collection contract", () => {
     expect(source).toContain("snapshot.mediaType === snapshotFilter");
   });
 
-  it("supports search, list/grid layouts, artwork, and Snapshot detail navigation", () => {
+  it("supports search, list/grid layouts, composed media, and Snapshot detail navigation", () => {
     for (const field of [
       "snapshot.sceneName",
       "snapshot.sceneActivity",
@@ -39,8 +39,16 @@ describe("Library Snapshot collection contract", () => {
     }
 
     expect(source).toContain('layout === "grid" && styles.snapshotCardGrid');
-    expect(source).toContain("snapshot.mediaUri || snapshot.trackImageUrl");
+    expect(source).toContain("<SnapshotComposition");
     expect(source).toContain('pathname: "/snapshots/[snapshotId]"');
+  });
+
+  it("keeps Snapshot previews visual-first and renders only real notes on one line", () => {
+    expect(source).toContain("{snapshot.note ? (");
+    expect(source).toContain('<Text numberOfLines={1} style={styles.snapshotNote}>');
+    expect(source).not.toContain("No note added");
+    expect(source).not.toContain("styles.snapshotMetaRow");
+    expect(source).not.toContain("styles.snapshotCopy");
   });
 
   it("provides a compact three-dot quick-actions menu without duplicating detail editing", () => {
