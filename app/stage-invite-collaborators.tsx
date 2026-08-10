@@ -17,6 +17,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   loadProfileConnections,
@@ -223,16 +224,18 @@ export default function StageInviteCollaboratorsScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView edges={["top", "bottom"]} style={styles.screen}>
       <Stack.Screen
         options={{
           headerShown: false,
         }}
       />
       <ScrollView
+        contentInsetAdjustmentBehavior="never"
         contentContainerStyle={
           styles.content
         }
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
           <Pressable
@@ -370,7 +373,7 @@ export default function StageInviteCollaboratorsScreen() {
           )}
         </Pressable>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -382,7 +385,7 @@ const styles = StyleSheet.create({
   content: {
     gap: 14,
     paddingHorizontal: 18,
-    paddingTop: 10,
+    paddingTop: 8,
     paddingBottom: 110,
   },
   header: {
@@ -407,9 +410,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   headerTitle: {
+    flex: 1,
     color: canalDynamicColors.text,
     fontSize: 16,
     fontWeight: "800",
+    textAlign: "center",
   },
   title: {
     color: canalDynamicColors.text,

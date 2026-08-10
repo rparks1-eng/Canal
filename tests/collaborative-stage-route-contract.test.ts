@@ -18,6 +18,11 @@ describe("collaborative Stage route contract", () => {
   it("routes hosts and joined collaborators through the contribution lobby", () => {
     expect(createStage).toContain("submitSceneToStage");
     expect(createStage).toContain('"/stage-invite-collaborators"');
+    expect(invitations).toContain('import { SafeAreaView } from "react-native-safe-area-context"');
+    expect(invitations).toContain('<SafeAreaView edges={["top", "bottom"]} style={styles.screen}>');
+    expect(invitations).toContain('contentInsetAdjustmentBehavior="never"');
+    expect(invitations).toContain("minWidth: 48");
+    expect(invitations).toContain("minHeight: 48");
     expect(joinStage).toContain('"/stage-contribution"');
     expect(joinStage).toContain('"/live-stage/[stageId]"');
     expect(invitations).toContain("inviteStageCollaborators");
