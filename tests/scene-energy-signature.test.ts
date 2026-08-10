@@ -32,4 +32,26 @@ describe("Scene energy signatures", () => {
     const steadyPoints = sceneEnergyArcPoints(steady);
     expect(Math.max(...steadyPoints) - Math.min(...steadyPoints)).toBeGreaterThan(0.25);
   });
+
+  it("gives every energy and arc combination a distinct curve", () => {
+    const energies = ["low", "medium", "high"];
+    const arcs = ["steady", "build", "waves"];
+    const curves = energies.flatMap((energy) => arcs.map((sceneArc) =>
+      JSON.stringify(sceneEnergyArcPoints({ ...scene(`${energy}-${sceneArc}`, energy), sceneArc })),
+    ));
+    expect(new Set(curves).size).toBe(energies.length * arcs.length);
+
+    for (const arc of arcs) {
+      const energyCurves = energies.map((energy) =>
+        JSON.stringify(sceneEnergyArcPoints({ ...scene(`${energy}-${arc}`, energy), sceneArc: arc })),
+      );
+      expect(new Set(energyCurves).size).toBe(energies.length);
+    }
+    for (const energy of energies) {
+      const arcCurves = arcs.map((sceneArc) =>
+        JSON.stringify(sceneEnergyArcPoints({ ...scene(`${energy}-${sceneArc}`, energy), sceneArc })),
+      );
+      expect(new Set(arcCurves).size).toBe(arcs.length);
+    }
+  });
 });

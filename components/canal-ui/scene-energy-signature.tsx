@@ -19,6 +19,7 @@ export function sceneEnergyArcPoints(scene: ArcScene): number[] {
   const shape = sceneArcShape(scene);
   const center = energy === "high" ? 0.66 : energy === "low" ? 0.36 : 0.52;
   const amplitude = energy === "high" ? 0.34 : energy === "low" ? 0.22 : 0.3;
+  const frequency = energy === "high" ? 1.45 : energy === "low" ? 0.78 : 1.05;
   const count = 33;
 
   return Array.from({ length: count }, (_, index) => {
@@ -26,10 +27,10 @@ export function sceneEnergyArcPoints(scene: ArcScene): number[] {
     let value = center;
     if (shape === "build") {
       value = center - (amplitude * 0.8) + (amplitude * 1.6 * progress)
-        + Math.sin(progress * Math.PI * 3) * amplitude * 0.18;
+        + Math.sin(progress * Math.PI * 2 * frequency) * amplitude * 0.18;
     }
-    else if (shape === "waves") value = center + Math.sin(progress * Math.PI * 4) * amplitude;
-    else value = center + Math.sin(progress * Math.PI * 2) * amplitude * 0.55;
+    else if (shape === "waves") value = center + Math.sin(progress * Math.PI * 2 * (frequency + 0.95)) * amplitude;
+    else value = center + Math.sin(progress * Math.PI * 2 * frequency) * amplitude * 0.55;
     return Math.max(0.06, Math.min(0.94, value));
   });
 }
@@ -44,6 +45,9 @@ export function SceneEnergySignature(props: {
   const energy = props.scene.energy?.trim() || "Medium";
   const arc = sceneArcShape(props.scene);
   const arcLabel = arc === "waves" ? "Waves" : arc === "build" ? "Build" : "Steady";
+  const normalizedEnergy = energy.toLowerCase();
+  const strokeHeight = normalizedEnergy === "high" ? 3.5 : normalizedEnergy === "low" ? 2 : 2.75;
+  const glowHeight = normalizedEnergy === "high" ? 8 : normalizedEnergy === "low" ? 5 : 6.5;
 
   return (
     <View
@@ -64,6 +68,7 @@ export function SceneEnergySignature(props: {
                   styles.lineGlow,
                   {
                     backgroundColor: props.accent,
+                    height: glowHeight,
                     top: midpoint,
                     transform: [{ rotate: `${angle}deg` }],
                   },
@@ -74,6 +79,7 @@ export function SceneEnergySignature(props: {
                   styles.lineStroke,
                   {
                     backgroundColor: props.accent,
+                    height: strokeHeight,
                     top: midpoint + 1,
                     transform: [{ rotate: `${angle}deg` }],
                   },
@@ -95,7 +101,7 @@ const styles = StyleSheet.create({
   containerCompact: { minWidth: 64, minHeight: 34 },
   lineCanvas: { height: 36, flexDirection: "row", overflow: "hidden" },
   lineCell: { flex: 1, position: "relative" },
-  lineGlow: { position: "absolute", left: "-18%", width: "136%", height: 6, borderRadius: 6, opacity: 0.2 },
-  lineStroke: { position: "absolute", left: "-14%", width: "128%", height: 2.5, borderRadius: 3, opacity: 0.96 },
+  lineGlow: { position: "absolute", left: "-18%", width: "136%", borderRadius: 8, opacity: 0.2 },
+  lineStroke: { position: "absolute", left: "-14%", width: "128%", borderRadius: 4, opacity: 0.96 },
   label: { fontSize: 8, fontWeight: "900", letterSpacing: 0.45, textTransform: "uppercase" },
 });
