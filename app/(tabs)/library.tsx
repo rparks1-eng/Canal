@@ -1208,8 +1208,8 @@ export default function LibraryScreen() {
                             : "Created by you"}
                         </Text>
                         <View style={[styles.sceneBreakdowns, layout === "grid" && styles.sceneBreakdownsGrid]}>
-                          <SceneMoodBreakdown compact scene={scene} style={styles.sceneBreakdown} />
-                          <SceneGenreBreakdown compact scene={scene} style={styles.sceneBreakdown} />
+                          <SceneMoodBreakdown compact reserveSpace={layout === "grid"} scene={scene} style={styles.sceneBreakdown} />
+                          <SceneGenreBreakdown compact reserveSpace={layout === "grid"} scene={scene} style={styles.sceneBreakdown} />
                         </View>
                       </View>
 
@@ -1829,6 +1829,7 @@ const styles =
     },
 
     sceneNameGrid: {
+      minHeight: 18,
       paddingRight: 30,
       fontSize: 15,
       lineHeight: 18,
@@ -1841,6 +1842,7 @@ const styles =
     },
 
     sceneMetaGrid: {
+      minHeight: 12,
       fontSize: 9,
       lineHeight: 12,
       marginTop: 3,
@@ -1866,6 +1868,7 @@ const styles =
     sceneBreakdownsGrid: {
       flexDirection: "column",
       gap: 6,
+      height: 40,
       marginTop: 8,
       maxWidth: "100%",
     },

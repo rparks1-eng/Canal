@@ -25,6 +25,8 @@ describe("Library Snapshot collection contract", () => {
     expect(source).toMatch(/sceneCardGrid:\s*\{[\s\S]*?minHeight:\s*202,/u);
     expect(source).toMatch(/sceneMainGrid:\s*\{[\s\S]*?flexDirection:\s*"column",[\s\S]*?alignItems:\s*"stretch",/u);
     expect(source).toMatch(/sceneBreakdownsGrid:\s*\{[\s\S]*?flexDirection:\s*"column",[\s\S]*?maxWidth:\s*"100%",/u);
+    expect(source).toMatch(/sceneBreakdownsGrid:\s*\{[\s\S]*?height:\s*40,/u);
+    expect(source).toContain('reserveSpace={layout === "grid"}');
     expect(source).toMatch(/sourceTextGrid:\s*\{[\s\S]*?display:\s*"none",/u);
   });
 

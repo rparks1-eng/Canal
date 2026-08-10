@@ -22,10 +22,13 @@ export function sceneGenreSignals(genres: string | undefined): string[] {
 export function SceneGenreBreakdown(props: {
   scene: Pick<StoredScene, "genres" | "name">;
   compact?: boolean;
+  reserveSpace?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const genres = sceneGenreSignals(props.scene.genres);
-  if (genres.length === 0) return null;
+  if (genres.length === 0) {
+    return props.reserveSpace ? <View accessibilityElementsHidden style={[styles.container, styles.reserved, props.style]} /> : null;
+  }
 
   return (
     <View
@@ -55,6 +58,7 @@ export function SceneGenreBreakdown(props: {
 const styles = StyleSheet.create({
   container: { minWidth: 110, gap: 4 },
   containerCompact: { minWidth: 82 },
+  reserved: { minHeight: 17 },
   spectrum: { height: 5, overflow: "hidden", flexDirection: "row", gap: 2, borderRadius: 5 },
   segment: { flex: 1, minWidth: 8, borderRadius: 5 },
   copyRow: { flexDirection: "row", alignItems: "center", gap: 5 },

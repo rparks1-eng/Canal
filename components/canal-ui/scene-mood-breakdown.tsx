@@ -22,10 +22,13 @@ export function sceneMoodSignals(emotions: string | undefined): string[] {
 export function SceneMoodBreakdown(props: {
   scene: Pick<StoredScene, "emotions" | "name">;
   compact?: boolean;
+  reserveSpace?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const moods = sceneMoodSignals(props.scene.emotions);
-  if (moods.length === 0) return null;
+  if (moods.length === 0) {
+    return props.reserveSpace ? <View accessibilityElementsHidden style={[styles.container, styles.reserved, props.style]} /> : null;
+  }
   return (
     <View
       accessibilityLabel={`Mood mix for ${props.scene.name}: ${moods.join(", ")}`}
@@ -50,6 +53,7 @@ export function SceneMoodBreakdown(props: {
 const styles = StyleSheet.create({
   container: { minWidth: 110, gap: 4 },
   containerCompact: { minWidth: 82 },
+  reserved: { minHeight: 17 },
   spectrum: { height: 5, overflow: "hidden", flexDirection: "row", gap: 2, borderRadius: 5 },
   segment: { flex: 1, minWidth: 8, borderRadius: 5 },
   copyRow: { flexDirection: "row", alignItems: "center", gap: 5 },
