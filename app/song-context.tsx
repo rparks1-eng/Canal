@@ -109,12 +109,16 @@ export default function SongContextScreen(): React.JSX.Element {
         </ContextSection>
 
         <ContextSection icon="people-outline" title="Credits">
-          {song?.credits.length ? song.credits.map((credit) => (
-            <View key={`${credit.label}-${credit.names.join("-")}`} style={styles.creditRow}>
-              <Text style={styles.fieldLabel}>{credit.label}</Text>
-              <Text style={styles.fieldValue}>{credit.names.join(", ")}</Text>
+          {song?.credits.length ? (
+            <View style={styles.creditsGrid}>
+              {song.credits.map((credit) => (
+                <View key={`${credit.label}-${credit.names.join("-")}`} style={styles.creditTile}>
+                  <Text numberOfLines={1} style={styles.creditLabel}>{credit.label}</Text>
+                  <Text numberOfLines={2} style={styles.creditNames}>{credit.names.join(", ")}</Text>
+                </View>
+              ))}
             </View>
-          )) : <EmptyField state={state} text="No credits found" />}
+          ) : <EmptyField state={state} text="No credits found" />}
         </ContextSection>
 
         <ContextSection icon="calendar-outline" title="Release details">
@@ -125,12 +129,32 @@ export default function SongContextScreen(): React.JSX.Element {
         </ContextSection>
 
         <ContextSection icon="chatbubble-ellipses-outline" title="Notes">
-          {song?.annotations.length ? song.annotations.map((annotation) => (
-            <View key={annotation.id} style={styles.noteCard}>
-              <Text style={styles.noteLabel}>{annotation.verified ? "VERIFIED NOTE" : "COMMUNITY NOTE"}</Text>
-              <Text style={styles.body}>{annotation.body}</Text>
-            </View>
-          )) : <EmptyField state={state} text="No notes found" />}
+          {song?.annotations.length ? (
+            <ScrollView
+              accessibilityLabel="Community notes"
+              contentContainerStyle={styles.notesRail}
+              decelerationRate="fast"
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={276}
+            >
+              {song.annotations.map((annotation, index) => (
+                <View accessibilityLabel={`Note ${index + 1} of ${song.annotations.length}`} key={annotation.id} style={styles.noteCard}>
+                  <View style={styles.noteHeader}>
+                    <Text style={styles.noteLabel}>{annotation.verified ? "VERIFIED NOTE" : "COMMUNITY NOTE"}</Text>
+                    <Text style={styles.noteCount}>{index + 1}/{song.annotations.length}</Text>
+                  </View>
+                  <Text numberOfLines={9} style={styles.noteBody}>{annotation.body}</Text>
+                  {annotation.geniusUrl ? (
+                    <Pressable accessibilityLabel={`Open full note ${index + 1} on Genius`} accessibilityRole="link" onPress={() => { if (annotation.geniusUrl) void Linking.openURL(annotation.geniusUrl); }} style={styles.noteLink}>
+                      <Text style={styles.noteLinkText}>Read full note</Text>
+                      <Ionicons color={canalDynamicColors.muted} name="open-outline" size={15} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))}
+            </ScrollView>
+          ) : <EmptyField state={state} text="No notes found" />}
         </ContextSection>
 
         <ContextSection icon="link-outline" title="Creative links">
@@ -189,7 +213,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: canalDynamicColors.mint, fontSize: 11, fontWeight: "900", letterSpacing: 1.5 },
   headerScene: { color: canalDynamicColors.muted, fontSize: 12, fontWeight: "700", marginTop: 3 },
   content: { paddingHorizontal: 18, paddingBottom: 150, gap: 14 },
-  hero: { padding: 16, flexDirection: "row", alignItems: "center", gap: 16, borderRadius: 24, borderCurve: "continuous", backgroundColor: canalDynamicColors.surface },
+  hero: { paddingHorizontal: 4, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 16 },
   artwork: { width: 112, height: 112, borderRadius: 18, borderCurve: "continuous" },
   artworkEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: canalDynamicColors.elevated },
   heroCopy: { flex: 1, gap: 6 },
@@ -203,17 +227,26 @@ const styles = StyleSheet.create({
   statusTitle: { color: canalDynamicColors.text, fontSize: 14, fontWeight: "900" },
   statusBody: { color: canalDynamicColors.muted, fontSize: 12, lineHeight: 17 },
   retryButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-  section: { padding: 17, gap: 13, borderRadius: 22, borderCurve: "continuous", backgroundColor: canalDynamicColors.surface },
+  section: { paddingHorizontal: 4, paddingTop: 16, paddingBottom: 8, gap: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: canalDynamicColors.line },
   sectionHeader: { minHeight: 28, flexDirection: "row", alignItems: "center", gap: 9 },
   sectionTitle: { color: canalDynamicColors.text, fontSize: 17, fontWeight: "900" },
   body: { color: canalDynamicColors.muted, fontSize: 14, lineHeight: 21 },
   emptyField: { color: canalDynamicColors.muted, fontSize: 14, fontStyle: "italic" },
-  creditRow: { gap: 4 },
+  creditsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  creditTile: { width: "48%", minHeight: 62, paddingHorizontal: 11, paddingVertical: 9, gap: 4, borderRadius: 14, borderCurve: "continuous", backgroundColor: canalDynamicColors.canvas },
+  creditLabel: { color: canalDynamicColors.muted, fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.65 },
+  creditNames: { color: canalDynamicColors.text, fontSize: 12, fontWeight: "800", lineHeight: 16 },
   detailRow: { minHeight: 42, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 18 },
   fieldLabel: { color: canalDynamicColors.muted, fontSize: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8 },
   fieldValue: { flex: 1, color: canalDynamicColors.text, fontSize: 14, fontWeight: "700", textAlign: "right" },
-  noteCard: { padding: 13, gap: 7, borderRadius: 16, borderCurve: "continuous", backgroundColor: canalDynamicColors.elevated },
+  notesRail: { gap: 10, paddingRight: 18 },
+  noteCard: { width: 266, minHeight: 220, padding: 14, gap: 9, borderRadius: 18, borderCurve: "continuous", backgroundColor: canalDynamicColors.canvas },
+  noteHeader: { minHeight: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   noteLabel: { color: canalDynamicColors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  noteCount: { color: canalDynamicColors.muted, fontSize: 10, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  noteBody: { flex: 1, color: canalDynamicColors.muted, fontSize: 13, lineHeight: 19 },
+  noteLink: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  noteLinkText: { color: canalDynamicColors.text, fontSize: 12, fontWeight: "900" },
   linkRow: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   linkText: { flex: 1, color: canalDynamicColors.text, fontSize: 14, fontWeight: "800" },
   attribution: { color: canalDynamicColors.muted, fontSize: 11, textAlign: "center", paddingVertical: 8 },

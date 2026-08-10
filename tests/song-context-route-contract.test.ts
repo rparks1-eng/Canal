@@ -30,6 +30,22 @@ describe("Song context route", () => {
     expect(contextSource).toContain('"No creative links found"');
   });
 
+  it("compresses credits and presents community notes as a horizontal rail", () => {
+    expect(contextSource).toContain("styles.creditsGrid");
+    expect(contextSource).toContain("styles.creditTile");
+    expect(contextSource).toContain('accessibilityLabel="Community notes"');
+    expect(contextSource).toContain("horizontal");
+    expect(contextSource).toContain("snapToInterval={276}");
+    expect(contextSource).toContain("numberOfLines={9}");
+    expect(contextSource).toContain("Read full note");
+  });
+
+  it("uses subtle dividers instead of pronounced section containers", () => {
+    expect(contextSource).toMatch(/section:\s*\{[\s\S]*?borderTopWidth:\s*StyleSheet\.hairlineWidth/u);
+    expect(contextSource).not.toMatch(/section:\s*\{[\s\S]*?backgroundColor:\s*canalDynamicColors\.surface/u);
+    expect(contextSource).toMatch(/hero:\s*\{[\s\S]*?paddingHorizontal:\s*4/u);
+  });
+
   it("preserves an exact return path to the Scene", () => {
     expect(contextSource).toContain("if (router.canGoBack()) router.back()");
     expect(contextSource).toContain('pathname: "/scenes/[sceneId]"');
