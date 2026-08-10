@@ -37,6 +37,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { ProfileAvatar } from "../../components/profile-avatar";
+import { SceneEnergySignature } from "../../components/canal-ui/scene-energy-signature";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
 import {
   scenePresentation,
@@ -327,6 +328,7 @@ function PublicSceneCard(
             </Text>
           </View>
         </View>
+        <SceneEnergySignature accent={presentation.accent} compact scene={item.scene} style={styles.publicSceneEnergy} />
       </Pressable>
 
       <View
@@ -1845,11 +1847,15 @@ const styles =
       borderRadius: 17,
     },
 
-    cardTop: {
+        cardTop: {
       flexDirection: "row",
       alignItems:
         "center",
-    },
+        },
+        publicSceneEnergy: {
+          width: 112,
+          marginTop: 10,
+        },
 
     artwork: {
       width: 64,

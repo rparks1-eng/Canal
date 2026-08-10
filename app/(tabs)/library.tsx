@@ -52,10 +52,8 @@ import {
   scenePresentation,
 } from "../../components/canal-ui/scene-signature";
 
-import {
-  SceneCardBackdrop,
-  ScenePaletteMark,
-} from "../../components/canal-ui/scene-card-visual";
+import { SceneCardBackdrop } from "../../components/canal-ui/scene-card-visual";
+import { SceneEnergySignature } from "../../components/canal-ui/scene-energy-signature";
 
 import {
   useReconnectReload,
@@ -1151,9 +1149,11 @@ export default function LibraryScreen() {
                         layout === "grid" && styles.sceneMainGrid,
                       ]}
                     >
-                      <ScenePaletteMark
-                        presentation={presentation}
-                        style={layout === "grid" ? styles.scenePaletteMarkGrid : styles.scenePaletteMark}
+                      <SceneEnergySignature
+                        accent={presentation.accent}
+                        compact={layout === "grid"}
+                        scene={scene}
+                        style={layout === "grid" ? styles.sceneEnergyGrid : styles.sceneEnergy}
                       />
                       <View
                         style={[
@@ -1801,17 +1801,16 @@ const styles =
       flex: 1,
     },
 
-    scenePaletteMark: {
+    sceneEnergy: {
+      width: 76,
       marginRight: 12,
     },
 
-    scenePaletteMarkGrid: {
+    sceneEnergyGrid: {
       position: "absolute",
       left: 0,
       top: 0,
-      width: 40,
-      height: 40,
-      borderRadius: 13,
+      width: 68,
     },
 
     sceneName: {
