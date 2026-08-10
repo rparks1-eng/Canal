@@ -1333,9 +1333,10 @@ function SceneDetailContent() {
 
         <View style={[
           styles.sectionCard,
-          reduceTransparency
-            ? styles.solidSurface
-            : styles.glassSurface,
+          styles.trackSequence,
+          {
+            backgroundColor: `${presentation.colors[2]}38`,
+          },
         ]}>
           <View style={styles.sequenceHeader}>
             <Text style={styles.sectionTitle}>Track sequence</Text>
@@ -1366,7 +1367,7 @@ function SceneDetailContent() {
                     styles.trackRow,
                     index === 0 && [
                       styles.trackRowFirst,
-                      { backgroundColor: `${presentation.accent}16` },
+                      { backgroundColor: `${presentation.accent}0D` },
                     ],
 
                     pressed &&
@@ -1656,6 +1657,12 @@ const styles =
       borderColor: "rgba(220, 255, 249, 0.20)",
       borderRadius: 22,
       padding: 18,
+    },
+
+    trackSequence: {
+      borderWidth: 0,
+      paddingHorizontal: 15,
+      paddingVertical: 14,
     },
 
     sectionTitle: {

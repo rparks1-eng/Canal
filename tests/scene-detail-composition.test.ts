@@ -29,4 +29,11 @@ describe("Scene detail composition", () => {
     expect(source).toContain("index === 0\n                    ? void start()");
     expect(source).not.toContain("styles.firstUpArtwork");
   });
+
+  it("blends Track sequence into the assigned Scene atmosphere", () => {
+    expect(source).toContain("styles.trackSequence");
+    expect(source).toContain('backgroundColor: `${presentation.colors[2]}38`');
+    expect(source).toMatch(/trackSequence:\s*\{[\s\S]*?borderWidth:\s*0,/u);
+    expect(source).toContain('backgroundColor: `${presentation.accent}0D`');
+  });
 });
