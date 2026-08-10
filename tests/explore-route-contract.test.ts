@@ -77,7 +77,7 @@ describe(
         expect(
           source,
         ).toMatch(
-          /\bloadExploreScenes\s*\(\s*\)/,
+          /\bloadExploreScenes\s*\(/,
         );
         expect(source).toContain('accessibilityLabel="Show Scenes"');
         expect(source).toContain('accessibilityLabel="Show Live Stages"');

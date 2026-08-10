@@ -55,6 +55,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="explore-category"
+        options={{
+          href: null,
+          title: "Explore category",
+        }}
+      />
+      <Tabs.Screen
         name="live"
         options={{
           href: null,

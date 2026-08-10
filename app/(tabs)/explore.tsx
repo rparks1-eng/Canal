@@ -88,6 +88,10 @@ import type {
 import {
   addSpotifyArtworkToLiveStage,
 } from "../../lib/spotify-scene-artwork";
+import {
+  exploreCategoryIcon,
+  exploreCategoryValues,
+} from "../../lib/explore-categories";
 
 type ExploreContent =
   | "scenes"
@@ -99,18 +103,11 @@ type StageFacet =
   | { kind: "all" }
   | { kind: "activity" | "mood"; value: string };
 
-type SceneFacet =
-  | { kind: "all" }
-  | { kind: "activity" | "mood" | "genre" | "creator"; value: string };
-
 function splitFacetValues(value: string | undefined): string[] {
-  return (value ?? "")
-    .split(/[,•|]/u)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return exploreCategoryValues(value);
 }
 
-function topFacetValues(values: string[], limit = 8): string[] {
+function topFacetValues(values: string[], limit = 40): string[] {
   const counts = new Map<string, { label: string; count: number }>();
   for (const value of values) {
     const key = value.toLowerCase();
@@ -440,8 +437,6 @@ function FacetRail(props: {
   accent: string;
   kind: "activity" | "mood" | "genre";
   values: string[];
-  selected: SceneFacet;
-  onSelect: (facet: SceneFacet) => void;
 }) {
   if (props.values.length === 0) return null;
   return (
@@ -453,34 +448,30 @@ function FacetRail(props: {
         <Text style={styles.discoveryTitle}>{props.title}</Text>
       </View>
       <ScrollView horizontal contentContainerStyle={styles.discoveryRail} showsHorizontalScrollIndicator={false}>
-        <Pressable
-          accessibilityLabel={`Show all ${props.title.toLowerCase()}`}
-          accessibilityRole="button"
-          accessibilityState={{ selected: props.selected.kind === "all" }}
-          onPress={() => props.onSelect({ kind: "all" })}
-          style={({ pressed }) => [
-            styles.discoveryChip,
-            props.selected.kind === "all" && { borderColor: `${props.accent}66`, backgroundColor: `${props.accent}2E` },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.discoveryChipText}>All</Text>
-        </Pressable>
-        {props.values.map((value) => {
-          const selected = props.selected.kind === props.kind && props.selected.value === value;
+        {props.values.map((value, index) => {
+          const icon = exploreCategoryIcon(props.kind, value);
           return (
             <Pressable
               key={`${props.kind}:${value}`}
+              accessibilityLabel={`Open ${value} ${props.kind} Scenes`}
               accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => props.onSelect(selected ? { kind: "all" } : { kind: props.kind, value })}
+              onPress={() => router.push({
+                pathname: "/explore-category",
+                params: { kind: props.kind, value },
+              })}
               style={({ pressed }) => [
-                styles.discoveryChip,
-                { borderColor: `${props.accent}66`, backgroundColor: selected ? `${props.accent}2E` : canalDynamicColors.surface },
+                styles.categoryCard,
+                { borderColor: `${props.accent}55`, backgroundColor: `${props.accent}16` },
                 pressed && styles.pressed,
               ]}
             >
-              <Text numberOfLines={1} style={[styles.discoveryChipText, selected && { color: props.accent }]}>{value}</Text>
+              <View style={[styles.categoryArtwork, { backgroundColor: `${props.accent}24` }]}>
+                <View style={[styles.categoryOrb, styles.categoryOrbOne, { backgroundColor: `${props.accent}68` }]} />
+                <View style={[styles.categoryOrb, styles.categoryOrbTwo, { backgroundColor: `${props.accent}38` }]} />
+                <Ionicons color={props.accent} name={icon as never} size={28 + (index % 2)} />
+              </View>
+              <Text numberOfLines={2} style={styles.categoryCardLabel}>{value}</Text>
+              <Text style={styles.categoryCardHint}>View Scenes</Text>
             </Pressable>
           );
         })}
@@ -489,10 +480,46 @@ function FacetRail(props: {
   );
 }
 
+function StageFacetRail(props: {
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  accent: string;
+  kind: "activity" | "mood";
+  values: string[];
+  selected: StageFacet;
+  onSelect: (facet: StageFacet) => void;
+}) {
+  if (props.values.length === 0) return null;
+  return (
+    <View style={styles.discoverySection}>
+      <View style={styles.discoveryHeading}>
+        <View style={[styles.discoveryIcon, { backgroundColor: `${props.accent}24` }]}>
+          <Ionicons color={props.accent} name={props.icon} size={18} />
+        </View>
+        <Text style={styles.discoveryTitle}>{props.title}</Text>
+      </View>
+      <ScrollView horizontal contentContainerStyle={styles.discoveryRail} showsHorizontalScrollIndicator={false}>
+        <Pressable accessibilityRole="button" onPress={() => props.onSelect({ kind: "all" })} style={styles.discoveryChip}>
+          <Text style={styles.discoveryChipText}>All</Text>
+        </Pressable>
+        {props.values.map((value) => (
+          <Pressable
+            key={`${props.kind}:${value}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected: props.selected.kind === props.kind && props.selected.value === value }}
+            onPress={() => props.onSelect({ kind: props.kind, value })}
+            style={styles.discoveryChip}
+          >
+            <Text numberOfLines={1} style={styles.discoveryChipText}>{value}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 function VerifiedCreatorRail(props: {
   creators: { ownerId: string; creator: PublicCanalScene["creator"] }[];
-  selected: SceneFacet;
-  onSelect: (facet: SceneFacet) => void;
 }) {
   if (props.creators.length === 0) return null;
   return (
@@ -505,14 +532,13 @@ function VerifiedCreatorRail(props: {
       </View>
       <ScrollView horizontal contentContainerStyle={styles.creatorRail} showsHorizontalScrollIndicator={false}>
         {props.creators.map(({ ownerId, creator }) => {
-          const selected = props.selected.kind === "creator" && props.selected.value === ownerId;
           return (
             <Pressable
               key={ownerId}
+              accessibilityLabel={`Open verified creator ${creator.displayName}`}
               accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => props.onSelect(selected ? { kind: "all" } : { kind: "creator", value: ownerId })}
-              style={({ pressed }) => [styles.creatorDiscoveryCard, selected && styles.creatorDiscoveryCardSelected, pressed && styles.pressed]}
+              onPress={() => router.push({ pathname: "/creator/[userId]", params: { userId: ownerId } })}
+              style={({ pressed }) => [styles.creatorDiscoveryCard, pressed && styles.pressed]}
             >
               <ProfileAvatar avatarUrl={creator.avatarUrl} displayName={creator.displayName} size={48} />
               <Text numberOfLines={1} style={styles.creatorDiscoveryName}>{creator.displayName}</Text>
@@ -546,7 +572,6 @@ export default function ExploreScreen() {
   const [stages, setStages] = useState<LiveStage[]>([]);
   const [stageFilter, setStageFilter] = useState<StageFilter>("all");
   const [stageFacet, setStageFacet] = useState<StageFacet>({ kind: "all" });
-  const [sceneFacet, setSceneFacet] = useState<SceneFacet>({ kind: "all" });
 
   const [
     activeContent,
@@ -626,7 +651,7 @@ export default function ExploreScreen() {
           stageResult,
         ] =
           await Promise.allSettled([
-            loadExploreScenes(),
+            loadExploreScenes({ force: isPullRefresh }),
             readLiveStages(),
           ]);
 
@@ -724,19 +749,11 @@ export default function ExploreScreen() {
             item.creator.handle,
             ...item.scene.tracks.map((track) => `${track.title} ${track.artist}`),
           ].join(" ").toLowerCase().includes(needle);
-          if (!matchesQuery || sceneFacet.kind === "all") return matchesQuery;
-          if (sceneFacet.kind === "creator") return item.ownerId === sceneFacet.value;
-          const source = sceneFacet.kind === "activity"
-            ? [item.scene.activity]
-            : sceneFacet.kind === "mood"
-              ? splitFacetValues(item.scene.emotions)
-              : splitFacetValues(item.scene.genres);
-          return source.some((value) => value.toLowerCase() === sceneFacet.value.toLowerCase());
+          return matchesQuery;
         });
       },
       [
         query,
-        sceneFacet,
         scenes,
       ],
     );
@@ -991,7 +1008,7 @@ export default function ExploreScreen() {
               ))}
             </View>
             <View style={styles.discoveryCatalog}>
-              <FacetRail
+              <StageFacetRail
                 title="Live activities"
                 icon="walk-outline"
                 accent="#7FE3CF"
@@ -1004,7 +1021,7 @@ export default function ExploreScreen() {
                     : { kind: "all" },
                 )}
               />
-              <FacetRail
+              <StageFacetRail
                 title="Live moods"
                 icon="sparkles-outline"
                 accent="#FFB7C4"
@@ -1021,10 +1038,10 @@ export default function ExploreScreen() {
           </Animated.View>
         ) : (
           <Animated.View entering={FadeInUp.duration(240).delay(110)} style={styles.discoveryCatalog}>
-            <FacetRail title="Activities" icon="walk-outline" accent="#7FE3CF" kind="activity" values={activityFacets} selected={sceneFacet} onSelect={setSceneFacet} />
-            <FacetRail title="Moods" icon="sparkles-outline" accent="#FFB7C4" kind="mood" values={moodFacets} selected={sceneFacet} onSelect={setSceneFacet} />
-            <FacetRail title="Genres" icon="musical-notes-outline" accent="#FFD37D" kind="genre" values={genreFacets} selected={sceneFacet} onSelect={setSceneFacet} />
-            <VerifiedCreatorRail creators={verifiedCreators} selected={sceneFacet} onSelect={setSceneFacet} />
+            <FacetRail title="Activities" icon="walk-outline" accent="#7FE3CF" kind="activity" values={activityFacets} />
+            <FacetRail title="Moods" icon="sparkles-outline" accent="#FFB7C4" kind="mood" values={moodFacets} />
+            <FacetRail title="Genres" icon="musical-notes-outline" accent="#FFD37D" kind="genre" values={genreFacets} />
+            <VerifiedCreatorRail creators={verifiedCreators} />
           </Animated.View>
         )}
 
@@ -1131,7 +1148,7 @@ export default function ExploreScreen() {
                 styles.emptyTitle
               }
             >
-              {query.trim() || sceneFacet.kind !== "all"
+              {query.trim()
                 ? "No matching Scenes"
                 : "No public Scenes yet"}
             </Text>
@@ -1141,7 +1158,7 @@ export default function ExploreScreen() {
                 styles.emptyText
               }
             >
-              {query.trim() || sceneFacet.kind !== "all"
+              {query.trim()
                 ? "Try another activity, mood, genre, creator, or search."
                 : "Change one of your created Scenes to Public in Library. Your own public Scene will appear here so the social flow can be tested before other creators join."}
             </Text>
@@ -1395,6 +1412,62 @@ const styles =
     discoveryRail: {
       gap: 8,
       paddingRight: 20,
+    },
+
+    categoryCard: {
+      width: 106,
+      minHeight: 132,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      padding: 10,
+      borderWidth: 1,
+      borderRadius: 20,
+      borderCurve: "continuous",
+    },
+
+    categoryArtwork: {
+      width: 68,
+      height: 68,
+      overflow: "hidden",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 22,
+      borderCurve: "continuous",
+    },
+
+    categoryOrb: {
+      position: "absolute",
+      borderRadius: 99,
+    },
+
+    categoryOrbOne: {
+      width: 48,
+      height: 48,
+      left: -15,
+      bottom: -17,
+    },
+
+    categoryOrbTwo: {
+      width: 38,
+      height: 38,
+      right: -10,
+      top: -9,
+    },
+
+    categoryCardLabel: {
+      minHeight: 28,
+      color: canalDynamicColors.text,
+      fontSize: 12,
+      fontWeight: "900",
+      textAlign: "center",
+      textTransform: "capitalize",
+    },
+
+    categoryCardHint: {
+      color: canalDynamicColors.muted,
+      fontSize: 9,
+      fontWeight: "700",
     },
 
     discoveryChip: {

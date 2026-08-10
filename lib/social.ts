@@ -72,6 +72,13 @@ export type PublicCanalScene = {
   isMine: boolean;
 };
 
+let exploreSceneCache: {
+  userId: string;
+  generation: number;
+  expiresAt: number;
+  scenes: PublicCanalScene[];
+} | null = null;
+
 function normalizeProfile(
   row: ProfileRow | null,
   userId: string,
@@ -301,11 +308,21 @@ async function loadSavedKeys(
   );
 }
 
-export async function loadExploreScenes(): Promise<
+export async function loadExploreScenes(
+  options: { force?: boolean } = {},
+): Promise<
   PublicCanalScene[]
 > {
-  const userId =
-    await currentUserId();
+  const sceneCacheOwner = await capturePreparedSceneCacheOwner();
+  const userId = sceneCacheOwner.userId;
+  if (
+    !options.force &&
+    exploreSceneCache?.userId === sceneCacheOwner.userId &&
+    exploreSceneCache.generation === sceneCacheOwner.generation &&
+    exploreSceneCache.expiresAt > Date.now()
+  ) {
+    return exploreSceneCache.scenes;
+  }
 
   const [
     sceneResult,
@@ -323,6 +340,10 @@ export async function loadExploreScenes(): Promise<
           "deleted_at",
           null,
         )
+        .eq(
+          "payload->>visibility",
+          "public",
+        )
         .order(
           "updated_at",
           {
@@ -331,13 +352,15 @@ export async function loadExploreScenes(): Promise<
           },
         )
         .limit(
-          100,
+          250,
         ),
 
       loadSavedKeys(
         userId,
       ),
     ]);
+
+  await assertSceneCacheOwner(sceneCacheOwner);
 
   if (
     sceneResult.error
@@ -353,14 +376,7 @@ export async function loadExploreScenes(): Promise<
       []
     ) as SceneRow[];
 
-  const publicRows =
-    rows.filter(
-      (row) =>
-        (
-          row.payload as Partial<StoredScene>
-        ).visibility ===
-        "public",
-    );
+  const publicRows = rows;
 
   const profiles =
     await loadProfiles(
@@ -370,7 +386,9 @@ export async function loadExploreScenes(): Promise<
       ),
     );
 
-  return publicRows
+  await assertSceneCacheOwner(sceneCacheOwner);
+
+  const result = publicRows
     .map(
       (
         row,
@@ -425,8 +443,16 @@ export async function loadExploreScenes(): Promise<
       ): value is PublicCanalScene =>
         Boolean(
           value,
-        ),
+      ),
     );
+
+  exploreSceneCache = {
+    userId: sceneCacheOwner.userId,
+    generation: sceneCacheOwner.generation,
+    expiresAt: Date.now() + 30_000,
+    scenes: result,
+  };
+  return result;
 }
 
 export async function loadPublicProfile(
