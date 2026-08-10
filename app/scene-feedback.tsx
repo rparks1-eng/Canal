@@ -40,9 +40,6 @@ import {
 import type {
   StoredScene,
 } from "../lib/scenes";
-import { useAuth } from "../providers/auth-provider";
-import { captureSceneStudioScope } from "../lib/scene-studio-scope";
-import { recordStoredSceneRecommendationFeedback } from "../lib/scene-recommendation-feedback";
 
 import { canalColors } from "../theme/canal-colors";
 import { canalTypography } from "../theme/canal-typography";
@@ -103,7 +100,6 @@ const OPTIONS: {
 ];
 
 export default function SceneFeedbackScreen() {
-  const { user, accountEpoch, sessionGeneration } = useAuth();
   const params =
     useLocalSearchParams<{
       sceneId?: string;
@@ -417,20 +413,7 @@ export default function SceneFeedbackScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Skip feedback"
-          onPress={() =>
-            void (async () => {
-              const feedbackScope = captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration });
-              if (scene && feedbackScope) {
-                await recordStoredSceneRecommendationFeedback({
-                  scope: feedbackScope,
-                  currentScope: () => captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration }),
-                  scene,
-                  action: "skip",
-                });
-              }
-              router.replace("/(tabs)");
-            })()
-          }
+          onPress={() => router.replace("/(tabs)")}
           style={({ pressed }) => [
             styles.skipButton,
 

@@ -16,8 +16,12 @@ import type {
 } from "./spotify-library";
 
 import {
-  upsertScene,
+  upsertSceneForScope,
 } from "./scenes";
+
+import type {
+  SceneStudioScope,
+} from "./scene-studio-scope";
 
 import {
   generateCreativeSceneName,
@@ -27,6 +31,14 @@ import type {
   SceneTrack,
   StoredScene,
 } from "./scenes";
+
+import {
+  EMPTY_SCENE_REASON_BIAS,
+} from "./scene-recommendation-reasons";
+
+import type {
+  SceneReasonBias,
+} from "./scene-recommendation-reasons";
 
 export const SCENE_STUDIO_DRAFT_STORAGE_KEY =
   "@canal/scene-studio-draft";
@@ -1459,10 +1471,16 @@ function scoreCandidate(
   generationSeed: string,
   deprioritizedTrackIds: ReadonlySet<string>,
   preferredTrackIds: ReadonlySet<string>,
+  reasonBias: SceneReasonBias,
 ): number {
   let score = 0;
   const familiarityLevel =
-    getSceneFamiliarityLevel(draft);
+    clamp(
+      getSceneFamiliarityLevel(draft) +
+        reasonBias.familiarityBias,
+      0,
+      100,
+    );
   const novelty = familiarityLevel / 100;
 
   for (
@@ -1486,8 +1504,13 @@ function scoreCandidate(
   }
 
   const energyTarget =
-    getEnergyTarget(
-      draft.energy,
+    clamp(
+      getEnergyTarget(
+        draft.energy,
+      ) +
+        reasonBias.energyBias,
+      0,
+      100,
     );
 
   const energyDistance =
@@ -1581,6 +1604,11 @@ function scoreCandidate(
     candidate.track.explicit
   ) {
     score -= 1000;
+  } else if (
+    reasonBias.suppressExplicit &&
+    candidate.track.explicit
+  ) {
+    score -= 120;
   }
 
   score +=
@@ -1679,6 +1707,7 @@ function buildCandidatePool(
   rejectedTrackIds: ReadonlySet<string>,
   deprioritizedTrackIds: ReadonlySet<string>,
   preferredTrackIds: ReadonlySet<string>,
+  reasonBias: SceneReasonBias,
 ): InternalCandidate[] {
   const artistGenreMap =
     buildArtistGenreMap(
@@ -1774,6 +1803,7 @@ function buildCandidatePool(
         generationSeed,
         deprioritizedTrackIds,
         preferredTrackIds,
+        reasonBias,
       );
   }
 
@@ -2603,6 +2633,7 @@ export function generateSceneFromSpotify(
     deprioritizedTrackIds?: readonly string[];
     preferredTrackIds?: readonly string[];
     existingSceneNames?: readonly string[];
+    reasonBias?: SceneReasonBias;
   } = {},
 ): GeneratedSceneResult {
   const id = createSceneId();
@@ -2616,6 +2647,8 @@ export function generateSceneFromSpotify(
       new Set(options.rejectedTrackIds ?? []),
       new Set(options.deprioritizedTrackIds ?? []),
       new Set(options.preferredTrackIds ?? []),
+      options.reasonBias ??
+        EMPTY_SCENE_REASON_BIAS,
     );
 
   const selected =
@@ -2827,6 +2860,7 @@ export function generateSceneWithSpotifyGenreFallback(
     deprioritizedTrackIds?: readonly string[];
     preferredTrackIds?: readonly string[];
     existingSceneNames?: readonly string[];
+    reasonBias?: SceneReasonBias;
   } = {},
 ): GeneratedSceneResult {
   const generated = generateSceneFromSpotify(draft, snapshot, options);
@@ -2931,6 +2965,10 @@ export function removeTrackFromGeneratedScene(
 
 export async function saveGeneratedSceneToLibrary(
   result: GeneratedSceneResult,
+  operation: {
+    scope: SceneStudioScope;
+    currentScope: () => SceneStudioScope | null;
+  },
   visibility: "private" | "public" = "private",
 ): Promise<StoredScene> {
   const now =
@@ -2950,8 +2988,10 @@ export async function saveGeneratedSceneToLibrary(
   };
 
   const savedScene =
-    await upsertScene(
+    await upsertSceneForScope(
       sceneToSave,
+      operation.scope,
+      operation.currentScope,
     );
 
   return savedScene;

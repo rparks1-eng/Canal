@@ -95,4 +95,64 @@ describe("Scene recommendation quality and learning", () => {
     expect(metrics.diversityRate).toBe(1);
     expect(metrics.repetitionRate).toBe(0);
   });
+
+  it("uses explicit energy and familiarity reasons as bounded ranking nudges", () => {
+    const snapshot = library();
+    const baseline = generateSceneFromSpotify(
+      { ...DEFAULT_SCENE_STUDIO_DRAFT, durationMinutes: 45 },
+      snapshot,
+      { variationSeed: "reason-bias" },
+    );
+    const adjusted = generateSceneFromSpotify(
+      { ...DEFAULT_SCENE_STUDIO_DRAFT, durationMinutes: 45 },
+      snapshot,
+      {
+        variationSeed: "reason-bias",
+        reasonBias: {
+          energyBias: -25,
+          familiarityBias: 25,
+          avoidArtistIds: [],
+          avoidGenres: [],
+          suppressExplicit: false,
+        },
+      },
+    );
+    const meanIntensity = (result: typeof baseline) =>
+      result.trackSignals.reduce(
+        (total, signal) => total + signal.intensity,
+        0,
+      ) / Math.max(result.trackSignals.length, 1);
+
+    expect(meanIntensity(adjusted)).toBeLessThan(meanIntensity(baseline));
+    expect(
+      generationDifferenceRate(baseline, adjusted),
+    ).toBeGreaterThan(0);
+  });
+
+  it("keeps provider-derived artist and genre bias descriptive until policy approval", () => {
+    const snapshot = library();
+    const baseline = generateSceneFromSpotify(
+      DEFAULT_SCENE_STUDIO_DRAFT,
+      snapshot,
+      { variationSeed: "policy-gate" },
+    );
+    const gated = generateSceneFromSpotify(
+      DEFAULT_SCENE_STUDIO_DRAFT,
+      snapshot,
+      {
+        variationSeed: "policy-gate",
+        reasonBias: {
+          energyBias: 0,
+          familiarityBias: 0,
+          avoidArtistIds: ["artist-1"],
+          avoidGenres: ["rock"],
+          suppressExplicit: false,
+        },
+      },
+    );
+
+    expect(gated.trackSignals.map((signal) => signal.track.id)).toEqual(
+      baseline.trackSignals.map((signal) => signal.track.id),
+    );
+  });
 });

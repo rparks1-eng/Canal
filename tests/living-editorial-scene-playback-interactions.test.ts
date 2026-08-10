@@ -15,11 +15,12 @@ const mockExport: jest.Mock = jest.fn(async () => ({ exportedTrackCount: 1, play
 const mockSavePublic: jest.Mock = jest.fn(async () => ({}));
 const mockShare: jest.Mock = jest.fn(async () => ({ action: "sharedAction" }));
 const mockWritePlayer: jest.Mock = jest.fn(async () => {});
+const mockRecommendationFeedback: jest.Mock = jest.fn(async () => [{ outcome: "cloud_synced" }]);
 const mockSaveSoundscape: jest.Mock = jest.fn();
 const mockNativeShare: jest.Mock = jest.fn(async () => ({ action: "sharedAction" }));
 const mockWriteScenes: jest.Mock = jest.fn(async () => {});
 let mockParams: Record<string, string> = { sceneId: "scene-a" };
-let mockAuth = { user: { id: "owner-a" }, accountEpoch: 1, sessionGeneration: 1 };
+let mockAuth: any = { user: { id: "owner-a" }, accountEpoch: 1, sessionGeneration: "session-1" };
 let mockConnectivity = "online";
 let mockRecoveryIssue: any = null;
 
@@ -97,7 +98,11 @@ jest.mock("../lib/canal-player", () => ({
   createPlayerSession: jest.fn(() => ({ sceneId: "scene-a", accountKey: "owner-a:1:1", currentIndex: 0, elapsedSeconds: 0, isPlaying: false, startedAt: "2026-01-01" })),
   writePlayerSession: (...args: unknown[]) => mockWritePlayer(...args), clearPlayerSession: jest.fn(async () => {}),
   constrainPlayerSessionToScene: jest.fn((value: unknown) => value), advancePlayerSession: jest.fn((value: any) => value),
-  movePlayerSession: jest.fn((value: any, delta: number) => ({ ...value, currentIndex: Math.max(0, Math.min(1, value.currentIndex + delta)) })),
+  movePlayerSession: jest.fn((value: any, _scene: unknown, delta: number) => ({ ...value, currentIndex: Math.max(0, Math.min(1, value.currentIndex + delta)), trackElapsedSeconds: 0 })),
+}));
+jest.mock("../lib/scene-recommendation-feedback", () => ({
+  enqueueStoredSceneRecommendationFeedback: (...args: unknown[]) => mockRecommendationFeedback(...args),
+  recordStoredSceneRecommendationFeedback: jest.fn(async () => []),
 }));
 jest.mock("../lib/canal-share", () => ({ shareSoundscape: (...args: unknown[]) => mockShare(...args) }));
 jest.mock("../lib/snapshots", () => ({ readSnapshots: jest.fn(async () => []), Snapshot: {} }));
@@ -136,7 +141,7 @@ describe("Living Editorial Scene playback interactions", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockParams = { sceneId: "scene-a" };
-    mockAuth = { user: { id: "owner-a" }, accountEpoch: 1, sessionGeneration: 1 };
+    mockAuth = { user: { id: "owner-a" }, accountEpoch: 1, sessionGeneration: "session-1" };
     mockConnectivity = "online";
     mockRecoveryIssue = null;
     mockExport.mockResolvedValue({ exportedTrackCount: 1, playlistUrl: "https://open.spotify.com/playlist/p" });
@@ -322,6 +327,82 @@ describe("Living Editorial Scene playback interactions", () => {
     await act(async () => play.props.onPress());
     expect(mockWritePlayer).toHaveBeenCalled();
     expect(mockBack).toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+  });
+
+  it("records one explicit skip before Next and keeps playback working if feedback fails", async () => {
+    const renderer = await render(React.createElement(NowPlayingScreen));
+    const next = renderer.root.findByProps({ accessibilityLabel: "Next track" });
+    await act(async () => {
+      void next.props.onPress();
+      void next.props.onPress();
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+    expect(mockRecommendationFeedback).toHaveBeenCalledTimes(1);
+    expect(mockRecommendationFeedback).toHaveBeenCalledWith(expect.objectContaining({
+      action: "skip",
+      scene: expect.objectContaining({ id: "scene-a" }),
+      trackIds: ["track-1"],
+    }));
+    expect(mockWritePlayer).toHaveBeenCalledWith(expect.objectContaining({ currentIndex: 1 }));
+
+    await act(async () => renderer.unmount());
+    jest.clearAllMocks();
+    mockRecommendationFeedback.mockRejectedValueOnce(new Error("feedback unavailable"));
+    const failureRenderer = await render(React.createElement(NowPlayingScreen));
+    await act(async () => {
+      await failureRenderer.root.findByProps({ accessibilityLabel: "Next track" }).props.onPress();
+    });
+    expect(mockWritePlayer).toHaveBeenCalledWith(expect.objectContaining({ currentIndex: 1 }));
+    await act(async () => failureRenderer.unmount());
+  });
+
+  it("restarts after three seconds and records replay without moving to the prior track", async () => {
+    const player = jest.requireMock("../lib/canal-player") as any;
+    player.createPlayerSession.mockReturnValueOnce({
+      sceneId: "scene-a",
+      accountKey: "owner-a:1:session-1",
+      currentIndex: 1,
+      elapsedSeconds: 12,
+      trackElapsedSeconds: 4,
+      isPlaying: false,
+      startedAt: "2026-01-01",
+    });
+    const renderer = await render(React.createElement(NowPlayingScreen));
+    await act(async () => {
+      await renderer.root.findByProps({ accessibilityLabel: "Previous track" }).props.onPress();
+    });
+    expect(mockRecommendationFeedback).toHaveBeenCalledWith(expect.objectContaining({
+      action: "replay",
+      trackIds: ["track-2"],
+    }));
+    expect(mockWritePlayer).toHaveBeenCalledWith(expect.objectContaining({
+      currentIndex: 1,
+      trackElapsedSeconds: 0,
+    }));
+    await act(async () => renderer.unmount());
+  });
+
+  it("fences a pending Next across an A to B account transition", async () => {
+    let release!: () => void;
+    mockRecommendationFeedback.mockImplementationOnce(
+      () => new Promise((resolve) => { release = () => resolve([{ outcome: "cloud_synced" }]); }),
+    );
+    const renderer = await render(React.createElement(NowPlayingScreen));
+    let pending!: Promise<void>;
+    await act(async () => {
+      pending = renderer.root.findByProps({ accessibilityLabel: "Next track" }).props.onPress();
+      await Promise.resolve();
+    });
+    mockWritePlayer.mockClear();
+    mockAuth = { user: { id: "owner-b" }, accountEpoch: 2, sessionGeneration: "session-2" };
+    await act(async () => renderer.update(React.createElement(NowPlayingScreen)));
+    mockWritePlayer.mockClear();
+    await act(async () => {
+      release();
+      await pending;
+    });
+    expect(mockWritePlayer).not.toHaveBeenCalledWith(expect.objectContaining({ currentIndex: 1 }));
     await act(async () => renderer.unmount());
   });
 
