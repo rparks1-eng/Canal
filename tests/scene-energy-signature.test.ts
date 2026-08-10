@@ -1,22 +1,31 @@
-import { sceneEnergyBars } from "../components/canal-ui/scene-energy-signature";
+import { sceneArcShape, sceneEnergyArcPoints } from "../components/canal-ui/scene-energy-signature";
 
 const scene = (id: string, energy: string) => ({ id, name: "Signal", activity: "Focus", energy });
 
 describe("Scene energy signatures", () => {
-  it("is deterministic but visually unique by Scene identity", () => {
-    expect(sceneEnergyBars(scene("one", "medium"))).toEqual(sceneEnergyBars(scene("one", "medium")));
-    expect(sceneEnergyBars(scene("one", "medium"))).not.toEqual(sceneEnergyBars(scene("two", "medium")));
+  it("renders a deterministic continuous arc", () => {
+    expect(sceneEnergyArcPoints(scene("one", "medium"))).toEqual(sceneEnergyArcPoints(scene("one", "medium")));
+    expect(sceneEnergyArcPoints(scene("one", "medium"))).toHaveLength(9);
   });
 
   it("makes high energy visibly stronger than low energy", () => {
     const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
-    expect(average(sceneEnergyBars(scene("same", "high")))).toBeGreaterThan(average(sceneEnergyBars(scene("same", "low"))));
+    expect(average(sceneEnergyArcPoints(scene("same", "high")))).toBeGreaterThan(average(sceneEnergyArcPoints(scene("same", "low"))));
   });
 
-  it("keeps every visual bar inside safe display bounds", () => {
-    for (const value of sceneEnergyBars(scene("bounded", "high"))) {
-      expect(value).toBeGreaterThanOrEqual(0.18);
-      expect(value).toBeLessThanOrEqual(1);
+  it("keeps the full line inside safe display bounds", () => {
+    for (const value of sceneEnergyArcPoints(scene("bounded", "high"))) {
+      expect(value).toBeGreaterThanOrEqual(0.1);
+      expect(value).toBeLessThanOrEqual(0.94);
     }
+  });
+
+  it("maps saved Scene arcs to visibly different line shapes", () => {
+    const steady = { ...scene("same", "medium"), sceneArc: "steady" };
+    const build = { ...scene("same", "medium"), sceneArc: "build" };
+    const waves = { ...scene("same", "medium"), sceneArc: "waves" };
+    expect(sceneArcShape(build)).toBe("build");
+    expect(sceneEnergyArcPoints(build)[0]).toBeLessThan(sceneEnergyArcPoints(build)[8]);
+    expect(sceneEnergyArcPoints(waves)).not.toEqual(sceneEnergyArcPoints(steady));
   });
 });

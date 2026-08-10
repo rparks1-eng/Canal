@@ -2760,6 +2760,9 @@ export function generateSceneFromSpotify(
     energy:
       draft.energy,
 
+    sceneArc:
+      draft.arc,
+
     familiarity:
       sceneFamiliarityFromLevel(
         getSceneFamiliarityLevel(draft),

@@ -661,7 +661,7 @@ export function sceneRecommendationDraftFromStoredScene(scene: StoredScene): Sce
     ? scene.energy as SceneStudioDraft["energy"]
     : fallback.energy;
   const sceneArc = typeof scene.sceneArc === "string" ? scene.sceneArc : "";
-  const arc = ["steady", "build", "wave", "peak-and-release"].includes(sceneArc)
+  const arc = ["steady", "build", "waves"].includes(sceneArc)
     ? sceneArc as SceneStudioDraft["arc"]
     : fallback.arc;
   const familiarityLevel = scene.familiarity === "familiar" ? 0 : scene.familiarity === "discovery" ? 100 : 50;
