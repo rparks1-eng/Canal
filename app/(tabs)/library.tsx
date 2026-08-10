@@ -54,6 +54,7 @@ import {
 
 import { SceneCardBackdrop } from "../../components/canal-ui/scene-card-visual";
 import { SceneEnergySignature } from "../../components/canal-ui/scene-energy-signature";
+import { SceneMoodBreakdown } from "../../components/canal-ui/scene-mood-breakdown";
 
 import {
   useReconnectReload,
@@ -1204,6 +1205,7 @@ export default function LibraryScreen() {
                             ? `Saved from ${sourceHandle || "another creator"}`
                             : "Created by you"}
                         </Text>
+                        <SceneMoodBreakdown compact={layout === "grid"} scene={scene} style={styles.sceneMoodMix} />
                       </View>
 
                       <Pressable
@@ -1829,6 +1831,11 @@ const styles =
       color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
+    },
+
+    sceneMoodMix: {
+      marginTop: 6,
+      maxWidth: 190,
     },
 
     arrow: {

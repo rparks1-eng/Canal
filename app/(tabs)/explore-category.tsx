@@ -20,6 +20,7 @@ import { SceneCardBackdrop } from "../../components/canal-ui/scene-card-visual";
 import { scenePresentation } from "../../components/canal-ui/scene-signature";
 import { ProfileAvatar } from "../../components/profile-avatar";
 import { SceneEnergySignature } from "../../components/canal-ui/scene-energy-signature";
+import { SceneMoodBreakdown } from "../../components/canal-ui/scene-mood-breakdown";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
 import {
   exploreCategoryIcon,
@@ -61,6 +62,7 @@ function CategorySceneCard({ item, showPlays = false }: { item: PublicCanalScene
         {item.scene.activity || "Any activity"} · {item.scene.emotions || "Open mood"}
       </Text>
       <SceneEnergySignature accent={presentation.accent} compact scene={item.scene} />
+      <SceneMoodBreakdown compact scene={item.scene} />
       <View style={styles.creatorRow}>
         <ProfileAvatar avatarUrl={item.creator.avatarUrl} displayName={item.creator.displayName} size={32} />
         <Text numberOfLines={1} style={styles.creatorName}>{item.creator.displayName}</Text>

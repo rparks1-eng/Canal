@@ -38,6 +38,7 @@ import Animated, {
 
 import { ProfileAvatar } from "../../components/profile-avatar";
 import { SceneEnergySignature } from "../../components/canal-ui/scene-energy-signature";
+import { SceneMoodBreakdown } from "../../components/canal-ui/scene-mood-breakdown";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
 import {
   scenePresentation,
@@ -329,6 +330,7 @@ function PublicSceneCard(
           </View>
         </View>
         <SceneEnergySignature accent={presentation.accent} compact scene={item.scene} style={styles.publicSceneEnergy} />
+        <SceneMoodBreakdown compact scene={item.scene} style={styles.publicSceneMood} />
       </Pressable>
 
       <View
@@ -1855,6 +1857,10 @@ const styles =
         publicSceneEnergy: {
           width: 112,
           marginTop: 10,
+        },
+        publicSceneMood: {
+          marginTop: 8,
+          maxWidth: 220,
         },
 
     artwork: {
