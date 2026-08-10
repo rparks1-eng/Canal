@@ -218,7 +218,7 @@ export default function ExploreCategoryScreen() {
               <View style={styles.sectionHeading}><VerifiedAccountBadge size={17} /><Text style={styles.sectionTitle}>Highlighted Scenes</Text></View>
               <Text style={styles.sectionSubtitle}>Selected from verified creators in this category.</Text>
               {highlighted.length > 0 ? (
-                <View style={styles.results}>{highlighted.map((item) => <CategorySceneCard item={item} key={`highlight:${item.ownerId}:${item.sceneId}`} />)}</View>
+                <View style={styles.results}>{highlighted.map((item) => <View key={`highlight:${item.ownerId}:${item.sceneId}`} style={styles.gridItem}><CategorySceneCard item={item} /></View>)}</View>
               ) : (
                 <View style={styles.sectionEmpty}><Text style={styles.sectionEmptyText}>No verified Scenes are featured here yet.</Text></View>
               )}
@@ -228,8 +228,8 @@ export default function ExploreCategoryScreen() {
               <Text style={styles.sectionSubtitle}>The most-played Scenes and most-listened-to live Stages here.</Text>
               {popularScenes.length > 0 || popularStages.length > 0 ? (
                 <View style={styles.results}>
-                  {popularScenes.map((item) => <CategorySceneCard item={item} key={`popular:${item.ownerId}:${item.sceneId}`} showPlays />)}
-                  {popularStages.map((stage) => <CategoryStageCard key={`stage:${stage.id}`} stage={stage} />)}
+                  {popularScenes.map((item) => <View key={`popular:${item.ownerId}:${item.sceneId}`} style={styles.gridItem}><CategorySceneCard item={item} showPlays /></View>)}
+                  {popularStages.map((stage) => <View key={`stage:${stage.id}`} style={styles.gridItem}><CategoryStageCard stage={stage} /></View>)}
                 </View>
               ) : (
                 <View style={styles.sectionEmpty}><Text style={styles.sectionEmptyText}>Popularity appears after matching Scenes or Stages have listening activity.</Text></View>
@@ -240,7 +240,7 @@ export default function ExploreCategoryScreen() {
               <Text style={styles.sectionSubtitle}>Every public Scene in this category.</Text>
               <View style={styles.results}>
                 {results.map((item, index) => (
-                  <Animated.View entering={FadeInUp.duration(260).delay(Math.min(index, 8) * 35)} key={`${item.ownerId}:${item.sceneId}`}>
+                  <Animated.View entering={FadeInUp.duration(260).delay(Math.min(index, 8) * 35)} key={`${item.ownerId}:${item.sceneId}`} style={styles.gridItem}>
                     <CategorySceneCard item={item} />
                   </Animated.View>
                 ))}
@@ -270,15 +270,16 @@ const styles = StyleSheet.create({
   sectionSubtitle: { color: canalDynamicColors.muted, fontSize: 11, lineHeight: 16 },
   sectionEmpty: { minHeight: 58, justifyContent: "center", borderRadius: 17, borderCurve: "continuous", backgroundColor: canalDynamicColors.surface, paddingHorizontal: 15 },
   sectionEmptyText: { color: canalDynamicColors.muted, fontSize: 11, lineHeight: 16 },
-  results: { gap: 10 },
-  sceneCard: { minHeight: 132, overflow: "hidden", gap: 10, borderRadius: 23, borderCurve: "continuous", borderWidth: 1, padding: 16, boxShadow: "0 12px 30px rgba(2, 28, 47, 0.16)" },
+  results: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
+  gridItem: { width: "48.6%" },
+  sceneCard: { minHeight: 150, overflow: "hidden", gap: 8, borderRadius: 21, borderCurve: "continuous", borderWidth: 1, padding: 13, boxShadow: "0 12px 30px rgba(2, 28, 47, 0.16)" },
   sceneHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  sceneName: { flex: 1, color: canalDynamicColors.text, fontFamily: "Georgia", fontSize: 22, fontWeight: "500" },
+  sceneName: { flex: 1, color: canalDynamicColors.text, fontFamily: "Georgia", fontSize: 17, fontWeight: "500" },
   sceneCount: { fontSize: 10, fontWeight: "900" },
   sceneMeta: { color: canalDynamicColors.muted, fontSize: 11 },
-  creatorRow: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 8 },
+  creatorRow: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 6 },
   creatorName: { flex: 1, color: canalDynamicColors.text, fontSize: 12, fontWeight: "800" },
-  stageCard: { minHeight: 74, flexDirection: "row", alignItems: "center", gap: 11, borderRadius: 20, borderCurve: "continuous", borderWidth: 1, borderColor: canalDynamicColors.line, backgroundColor: canalDynamicColors.surface, paddingHorizontal: 14 },
+  stageCard: { minHeight: 150, justifyContent: "space-between", gap: 10, borderRadius: 20, borderCurve: "continuous", borderWidth: 1, borderColor: canalDynamicColors.line, backgroundColor: canalDynamicColors.surface, padding: 13 },
   livePill: { minHeight: 28, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 14, backgroundColor: canalDynamicColors.dangerSurface, paddingHorizontal: 9 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: canalDynamicColors.danger },
   liveText: { color: canalDynamicColors.danger, fontSize: 8, fontWeight: "900", letterSpacing: 1 },

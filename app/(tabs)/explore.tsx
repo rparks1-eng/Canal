@@ -461,7 +461,6 @@ function FacetRail(props: {
               })}
               style={({ pressed }) => [
                 styles.categoryCard,
-                { borderColor: `${props.accent}55`, backgroundColor: `${props.accent}16` },
                 pressed && styles.pressed,
               ]}
             >
@@ -469,9 +468,9 @@ function FacetRail(props: {
                 <View style={[styles.categoryOrb, styles.categoryOrbOne, { backgroundColor: `${props.accent}68` }]} />
                 <View style={[styles.categoryOrb, styles.categoryOrbTwo, { backgroundColor: `${props.accent}38` }]} />
                 <Ionicons color={props.accent} name={icon as never} size={28 + (index % 2)} />
+                <View style={styles.categoryLabelScrim} />
+                <Text numberOfLines={2} style={styles.categoryCardLabel}>{value}</Text>
               </View>
-              <Text numberOfLines={2} style={styles.categoryCardLabel}>{value}</Text>
-              <Text style={styles.categoryCardHint}>View Scenes</Text>
             </Pressable>
           );
         })}
@@ -1414,21 +1413,16 @@ const styles =
       paddingRight: 20,
     },
 
-    categoryCard: {
-      width: 106,
-      minHeight: 132,
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 7,
-      padding: 10,
-      borderWidth: 1,
-      borderRadius: 20,
-      borderCurve: "continuous",
-    },
+        categoryCard: {
+          width: 82,
+          minHeight: 82,
+          alignItems: "center",
+          justifyContent: "center",
+        },
 
-    categoryArtwork: {
-      width: 68,
-      height: 68,
+        categoryArtwork: {
+          width: 78,
+          height: 78,
       overflow: "hidden",
       alignItems: "center",
       justifyContent: "center",
@@ -1455,20 +1449,29 @@ const styles =
       top: -9,
     },
 
-    categoryCardLabel: {
-      minHeight: 28,
-      color: canalDynamicColors.text,
-      fontSize: 12,
-      fontWeight: "900",
-      textAlign: "center",
-      textTransform: "capitalize",
-    },
+        categoryCardLabel: {
+          position: "absolute",
+          left: 6,
+          right: 6,
+          bottom: 7,
+          color: "#FFFFFF",
+          fontSize: 10,
+          fontWeight: "900",
+          textAlign: "center",
+          textTransform: "capitalize",
+          textShadowColor: "rgba(0,0,0,0.56)",
+          textShadowOffset: { width: 0, height: 1 },
+          textShadowRadius: 3,
+        },
 
-    categoryCardHint: {
-      color: canalDynamicColors.muted,
-      fontSize: 9,
-      fontWeight: "700",
-    },
+        categoryLabelScrim: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 34,
+          backgroundColor: "rgba(4, 18, 34, 0.34)",
+        },
 
     discoveryChip: {
       minHeight: 48,

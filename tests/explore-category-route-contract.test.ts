@@ -11,6 +11,8 @@ describe("Explore category route", () => {
     expect(exploreSource).toContain('pathname: "/explore-category"');
     expect(exploreSource).toContain("Open ${value} ${props.kind} Scenes");
     expect(exploreSource).toContain("exploreCategoryIcon(props.kind, value)");
+    expect(exploreSource).toContain("styles.categoryLabelScrim");
+    expect(exploreSource).not.toContain("View Scenes</Text>");
     expect(layoutSource).toContain('name="explore-category"');
     expect(layoutSource).toMatch(/name="explore-category"[\s\S]*?href: null/u);
   });
@@ -24,6 +26,8 @@ describe("Explore category route", () => {
     expect(categorySource).toContain("Highlighted Scenes");
     expect(categorySource).toContain("Popular Now");
     expect(categorySource).toContain("All Scenes");
+    expect(categorySource).toContain('gridItem: { width: "48.6%" }');
+    expect(categorySource).toContain('flexWrap: "wrap"');
     expect(categorySource).toContain("No verified Scenes are featured here yet.");
     expect(categorySource).toContain("Popularity appears after matching Scenes or Stages have listening activity.");
     expect(categorySource).toContain("stage.listenerCount > 0");
