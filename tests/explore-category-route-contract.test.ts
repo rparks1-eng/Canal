@@ -24,6 +24,8 @@ describe("Explore category route", () => {
     expect(categorySource).toContain("Highlighted Scenes");
     expect(categorySource).toContain("Popular Now");
     expect(categorySource).toContain("All Scenes");
+    expect(categorySource).toContain("No verified Scenes are featured here yet.");
+    expect(categorySource).toContain("Popularity appears after matching Scenes or Stages have listening activity.");
     expect(categorySource).toContain("stage.listenerCount > 0");
     expect(categorySource).toContain("right.listenerCount - left.listenerCount");
     expect(categorySource).not.toContain('accessibilityRole="radiogroup"');

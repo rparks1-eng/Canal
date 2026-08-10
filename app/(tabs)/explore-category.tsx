@@ -214,23 +214,27 @@ export default function ExploreCategoryScreen() {
           </View>
         ) : (
           <>
-            {highlighted.length > 0 ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeading}><VerifiedAccountBadge size={17} /><Text style={styles.sectionTitle}>Highlighted Scenes</Text></View>
-                <Text style={styles.sectionSubtitle}>Selected from verified creators in this category.</Text>
+            <View style={styles.section}>
+              <View style={styles.sectionHeading}><VerifiedAccountBadge size={17} /><Text style={styles.sectionTitle}>Highlighted Scenes</Text></View>
+              <Text style={styles.sectionSubtitle}>Selected from verified creators in this category.</Text>
+              {highlighted.length > 0 ? (
                 <View style={styles.results}>{highlighted.map((item) => <CategorySceneCard item={item} key={`highlight:${item.ownerId}:${item.sceneId}`} />)}</View>
-              </View>
-            ) : null}
-            {popularScenes.length > 0 || popularStages.length > 0 ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeading}><Ionicons color={accent} name="trending-up-outline" size={19} /><Text style={styles.sectionTitle}>Popular Now</Text></View>
-                <Text style={styles.sectionSubtitle}>The most-played Scenes and most-listened-to live Stages here.</Text>
+              ) : (
+                <View style={styles.sectionEmpty}><Text style={styles.sectionEmptyText}>No verified Scenes are featured here yet.</Text></View>
+              )}
+            </View>
+            <View style={styles.section}>
+              <View style={styles.sectionHeading}><Ionicons color={accent} name="trending-up-outline" size={19} /><Text style={styles.sectionTitle}>Popular Now</Text></View>
+              <Text style={styles.sectionSubtitle}>The most-played Scenes and most-listened-to live Stages here.</Text>
+              {popularScenes.length > 0 || popularStages.length > 0 ? (
                 <View style={styles.results}>
                   {popularScenes.map((item) => <CategorySceneCard item={item} key={`popular:${item.ownerId}:${item.sceneId}`} showPlays />)}
                   {popularStages.map((stage) => <CategoryStageCard key={`stage:${stage.id}`} stage={stage} />)}
                 </View>
-              </View>
-            ) : null}
+              ) : (
+                <View style={styles.sectionEmpty}><Text style={styles.sectionEmptyText}>Popularity appears after matching Scenes or Stages have listening activity.</Text></View>
+              )}
+            </View>
             <View style={styles.section}>
               <View style={styles.sectionHeading}><Ionicons color={accent} name="albums-outline" size={19} /><Text style={styles.sectionTitle}>All Scenes</Text></View>
               <Text style={styles.sectionSubtitle}>Every public Scene in this category.</Text>
@@ -264,6 +268,8 @@ const styles = StyleSheet.create({
   sectionHeading: { minHeight: 28, flexDirection: "row", alignItems: "center", gap: 8 },
   sectionTitle: { color: canalDynamicColors.text, fontSize: 18, fontWeight: "900" },
   sectionSubtitle: { color: canalDynamicColors.muted, fontSize: 11, lineHeight: 16 },
+  sectionEmpty: { minHeight: 58, justifyContent: "center", borderRadius: 17, borderCurve: "continuous", backgroundColor: canalDynamicColors.surface, paddingHorizontal: 15 },
+  sectionEmptyText: { color: canalDynamicColors.muted, fontSize: 11, lineHeight: 16 },
   results: { gap: 10 },
   sceneCard: { minHeight: 132, overflow: "hidden", gap: 10, borderRadius: 23, borderCurve: "continuous", borderWidth: 1, padding: 16, boxShadow: "0 12px 30px rgba(2, 28, 47, 0.16)" },
   sceneHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
