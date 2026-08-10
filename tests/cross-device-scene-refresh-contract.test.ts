@@ -8,7 +8,7 @@ describe("cross-device Scene refresh", () => {
     const library = read("app/(tabs)/library.tsx");
 
     expect(library).toContain('import {\n  syncScenesWithCloud,\n} from "../../lib/scene-sync";');
-    expect(library).toMatch(/await syncScenesWithCloud\(\);[\s\S]*setScenes\(\s*await readScenes\(\),/);
+    expect(library).toMatch(/await syncScenesWithCloud\(\);[\s\S]*readScenes\(\)[\s\S]*setScenes\(nextScenes\)/);
     expect(library).toContain("showing the latest local Library instead");
   });
 

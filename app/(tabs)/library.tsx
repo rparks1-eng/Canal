@@ -34,6 +34,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 
 import {
   RecoveryNotice,
@@ -80,6 +81,14 @@ import {
 } from "../../lib/scene-sync";
 
 import {
+  readSnapshotsWithStatus,
+} from "../../lib/snapshots";
+
+import type {
+  Snapshot,
+} from "../../lib/snapshots";
+
+import {
   removeSavedSceneCompletely,
 } from "../../lib/saved-scene-management";
 
@@ -101,6 +110,17 @@ type LibraryLayout =
   | "list"
   | "grid";
 
+type LibrarySection =
+  | "scenes"
+  | "snapshots";
+
+type SnapshotFilter =
+  | "all"
+  | "public"
+  | "private"
+  | "photo"
+  | "video";
+
 export default function LibraryScreen() {
   const {
     refresh:
@@ -117,6 +137,26 @@ export default function LibraryScreen() {
     useState<
       StoredScene[]
     >([]);
+
+  const [
+    snapshots,
+    setSnapshots,
+  ] = useState<Snapshot[]>([]);
+
+  const [
+    section,
+    setSection,
+  ] = useState<LibrarySection>("scenes");
+
+  const [
+    snapshotFilter,
+    setSnapshotFilter,
+  ] = useState<SnapshotFilter>("all");
+
+  const [
+    snapshotWarning,
+    setSnapshotWarning,
+  ] = useState("");
 
   const [
     query,
@@ -230,9 +270,17 @@ export default function LibraryScreen() {
             );
           }
 
-          setScenes(
-            await readScenes(),
-          );
+          const [
+            nextScenes,
+            snapshotResult,
+          ] = await Promise.all([
+            readScenes(),
+            readSnapshotsWithStatus(),
+          ]);
+
+          setScenes(nextScenes);
+          setSnapshots(snapshotResult.value);
+          setSnapshotWarning(snapshotResult.warning ?? "");
         } catch (error) {
           setLoadIssue(
             classifyRecoveryIssue(
@@ -363,6 +411,42 @@ export default function LibraryScreen() {
         query,
         scenes,
       ],
+    );
+
+  const filteredSnapshots =
+    useMemo(
+      () => {
+        const needle = query.trim().toLowerCase();
+
+        return snapshots.filter((snapshot) => {
+          const matchesFilter =
+            snapshotFilter === "all" ||
+            snapshot.visibility === snapshotFilter ||
+            snapshot.mediaType === snapshotFilter;
+
+          if (!matchesFilter) {
+            return false;
+          }
+
+          if (!needle) {
+            return true;
+          }
+
+          return [
+            snapshot.sceneName,
+            snapshot.sceneActivity,
+            snapshot.trackTitle,
+            snapshot.trackArtist,
+            snapshot.note,
+            snapshot.mood,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(needle);
+        });
+      },
+      [query, snapshotFilter, snapshots],
     );
 
   const changeVisibility =
@@ -584,14 +668,46 @@ export default function LibraryScreen() {
                 styles.subtitle
               }
             >
-              Scenes you made, saved, and returned to—kept in one living collection.
+              Scenes and Snapshots you made, saved, and returned to—kept in one living collection.
             </Text>
           </View>
 
             <CanalHeaderActions />
         </Animated.View>
 
-        <Pressable
+        <View accessibilityRole="tablist" style={styles.sectionToggle}>
+          {(["scenes", "snapshots"] as LibrarySection[]).map((value) => (
+            <Pressable
+              key={value}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: section === value }}
+              accessibilityLabel={`${value === "scenes" ? "Scenes" : "Snapshots"} Library`}
+              onPress={() => {
+                setSection(value);
+                setQuery("");
+                setAnimationRevision((current) => current + 1);
+              }}
+              style={[
+                styles.sectionButton,
+                section === value && styles.sectionButtonSelected,
+              ]}
+            >
+              <Ionicons
+                name={value === "scenes" ? "musical-notes-outline" : "camera-outline"}
+                size={17}
+                color={section === value ? canalDynamicColors.text : canalDynamicColors.muted}
+              />
+              <Text style={[
+                styles.sectionButtonText,
+                section === value && styles.sectionButtonTextSelected,
+              ]}>
+                {value === "scenes" ? `Scenes ${scenes.length}` : `Snapshots ${snapshots.length}`}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {section === "scenes" ? <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open Scene collaboration"
           accessibilityHint="Review collaboration invitations and shared Scenes."
@@ -631,7 +747,7 @@ export default function LibraryScreen() {
           >
             ›
           </Text>
-        </Pressable>
+        </Pressable> : null}
 
         <TextInput
           accessibilityLabel="Search your Library"
@@ -641,7 +757,7 @@ export default function LibraryScreen() {
           onChangeText={
             setQuery
           }
-          placeholder="Search your Library"
+          placeholder={section === "scenes" ? "Search Scenes" : "Search Snapshots"}
           placeholderTextColor={canalDynamicColors.muted}
           autoCapitalize="none"
           autoCorrect={
@@ -657,13 +773,9 @@ export default function LibraryScreen() {
             styles.filters
           }
         >
-          {(
-            [
-              "all",
-              "created",
-              "saved",
-              "favorites",
-            ] as LibraryFilter[]
+          {(section === "scenes"
+            ? (["all", "created", "saved", "favorites"] as const)
+            : (["all", "public", "private", "photo", "video"] as const)
           ).map(
             (value) => (
               <Pressable
@@ -672,14 +784,16 @@ export default function LibraryScreen() {
                 }
                 accessibilityRole="button"
                 accessibilityState={{
-                  selected:
-                    filter ===
-                    value,
+                  selected: section === "scenes"
+                    ? filter === value
+                    : snapshotFilter === value,
                 }}
                 onPress={() => {
-                  setFilter(
-                    value,
-                  );
+                  if (section === "scenes") {
+                    setFilter(value as LibraryFilter);
+                  } else {
+                    setSnapshotFilter(value as SnapshotFilter);
+                  }
                   setAnimationRevision(
                     (current) =>
                       current + 1,
@@ -688,8 +802,7 @@ export default function LibraryScreen() {
                 style={[
                   styles.filterButton,
 
-                  filter ===
-                    value &&
+                  (section === "scenes" ? filter === value : snapshotFilter === value) &&
                     styles.filterSelected,
                 ]}
               >
@@ -697,8 +810,7 @@ export default function LibraryScreen() {
                   style={[
                     styles.filterText,
 
-                    filter ===
-                      value &&
+                    (section === "scenes" ? filter === value : snapshotFilter === value) &&
                       styles.filterTextSelected,
                   ]}
                 >
@@ -765,6 +877,10 @@ export default function LibraryScreen() {
           />
         ) : null}
 
+        {section === "snapshots" && snapshotWarning ? (
+          <Notice text={snapshotWarning} />
+        ) : null}
+
         {loadIssue ? (
           <RecoveryNotice
             busy={
@@ -790,8 +906,8 @@ export default function LibraryScreen() {
             />
           </View>
         ) : loadIssue &&
-          scenes.length ===
-            0 ? null : filteredScenes.length ===
+          (section === "scenes" ? scenes.length : snapshots.length) ===
+            0 ? null : (section === "scenes" ? filteredScenes.length : filteredSnapshots.length) ===
           0 ? (
           <View
             style={
@@ -803,11 +919,9 @@ export default function LibraryScreen() {
                 styles.emptyTitle
               }
             >
-              {query.trim() ||
-              filter !==
-                "all"
-                ? "No matching Scenes"
-                : "Your Library is empty"}
+              {query.trim() || (section === "scenes" ? filter !== "all" : snapshotFilter !== "all")
+                ? `No matching ${section === "scenes" ? "Scenes" : "Snapshots"}`
+                : `No ${section === "scenes" ? "Scenes" : "Snapshots"} yet`}
             </Text>
 
             <Text
@@ -815,11 +929,11 @@ export default function LibraryScreen() {
                 styles.emptyText
               }
             >
-              {query.trim() ||
-              filter !==
-                "all"
+              {query.trim() || (section === "scenes" ? filter !== "all" : snapshotFilter !== "all")
                 ? "Try another search or filter."
-                : "Create a Scene or save one from Explore. Saved work remains available when you’re offline."}
+                : section === "scenes"
+                  ? "Create a Scene or save one from Explore. Saved work remains available when you’re offline."
+                  : "Capture a Snapshot from a Scene or Stage. Private and public moments will both appear here."}
             </Text>
           </View>
         ) : (
@@ -829,7 +943,7 @@ export default function LibraryScreen() {
               layout === "grid" && styles.grid,
             ]}
           >
-            {filteredScenes.map(
+            {section === "scenes" ? filteredScenes.map(
               (scene, index) => {
                 const busy =
                   busySceneId ===
@@ -1009,7 +1123,70 @@ export default function LibraryScreen() {
                   </Animated.View>
                 );
               },
-            )}
+            ) : filteredSnapshots.map((snapshot, index) => (
+              <Animated.View
+                key={`${animationRevision}:${snapshot.id}`}
+                entering={FadeInUp.duration(300).delay(Math.min(index, 7) * 42)}
+                style={[
+                  styles.snapshotWrapper,
+                  layout === "grid" && styles.snapshotWrapperGrid,
+                ]}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${snapshot.sceneName} Snapshot`}
+                  onPress={() => router.push({
+                    pathname: "/snapshots/[snapshotId]",
+                    params: { snapshotId: snapshot.id },
+                  } as never)}
+                  style={({ pressed }) => [
+                    styles.snapshotCard,
+                    layout === "grid" && styles.snapshotCardGrid,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={[
+                    styles.snapshotArtwork,
+                    layout === "grid" && styles.snapshotArtworkGrid,
+                  ]}>
+                    {snapshot.mediaUri || snapshot.trackImageUrl ? (
+                      <Image
+                        source={{ uri: snapshot.mediaUri || snapshot.trackImageUrl }}
+                        contentFit="cover"
+                        transition={160}
+                        style={styles.snapshotImage}
+                      />
+                    ) : (
+                      <Ionicons name="camera-outline" size={23} color={canalDynamicColors.gold} />
+                    )}
+                    {snapshot.mediaType === "video" ? (
+                      <View style={styles.videoBadge}>
+                        <Ionicons name="play" size={12} color={canalDynamicColors.text} />
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.snapshotCopy}>
+                    <Text numberOfLines={1} style={styles.snapshotName}>{snapshot.sceneName}</Text>
+                    <Text numberOfLines={1} style={styles.snapshotTrack}>
+                      {snapshot.trackTitle
+                        ? `${snapshot.trackTitle}${snapshot.trackArtist ? ` · ${snapshot.trackArtist}` : ""}`
+                        : "Scene moment"}
+                    </Text>
+                    <View style={styles.snapshotMetaRow}>
+                      <Ionicons
+                        name={snapshot.visibility === "public" ? "globe-outline" : "lock-closed-outline"}
+                        size={13}
+                        color={canalDynamicColors.muted}
+                      />
+                      <Text numberOfLines={1} style={styles.snapshotMeta}>
+                        {snapshot.visibility} · {snapshot.mediaType ?? "template"}
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={canalDynamicColors.muted} />
+                </Pressable>
+              </Animated.View>
+            ))}
           </View>
         )}
       </ScrollView>
@@ -1143,6 +1320,40 @@ const styles =
       boxShadow: "0 14px 34px rgba(2, 31, 46, 0.14)",
     },
 
+    sectionToggle: {
+      minHeight: 52,
+      flexDirection: "row",
+      padding: 4,
+      borderRadius: 17,
+      backgroundColor: canalDynamicColors.surface,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+    },
+
+    sectionButton: {
+      flex: 1,
+      minHeight: 44,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      borderRadius: 13,
+    },
+
+    sectionButtonSelected: {
+      backgroundColor: canalDynamicColors.warningSurface,
+    },
+
+    sectionButtonText: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    sectionButtonTextSelected: {
+      color: canalDynamicColors.text,
+    },
+
     collaborationTitle: {
       color: canalDynamicColors.text,
       fontSize: 15,
@@ -1173,6 +1384,7 @@ const styles =
 
     filters: {
       flexDirection: "row",
+      flexWrap: "wrap",
       alignItems: "center",
       gap: 8,
       marginTop: 0,
@@ -1244,6 +1456,100 @@ const styles =
 
     sceneWrapperGrid: {
       width: "48.6%",
+    },
+
+    snapshotWrapper: {
+      width: "100%",
+    },
+
+    snapshotWrapperGrid: {
+      width: "48.6%",
+    },
+
+    snapshotCard: {
+      minHeight: 82,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      padding: 11,
+      borderRadius: 19,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.surface,
+      overflow: "hidden",
+      boxShadow: "0 12px 28px rgba(2, 30, 45, 0.11)",
+    },
+
+    snapshotCardGrid: {
+      minHeight: 205,
+      flexDirection: "column",
+      alignItems: "stretch",
+      gap: 9,
+      padding: 10,
+    },
+
+    snapshotArtwork: {
+      width: 60,
+      height: 60,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+      backgroundColor: canalDynamicColors.warningSurface,
+    },
+
+    snapshotArtworkGrid: {
+      width: "100%",
+      height: 116,
+      borderRadius: 14,
+    },
+
+    snapshotImage: {
+      width: "100%",
+      height: "100%",
+    },
+
+    videoBadge: {
+      position: "absolute",
+      right: 6,
+      bottom: 6,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(4, 19, 29, 0.72)",
+    },
+
+    snapshotCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    snapshotName: {
+      color: canalDynamicColors.text,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    snapshotTrack: {
+      marginTop: 4,
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+    },
+
+    snapshotMetaRow: {
+      marginTop: 7,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+    },
+
+    snapshotMeta: {
+      flex: 1,
+      color: canalDynamicColors.muted,
+      fontSize: 10,
+      textTransform: "capitalize",
     },
 
     sceneCard: {
