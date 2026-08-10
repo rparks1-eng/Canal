@@ -12,7 +12,8 @@ import {
 import {
     ActivityIndicator,
     Alert,
-    Linking,
+  Linking,
+  Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -265,6 +266,7 @@ function SnapshotDetailContent() {
   const [commentText, setCommentText] = useState("");
   const [replyingTo, setReplyingTo] = useState<SnapshotComment | null>(null);
   const [showManagement, setShowManagement] = useState(false);
+  const [showConversation, setShowConversation] = useState(false);
 
   const loadSnapshot =
     useCallback(async () => {
@@ -936,25 +938,18 @@ function SnapshotDetailContent() {
             Snapshot
           </Text>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              void handleShare();
-            }}
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Text
-              style={
-                styles.headerAction
-              }
+          {canEdit ? (
+            <Pressable
+              accessibilityLabel="Manage Snapshot"
+              accessibilityHint="Shows edit, visibility, and delete options"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showManagement }}
+              onPress={() => setShowManagement(true)}
+              style={({ pressed }) => [styles.headerMenuButton, pressed && styles.pressed]}
             >
-              Share
-            </Text>
-          </Pressable>
+              <Ionicons name="ellipsis-horizontal" size={22} color={canalDynamicColors.text} />
+            </Pressable>
+          ) : <View style={styles.headerMenuButton} />}
         </View>
 
         <SnapshotComposition snapshot={snapshot} ref={compositionRef} overlayRef={overlayRef} height={500} />
@@ -975,10 +970,17 @@ function SnapshotDetailContent() {
             <Text style={styles.socialActionCount}>{social.summary.likeCount}</Text>
           </Pressable>
 
-          <View accessibilityLabel={`${social.summary.commentCount} comments`} style={styles.socialActionButton}>
+          <Pressable
+            accessibilityLabel={`${social.summary.commentCount} comments`}
+            accessibilityHint={showConversation ? "Hides the Snapshot conversation" : "Shows the Snapshot conversation"}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showConversation }}
+            onPress={() => setShowConversation((value) => !value)}
+            style={({ pressed }) => [styles.socialActionButton, pressed && styles.pressed]}
+          >
             <Ionicons name="chatbubble-outline" size={22} color={canalDynamicColors.text} />
             <Text style={styles.socialActionCount}>{social.summary.commentCount}</Text>
-          </View>
+          </Pressable>
 
           {canonicalSpotifyTrackUrl(snapshot.spotifyUrl) ? (
             <Pressable
@@ -1040,7 +1042,7 @@ function SnapshotDetailContent() {
           </View>
         ) : null}
 
-        <View style={styles.commentsSection}>
+        {showConversation ? <View style={styles.commentsSection}>
           <Text style={styles.commentsTitle}>Conversation</Text>
           {socialLoading ? <ActivityIndicator color="#ff7a1a" /> : null}
           {!socialLoading && social.comments.length === 0 ? (
@@ -1110,24 +1112,43 @@ function SnapshotDetailContent() {
               {socialAction === "comment" ? <ActivityIndicator color={canalDynamicColors.text} /> : <Ionicons name="arrow-up" size={20} color={canalDynamicColors.text} />}
             </Pressable>
           </View>
-        </View>
-
-        {canEdit ? (
-          <Pressable
-            accessibilityLabel={showManagement ? "Hide Snapshot management" : "Manage Snapshot"}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: showManagement }}
-            onPress={() => setShowManagement((value) => !value)}
-            style={({ pressed }) => [styles.manageButton, pressed && styles.pressed]}
-          >
-            <Ionicons name="options-outline" size={20} color={canalDynamicColors.text} />
-            <Text style={styles.manageButtonText}>Manage Snapshot</Text>
-            <Ionicons name={showManagement ? "chevron-up" : "chevron-down"} size={18} color={canalDynamicColors.muted} />
-          </Pressable>
-        ) : null}
+        </View> : null}
 
         {canEdit && showManagement ? (
-          <>
+          <Modal
+            animationType="slide"
+            transparent
+            visible
+            onRequestClose={() => setShowManagement(false)}
+          >
+            <Pressable
+              onPress={() => setShowManagement(false)}
+              style={styles.managementBackdrop}
+            >
+              <Pressable
+                accessibilityRole="none"
+                onPress={(event) => event.stopPropagation()}
+                style={styles.managementSheet}
+              >
+                <View style={styles.managementHeader}>
+                  <View>
+                    <Text style={styles.managementEyebrow}>SNAPSHOT OPTIONS</Text>
+                    <Text style={styles.managementTitle}>Edit your moment</Text>
+                  </View>
+                  <Pressable
+                    accessibilityLabel="Close Snapshot options"
+                    accessibilityRole="button"
+                    onPress={() => setShowManagement(false)}
+                    style={styles.managementClose}
+                  >
+                    <Ionicons name="close" size={21} color={canalDynamicColors.text} />
+                  </Pressable>
+                </View>
+                <ScrollView
+                  contentContainerStyle={styles.managementContent}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
 
         <View
           style={
@@ -1350,7 +1371,10 @@ function SnapshotDetailContent() {
             )}
           </Pressable>
         ) : null}
-          </>
+                </ScrollView>
+              </Pressable>
+            </Pressable>
+          </Modal>
         ) : null}
       </ScrollView>
     </SafeAreaView>
@@ -1470,6 +1494,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     textAlign: "right",
+  },
+
+  headerMenuButton: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 24,
   },
 
   socialBar: {
@@ -1674,6 +1706,62 @@ const styles = StyleSheet.create({
     color: canalDynamicColors.text,
     fontSize: 13,
     fontWeight: "800",
+  },
+
+  managementBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    backgroundColor: "rgba(2, 12, 18, 0.58)",
+  },
+
+  managementSheet: {
+    maxHeight: "86%",
+    overflow: "hidden",
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: canalDynamicColors.line,
+    backgroundColor: canalDynamicColors.surface,
+  },
+
+  managementHeader: {
+    minHeight: 72,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingLeft: 20,
+    paddingRight: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: canalDynamicColors.line,
+  },
+
+  managementEyebrow: {
+    color: canalDynamicColors.muted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+  },
+
+  managementTitle: {
+    marginTop: 3,
+    color: canalDynamicColors.text,
+    fontFamily: "Georgia",
+    fontSize: 20,
+  },
+
+  managementClose: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 24,
+  },
+
+  managementContent: {
+    padding: 16,
+    paddingBottom: 30,
+    gap: 16,
   },
 
   hero: {

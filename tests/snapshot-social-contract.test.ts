@@ -47,7 +47,7 @@ describe("Snapshot social contract", () => {
     expect(migration).toContain("foreign key (parent_comment_id, snapshot_id)");
   });
 
-  it("renders the composition, social actions, replies and collapsed management", () => {
+  it("renders the composition with comment-triggered conversation and modal management", () => {
     expect(detail).toContain("<SnapshotComposition");
     expect(detail).toContain("snapshot={snapshot}");
     expect(detail).toContain("height={500}");
@@ -56,5 +56,9 @@ describe("Snapshot social contract", () => {
     expect(detail).toContain("Post comment");
     expect(detail).toContain("Manage Snapshot");
     expect(detail).toContain("showManagement");
+    expect(detail).toContain("showConversation");
+    expect(detail).toContain("setShowConversation((value) => !value)");
+    expect(detail).toContain('<Modal');
+    expect(detail).toContain('name="ellipsis-horizontal"');
   });
 });

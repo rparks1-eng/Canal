@@ -689,13 +689,6 @@ export default function LibraryScreen() {
       "Manage this Snapshot.",
       [
         {
-          text: "Edit",
-          onPress: () => router.push({
-            pathname: "/snapshots/[snapshotId]",
-            params: { snapshotId: snapshot.id },
-          } as never),
-        },
-        {
           text: snapshot.visibility === "public" ? "Make Private" : "Make Public",
           onPress: () => void updateSnapshotVisibility(snapshot),
         },

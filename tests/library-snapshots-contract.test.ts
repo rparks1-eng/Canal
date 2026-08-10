@@ -43,10 +43,10 @@ describe("Library Snapshot collection contract", () => {
     expect(source).toContain('pathname: "/snapshots/[snapshotId]"');
   });
 
-  it("provides a standard three-dot management menu for every Snapshot", () => {
+  it("provides a compact three-dot quick-actions menu without duplicating detail editing", () => {
     expect(source).toContain('name="ellipsis-horizontal"');
     expect(source).toContain("openSnapshotActions(snapshot)");
-    expect(source).toContain('text: "Edit"');
+    expect(source).not.toContain('text: "Edit"');
     expect(source).toContain('text: snapshot.visibility === "public" ? "Make Private" : "Make Public"');
     expect(source).toContain('text: "Share"');
     expect(source).toContain('text: "Delete"');
