@@ -43,6 +43,13 @@ jest.mock("expo-router", () => {
   };
 });
 
+jest.mock("expo-image", () => {
+  const ReactModule = require("react");
+  const Image = (props: any) => ReactModule.createElement("ExpoImage", props);
+  Image.prefetch = jest.fn(async () => true);
+  return { Image };
+});
+
 jest.mock("../providers/auth-provider", () => ({ useAuth: () => mockAuth }));
 jest.mock("@expo/vector-icons", () => ({ Ionicons: (props: any) => require("react").createElement("Ionicons", props) }));
 jest.mock("react-native/Libraries/Share/Share", () => ({ __esModule: true, default: { share: (...args: unknown[]) => mockNativeShare(...args) } }));

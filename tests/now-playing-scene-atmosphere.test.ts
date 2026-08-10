@@ -6,10 +6,19 @@ const source = fs.readFileSync(path.join(process.cwd(), "app/now-playing.tsx"), 
 describe("Now Playing Scene atmosphere", () => {
   it("uses the same assigned Scene presentation as Scene detail", () => {
     expect(source).toContain("const presentation = scenePresentation(scene)");
-    expect(source).toContain("<SceneCardBackdrop presentation={presentation} scene={scene} />");
     expect(source).toContain("setOverride(sceneAtmosphere(scene))");
+    expect(source).not.toContain("<SceneCardBackdrop");
     expect(source).toContain("backgroundColor: presentation.accent");
     expect(source).toContain("color: presentation.accentText");
+  });
+
+  it("prefetches artwork and renders no placeholder before it is ready", () => {
+    expect(source).toContain("Image.prefetch(url)");
+    expect(source).toContain("readyArtworkUrls.has(currentTrack.imageUrl)");
+    expect(source).toContain("readyArtworkUrls.has(track.imageUrl)");
+    expect(source).toContain('cachePolicy="memory-disk"');
+    expect(source).not.toContain("styles.queueImagePlaceholder");
+    expect(source).not.toContain("styles.artworkText");
   });
 
   it("renders the shared Scene DNA profile instead of generic tags", () => {

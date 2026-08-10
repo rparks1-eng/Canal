@@ -101,7 +101,6 @@ import { canalColors } from "../theme/canal-colors";
 import { canalTypography } from "../theme/canal-typography";
 import { CanalAtmosphereContext } from "../theme/canal-atmosphere-context";
 import { sceneAtmosphere, scenePresentation } from "../components/canal-ui/scene-signature";
-import { SceneCardBackdrop } from "../components/canal-ui/scene-card-visual";
 import { SceneDnaPanel } from "../components/canal-ui/scene-dna-panel";
 
 function formatTime(
@@ -218,6 +217,30 @@ export default function NowPlayingScreen() {
     setOverride(sceneAtmosphere(scene));
     return () => setOverride(null);
   }, [scene, setOverride]);
+
+  const [readyArtworkUrls, setReadyArtworkUrls] =
+    useState<ReadonlySet<string>>(() => new Set());
+
+  useEffect(() => {
+    let active = true;
+    setReadyArtworkUrls(new Set());
+    const urls = Array.from(new Set(
+      scene?.tracks
+        .map((track) => track.imageUrl)
+        .filter((url): url is string => Boolean(url)) ?? [],
+    ));
+    urls.forEach((url) => {
+      void Image.prefetch(url).then((ready) => {
+        if (!active || !ready) return;
+        setReadyArtworkUrls((current) => {
+          const next = new Set(current);
+          next.add(url);
+          return next;
+        });
+      }).catch(() => undefined);
+    });
+    return () => { active = false; };
+  }, [scene?.tracks]);
 
   const [contextTrack, setContextTrack] =
     useState<LinerNotesTrack | null>(null);
@@ -1377,7 +1400,6 @@ export default function NowPlayingScreen() {
         "bottom",
       ]}
     >
-      <SceneCardBackdrop presentation={presentation} scene={scene} />
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -1451,23 +1473,16 @@ export default function NowPlayingScreen() {
           false
         }
       >
-        {currentTrack.imageUrl ? (
+        {currentTrack.imageUrl && readyArtworkUrls.has(currentTrack.imageUrl) ? (
           <Image
             accessibilityLabel={`${currentTrack.title} album artwork from Spotify`}
+            cachePolicy="memory-disk"
             contentFit="cover"
             source={{ uri: currentTrack.imageUrl }}
             style={[styles.artwork, { borderColor: `${presentation.accent}55` }]}
             transition={180}
           />
-        ) : (
-          <View style={[styles.artwork, { borderColor: `${presentation.accent}55`, backgroundColor: presentation.colors[2] }]}>
-            <View style={styles.orbOne} />
-            <View style={styles.orbTwo} />
-            <View style={styles.orbThree} />
-
-            <Text style={styles.artworkText}>◉</Text>
-          </View>
-        )}
+        ) : null}
 
         <Text
           numberOfLines={2}
@@ -1730,24 +1745,16 @@ export default function NowPlayingScreen() {
                   key={`${track.id}-${index}`}
                   style={[styles.queueRow, { borderTopColor: `${presentation.accent}24` }]}
                 >
-                  {track.imageUrl ? (
+                  {track.imageUrl && readyArtworkUrls.has(track.imageUrl) ? (
                     <Image
                       accessibilityLabel={`${track.title} album artwork from Spotify`}
+                      cachePolicy="memory-disk"
                       contentFit="cover"
                       source={{ uri: track.imageUrl }}
                       style={styles.queueImage}
                       transition={120}
                     />
-                  ) : (
-                    <View
-                      style={[
-                        styles.queueImage,
-                        styles.queueImagePlaceholder,
-                      ]}
-                    >
-                      <Text style={styles.queueImageText}>♪</Text>
-                    </View>
-                  )}
+                  ) : null}
 
                   <Text
                     style={
@@ -1951,48 +1958,6 @@ const styles =
         "#2B1710",
       marginTop: 2,
       boxShadow: "0 18px 34px rgba(7, 32, 48, 0.22)",
-    },
-
-    orbOne: {
-      position: "absolute",
-      width: 220,
-      height: 220,
-      borderRadius: 110,
-      backgroundColor:
-        "#F47A24",
-      top: -50,
-      right: -45,
-      opacity: 0.85,
-    },
-
-    orbTwo: {
-      position: "absolute",
-      width: 185,
-      height: 185,
-      borderRadius: 93,
-      backgroundColor:
-        "#8D3C1A",
-      bottom: -50,
-      left: -35,
-      opacity: 0.82,
-    },
-
-    orbThree: {
-      position: "absolute",
-      width: 110,
-      height: 110,
-      borderRadius: 55,
-      backgroundColor:
-        "#FFB781",
-      bottom: 30,
-      right: 35,
-      opacity: 0.72,
-    },
-
-    artworkText: {
-      color: "#FFFFFF",
-      fontSize: 72,
-      opacity: 0.92,
     },
 
     trackTitle: {
@@ -2254,18 +2219,6 @@ const styles =
       backgroundColor:
         "#F1E7DF",
       marginRight: 8,
-    },
-
-    queueImagePlaceholder: {
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
-    },
-
-    queueImageText: {
-      color: canalDynamicColors.muted,
-      fontSize: 18,
     },
 
     queueNumber: {
