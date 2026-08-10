@@ -100,7 +100,9 @@ import {
 import { canalColors } from "../theme/canal-colors";
 import { canalTypography } from "../theme/canal-typography";
 import { CanalAtmosphereContext } from "../theme/canal-atmosphere-context";
-import { sceneAtmosphere } from "../components/canal-ui/scene-signature";
+import { sceneAtmosphere, scenePresentation } from "../components/canal-ui/scene-signature";
+import { SceneCardBackdrop } from "../components/canal-ui/scene-card-visual";
+import { SceneDnaPanel } from "../components/canal-ui/scene-dna-panel";
 
 function formatTime(
   totalSeconds: number,
@@ -1365,6 +1367,8 @@ export default function NowPlayingScreen() {
     );
   }
 
+  const presentation = scenePresentation(scene);
+
   return (
     <SafeAreaView
       style={styles.safeArea}
@@ -1373,6 +1377,7 @@ export default function NowPlayingScreen() {
         "bottom",
       ]}
     >
+      <SceneCardBackdrop presentation={presentation} scene={scene} />
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -1386,6 +1391,7 @@ export default function NowPlayingScreen() {
           }}
           style={({ pressed }) => [
             styles.backButton,
+            { backgroundColor: `${presentation.colors[2]}30` },
 
             pressed &&
               styles.pressed,
@@ -1427,6 +1433,7 @@ export default function NowPlayingScreen() {
           }
           style={({ pressed }) => [
             styles.doneButton,
+            { backgroundColor: `${presentation.colors[2]}30` },
 
             pressed &&
               styles.pressed,
@@ -1449,11 +1456,11 @@ export default function NowPlayingScreen() {
             accessibilityLabel={`${currentTrack.title} album artwork from Spotify`}
             contentFit="cover"
             source={{ uri: currentTrack.imageUrl }}
-            style={styles.artwork}
+            style={[styles.artwork, { borderColor: `${presentation.accent}55` }]}
             transition={180}
           />
         ) : (
-          <View style={styles.artwork}>
+          <View style={[styles.artwork, { borderColor: `${presentation.accent}55`, backgroundColor: presentation.colors[2] }]}>
             <View style={styles.orbOne} />
             <View style={styles.orbTwo} />
             <View style={styles.orbThree} />
@@ -1482,6 +1489,7 @@ export default function NowPlayingScreen() {
               styles.progressFill,
 
               {
+                backgroundColor: presentation.accent,
                 width:
                   `${progress * 100}%`,
               },
@@ -1516,6 +1524,7 @@ export default function NowPlayingScreen() {
             }
             style={({ pressed }) => [
               styles.secondaryControl,
+              { backgroundColor: `${presentation.colors[2]}30` },
 
               pressed &&
                 styles.pressed,
@@ -1539,15 +1548,14 @@ export default function NowPlayingScreen() {
             }
             style={({ pressed }) => [
               styles.playButton,
+              { backgroundColor: presentation.accent },
 
               pressed &&
                 styles.pressed,
             ]}
           >
             <Text
-              style={
-                styles.playButtonText
-              }
+              style={[styles.playButtonText, { color: presentation.accentText }]}
             >
               {session.isPlaying
                 ? "Ⅱ"
@@ -1563,6 +1571,7 @@ export default function NowPlayingScreen() {
             }
             style={({ pressed }) => [
               styles.secondaryControl,
+              { backgroundColor: `${presentation.colors[2]}30` },
 
               pressed &&
                 styles.pressed,
@@ -1592,13 +1601,13 @@ export default function NowPlayingScreen() {
               title: currentTrack.title,
               artist: currentTrack.artist,
             })}
-            style={styles.playbackAction}
+            style={[styles.playbackAction, { backgroundColor: `${presentation.colors[2]}24` }]}
           />
           <Pressable
             accessibilityLabel="View Scene details"
             accessibilityRole="button"
             onPress={() => router.push({ pathname: "/scenes/[sceneId]", params: { sceneId: scene.id } })}
-            style={styles.playbackAction}
+            style={[styles.playbackAction, { backgroundColor: `${presentation.colors[2]}24` }]}
           >
             <Ionicons color={canalDynamicColors.text} name="sparkles-outline" size={18} />
             <Text style={styles.playbackActionText}>Scene details</Text>
@@ -1607,7 +1616,7 @@ export default function NowPlayingScreen() {
             accessibilityLabel="Create a Snapshot from this Scene"
             accessibilityRole="button"
             onPress={() => router.push({ pathname: "/scene-snapshot", params: { sceneId: scene.id } } as never)}
-            style={styles.playbackAction}
+            style={[styles.playbackAction, { backgroundColor: `${presentation.colors[2]}24` }]}
           >
             <Ionicons color={canalDynamicColors.text} name="camera-outline" size={18} />
             <Text style={styles.playbackActionText}>Snapshot</Text>
@@ -1689,51 +1698,15 @@ export default function NowPlayingScreen() {
           </View>
         ) : null}
 
-        <View style={styles.sceneProfile}>
-          <Text
-            style={
-              styles.profileTitle
-            }
-          >
-            Scene profile
-          </Text>
-
-          <View style={styles.tags}>
-            {[
-              scene.activity,
-              scene.energy,
-              scene.familiarity,
-
-              ...scene.emotions
-                .split(",")
-                .map(
-                  (item) =>
-                    item.trim(),
-                )
-                .filter(Boolean)
-                .slice(0, 2),
-            ].map(
-              (tag, index) => (
-                <View
-                  key={`${index}:${tag}`}
-                  style={
-                    styles.tag
-                  }
-                >
-                  <Text
-                    style={
-                      styles.tagText
-                    }
-                  >
-                    {tag}
-                  </Text>
-                </View>
-              ),
-            )}
+        <View style={[styles.sceneProfile, { backgroundColor: `${presentation.colors[2]}20` }]}>
+          <View style={styles.profileHeader}>
+            <Text style={styles.profileTitle}>Scene profile</Text>
+            <Text style={[styles.profileName, { color: presentation.accent }]}>{scene.name}</Text>
           </View>
+          <SceneDnaPanel accent={presentation.accent} scene={scene} />
         </View>
 
-        <View style={styles.queueCard}>
+        <View style={[styles.queueCard, { backgroundColor: `${presentation.colors[2]}20` }]}>
           <Text
             style={
               styles.queueTitle
@@ -1755,9 +1728,7 @@ export default function NowPlayingScreen() {
               (track, index) => (
                 <View
                   key={`${track.id}-${index}`}
-                  style={
-                    styles.queueRow
-                  }
+                  style={[styles.queueRow, { borderTopColor: `${presentation.accent}24` }]}
                 >
                   {track.imageUrl ? (
                     <Image
@@ -1834,6 +1805,7 @@ export default function NowPlayingScreen() {
           }
           style={({ pressed }) => [
             styles.finishButton,
+            { backgroundColor: `${presentation.colors[2]}2E` },
 
             pressed &&
               styles.pressed,
@@ -1866,7 +1838,7 @@ const styles =
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor: "#11100F",
+      backgroundColor: "transparent",
     },
 
     center: {
@@ -1974,6 +1946,7 @@ const styles =
       justifyContent:
         "center",
       overflow: "hidden",
+      borderWidth: StyleSheet.hairlineWidth,
       backgroundColor:
         "#2B1710",
       marginTop: 2,
@@ -2031,7 +2004,7 @@ const styles =
     },
 
     trackArtist: {
-      color: "rgba(239, 255, 251, 0.76)",
+      color: canalDynamicColors.muted,
       fontSize: 14,
       marginTop: 6,
     },
@@ -2120,7 +2093,7 @@ const styles =
     },
 
     sessionTime: {
-      color: "#77706A",
+      color: canalDynamicColors.muted,
       fontSize: 11,
       marginTop: 15,
     },
@@ -2191,16 +2164,33 @@ const styles =
 
     sceneProfile: {
       width: "100%",
-      backgroundColor: canalDynamicColors.surface,
       borderRadius: 20,
-      padding: 17,
+      borderCurve: "continuous",
+      paddingHorizontal: 15,
+      paddingVertical: 13,
       marginTop: 19,
+    },
+
+    profileHeader: {
+      minHeight: 34,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      paddingHorizontal: 2,
     },
 
     profileTitle: {
       color: canalDynamicColors.text,
       fontSize: 16,
       fontWeight: "900",
+    },
+
+    profileName: {
+      flex: 1,
+      fontSize: 11,
+      fontWeight: "900",
+      textAlign: "right",
     },
 
     tags: {
@@ -2227,10 +2217,9 @@ const styles =
 
     queueCard: {
       width: "100%",
-      backgroundColor: "rgba(7, 43, 58, 0.32)",
-      borderWidth: 1,
-      borderColor: "rgba(235, 255, 250, 0.14)",
+      borderWidth: 0,
       borderRadius: 20,
+      borderCurve: "continuous",
       padding: 17,
       marginTop: 14,
     },
@@ -2243,7 +2232,7 @@ const styles =
     },
 
     queueEmpty: {
-      color: "#77706A",
+      color: canalDynamicColors.muted,
       fontSize: 12,
       marginTop: 7,
     },
@@ -2299,7 +2288,7 @@ const styles =
     },
 
     queueArtist: {
-      color: "#77706A",
+      color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 3,
     },
@@ -2312,9 +2301,7 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor: "rgba(7, 43, 58, 0.42)",
-      borderWidth: 1,
-      borderColor: "rgba(235, 255, 250, 0.18)",
+      borderWidth: 0,
       marginTop: 15,
       paddingHorizontal: 15,
     },
@@ -2343,11 +2330,9 @@ const styles =
       justifyContent: "center",
       gap: 7,
       paddingHorizontal: 12,
-      borderWidth: 1,
-      borderColor: "rgba(235, 255, 250, 0.17)",
+      borderWidth: 0,
       borderRadius: 16,
       borderCurve: "continuous",
-      backgroundColor: "rgba(7, 43, 58, 0.34)",
     },
 
     playbackActionText: {

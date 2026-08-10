@@ -495,10 +495,10 @@ describe("Living Editorial Scene playback interactions", () => {
     expect(publicScene).toContain("publicSceneShareUrl");
     expect(player).toContain('accessibilityLabel="Previous track"');
     expect(player).toContain('accessibilityLabel="Next track"');
-    expect(player).toContain('key={`${index}:${tag}`}');
-    expect(player).not.toContain("key={tag}");
+    expect(player).toContain("<SceneDnaPanel accent={presentation.accent} scene={scene} />");
     expect(player).toContain("setOverride(sceneAtmosphere(scene))");
-    expect(player).toContain('backgroundColor: "rgba(7, 43, 58, 0.34)"');
+    expect(player).toContain("const presentation = scenePresentation(scene)");
+    expect(player).toContain('backgroundColor: `${presentation.colors[2]}24`');
     expect(soundscape).toContain("saveSoundscape");
     expect(soundscape).toContain('accessibilityLabel="Public Soundscape"');
     for (const content of [
