@@ -80,7 +80,7 @@ function CategoryStageCard({ stage }: { stage: LiveStage }) {
       <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>LIVE</Text></View>
       <View style={styles.stageCopy}>
         <Text numberOfLines={1} style={styles.stageName}>{stage.name}</Text>
-        <Text numberOfLines={1} style={styles.stageMeta}>{stage.hostName} · {stage.participantCount} listening</Text>
+        <Text numberOfLines={1} style={styles.stageMeta}>{stage.hostName} · {stage.listenerCount} listening</Text>
       </View>
       <Ionicons color={canalDynamicColors.muted} name="chevron-forward" size={18} />
     </Pressable>
@@ -139,7 +139,7 @@ export default function ExploreCategoryScreen() {
   const highlighted = useMemo(() => highlightedExploreCategoryScenes(results), [results]);
   const popularScenes = useMemo(() => popularExploreCategoryScenes(results), [results]);
   const popularStages = useMemo(() => {
-    if (!kind || kind === "genre") return [];
+    if (!kind) return [];
     const category = value.toLowerCase();
     return stages
       .filter((stage) => {
@@ -154,9 +154,9 @@ export default function ExploreCategoryScreen() {
           stage.activity,
           ...(stage.atmosphereSignals ?? []),
         ].join(" ").toLowerCase().includes(query.trim().toLowerCase());
-        return matches && matchesQuery && stage.participantCount > 0;
+        return matches && matchesQuery && stage.listenerCount > 0;
       })
-      .sort((left, right) => right.participantCount - left.participantCount)
+      .sort((left, right) => right.listenerCount - left.listenerCount)
       .slice(0, 4);
   }, [kind, query, stages, value]);
 

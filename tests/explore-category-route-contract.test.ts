@@ -24,6 +24,8 @@ describe("Explore category route", () => {
     expect(categorySource).toContain("Highlighted Scenes");
     expect(categorySource).toContain("Popular Now");
     expect(categorySource).toContain("All Scenes");
+    expect(categorySource).toContain("stage.listenerCount > 0");
+    expect(categorySource).toContain("right.listenerCount - left.listenerCount");
     expect(categorySource).not.toContain('accessibilityRole="radiogroup"');
     expect(categorySource).not.toContain("Show verified Scenes");
     expect(categorySource).toContain('pathname: "/public-scene"');
