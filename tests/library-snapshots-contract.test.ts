@@ -44,8 +44,12 @@ describe("Library Snapshot collection contract", () => {
   });
 
   it("keeps Snapshot previews visual-first and renders only real notes on one line", () => {
-    expect(source).toContain("{snapshot.note ? (");
-    expect(source).toContain('<Text numberOfLines={1} style={styles.snapshotNote}>');
+    const composition = fs.readFileSync(
+      path.join(process.cwd(), "components", "snapshot-composition.tsx"),
+      "utf8",
+    );
+    expect(composition).toContain("{snapshot.note ? (");
+    expect(composition).toContain("numberOfLines={1}");
     expect(source).not.toContain("No note added");
     expect(source).not.toContain("styles.snapshotMetaRow");
     expect(source).not.toContain("styles.snapshotCopy");

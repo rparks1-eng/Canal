@@ -205,10 +205,6 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
     : requestedMediaUri;
   const mediaType = params.mediaType === "video" ? "video" as const : "photo" as const;
 
-  useEffect(() => () => {
-    cleanupSnapshotMediaDraft(mediaUri || undefined, draftScope);
-  }, [draftScope, mediaUri]);
-
   const sceneId =
     typeof params.sceneId ===
       "string"
@@ -339,6 +335,13 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
           const artworkReadyScene = sceneWithRouteArtwork
             ? await addSpotifyArtworkToStoredScene(sceneWithRouteArtwork)
             : null;
+          const stageTracks = stage?.tracks.length
+            ? stage.tracks.map((track) =>
+                track.id === params.trackId && !track.imageUrl && routeTrackImageUrl
+                  ? { ...track, imageUrl: routeTrackImageUrl }
+                  : track,
+              )
+            : [];
           const stageScene = stageName ? {
             id: sceneId,
             name: stageName,
@@ -352,7 +355,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
             songRequest: "",
             avoid: "",
             collaborators: [],
-            tracks: stage?.tracks.length ? stage.tracks : typeof params.trackId === "string" && params.trackId ? [{
+            tracks: stageTracks.length ? stageTracks : typeof params.trackId === "string" && params.trackId ? [{
               id: params.trackId,
               title: typeof params.trackTitle === "string" ? params.trackTitle : "Stage moment",
               artist: typeof params.trackArtist === "string" ? params.trackArtist : "Canal",
@@ -755,6 +758,15 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
     templateTheme: selectedTemplate?.theme,
   }) : null, [caption, mediaType, mediaUri, pendingSnapshotId, scene, selectedTemplate, selectedTrack]);
 
+  const returnToCapturePreview = (): void => {
+    if (mediaUri && !published && router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    closeSceneSnapshot();
+  };
+
   if (isLoadingScene) {
     return (
       <SafeAreaView
@@ -884,6 +896,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
       {exportSnapshot ? (
         <View pointerEvents="none" style={styles.exportSurface}>
           <SnapshotComposition
+            exportBrand
             ref={exportCompositionRef}
             overlayRef={exportOverlayRef}
             snapshot={exportSnapshot}
@@ -895,9 +908,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
         <Pressable
           accessibilityLabel="Return from Snapshot composer"
           accessibilityRole="button"
-          onPress={
-            closeSceneSnapshot
-          }
+          onPress={returnToCapturePreview}
           style={({ pressed }) => [
             styles.backButton,
 
@@ -980,20 +991,6 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
             ]}
           /> : null}
 
-          <Text
-            style={[
-              styles.snapshotBrand,
-              {
-                color:
-                  palette.textColor,
-              },
-            ]}
-          >
-            {selectedTemplate
-              ?.brandLabel ||
-              "canal"}
-          </Text>
-
           <View style={styles.snapshotBottom}>
             <Text
               style={[
@@ -1056,6 +1053,15 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
                   </Text>
                 </View>
               </View>
+            ) : null}
+
+            {caption.trim() ? (
+              <Text
+                numberOfLines={1}
+                style={[styles.snapshotNote, { color: palette.textColor }]}
+              >
+                {caption.trim()}
+              </Text>
             ) : null}
 
             <Text
@@ -1748,13 +1754,6 @@ const styles =
       opacity: 0.7,
     },
 
-    snapshotBrand: {
-      color: "#FFFFFF",
-      fontSize: 21,
-      fontWeight: "900",
-      letterSpacing: -0.8,
-    },
-
     snapshotBottom: {
       zIndex: 2,
     },
@@ -1765,10 +1764,6 @@ const styles =
       alignItems: "center",
       gap: 10,
       marginTop: 18,
-      borderRadius: 15,
-      borderCurve: "continuous",
-      backgroundColor: "rgba(5,8,12,0.62)",
-      padding: 8,
     },
 
     snapshotTrackArtwork: {
@@ -1804,6 +1799,14 @@ const styles =
     snapshotTrackArtist: {
       fontSize: 11,
       marginTop: 3,
+    },
+
+    snapshotNote: {
+      marginTop: 5,
+      paddingLeft: 52,
+      fontSize: 12,
+      lineHeight: 17,
+      fontWeight: "600",
     },
 
     snapshotActivity: {

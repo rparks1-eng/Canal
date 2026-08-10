@@ -952,7 +952,17 @@ function SnapshotDetailContent() {
           ) : <View style={styles.headerMenuButton} />}
         </View>
 
-        <SnapshotComposition snapshot={snapshot} ref={compositionRef} overlayRef={overlayRef} height={500} />
+        <View pointerEvents="none" style={styles.exportSurface}>
+          <SnapshotComposition
+            exportBrand
+            snapshot={snapshot}
+            ref={compositionRef}
+            overlayRef={overlayRef}
+            height={500}
+          />
+        </View>
+
+        <SnapshotComposition snapshot={snapshot} height={500} />
 
         <View style={styles.socialBar}>
           <Pressable
@@ -1421,6 +1431,13 @@ function formatSnapshotDate(
 }
 
 const styles = StyleSheet.create({
+  exportSurface: {
+    position: "absolute",
+    left: -10_000,
+    top: 0,
+    width: 420,
+  },
+
   screen: {
     flex: 1,
     backgroundColor: "#161513",

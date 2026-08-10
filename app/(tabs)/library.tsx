@@ -1195,11 +1195,6 @@ export default function LibraryScreen() {
                     height={layout === "grid" ? 176 : 116}
                     snapshot={snapshot}
                   />
-                  {snapshot.note ? (
-                    <Text numberOfLines={1} style={styles.snapshotNote}>
-                      {snapshot.note}
-                    </Text>
-                  ) : null}
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Manage ${snapshot.sceneName} Snapshot`}
@@ -1502,14 +1497,6 @@ const styles =
 
     snapshotCardGrid: {
       minHeight: 176,
-    },
-
-    snapshotNote: {
-      paddingTop: 7,
-      paddingHorizontal: 9,
-      color: canalDynamicColors.muted,
-      fontSize: 12,
-      lineHeight: 17,
     },
 
     snapshotManageButton: {

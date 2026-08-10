@@ -88,21 +88,10 @@ export function PublicSnapshotCard(
           height={props.compact ? 108 : 360}
           compact={props.compact}
         />
-
-        {props.compact && snapshot.note ? (
-          <Text
-            numberOfLines={1}
-            style={
-              styles.compactNote
-            }
-          >
-            {snapshot.note}
-          </Text>
-        ) : null}
       </Pressable>
 
       {!props.compact ? (
-        <View style={styles.socialRow}>
+        <View style={styles.socialOverlay}>
           <Pressable
             accessibilityLabel={
               props.socialSummary?.likedByMe
@@ -133,7 +122,7 @@ export function PublicSnapshotCard(
               color={
                 props.socialSummary?.likedByMe
                   ? "#FF6F68"
-                  : canalDynamicColors.text
+                  : "#FFFFFF"
               }
             />
             <Text style={styles.socialCount}>
@@ -153,18 +142,13 @@ export function PublicSnapshotCard(
             <Ionicons
               name="chatbubble-outline"
               size={19}
-              color={canalDynamicColors.text}
+              color="#FFFFFF"
             />
             <Text style={styles.socialCount}>
               {props.socialSummary?.commentCount ?? 0}
             </Text>
           </Pressable>
 
-          {snapshot.note ? (
-            <Text numberOfLines={1} style={styles.feedCaption}>
-              {snapshot.note}
-            </Text>
-          ) : null}
         </View>
       ) : null}
 
@@ -188,7 +172,7 @@ export function PublicSnapshotCard(
           style={({
             pressed,
           }) => [
-            styles.creatorButton,
+            styles.creatorOverlay,
 
             pressed &&
               styles.pressed,
@@ -312,13 +296,13 @@ const styles =
       opacity: 0.72,
     },
 
-    socialRow: {
-      minHeight: 56,
-      paddingHorizontal: 13,
-      paddingVertical: 8,
+    socialOverlay: {
+      position: "absolute",
+      top: 10,
+      right: 10,
       flexDirection: "row",
       alignItems: "center",
-      gap: 14,
+      gap: 6,
     },
 
     socialButton: {
@@ -328,20 +312,15 @@ const styles =
       alignItems: "center",
       justifyContent: "center",
       gap: 5,
+      borderRadius: 24,
+      backgroundColor: "rgba(8, 15, 22, 0.42)",
     },
 
     socialCount: {
-      color: canalDynamicColors.text,
+      color: "#FFFFFF",
       fontSize: 12,
       fontWeight: "700",
       fontVariant: ["tabular-nums"],
-    },
-
-    feedCaption: {
-      flex: 1,
-      color: canalDynamicColors.muted,
-      fontSize: 12,
-      lineHeight: 17,
     },
 
     artwork: {
@@ -395,25 +374,20 @@ const styles =
       letterSpacing: 0.5,
     },
 
-    compactNote: {
-      color: canalDynamicColors.muted,
-      fontSize: 12,
-      lineHeight: 17,
-      paddingTop: 7,
-      paddingHorizontal: 9,
-    },
-
-    creatorButton: {
+    creatorOverlay: {
+      position: "absolute",
+      left: 12,
+      top: 12,
       minHeight: 52,
       flexDirection: "row",
       alignItems:
         "center",
       gap: 8,
-      borderTopWidth: 1,
-      borderTopColor:
-        "#F3ECE6",
-      paddingHorizontal: 13,
-      paddingVertical: 9,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      borderRadius: 26,
+      backgroundColor: "rgba(8, 15, 22, 0.42)",
+      maxWidth: "54%",
     },
 
     creatorCopy: {
@@ -430,7 +404,7 @@ const styles =
 
     creatorName: {
       flexShrink: 1,
-      color: canalDynamicColors.text,
+      color: "#FFFFFF",
       fontSize: 11,
       fontWeight: "800",
     },
@@ -446,7 +420,7 @@ const styles =
     },
 
     creatorHandle: {
-      color: "#8B837C",
+      color: "rgba(255,255,255,0.76)",
       fontSize: 9,
       marginTop: 1,
     },

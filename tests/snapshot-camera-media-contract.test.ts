@@ -23,7 +23,10 @@ describe("Snapshot camera media contract", () => {
     expect(preview).toContain("instance.loop = true");
     expect(preview).toContain("if (background || autoPlay) instance.play()");
     expect(source).toContain('pathname: "/scene-snapshot"');
+    expect(source).toContain("router.push({");
     expect(source).toContain("Use in Snapshot");
+    expect(source).toContain("Cancel Snapshot");
+    expect(source).toContain("source={{ uri: first(params.trackImageUrl) }}");
     expect(source).toContain("stageId: first(params.stageId)");
     expect(source).toContain("trackImageUrl: first(params.trackImageUrl)");
     expect(source).toContain('style={StyleSheet.absoluteFill}');
@@ -40,6 +43,8 @@ describe("Snapshot camera media contract", () => {
     expect(composer).toContain("trackArtist: selectedTrack?.artist");
     expect(composer).toContain("selectedTrack.imageUrl");
     expect(composer).toContain("routeTrackImageUrl");
+    expect(composer).toContain("returnToCapturePreview");
+    expect(composer).toContain("stage.tracks.map");
     expect(composer).toContain('normalizedUri.endsWith(".mov")');
     expect(composer).toContain('"video/quicktime"');
   });

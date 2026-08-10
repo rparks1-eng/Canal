@@ -14,19 +14,24 @@ describe("published Snapshot composition", () => {
     expect(detail).toContain("<SnapshotComposition snapshot={snapshot}");
     expect(detail).not.toContain("<SnapshotMediaPreview");
     expect(composition).toContain("snapshot.mediaUri");
-    expect(composition).toContain("snapshot.templateBrandLabel");
+    expect(composition).toContain("exportBrand");
     expect(composition).toContain("snapshot.sceneName");
     expect(composition).toContain("snapshot.sceneActivity");
     expect(composition).toContain("snapshot.trackImageUrl");
     expect(composition).toContain("snapshot.trackTitle");
   });
 
-  it("keeps compact cards free of duplicate metadata and empty-note placeholders", () => {
+  it("overlays notes and free-standing song details without in-app Canal branding", () => {
     const feed = read("components/PublicSnapshotCard.tsx");
+    const composition = read("components/snapshot-composition.tsx");
+    const detail = read("app/snapshots/[snapshotId].tsx");
 
     expect(feed).not.toContain("No note added");
     expect(feed).not.toContain("Template ·");
-    expect(feed).toContain("styles.compactNote");
+    expect(composition).toContain("snapshot.note ? (");
+    expect(composition).toContain("styles.compactNote");
+    expect(composition).not.toContain('backgroundColor: "rgba(8, 11, 16, 0.48)"');
+    expect(detail).toContain("exportBrand");
   });
 
   it("uses the Canal verification icon instead of a text badge in Explore", () => {

@@ -12,6 +12,7 @@ type SnapshotCompositionProps = {
   snapshot: Snapshot;
   height?: number;
   compact?: boolean;
+  exportBrand?: boolean;
   overlayRef?: RefObject<View | null>;
 };
 
@@ -19,6 +20,7 @@ export const SnapshotComposition = forwardRef<View, SnapshotCompositionProps>(fu
   snapshot,
   height = 430,
   compact = false,
+  exportBrand = false,
   overlayRef,
 }, ref) {
   const palette = snapshotPalette(snapshot.templateTheme);
@@ -53,16 +55,18 @@ export const SnapshotComposition = forwardRef<View, SnapshotCompositionProps>(fu
       <View ref={overlayRef} collapsable={false} pointerEvents="none" style={styles.overlayCanvas}>
       <View style={snapshot.mediaUri ? styles.scrim : styles.coverScrim} />
 
-      <Text
-        numberOfLines={1}
-        style={[
-          styles.brand,
-          compact && styles.compactBrand,
-          { color: palette.textColor },
-        ]}
-      >
-        {snapshot.templateBrandLabel || "canal"}
-      </Text>
+      {exportBrand ? (
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.brand,
+            compact && styles.compactBrand,
+            { color: palette.textColor },
+          ]}
+        >
+          canal
+        </Text>
+      ) : null}
 
       <View style={[styles.bottom, compact && styles.compactBottom]}>
         {snapshot.sceneActivity ? (
@@ -143,6 +147,19 @@ export const SnapshotComposition = forwardRef<View, SnapshotCompositionProps>(fu
               ) : null}
             </View>
           </View>
+        ) : null}
+
+        {snapshot.note ? (
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.note,
+              compact && styles.compactNote,
+              { color: palette.textColor },
+            ]}
+          >
+            {snapshot.note}
+          </Text>
         ) : null}
       </View>
       </View>
@@ -251,9 +268,6 @@ const styles = StyleSheet.create({
   track: {
     minHeight: 58,
     marginTop: 10,
-    padding: 7,
-    borderRadius: 16,
-    backgroundColor: "rgba(8, 11, 16, 0.48)",
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -261,8 +275,6 @@ const styles = StyleSheet.create({
   compactTrack: {
     minHeight: 28,
     marginTop: 3,
-    padding: 3,
-    borderRadius: 8,
     gap: 5,
   },
   artwork: { width: 44, height: 44, borderRadius: 10 },
@@ -277,4 +289,15 @@ const styles = StyleSheet.create({
   compactTrackTitle: { fontSize: 8 },
   trackArtist: { paddingTop: 2, fontSize: 12, fontWeight: "600" },
   compactTrackArtist: { paddingTop: 0, fontSize: 7 },
+  note: {
+    paddingLeft: 54,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  compactNote: {
+    paddingLeft: 27,
+    fontSize: 8,
+    lineHeight: 10,
+  },
 });
