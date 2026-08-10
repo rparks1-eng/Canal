@@ -18,6 +18,16 @@ describe("Library Snapshot collection contract", () => {
     expect(gridStyle).not.toContain("borderWidth");
   });
 
+  it("uses a dedicated bounded composition for Scene grid cards", () => {
+    expect(source).toContain('layout === "grid" && styles.sceneNameGrid');
+    expect(source).toContain('layout === "grid" && styles.sceneMetaGrid');
+    expect(source).toContain('layout === "grid" && styles.sourceTextGrid');
+    expect(source).toMatch(/sceneCardGrid:\s*\{[\s\S]*?minHeight:\s*202,/u);
+    expect(source).toMatch(/sceneMainGrid:\s*\{[\s\S]*?flexDirection:\s*"column",[\s\S]*?alignItems:\s*"stretch",/u);
+    expect(source).toMatch(/sceneBreakdownsGrid:\s*\{[\s\S]*?flexDirection:\s*"column",[\s\S]*?maxWidth:\s*"100%",/u);
+    expect(source).toMatch(/sourceTextGrid:\s*\{[\s\S]*?display:\s*"none",/u);
+  });
+
   it("loads the full account-scoped Snapshot collection whenever Library focuses", () => {
     expect(source).toContain("readSnapshotsWithStatus");
     expect(source).toContain("setSnapshots(snapshotResult.value)");

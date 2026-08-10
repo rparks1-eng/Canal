@@ -1169,6 +1169,7 @@ export default function LibraryScreen() {
                           }
                           style={[
                             styles.sceneName,
+                            layout === "grid" && styles.sceneNameGrid,
                             {
                               color:
                                 "#FFFFFF",
@@ -1182,7 +1183,7 @@ export default function LibraryScreen() {
                           numberOfLines={
                             1
                           }
-                          style={[styles.sceneMeta, { color: `${presentation.accent}CC` }]}
+                          style={[styles.sceneMeta, layout === "grid" && styles.sceneMetaGrid, { color: `${presentation.accent}CC` }]}
                         >
                           {scene.activity ||
                             "Any activity"}{" "}
@@ -1199,7 +1200,7 @@ export default function LibraryScreen() {
                           numberOfLines={
                             1
                           }
-                          style={[styles.sourceText, { color: "rgba(255,255,255,0.64)" }]}
+                          style={[styles.sourceText, layout === "grid" && styles.sourceTextGrid, { color: "rgba(255,255,255,0.64)" }]}
                         >
                           {scene.libraryType ===
                           "saved"
@@ -1707,7 +1708,7 @@ const styles =
 
     sceneCardGrid: {
       width: "100%",
-      minHeight: 164,
+      minHeight: 202,
       paddingHorizontal: 12,
       paddingVertical: 12,
     },
@@ -1765,13 +1766,16 @@ const styles =
 
     sceneMainGrid: {
       flex: 1,
-      alignItems: "flex-end",
+      flexDirection: "column",
+      alignItems: "stretch",
+      justifyContent: "flex-start",
     },
 
     sceneTextGrid: {
-      alignSelf: "flex-end",
-      paddingBottom: 2,
-      paddingRight: 0,
+      flex: 1,
+      width: "100%",
+      justifyContent: "flex-end",
+      paddingTop: 2,
     },
 
     artwork: {
@@ -1813,10 +1817,9 @@ const styles =
     },
 
     sceneEnergyGrid: {
-      position: "absolute",
-      left: 0,
-      top: 0,
-      width: 68,
+      width: 82,
+      marginRight: 0,
+      marginBottom: 8,
     },
 
     sceneName: {
@@ -1825,16 +1828,32 @@ const styles =
       fontWeight: "900",
     },
 
+    sceneNameGrid: {
+      paddingRight: 30,
+      fontSize: 15,
+      lineHeight: 18,
+    },
+
     sceneMeta: {
       color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
     },
 
+    sceneMetaGrid: {
+      fontSize: 9,
+      lineHeight: 12,
+      marginTop: 3,
+    },
+
     sourceText: {
       color: canalDynamicColors.muted,
       fontSize: 10,
       marginTop: 4,
+    },
+
+    sourceTextGrid: {
+      display: "none",
     },
 
     sceneBreakdowns: {
@@ -1846,7 +1865,9 @@ const styles =
 
     sceneBreakdownsGrid: {
       flexDirection: "column",
-      gap: 5,
+      gap: 6,
+      marginTop: 8,
+      maxWidth: "100%",
     },
 
     sceneBreakdown: {
