@@ -563,49 +563,6 @@ export default function LibraryScreen() {
       }
     };
 
-  const confirmDelete =
-    (
-      scene: StoredScene,
-    ): void => {
-      Alert.alert(
-        scene.libraryType ===
-          "saved"
-          ? "Remove saved Scene?"
-          : "Delete Scene?",
-
-        scene.libraryType ===
-          "saved"
-          ? `"${scene.name}" will be removed from this account's Library. The original creator's public Scene will not be affected.`
-          : `"${scene.name}" will be permanently deleted from this Canal account.`,
-
-        [
-          {
-            text:
-              "Cancel",
-
-            style:
-              "cancel",
-          },
-
-          {
-            text:
-              scene.libraryType ===
-                "saved"
-                ? "Remove"
-                : "Delete",
-
-            style:
-              "destructive",
-
-            onPress: () =>
-              void performDelete(
-                scene,
-              ),
-          },
-        ],
-      );
-    };
-
   const openSceneActions = (scene: StoredScene): void => {
     const options = [
       {
@@ -627,11 +584,17 @@ export default function LibraryScreen() {
       {
         text: scene.libraryType === "saved" ? "Remove from Library" : "Delete Scene",
         style: "destructive" as const,
-        onPress: () => confirmDelete(scene),
+        onPress: () => void performDelete(scene),
       },
       { text: "Cancel", style: "cancel" as const },
     ];
-    Alert.alert(scene.name, "Manage this Scene.", options);
+    Alert.alert(
+      scene.name,
+      scene.libraryType === "saved"
+        ? "Manage this Scene. Remove from Library only affects this account."
+        : "Manage this Scene. Delete Scene permanently removes it from this account.",
+      options,
+    );
   };
 
   const updateSnapshotVisibility = async (

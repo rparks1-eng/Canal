@@ -51,4 +51,10 @@ describe("Library Snapshot collection contract", () => {
     expect(source).toContain('text: "Share"');
     expect(source).toContain('text: "Delete"');
   });
+
+  it("executes Scene deletion directly from the open management alert", () => {
+    expect(source).toContain('text: scene.libraryType === "saved" ? "Remove from Library" : "Delete Scene"');
+    expect(source).toContain("onPress: () => void performDelete(scene)");
+    expect(source).not.toContain("onPress: () => confirmDelete(scene)");
+  });
 });
