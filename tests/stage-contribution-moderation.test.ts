@@ -27,11 +27,11 @@ describe("collaborative Stage contribution moderation", () => {
     expect(migration).toContain("set tracks = collaboration_base_tracks");
   });
 
-  it("fails closed when an existing collaborative mix cannot be separated from its base", () => {
-    expect(migration).toContain("if exists (\n    select 1\n    from public.live_stage_contributions contribution\n    where contribution.ready");
-    expect(migration).toContain("requires remediation of existing ready contributions before deployment");
-    expect(migration.indexOf("requires remediation of existing ready contributions"))
-      .toBeLessThan(migration.indexOf("set collaboration_base_tracks = tracks"));
+  it("preserves legacy collaborative mixes and their accepted contributions", () => {
+    expect(migration).toContain("Preserve the currently visible mix as their fallback baseline");
+    expect(migration).toContain("set collaboration_base_tracks = tracks");
+    expect(migration).toContain("set moderation_status = case when ready then 'approved' else 'pending' end");
+    expect(migration).not.toContain("requires remediation of existing ready contributions before deployment");
   });
 
   it("prevents public enumeration and supports collaborator code joins", () => {

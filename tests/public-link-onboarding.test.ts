@@ -103,6 +103,6 @@ describe("public link onboarding security contract", () => {
     expect(legacy).toContain("join_live_stage_as_collaborator_by_code");
     expect(legacy).toContain("private.consume_live_stage_join_attempt(current_user_id)");
     expect(legacy).toContain("contribution.moderation_status = 'approved'");
-    expect(legacy).toContain("requires remediation of existing ready contributions before deployment");
+    expect(legacy).toContain("set moderation_status = case when ready then 'approved' else 'pending' end");
   });
 });
