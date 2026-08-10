@@ -450,6 +450,13 @@ function FacetRail(props: {
       <ScrollView horizontal contentContainerStyle={styles.discoveryRail} showsHorizontalScrollIndicator={false}>
         {props.values.map((value, index) => {
           const icon = exploreCategoryIcon(props.kind, value);
+          const categoryPresentation = scenePresentation({
+            name: "",
+            activity: props.kind === "activity" ? value : "",
+            emotions: props.kind === "mood" ? value : "",
+            genres: props.kind === "genre" ? value : "",
+            energy: "medium",
+          });
           return (
             <Pressable
               key={`${props.kind}:${value}`}
@@ -464,10 +471,10 @@ function FacetRail(props: {
                 pressed && styles.pressed,
               ]}
             >
-              <View style={[styles.categoryArtwork, { backgroundColor: `${props.accent}24` }]}>
-                <View style={[styles.categoryOrb, styles.categoryOrbOne, { backgroundColor: `${props.accent}68` }]} />
-                <View style={[styles.categoryOrb, styles.categoryOrbTwo, { backgroundColor: `${props.accent}38` }]} />
-                <Ionicons color={props.accent} name={icon as never} size={28 + (index % 2)} />
+              <View style={[styles.categoryArtwork, { backgroundColor: categoryPresentation.colors[2] }]}>
+                <View style={[styles.categoryOrb, styles.categoryOrbOne, { backgroundColor: categoryPresentation.colors[0] }]} />
+                <View style={[styles.categoryOrb, styles.categoryOrbTwo, { backgroundColor: categoryPresentation.colors[1] }]} />
+                <Ionicons color={categoryPresentation.accent} name={icon as never} size={28 + (index % 2)} />
                 <View style={styles.categoryLabelScrim} />
                 <Text numberOfLines={2} style={styles.categoryCardLabel}>{value}</Text>
               </View>

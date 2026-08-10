@@ -11,6 +11,10 @@ describe("Explore category route", () => {
     expect(exploreSource).toContain('pathname: "/explore-category"');
     expect(exploreSource).toContain("Open ${value} ${props.kind} Scenes");
     expect(exploreSource).toContain("exploreCategoryIcon(props.kind, value)");
+    expect(exploreSource).toContain("const categoryPresentation = scenePresentation({");
+    expect(exploreSource).toContain("backgroundColor: categoryPresentation.colors[2]");
+    expect(exploreSource).toContain("backgroundColor: categoryPresentation.colors[0]");
+    expect(exploreSource).toContain("backgroundColor: categoryPresentation.colors[1]");
     expect(exploreSource).toContain("styles.categoryLabelScrim");
     expect(exploreSource).not.toContain("View Scenes</Text>");
     expect(layoutSource).toContain('name="explore-category"');
