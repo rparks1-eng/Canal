@@ -316,6 +316,7 @@ function SceneDetailContent() {
     message,
     setMessage,
   ] = useState("");
+  const [profileVisible, setProfileVisible] = useState(false);
 
   const exportInFlight =
     useRef(false);
@@ -1073,6 +1074,40 @@ function SceneDetailContent() {
               Start Scene
             </Text>
           </Pressable>
+
+          {profileVisible ? (
+            <View accessibilityLabel="Scene profile details" style={styles.heroProfile}>
+              {[
+                ["Genres", scene.genres || "Spotify taste"],
+                ["Artists", scene.artists || "Multiple artists"],
+                ["Energy", scene.energy],
+                ["Familiarity", scene.familiarity],
+                ["Visibility", scene.visibility],
+              ].map(([label, value]) => (
+                <View key={label} style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{label}</Text>
+                  <Text style={styles.detailValue}>{value}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={profileVisible ? "Hide Scene profile" : "Show Scene profile"}
+            accessibilityState={{ expanded: profileVisible }}
+            onPress={() => setProfileVisible((current) => !current)}
+            style={({ pressed }) => [styles.profileToggle, pressed && styles.pressed]}
+          >
+            <Text style={[styles.profileToggleText, { color: presentation.accent }]}>
+              {profileVisible ? "Hide Scene profile" : "Show Scene profile"}
+            </Text>
+            <Ionicons
+              color={presentation.accent}
+              name={profileVisible ? "chevron-up" : "chevron-down"}
+              size={17}
+            />
+          </Pressable>
         </View>
 
         <View style={styles.actionGrid}>
@@ -1269,63 +1304,6 @@ function SceneDetailContent() {
           </Pressable>
         </View>
 
-        {scene.tracks[0] ? (
-          <Pressable
-            accessibilityLabel={`Start Scene with ${scene.tracks[0].title}`}
-            accessibilityRole="button"
-            onPress={() => void start()}
-            style={({ pressed }) => [
-              styles.firstUp,
-              reduceTransparency
-                ? styles.solidSurface
-                : styles.glassSurface,
-              pressed && styles.pressed,
-            ]}
-          >
-            {scene.tracks[0].imageUrl ? (
-              <Image
-                accessibilityLabel={`${scene.tracks[0].title} album artwork from Spotify`}
-                contentFit="cover"
-                source={{ uri: scene.tracks[0].imageUrl }}
-                style={styles.firstUpArtwork}
-                transition={120}
-              />
-            ) : (
-              <View style={[styles.firstUpArtwork, styles.trackImagePlaceholder]} />
-            )}
-
-            <View style={styles.firstUpCopy}>
-              <Text style={styles.firstUpKicker}>FIRST UP</Text>
-              <Text numberOfLines={1} style={styles.firstUpTitle}>
-                {scene.tracks[0].title}
-              </Text>
-              <Text numberOfLines={1} style={styles.firstUpArtist}>
-                {scene.tracks[0].artist}
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.firstUpPlay,
-                {
-                  backgroundColor: presentation.accent,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.firstUpPlayText,
-                  {
-                    color: presentation.accentText,
-                  },
-                ]}
-              >
-                Play
-              </Text>
-            </View>
-          </Pressable>
-        ) : null}
-
         {exportRecoveryIssue ? (
           <RecoveryNotice
             busy={
@@ -1359,78 +1337,12 @@ function SceneDetailContent() {
             ? styles.solidSurface
             : styles.glassSurface,
         ]}>
-          <Text
-            style={
-              styles.sectionTitle
-            }
-          >
-            Scene profile
-          </Text>
-
-          {[
-            [
-              "Genres",
-              scene.genres ||
-                "Spotify taste",
-            ],
-            [
-              "Artists",
-              scene.artists ||
-                "Multiple artists",
-            ],
-            [
-              "Energy",
-              scene.energy,
-            ],
-            [
-              "Familiarity",
-              scene.familiarity,
-            ],
-            [
-              "Visibility",
-              scene.visibility,
-            ],
-          ].map(
-            ([label, value]) => (
-              <View
-                key={label}
-                style={
-                  styles.detailRow
-                }
-              >
-                <Text
-                  style={
-                    styles.detailLabel
-                  }
-                >
-                  {label}
-                </Text>
-
-                <Text
-                  style={
-                    styles.detailValue
-                  }
-                >
-                  {value}
-                </Text>
-              </View>
-            ),
-          )}
-        </View>
-
-        <View style={[
-          styles.sectionCard,
-          reduceTransparency
-            ? styles.solidSurface
-            : styles.glassSurface,
-        ]}>
-          <Text
-            style={
-              styles.sectionTitle
-            }
-          >
-            Track sequence
-          </Text>
+          <View style={styles.sequenceHeader}>
+            <Text style={styles.sectionTitle}>Track sequence</Text>
+            <Text style={[styles.sequenceCount, { color: presentation.accent }]}>
+              {scene.tracks.length} tracks
+            </Text>
+          </View>
 
           {scene.tracks.length === 0 ? (
             <Text
@@ -1446,14 +1358,16 @@ function SceneDetailContent() {
                 <Pressable
                   key={`${track.id}-${index}`}
                   accessibilityRole="button"
-                  onPress={() =>
-                    void openTrack(
-                      track.spotifyUrl,
-                      track.spotifyUri,
-                    )
-                  }
+                  accessibilityLabel={index === 0 ? `Start Scene with ${track.title}` : `Open ${track.title} in Spotify`}
+                  onPress={() => index === 0
+                    ? void start()
+                    : void openTrack(track.spotifyUrl, track.spotifyUri)}
                   style={({ pressed }) => [
                     styles.trackRow,
+                    index === 0 && [
+                      styles.trackRowFirst,
+                      { backgroundColor: `${presentation.accent}16` },
+                    ],
 
                     pressed &&
                       styles.pressed,
@@ -1483,6 +1397,9 @@ function SceneDetailContent() {
                       styles.trackText
                     }
                   >
+                    {index === 0 ? (
+                      <Text style={[styles.trackKicker, { color: presentation.accent }]}>FIRST UP</Text>
+                    ) : null}
                     <Text
                       numberOfLines={1}
                       style={
@@ -1502,13 +1419,11 @@ function SceneDetailContent() {
                     </Text>
                   </View>
 
-                  <Text
-                    style={
-                      styles.trackArrow
-                    }
-                  >
-                    ›
-                  </Text>
+                  {index === 0 ? (
+                    <Ionicons color={presentation.accent} name="play" size={20} />
+                  ) : (
+                    <Ionicons color={canalDynamicColors.muted} name="open-outline" size={18} />
+                  )}
                 </Pressable>
               ),
             )
@@ -1616,62 +1531,6 @@ const styles =
       borderColor: "rgba(220,255,249,0.22)",
     },
 
-    firstUp: {
-      minHeight: 76,
-      flexDirection: "row",
-      alignItems: "center",
-      borderRadius: 22,
-      borderWidth: StyleSheet.hairlineWidth,
-      padding: 12,
-    },
-
-    firstUpArtwork: {
-      width: 52,
-      height: 52,
-      borderRadius: 11,
-      backgroundColor: "rgba(255,255,255,0.12)",
-    },
-
-    firstUpCopy: {
-      flex: 1,
-      minWidth: 0,
-      paddingHorizontal: 12,
-    },
-
-    firstUpKicker: {
-      color: canalDynamicColors.mint,
-      fontSize: 9,
-      fontWeight: "900",
-      letterSpacing: 0.8,
-    },
-
-    firstUpTitle: {
-      color: canalDynamicColors.text,
-      fontSize: 14,
-      fontWeight: "900",
-      marginTop: 3,
-    },
-
-    firstUpArtist: {
-      color: "rgba(231,250,245,0.65)",
-      fontSize: 11,
-      marginTop: 2,
-    },
-
-    firstUpPlay: {
-      minWidth: 58,
-      minHeight: 44,
-      borderRadius: 16,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: 12,
-    },
-
-    firstUpPlayText: {
-      fontSize: 12,
-      fontWeight: "900",
-    },
-
     heroAccentLine: {
       width: 42,
       height: 3,
@@ -1750,21 +1609,16 @@ const styles =
 
     actionGrid: {
       flexDirection: "row",
-      justifyContent: "center",
+      justifyContent: "space-between",
       alignItems: "center",
-      gap: 10,
       paddingVertical: 4,
     },
 
     actionButton: {
-      width: 52,
-      height: 52,
+      width: 48,
+      height: 48,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "rgba(5, 42, 66, 0.44)",
-      borderRadius: 26,
-      borderCurve: "continuous",
-      boxShadow: "0 8px 20px rgba(2, 22, 51, 0.14)",
     },
 
     actionTitle: {
@@ -1811,6 +1665,40 @@ const styles =
       marginBottom: 8,
     },
 
+    sequenceHeader: {
+      minHeight: 34,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+
+    sequenceCount: {
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 0.4,
+      textTransform: "uppercase",
+    },
+
+    heroProfile: {
+      width: "100%",
+      marginTop: 15,
+    },
+
+    profileToggle: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      marginTop: 7,
+    },
+
+    profileToggleText: {
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 0.25,
+    },
+
     detailRow: {
       flexDirection: "row",
       alignItems:
@@ -1847,6 +1735,22 @@ const styles =
       borderTopColor:
         "rgba(218, 255, 248, 0.24)",
       paddingVertical: 12,
+    },
+
+    trackRowFirst: {
+      minHeight: 78,
+      marginHorizontal: -8,
+      borderTopWidth: 0,
+      borderRadius: 16,
+      borderCurve: "continuous",
+      paddingHorizontal: 10,
+    },
+
+    trackKicker: {
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.9,
+      marginBottom: 3,
     },
 
     trackNumber: {
