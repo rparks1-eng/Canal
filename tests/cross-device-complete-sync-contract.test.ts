@@ -14,6 +14,8 @@ describe("complete account-safe cross-device synchronization", () => {
     expect(sync).toContain("sceneDeletionKey");
     expect(sync).toContain("applySceneDeletionToCloud");
     expect(sync).toMatch(/if \(row[.]deleted_at\)[\s\S]*deletionIds[.]add/u);
+    expect(scenes).toContain("deleteSceneForCurrentOwner");
+    expect(scenes).not.toMatch(/await import\(\s*["']\.[/]scene-sync["']\s*\)/u);
   });
 
   it("uses cloud-authoritative Snapshot, profile, Stage contribution, and notification paths", () => {

@@ -23,6 +23,10 @@ import {
   saveSceneToCloudForScope,
 } from "./scene-cloud";
 
+import {
+  deleteSceneForCurrentOwner,
+} from "./scene-sync";
+
 export type SceneVisibility =
   | "private"
   | "public";
@@ -906,12 +910,6 @@ export async function createScene(
 export async function deleteScene(
   sceneId: string,
 ): Promise<void> {
-  const {
-    deleteSceneForCurrentOwner,
-  } = await import(
-    "./scene-sync"
-  );
-
   await deleteSceneForCurrentOwner(
     sceneId,
   );
