@@ -1,25 +1,11 @@
 begin;
 
--- Existing ready contributions may already have replaced live_stages.tracks with a
--- collaborative mix. There is no reliable way to reconstruct the host's original
--- base from that mixed payload, so fail closed instead of recording a false base.
-do $$
-begin
-  if exists (
-    select 1
-    from public.live_stage_contributions contribution
-    where contribution.ready
-  ) then
-    raise exception
-      'Stage moderation migration requires remediation of existing ready contributions before deployment.'
-      using errcode = '55000';
-  end if;
-end;
-$$;
-
 alter table public.live_stages
 add column if not exists collaboration_base_tracks jsonb;
 
+-- Legacy collaborative Stages do not retain the pre-collaboration host playlist.
+-- Preserve the currently visible mix as their fallback baseline instead of deleting
+-- tracks, ending the Stage, or inventing a source playlist that cannot be recovered.
 update public.live_stages
 set collaboration_base_tracks = tracks
 where collaboration_base_tracks is null;
@@ -44,6 +30,11 @@ execute function private.capture_live_stage_collaboration_base();
 
 alter table public.live_stage_contributions
 add column if not exists moderation_status text not null default 'pending';
+
+-- Ready contributions were already accepted by the legacy workflow. Keep that
+-- decision intact while all non-ready contributions remain pending.
+update public.live_stage_contributions
+set moderation_status = case when ready then 'approved' else 'pending' end;
 
 alter table public.live_stage_contributions
 drop constraint if exists live_stage_contributions_moderation_status_check;
