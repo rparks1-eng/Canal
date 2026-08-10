@@ -47,11 +47,13 @@ describe("Scene detail composition", () => {
     expect(source).toMatch(/stageStartButton:\s*\{[\s\S]*?width:\s*54/u);
   });
 
-  it("makes First Up the playable lead row of Track sequence", () => {
+  it("makes First Up the lead row and routes it to internal song context", () => {
     expect(source).toContain("styles.trackRowFirst");
     expect(source).toContain(">FIRST UP</Text>");
-    expect(source).toContain('index === 0 ? `Start Scene with ${track.title}`');
-    expect(source).toContain("index === 0\n                    ? void start()");
+    expect(source).toContain("View song context for");
+    expect(source).toContain('pathname: "/song-context"');
+    expect(source).toContain('name="information-circle-outline"');
+    expect(source).not.toContain('`Open ${track.title} in Spotify`');
     expect(source).not.toContain("styles.firstUpArtwork");
   });
 

@@ -1357,10 +1357,12 @@ function SceneDetailContent() {
                 <Pressable
                   key={`${track.id}-${index}`}
                   accessibilityRole="button"
-                  accessibilityLabel={index === 0 ? `Start Scene with ${track.title}` : `Open ${track.title} in Spotify`}
-                  onPress={() => index === 0
-                    ? void start()
-                    : void openTrack(track.spotifyUrl, track.spotifyUri)}
+                  accessibilityLabel={`View song context for ${track.title}`}
+                  accessibilityHint="Opens the Canal song page with context from Genius"
+                  onPress={() => router.push({
+                    pathname: "/song-context",
+                    params: { sceneId: scene.id, trackId: track.id },
+                  } as never)}
                   style={({ pressed }) => [
                     styles.trackRow,
                     index === 0 && [
@@ -1418,11 +1420,7 @@ function SceneDetailContent() {
                     </Text>
                   </View>
 
-                  {index === 0 ? (
-                    <Ionicons color={presentation.accent} name="play" size={20} />
-                  ) : (
-                    <Ionicons color={canalDynamicColors.muted} name="open-outline" size={18} />
-                  )}
+                  <Ionicons color={index === 0 ? presentation.accent : canalDynamicColors.muted} name="information-circle-outline" size={20} />
                 </Pressable>
               ),
             )
