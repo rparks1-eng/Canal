@@ -11,6 +11,10 @@ const libraryPath = path.join(
 describe("Library Snapshot collection contract", () => {
   const source = fs.readFileSync(libraryPath, "utf8");
 
+  it("starts Scenes and Snapshots in grid view", () => {
+    expect(source).toMatch(/useState<LibraryLayout>\(\s*"grid",\s*\)/u);
+  });
+
   it("keeps Library overflow icons free-standing with accessible invisible targets", () => {
     expect(source).toMatch(/manageButtonGrid:\s*\{[\s\S]*?width:\s*48,[\s\S]*?height:\s*48,/u);
     const gridStyle = source.match(/manageButtonGrid:\s*\{([\s\S]*?)\n\s*\},/u)?.[1] ?? "";

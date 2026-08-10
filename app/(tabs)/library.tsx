@@ -237,7 +237,7 @@ export default function LibraryScreen() {
     layout,
     setLayout,
   ] = useState<LibraryLayout>(
-    "list",
+    "grid",
   );
 
   const [
