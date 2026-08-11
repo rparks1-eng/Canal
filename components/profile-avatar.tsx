@@ -2,6 +2,7 @@ import { Image } from "expo-image";
 import { StyleSheet, Text, View } from "react-native";
 
 import { canalDynamicColors } from "../theme/canal-dynamic-colors";
+import { canalProfileAvatarImageSource } from "../lib/canal-profile-avatars";
 
 type ProfileAvatarProps = {
   avatarUrl?: string | null;
@@ -16,14 +17,15 @@ function profileInitials(displayName: string): string {
 
 export function ProfileAvatar({ avatarUrl, displayName, size = 48 }: ProfileAvatarProps) {
   const dimension = Math.max(24, size);
+  const imageSource = canalProfileAvatarImageSource(avatarUrl);
 
   return (
     <View
       accessibilityLabel={`${displayName} profile picture`}
       style={[styles.avatar, { width: dimension, height: dimension, borderRadius: dimension / 2 }]}
     >
-      {avatarUrl ? (
-        <Image contentFit="cover" source={avatarUrl} style={styles.image} transition={140} />
+      {imageSource ? (
+        <Image contentFit="cover" source={imageSource} style={styles.image} transition={140} />
       ) : (
         <Text
           adjustsFontSizeToFit

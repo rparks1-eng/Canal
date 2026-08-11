@@ -10,7 +10,7 @@ import {
 
 import {
   ActivityIndicator,
-  Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -107,6 +107,11 @@ import {
 } from "../../lib/profile-avatar";
 
 import {
+  CANAL_PROFILE_AVATARS,
+  canalProfileAvatarImageSource,
+} from "../../lib/canal-profile-avatars";
+
+import {
   useAuth,
 } from "../../providers/auth-provider";
 
@@ -170,35 +175,6 @@ function fallbackHandle(
         0,
         10,
       )
-  );
-}
-
-function initials(
-  value: string,
-): string {
-  return (
-    value
-      .trim()
-      .split(
-        /\s+/,
-      )
-      .filter(
-        Boolean,
-      )
-      .slice(
-        0,
-        2,
-      )
-      .map(
-        (word) =>
-          word
-            .charAt(
-              0,
-            )
-            .toUpperCase(),
-      )
-      .join("") ||
-    "C"
   );
 }
 
@@ -369,6 +345,9 @@ function ProfileScreenContent() {
     pendingAvatar,
     setPendingAvatar,
   ] = useState<ImagePicker.ImagePickerAsset | null>(null);
+
+  const [avatarChooserOpen, setAvatarChooserOpen] = useState(false);
+  const originalAvatarUrlRef = useRef("");
 
   const [
     removeAvatar,
@@ -977,6 +956,7 @@ function ProfileScreenContent() {
       setDraft({
         ...profile,
       });
+      originalAvatarUrlRef.current = profile.avatarUrl;
 
       setMessage("");
       setFormErrorMessage(
@@ -984,6 +964,7 @@ function ProfileScreenContent() {
       );
       setPendingAvatar(null);
       setRemoveAvatar(false);
+      setAvatarChooserOpen(false);
       setEditing(
         true,
       );
@@ -1008,6 +989,7 @@ function ProfileScreenContent() {
       );
       setPendingAvatar(null);
       setRemoveAvatar(false);
+      setAvatarChooserOpen(false);
       setEditing(
         false,
       );
@@ -1042,6 +1024,7 @@ function ProfileScreenContent() {
       if (!result.canceled && result.assets[0]) {
         setPendingAvatar(result.assets[0]);
         setRemoveAvatar(false);
+        setAvatarChooserOpen(false);
         setFormErrorMessage("");
       }
     } catch (error) {
@@ -1051,22 +1034,12 @@ function ProfileScreenContent() {
     }
   };
 
-  const openProfilePictureMenu = (): void => {
-    Alert.alert(
-      "Profile picture",
-      "Choose a square photo. You can crop it before saving.",
-      [
-        { text: "Take Photo", onPress: () => void chooseProfilePicture("camera") },
-        { text: "Choose from Library", onPress: () => void chooseProfilePicture("library") },
-        ...(draft.avatarUrl || pendingAvatar
-          ? [{ text: "Remove Photo", style: "destructive" as const, onPress: () => {
-              setPendingAvatar(null);
-              setRemoveAvatar(true);
-            } }]
-          : []),
-        { text: "Cancel", style: "cancel" },
-      ],
-    );
+  const selectCanalProfilePicture = (value: string): void => {
+    setPendingAvatar(null);
+    setRemoveAvatar(false);
+    setDraft((current) => ({ ...current, avatarUrl: value }));
+    setAvatarChooserOpen(false);
+    setFormErrorMessage("");
   };
 
   const save =
@@ -1253,15 +1226,17 @@ function ProfileScreenContent() {
 
         setPendingAvatar(null);
         setRemoveAvatar(false);
+        setAvatarChooserOpen(false);
 
         setEditing(
           false,
         );
 
-        const replacedAvatar = draft.avatarUrl && draft.avatarUrl !== next.avatarUrl;
-        if ((removeAvatar || replacedAvatar) && draft.avatarUrl) {
+        const previousAvatarUrl = originalAvatarUrlRef.current;
+        const replacedAvatar = previousAvatarUrl && previousAvatarUrl !== next.avatarUrl;
+        if ((removeAvatar || replacedAvatar) && previousAvatarUrl) {
           try {
-            await removeOwnedProfileAvatar(draft.avatarUrl, user.id);
+            await removeOwnedProfileAvatar(previousAvatarUrl, user.id);
           } catch {
             setMessage("Profile updated. Canal will retry cleaning up the previous photo later.");
             return;
@@ -1980,33 +1955,121 @@ function ProfileScreenContent() {
             </Text>
 
             <View style={styles.avatarEditor}>
-              <View style={styles.avatarPreview}>
-                {pendingAvatar?.uri || (!removeAvatar && draft.avatarUrl) ? (
-                  <Image
-                    accessibilityLabel="Profile picture preview"
-                    contentFit="cover"
-                    source={pendingAvatar?.uri || draft.avatarUrl}
-                    style={styles.avatarImage}
-                  />
-                ) : (
-                  <Text style={styles.avatarText}>{initials(draft.displayName)}</Text>
-                )}
-              </View>
+              <Pressable
+                accessibilityLabel="Change profile picture"
+                accessibilityHint="Open choices for Photo Library, camera, and Canal profile pictures"
+                accessibilityRole="button"
+                disabled={saving}
+                onPress={() => setAvatarChooserOpen(true)}
+                style={({ pressed }) => [styles.avatarPreviewButton, pressed && styles.pressed]}
+              >
+                <ProfileAvatar
+                  avatarUrl={pendingAvatar?.uri || (!removeAvatar ? draft.avatarUrl : "")}
+                  displayName={draft.displayName}
+                  size={76}
+                />
+                <View style={styles.avatarEditGlyph}>
+                  <Ionicons color={canalDynamicColors.onAccent} name="camera-outline" size={15} />
+                </View>
+              </Pressable>
               <View style={styles.avatarEditorCopy}>
                 <Text style={styles.avatarEditorTitle}>Profile picture</Text>
-                <Text style={styles.avatarEditorHelp}>Square JPEG, PNG, or WebP · 5 MB maximum</Text>
+                <Text style={styles.avatarEditorHelp}>Tap the picture to upload, take a photo, or choose a Canal design.</Text>
                 <Pressable
-                  accessibilityLabel="Change profile picture"
-                  accessibilityHint="Choose a photo from the library, take a new photo, or remove the current photo"
+                  accessibilityLabel="Open profile picture choices"
                   accessibilityRole="button"
                   disabled={saving}
-                  onPress={openProfilePictureMenu}
+                  onPress={() => setAvatarChooserOpen(true)}
                   style={({ pressed }) => [styles.avatarAction, pressed && styles.pressed]}
                 >
-                  <Text style={styles.avatarActionText}>{draft.avatarUrl || pendingAvatar ? "Change photo" : "Add photo"}</Text>
+                  <Text style={styles.avatarActionText}>{draft.avatarUrl || pendingAvatar ? "Change picture" : "Add picture"}</Text>
                 </Pressable>
               </View>
             </View>
+
+            <Modal
+              animationType="slide"
+              onRequestClose={() => setAvatarChooserOpen(false)}
+              presentationStyle="pageSheet"
+              visible={avatarChooserOpen}
+            >
+              <SafeAreaView style={styles.avatarChooserScreen}>
+                <View style={styles.avatarChooserHeader}>
+                  <Pressable
+                    accessibilityLabel="Close profile picture choices"
+                    accessibilityRole="button"
+                    onPress={() => setAvatarChooserOpen(false)}
+                    style={styles.avatarChooserClose}
+                  >
+                    <Ionicons color={canalDynamicColors.text} name="close" size={24} />
+                  </Pressable>
+                  <Text style={styles.avatarChooserTitle}>Profile picture</Text>
+                  <View style={styles.avatarChooserClose} />
+                </View>
+                <ScrollView contentContainerStyle={styles.avatarChooserContent}>
+                  <View style={styles.avatarSourceRow}>
+                    <Pressable
+                      accessibilityLabel="Choose profile picture from library"
+                      accessibilityRole="button"
+                      onPress={() => void chooseProfilePicture("library")}
+                      style={({ pressed }) => [styles.avatarSourceAction, pressed && styles.pressed]}
+                    >
+                      <Ionicons color={canalDynamicColors.text} name="images-outline" size={25} />
+                      <Text style={styles.avatarSourceText}>Photo Library</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityLabel="Take a profile picture"
+                      accessibilityRole="button"
+                      onPress={() => void chooseProfilePicture("camera")}
+                      style={({ pressed }) => [styles.avatarSourceAction, pressed && styles.pressed]}
+                    >
+                      <Ionicons color={canalDynamicColors.text} name="camera-outline" size={25} />
+                      <Text style={styles.avatarSourceText}>Take Photo</Text>
+                    </Pressable>
+                  </View>
+
+                  <Text style={styles.canalAvatarTitle}>Canal profile pictures</Text>
+                  <Text style={styles.canalAvatarHelp}>Ten color flows drawn from Canal’s Scene palettes.</Text>
+                  <View style={styles.canalAvatarGrid}>
+                    {CANAL_PROFILE_AVATARS.map((avatar) => {
+                      const selected = !pendingAvatar && !removeAvatar && draft.avatarUrl === avatar.value;
+                      return (
+                        <Pressable
+                          key={avatar.id}
+                          accessibilityLabel={`Choose ${avatar.name} Canal profile picture`}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected }}
+                          onPress={() => selectCanalProfilePicture(avatar.value)}
+                          style={({ pressed }) => [styles.canalAvatarChoice, selected && styles.canalAvatarChoiceSelected, pressed && styles.pressed]}
+                        >
+                          <Image
+                            contentFit="cover"
+                            source={canalProfileAvatarImageSource(avatar.value) ?? undefined}
+                            style={styles.canalAvatarImage}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {draft.avatarUrl || pendingAvatar ? (
+                    <Pressable
+                      accessibilityLabel="Remove profile picture"
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setPendingAvatar(null);
+                        setRemoveAvatar(true);
+                        setDraft((current) => ({ ...current, avatarUrl: "" }));
+                        setAvatarChooserOpen(false);
+                      }}
+                      style={styles.removeAvatarAction}
+                    >
+                      <Text style={styles.removeAvatarText}>Remove picture</Text>
+                    </Pressable>
+                  ) : null}
+                </ScrollView>
+              </SafeAreaView>
+            </Modal>
 
             <FieldLabel
               text="Display name"
@@ -2917,14 +2980,27 @@ const styles =
       backgroundColor: canalDynamicColors.surface,
     },
 
-    avatarPreview: {
+    avatarPreviewButton: {
       width: 76,
       height: 76,
-      borderRadius: 24,
+      borderRadius: 38,
       overflow: "hidden",
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "#4C46C8",
+    },
+
+    avatarEditGlyph: {
+      position: "absolute",
+      right: 0,
+      bottom: 0,
+      width: 27,
+      height: 27,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: canalDynamicColors.mint,
+      borderWidth: 2,
+      borderColor: canalDynamicColors.baseCanvas,
     },
 
     avatarEditorCopy: {
@@ -2957,6 +3033,109 @@ const styles =
       color: canalDynamicColors.text,
       fontSize: 12,
       fontWeight: "800",
+    },
+
+    avatarChooserScreen: {
+      flex: 1,
+      backgroundColor: canalDynamicColors.baseCanvas,
+    },
+
+    avatarChooserHeader: {
+      minHeight: 58,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: canalDynamicColors.line,
+    },
+
+    avatarChooserClose: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    avatarChooserTitle: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 20,
+    },
+
+    avatarChooserContent: {
+      gap: 14,
+      padding: 20,
+      paddingBottom: 48,
+    },
+
+    avatarSourceRow: {
+      flexDirection: "row",
+      gap: 12,
+    },
+
+    avatarSourceAction: {
+      flex: 1,
+      minHeight: 76,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+    },
+
+    avatarSourceText: {
+      color: canalDynamicColors.text,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+
+    canalAvatarTitle: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 21,
+      marginTop: 8,
+    },
+
+    canalAvatarHelp: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+
+    canalAvatarGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 15,
+    },
+
+    canalAvatarChoice: {
+      width: 62,
+      height: 62,
+      borderRadius: 31,
+      padding: 3,
+    },
+
+    canalAvatarChoiceSelected: {
+      borderWidth: 2,
+      borderColor: canalDynamicColors.mint,
+    },
+
+    canalAvatarImage: {
+      width: "100%",
+      height: "100%",
+      borderRadius: 28,
+    },
+
+    removeAvatarAction: {
+      alignSelf: "flex-start",
+      minHeight: 48,
+      justifyContent: "center",
+      marginTop: 6,
+    },
+
+    removeAvatarText: {
+      color: canalDynamicColors.danger,
+      fontSize: 13,
+      fontWeight: "700",
     },
 
     infoCard: {
