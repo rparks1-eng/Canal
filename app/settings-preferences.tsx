@@ -2,11 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CanalAmbientBackground } from "../components/canal-ui/canal-ambient-background";
-import { logoutAllMusicPlatforms } from "../lib/app-session";
+import { logoutAllMusicPlatforms, retryIncompleteAccountCleanup } from "../lib/app-session";
 import { DEFAULT_CANAL_SETTINGS, readAccountCanalSettings, saveAccountCanalSettings, type CanalSettings } from "../lib/app-settings";
 import { getCanalStorageSummary } from "../lib/data-controls";
 import { useAuth } from "../providers/auth-provider";
@@ -31,6 +31,7 @@ export default function SettingsPreferencesScreen(): React.JSX.Element {
   const [settings, setSettings] = useState(DEFAULT_CANAL_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [storageCopy, setStorageCopy] = useState("Calculating local storage…");
   const [message, setMessage] = useState("");
 
@@ -46,17 +47,82 @@ export default function SettingsPreferencesScreen(): React.JSX.Element {
     catch { setSettings(previous); setMessage("Canal could not save that preference. The previous setting was restored."); }
     finally { setSaving(false); }
   };
+
+  const performLogout = async (): Promise<void> => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setMessage("Logging out of this device…");
+
+    try {
+      const pending = await retryIncompleteAccountCleanup({ allowSignOut: true });
+      let result = pending ?? await logoutAllMusicPlatforms();
+
+      if (
+        pending &&
+        !result.signedOut &&
+        !result.cleanupIncomplete &&
+        result.recovery === "none"
+      ) {
+        result = await logoutAllMusicPlatforms();
+      }
+
+      if (!result.signedOut) {
+        setMessage(
+          result.recovery === "signout"
+            ? "Spotify is disconnected. Retry to finish logging out of Canal on this device."
+            : "Device cleanup needs attention before Canal can finish logging out.",
+        );
+        return;
+      }
+
+      router.replace("/login");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Canal could not finish logging out. Retry without refreshing the page.",
+      );
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  const requestLogout = (): void => {
+    if (loggingOut) return;
+
+    const message = "This disconnects Spotify on this device. Cloud data remains intact.";
+
+    if (Platform.OS === "web") {
+      const confirm = (globalThis as typeof globalThis & {
+        confirm?: (prompt: string) => boolean;
+      }).confirm;
+
+      if (typeof confirm === "function" && confirm(`Log out of Canal?\n\n${message}`)) {
+        void performLogout();
+      }
+      return;
+    }
+
+    Alert.alert(
+      "Log out of Canal?",
+      message,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Log Out", style: "destructive", onPress: () => { void performLogout(); } },
+      ],
+    );
+  };
   const copy = SECTION_COPY[section];
   return <SafeAreaView edges={["top"]} style={styles.screen}><CanalAmbientBackground /><ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
     <Pressable accessibilityLabel="Back to Settings" accessibilityRole="button" onPress={() => router.canGoBack() ? router.back() : router.replace("/settings")} style={styles.back}><Ionicons color={canalDynamicColors.text} name="chevron-back" size={24} /></Pressable>
     <View style={styles.header}><Text style={styles.kicker}>{copy.kicker}</Text><Text accessibilityRole="header" style={styles.title}>{copy.title}</Text><Text style={styles.subtitle}>{copy.subtitle}</Text></View>
-    {loading ? <ActivityIndicator color={canalDynamicColors.mint} /> : <SectionContent section={section} settings={settings} storageCopy={storageCopy} update={update} />}
+    {loading ? <ActivityIndicator color={canalDynamicColors.mint} /> : <SectionContent loggingOut={loggingOut} requestLogout={requestLogout} section={section} settings={settings} storageCopy={storageCopy} update={update} />}
     {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
     {saving ? <ActivityIndicator color={canalDynamicColors.mint} /> : null}
   </ScrollView></SafeAreaView>;
 }
 
-function SectionContent(props: { section: Section; settings: CanalSettings; storageCopy: string; update: <K extends keyof CanalSettings>(key: K, value: CanalSettings[K]) => Promise<void> }): React.JSX.Element {
+function SectionContent(props: { loggingOut: boolean; requestLogout: () => void; section: Section; settings: CanalSettings; storageCopy: string; update: <K extends keyof CanalSettings>(key: K, value: CanalSettings[K]) => Promise<void> }): React.JSX.Element {
   const s = props.settings;
   if (props.section === "playback") return <View><Toggle label="True Black playback" note="Use a pure black canvas in Now Playing while preserving artwork and readable controls." value={s.trueBlackPlayback} onChange={(v) => props.update("trueBlackPlayback", v)} /><Toggle label="Allow explicit tracks" note="Default for newly created Scenes." value={s.allowExplicitDefault} onChange={(v) => props.update("allowExplicitDefault", v)} /><Toggle label="Smooth transitions" note="Prefer compatible energy changes between tracks." value={s.smoothTransitionsDefault} onChange={(v) => props.update("smoothTransitionsDefault", v)} /><Toggle label="Avoid recently used tracks" note="Increase variety across newly generated Scenes." value={s.avoidRecentDefault} onChange={(v) => props.update("avoidRecentDefault", v)} /><Toggle label="Smart Spotify synchronization" note="Refresh the cached library after reconnecting while minimizing provider requests." value={s.smartSpotifySync} onChange={(v) => props.update("smartSpotifySync", v)} /></View>;
   if (props.section === "notifications") return <View><Toggle label="Stage invitations" note="Direct and collaborator invitations." value={s.stageInviteNotifications} onChange={(v) => props.update("stageInviteNotifications", v)} /><Toggle label="Stage reminders" note="Stages you host or joined starting soon." value={s.stageReminderNotifications} onChange={(v) => props.update("stageReminderNotifications", v)} /><Toggle label="Social activity" note="Follows, likes, comments and replies." value={s.socialNotifications} onChange={(v) => props.update("socialNotifications", v)} /><Toggle label="Scene collaboration" note="Edits, requests and contribution status." value={s.collaborationNotifications} onChange={(v) => props.update("collaborationNotifications", v)} /></View>;
@@ -65,10 +131,10 @@ function SectionContent(props: { section: Section; settings: CanalSettings; stor
   if (props.section === "storage") return <View><View style={styles.info}><Text style={styles.infoTitle}>Local storage</Text><Text style={styles.infoText}>{props.storageCopy}</Text></View><Action label="Open full Data Controls" onPress={() => router.push("/data-controls")} /><Action label="Review Spotify cache and sync" onPress={() => router.push("/music-services")} /></View>;
   if (props.section === "safety") return <View><Toggle label="Collaboration invitations" note="Allow friends to invite you into Scenes and Stages." value={s.collaborationInvites} onChange={(v) => props.update("collaborationInvites", v)} /><Action label="Review blocked accounts" onPress={() => router.push("/blocked-users")} /></View>;
   if (props.section === "support") return <View><Action label="Email Canal support" onPress={() => { void Linking.openURL("mailto:support@canal.app?subject=Canal%20support"); }} /><Action label="Share safe diagnostics" onPress={() => { void Share.share({ title: "Canal diagnostics", message: "Canal 1.0.0 · Expo SDK 54 · no credentials included" }); }} /><View style={styles.info}><Text style={styles.infoTitle}>Canal 1.0.0</Text><Text style={styles.infoText}>Expo SDK 54 · Privacy and provider acknowledgements live in Data Controls.</Text></View></View>;
-  return <View><Action label="Log out of this device" onPress={() => Alert.alert("Log out of Canal?", "This disconnects Spotify on this device. Cloud data remains intact.", [{ text: "Cancel", style: "cancel" }, { text: "Log Out", style: "destructive", onPress: () => { void logoutAllMusicPlatforms().then(() => router.replace("/login")); } }])} /><Action label="Review data export and deletion" onPress={() => router.push("/data-controls")} danger /></View>;
+  return <View><Action busy={props.loggingOut} disabled={props.loggingOut} label={props.loggingOut ? "Logging out…" : "Log out of this device"} onPress={props.requestLogout} /><Action label="Review data export and deletion" onPress={() => router.push("/data-controls")} danger /></View>;
 }
 
 function Toggle(props: { label: string; note: string; value: boolean; onChange: (value: boolean) => void }): React.JSX.Element { return <View style={styles.control}><View style={styles.controlCopy}><Text style={styles.controlTitle}>{props.label}</Text><Text style={styles.controlNote}>{props.note}</Text></View><Switch accessibilityLabel={props.label} onValueChange={props.onChange} trackColor={{ false: canalDynamicColors.line, true: canalDynamicColors.mint }} value={props.value} /></View>; }
-function Action(props: { label: string; onPress: () => void; danger?: boolean }): React.JSX.Element { return <Pressable accessibilityLabel={props.label} accessibilityRole="button" onPress={props.onPress} style={({ pressed }) => [styles.action, props.danger && styles.actionDanger, pressed && styles.pressed]}><Text style={[styles.actionText, props.danger && styles.dangerText]}>{props.label}</Text><Ionicons color={props.danger ? canalDynamicColors.danger : canalDynamicColors.text} name="chevron-forward" size={18} /></Pressable>; }
+function Action(props: { label: string; onPress: () => void; busy?: boolean; danger?: boolean; disabled?: boolean }): React.JSX.Element { return <Pressable accessibilityLabel={props.label} accessibilityRole="button" accessibilityState={{ busy: props.busy === true, disabled: props.disabled === true }} disabled={props.disabled} onPress={props.onPress} style={({ pressed }) => [styles.action, props.danger && styles.actionDanger, props.disabled && styles.disabled, pressed && styles.pressed]}><Text style={[styles.actionText, props.danger && styles.dangerText]}>{props.label}</Text><Ionicons color={props.danger ? canalDynamicColors.danger : canalDynamicColors.text} name="chevron-forward" size={18} /></Pressable>; }
 
-const styles = StyleSheet.create({ screen: { flex: 1, backgroundColor: "transparent" }, content: { paddingHorizontal: 18, paddingBottom: 120, gap: 18 }, back: { width: 48, height: 48, alignItems: "center", justifyContent: "center" }, header: { gap: 6 }, kicker: { color: canalDynamicColors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.3 }, title: { color: canalDynamicColors.text, fontFamily: "Georgia", fontSize: 34 }, subtitle: { color: canalDynamicColors.muted, fontSize: 14, lineHeight: 20 }, control: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: canalDynamicColors.line, paddingVertical: 9 }, controlCopy: { flex: 1 }, controlTitle: { color: canalDynamicColors.text, fontSize: 14, fontWeight: "800" }, controlNote: { color: canalDynamicColors.muted, fontSize: 11, lineHeight: 16, marginTop: 3 }, info: { padding: 16, borderRadius: 18, borderCurve: "continuous", backgroundColor: canalDynamicColors.surface, gap: 5, marginBottom: 10 }, infoTitle: { color: canalDynamicColors.text, fontSize: 14, fontWeight: "900" }, infoText: { color: canalDynamicColors.muted, fontSize: 12, lineHeight: 17 }, action: { minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: canalDynamicColors.line, paddingHorizontal: 3 }, actionDanger: { borderBottomColor: canalDynamicColors.danger }, actionText: { flex: 1, color: canalDynamicColors.text, fontSize: 14, fontWeight: "800" }, dangerText: { color: canalDynamicColors.danger }, groupLabel: { color: canalDynamicColors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.1, marginTop: 14 }, days: { flexDirection: "row", gap: 7, marginTop: 9 }, day: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 15, borderWidth: 1, borderColor: canalDynamicColors.line }, daySelected: { borderColor: canalDynamicColors.mint, backgroundColor: canalDynamicColors.surface }, dayText: { color: canalDynamicColors.text, fontSize: 11, fontWeight: "800" }, message: { color: canalDynamicColors.mint, fontSize: 12, lineHeight: 17, textAlign: "center" }, pressed: { opacity: 0.62 } });
+const styles = StyleSheet.create({ screen: { flex: 1, backgroundColor: "transparent" }, content: { paddingHorizontal: 18, paddingBottom: 120, gap: 18 }, back: { width: 48, height: 48, alignItems: "center", justifyContent: "center" }, header: { gap: 6 }, kicker: { color: canalDynamicColors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.3 }, title: { color: canalDynamicColors.text, fontFamily: "Georgia", fontSize: 34 }, subtitle: { color: canalDynamicColors.muted, fontSize: 14, lineHeight: 20 }, control: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: canalDynamicColors.line, paddingVertical: 9 }, controlCopy: { flex: 1 }, controlTitle: { color: canalDynamicColors.text, fontSize: 14, fontWeight: "800" }, controlNote: { color: canalDynamicColors.muted, fontSize: 11, lineHeight: 16, marginTop: 3 }, info: { padding: 16, borderRadius: 18, borderCurve: "continuous", backgroundColor: canalDynamicColors.surface, gap: 5, marginBottom: 10 }, infoTitle: { color: canalDynamicColors.text, fontSize: 14, fontWeight: "900" }, infoText: { color: canalDynamicColors.muted, fontSize: 12, lineHeight: 17 }, action: { minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: canalDynamicColors.line, paddingHorizontal: 3 }, actionDanger: { borderBottomColor: canalDynamicColors.danger }, actionText: { flex: 1, color: canalDynamicColors.text, fontSize: 14, fontWeight: "800" }, dangerText: { color: canalDynamicColors.danger }, groupLabel: { color: canalDynamicColors.muted, fontSize: 10, fontWeight: "900", letterSpacing: 1.1, marginTop: 14 }, days: { flexDirection: "row", gap: 7, marginTop: 9 }, day: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 15, borderWidth: 1, borderColor: canalDynamicColors.line }, daySelected: { borderColor: canalDynamicColors.mint, backgroundColor: canalDynamicColors.surface }, dayText: { color: canalDynamicColors.text, fontSize: 11, fontWeight: "800" }, message: { color: canalDynamicColors.mint, fontSize: 12, lineHeight: 17, textAlign: "center" }, disabled: { opacity: 0.45 }, pressed: { opacity: 0.62 } });

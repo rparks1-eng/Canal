@@ -174,6 +174,13 @@ jest.mock("../lib/canal-auth", () => ({
   updateCanalPassword: (password: string) => mockUpdateCanalPassword(password),
 }));
 
+jest.mock("../lib/social-auth-providers", () => ({
+  readCanalSocialAuthProviderAvailability: jest.fn(async () => ({
+    google: true,
+    apple: true,
+  })),
+}));
+
 jest.mock("../lib/supabase", () => ({
   supabase: {
     auth: {

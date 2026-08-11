@@ -49,6 +49,14 @@ import {
 } from "../lib/canal-auth";
 
 import {
+  readCanalSocialAuthProviderAvailability,
+} from "../lib/social-auth-providers";
+
+import type {
+  CanalSocialAuthProviderAvailability,
+} from "../lib/social-auth-providers";
+
+import {
   isOnboardingRequired,
   markOnboardingRequired,
   ONBOARDING_METADATA_KEY,
@@ -149,6 +157,30 @@ export default function LoginScreen() {
     loading,
     setLoading,
   ] = useState(false);
+
+  const [
+    socialProviders,
+    setSocialProviders,
+  ] = useState<CanalSocialAuthProviderAvailability | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!configured) {
+      setSocialProviders({ google: false, apple: false });
+      return () => { active = false; };
+    }
+
+    void readCanalSocialAuthProviderAvailability()
+      .then((availability) => {
+        if (active) setSocialProviders(availability);
+      })
+      .catch(() => {
+        if (active) setSocialProviders({ google: false, apple: false });
+      });
+
+    return () => { active = false; };
+  }, [configured]);
 
   const submissionInFlight =
     useRef(false);
@@ -628,11 +660,13 @@ export default function LoginScreen() {
               busy: loading,
               disabled:
                 loading ||
-                !configured,
+                !configured ||
+                socialProviders?.google !== true,
             }}
             disabled={
               loading ||
-              !configured
+              !configured ||
+              socialProviders?.google !== true
             }
             onPress={() =>
               void submitEmail()
@@ -701,11 +735,13 @@ export default function LoginScreen() {
               busy: loading,
               disabled:
                 loading ||
-                !configured,
+                !configured ||
+                socialProviders?.google !== true,
             }}
             disabled={
               loading ||
-              !configured
+              !configured ||
+              socialProviders?.google !== true
             }
             onPress={() =>
               void submitSocial(
@@ -718,7 +754,8 @@ export default function LoginScreen() {
               styles.socialButton,
 
               (loading ||
-                !configured) &&
+                !configured ||
+                socialProviders?.google !== true) &&
                 styles.disabled,
 
               pressed &&
@@ -741,11 +778,13 @@ export default function LoginScreen() {
               busy: loading,
               disabled:
                 loading ||
-                !configured,
+                !configured ||
+                socialProviders?.apple !== true,
             }}
             disabled={
               loading ||
-              !configured
+              !configured ||
+              socialProviders?.apple !== true
             }
             onPress={() =>
               void submitSocial(
@@ -758,7 +797,8 @@ export default function LoginScreen() {
               styles.appleButton,
 
               (loading ||
-                !configured) &&
+                !configured ||
+                socialProviders?.apple !== true) &&
                 styles.disabled,
 
               pressed &&
@@ -773,6 +813,14 @@ export default function LoginScreen() {
               Continue with Apple
             </Text>
           </Pressable>
+
+          {configured && socialProviders && (!socialProviders.google || !socialProviders.apple) ? (
+            <Text accessibilityLiveRegion="polite" style={styles.socialAvailabilityText}>
+              {!socialProviders.google && !socialProviders.apple
+                ? "Google and Apple sign-in are not enabled for this Canal environment yet."
+                : `${socialProviders.google ? "Apple" : "Google"} sign-in is not enabled for this Canal environment yet.`}
+            </Text>
+          ) : null}
 
           {message ? (
             <View
@@ -1048,6 +1096,14 @@ const styles =
       color: "#FFFFFF",
       fontSize: 14,
       fontWeight: "900",
+    },
+
+    socialAvailabilityText: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 10,
+      textAlign: "center",
     },
 
     messageBox: {
