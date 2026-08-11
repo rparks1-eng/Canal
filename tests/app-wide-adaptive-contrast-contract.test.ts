@@ -16,6 +16,14 @@ const adaptiveTextRole =
 const intentionalFixedRole =
   /(?:accent|art|artwork|avatar|badge|brand|button|cta|danger|delete|logo|mark|pill|play|provider|selected|spotify|success|warning)/iu;
 
+// Soundscape is deliberately a fixed-dark editorial canvas on native and web.
+// Keep this exception file-scoped so every adaptive screen remains governed by
+// the semantic-palette contract below.
+const fixedDarkEditorialCanvas = new Set([
+  "app/soundscape.tsx",
+  "components/soundscape/SoundscapeExperience.tsx",
+]);
+
 describe("app-wide adaptive contrast", () => {
   it("keeps input placeholders readable in either appearance", () => {
     for (const file of [
@@ -37,6 +45,8 @@ describe("app-wide adaptive contrast", () => {
       ...sourceFiles(path.join(projectRoot, "components")),
     ]) {
       let activeStyle = "";
+      const relativeFile = path.relative(projectRoot, file);
+      if (fixedDarkEditorialCanvas.has(relativeFile)) continue;
       const lines = fs.readFileSync(file, "utf8").split("\n");
 
       lines.forEach((line, index) => {

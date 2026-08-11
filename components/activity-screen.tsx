@@ -10,13 +10,14 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../lib/canal-alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -183,7 +184,7 @@ export default function ActivityScreen() {
     };
 
   function confirmClear() {
-    Alert.alert(
+    CanalAlert.alert(
       "Clear activity history?",
       "This removes synced activity history from your Canal account and this device.",
       [
@@ -213,7 +214,7 @@ export default function ActivityScreen() {
         error,
       );
 
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to clear",
         "Canal could not clear activity history.",
       );
@@ -227,7 +228,7 @@ export default function ActivityScreen() {
       item.stageId &&
       item.stageInviteId
     ) {
-      Alert.alert(
+      CanalAlert.alert(
         "Join as a collaborator?",
         item.description,
         [
@@ -307,7 +308,7 @@ export default function ActivityScreen() {
         );
 
       if (!profileId) {
-        Alert.alert(
+        CanalAlert.alert(
           "Profile unavailable",
           "This Canal profile is no longer public or available.",
         );
@@ -323,7 +324,7 @@ export default function ActivityScreen() {
         },
       });
     } catch {
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to open profile",
         "Canal could not load this profile right now. Try again.",
       );

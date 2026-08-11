@@ -16,7 +16,6 @@ import {
 import {
   AccessibilityInfo,
   ActivityIndicator,
-  Alert,
   findNodeHandle,
   Platform,
   Pressable,
@@ -26,6 +25,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 
 import {
   router,
@@ -1133,7 +1134,7 @@ function EventRunSheetBuilderContent(
         return;
       }
 
-      Alert.alert(
+      CanalAlert.alert(
         "Delete planned Run Sheet?",
         `"${runSheet.title}" will be deleted. Its source collection and Scenes stay unchanged.`,
         [

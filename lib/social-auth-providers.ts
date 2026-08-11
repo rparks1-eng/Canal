@@ -7,7 +7,15 @@ export type CanalSocialAuthProviderAvailability = {
   apple: boolean;
 };
 
-const PROVIDER_SETTINGS_CACHE_MS = 5 * 60 * 1000;
+const PROVIDER_SETTINGS_CACHE_MS =
+  5 * 60_000;
+const PROVIDER_SETTINGS_TIMEOUT_MS =
+  5_000;
+
+const NO_SOCIAL_PROVIDERS: CanalSocialAuthProviderAvailability = {
+  google: false,
+  apple: false,
+};
 
 let cachedAvailability:
   | {
@@ -19,15 +27,33 @@ let cachedAvailability:
 export function parseCanalSocialAuthProviderAvailability(
   payload: unknown,
 ): CanalSocialAuthProviderAvailability {
-  const external = payload && typeof payload === "object" &&
-    "external" in payload &&
-    payload.external && typeof payload.external === "object"
-    ? payload.external as Record<string, unknown>
-    : {};
+  if (
+    !payload ||
+    typeof payload !==
+      "object" ||
+    !("external" in payload) ||
+    !payload.external ||
+    typeof payload.external !==
+      "object"
+  ) {
+    return {
+      ...NO_SOCIAL_PROVIDERS,
+    };
+  }
+
+  const external =
+    payload.external as Record<
+      string,
+      unknown
+    >;
 
   return {
-    google: external.google === true,
-    apple: external.apple === true,
+    google:
+      external.google ===
+      true,
+    apple:
+      external.apple ===
+      true,
   };
 }
 
@@ -35,48 +61,92 @@ export async function readCanalSocialAuthProviderAvailability(
   options: {
     fetchImpl?: typeof fetch;
     now?: number;
+    timeoutMs?: number;
   } = {},
 ): Promise<CanalSocialAuthProviderAvailability> {
   if (!isSupabaseConfigured) {
     return {
-      google: false,
-      apple: false,
+      ...NO_SOCIAL_PROVIDERS,
     };
   }
 
-  const now = options.now ?? Date.now();
+  const now =
+    options.now ??
+    Date.now();
 
-  if (cachedAvailability && cachedAvailability.expiresAt > now) {
+  if (
+    cachedAvailability &&
+    cachedAvailability.expiresAt >
+      now
+  ) {
     return cachedAvailability.value;
   }
 
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() ?? "";
-  const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ?? "";
-  const response = await (options.fetchImpl ?? fetch)(
-    `${supabaseUrl}/auth/v1/settings`,
-    {
-      headers: {
-        apikey: publishableKey,
+  const supabaseUrl =
+    process.env
+      .EXPO_PUBLIC_SUPABASE_URL
+      ?.trim() ??
+    "";
+  const publishableKey =
+    process.env
+      .EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+      ?.trim() ??
+    "";
+  const controller =
+    new AbortController();
+  const timeout =
+    setTimeout(
+      () => {
+        controller.abort();
       },
-    },
-  );
+      options.timeoutMs ??
+        PROVIDER_SETTINGS_TIMEOUT_MS,
+    );
 
-  if (!response.ok) {
-    throw new Error("Canal could not verify social sign-in availability.");
+  try {
+    const response =
+      await (
+        options.fetchImpl ??
+        fetch
+      )(
+        `${supabaseUrl}/auth/v1/settings`,
+        {
+          headers: {
+            apikey:
+              publishableKey,
+          },
+          signal:
+            controller.signal,
+        },
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        "Canal could not verify social sign-in availability.",
+      );
+    }
+
+    const value =
+      parseCanalSocialAuthProviderAvailability(
+        await response.json(),
+      );
+
+    cachedAvailability = {
+      expiresAt:
+        now +
+        PROVIDER_SETTINGS_CACHE_MS,
+      value,
+    };
+
+    return value;
+  } finally {
+    clearTimeout(
+      timeout,
+    );
   }
-
-  const value = parseCanalSocialAuthProviderAvailability(
-    await response.json(),
-  );
-
-  cachedAvailability = {
-    expiresAt: now + PROVIDER_SETTINGS_CACHE_MS,
-    value,
-  };
-
-  return value;
 }
 
 export function clearCanalSocialAuthProviderAvailabilityCache(): void {
-  cachedAvailability = null;
+  cachedAvailability =
+    null;
 }

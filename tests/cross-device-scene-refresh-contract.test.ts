@@ -4,11 +4,16 @@ import { resolve } from "node:path";
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 
 describe("cross-device Scene refresh", () => {
-  it("refreshes the cloud account scope before reading the Library cache", () => {
+  it("renders the account-scoped Library cache first, then refreshes it from cloud without blanking the screen", () => {
     const library = read("app/(tabs)/library.tsx");
 
     expect(library).toContain('import {\n  syncScenesWithCloud,\n} from "../../lib/scene-sync";');
-    expect(library).toMatch(/await syncScenesWithCloud\(\);[\s\S]*readScenes\(\)[\s\S]*setScenes\(nextScenes\)/);
+    expect(library).toMatch(
+      /const \[[\s\S]*nextScenes[\s\S]*= await Promise[.]all\([\s\S]*readScenes\(\)[\s\S]*setScenes\(nextScenes\)/,
+    );
+    expect(library).toMatch(
+      /Promise[.]allSettled\([\s\S]*syncScenesWithCloud\(\)[\s\S]*setScenes\(await readScenes\(\)\)/,
+    );
     expect(library).toContain("showing the latest local Library instead");
   });
 

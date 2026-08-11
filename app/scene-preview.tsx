@@ -23,6 +23,7 @@ import {
 
 import {
   router,
+  useFocusEffect,
 } from "expo-router";
 
 import * as ExpoRouter from "expo-router";
@@ -111,6 +112,18 @@ import {
 import {
   useConnectivity,
 } from "../providers/connectivity-provider";
+
+import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../hooks/use-reconnect-reload";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
 
 import type {
   GeneratedSceneResult,
@@ -241,6 +254,10 @@ export default function ScenePreviewScreen() {
 
   const [loading, setLoading] =
     useState(true);
+  const [loadError, setLoadError] =
+    useState<unknown>(null);
+  const [reloadEpoch, setReloadEpoch] =
+    useState(0);
   const [scopedPreview, setScopedPreview] =
     useState<GeneratedSceneResult | null>(null);
   const [hasScopedPreview, setHasScopedPreview] =
@@ -348,7 +365,8 @@ export default function ScenePreviewScreen() {
     generationInFlightRef.current = false;
   }, [scope]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
+    void reloadEpoch;
     let active = true;
     const operationScope = scope;
     const operationGeneration =
@@ -411,12 +429,22 @@ export default function ScenePreviewScreen() {
         return;
       }
 
-      const preview =
-        await repositoryRef.current.readPreview({
+      setLoadError(null);
+
+      let preview;
+      try {
+        preview = await repositoryRef.current.readPreview({
           scope: operationScope,
           currentScope,
           operationGuard: canCommit,
         });
+      } catch (error) {
+        if (canCommit()) {
+          setLoadError(error);
+          setLoading(false);
+        }
+        return;
+      }
 
       if (!canCommit()) {
         return;
@@ -445,8 +473,26 @@ export default function ScenePreviewScreen() {
     };
   }, [
     currentScope,
+    reloadEpoch,
     scope,
-  ]);
+  ]));
+
+  const reloadPreview = useCallback(() => {
+    setReloadEpoch((current) => current + 1);
+  }, []);
+
+  useReconnectReload(reloadPreview);
+
+  const previewRecoveryIssue = useMemo(
+    () =>
+      loadError
+        ? classifyRecoveryIssue(loadError, {
+            service: "canal",
+            connectivityStatus,
+          })
+        : null,
+    [connectivityStatus, loadError],
+  );
 
   const mutatePreview = useCallback(
     async (
@@ -962,9 +1008,29 @@ export default function ScenePreviewScreen() {
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.content}
       >
-        <Text accessibilityRole="header" style={styles.title}>
-          Edit Scene
-        </Text>
+        <View style={styles.header}>
+          <Pressable
+            accessibilityLabel="Back from Scene editor"
+            accessibilityRole="button"
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace("/scene-studio" as never);
+            }}
+            style={styles.backButton}
+          >
+            <Ionicons color={canalDynamicColors.text} name="chevron-back" size={22} />
+          </Pressable>
+          <Text accessibilityRole="header" style={styles.title}>
+            Edit Scene
+          </Text>
+        </View>
+
+        {previewRecoveryIssue ? (
+          <RecoveryNotice
+            issue={previewRecoveryIssue}
+            onAction={reloadPreview}
+          />
+        ) : null}
 
         <View
           accessibilityLiveRegion="polite"
@@ -1369,6 +1435,17 @@ const styles = StyleSheet.create({
     fontFamily: "Georgia",
     fontSize: 34,
     fontWeight: "700",
+  },
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  backButton: {
+    alignItems: "center",
+    height: 48,
+    justifyContent: "center",
+    width: 48,
   },
   notice: {
     backgroundColor: "rgba(16, 28, 25, 0.94)",

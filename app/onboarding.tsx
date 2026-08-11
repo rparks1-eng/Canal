@@ -1,17 +1,31 @@
-import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
+import type {
+  ReactNode,
+} from "react";
+
 import {
-  ActivityIndicator,
+  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
+  TextInput,
+  useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
+
+import {
+  Ionicons,
+} from "@expo/vector-icons";
+
+import * as Haptics from "expo-haptics";
 
 import {
   router,
@@ -27,6 +41,32 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  OnboardingAtmosphere,
+  OnboardingButton,
+  OnboardingChoice,
+  OnboardingHeader,
+  OnboardingPanel,
+  useOnboardingPalette,
+} from "../components/auth-onboarding-ui";
+
+import type {
+  OnboardingPalette,
+} from "../components/auth-onboarding-ui";
+
+import {
+  CanalAvatar,
+} from "../components/canal-avatar";
+
+import {
+  classifyAnalyticsFailure,
+  recordAnalyticsFailure,
+} from "../lib/analytics";
+
+import {
+  readPublicSceneReturn,
+} from "../lib/auth-return";
+
+import {
   completeOnboarding,
 } from "../lib/onboarding";
 
@@ -35,9 +75,12 @@ import type {
 } from "../lib/onboarding";
 
 import {
-  classifyAnalyticsFailure,
-  recordAnalyticsFailure,
-} from "../lib/analytics";
+  writeOnboardingSceneSeed,
+} from "../lib/onboarding-scene-seed";
+
+import {
+  readSpotifySession,
+} from "../lib/spotify-auth";
 
 import {
   useAuth,
@@ -46,7 +89,55 @@ import {
 type OnboardingStep =
   | 0
   | 1
-  | 2;
+  | 2
+  | 3
+  | 4;
+
+const STEP_LABELS = [
+  "Music",
+  "Identity",
+  "Taste",
+  "First Scene",
+  "Ready",
+] as const;
+
+const STEP_PALETTES:
+  readonly OnboardingPalette[] = [
+    "verdant",
+    "ember",
+    "violet",
+    "rose",
+    "tidal",
+  ];
+
+const ACTIVITIES = [
+  "Focus",
+  "Commute",
+  "Workout",
+  "Cook",
+  "Wind down",
+  "Host friends",
+] as const;
+
+const MOODS = [
+  "Calm",
+  "Bright",
+  "Dreamy",
+  "Confident",
+  "Reflective",
+  "Energized",
+  "Warm",
+  "Nostalgic",
+] as const;
+
+const GENRES = [
+  "Alternative R&B",
+  "Hip-hop",
+  "Electronic",
+  "Ambient",
+  "Indie",
+  "Soul",
+] as const;
 
 function parseStep(
   value:
@@ -55,16 +146,34 @@ function parseStep(
 ): OnboardingStep {
   if (
     value ===
-    "shape"
+      "identity" ||
+    value ===
+      "shape"
   ) {
     return 1;
   }
 
   if (
     value ===
-    "export"
+    "taste"
   ) {
     return 2;
+  }
+
+  if (
+    value ===
+    "scene"
+  ) {
+    return 3;
+  }
+
+  if (
+    value ===
+      "ready" ||
+    value ===
+      "export"
+  ) {
+    return 4;
   }
 
   return 0;
@@ -76,50 +185,190 @@ export default function OnboardingScreen() {
       step?: string;
       spotify?: string;
     }>();
-
   const {
+    width,
+  } =
+    useWindowDimensions();
+  const colorScheme =
+    useColorScheme();
+  const {
+    profile,
     user,
   } =
     useAuth();
-
   const [
     step,
     setStep,
-  ] =
-    useState<OnboardingStep>(
-      parseStep(
-        params.step,
-      ),
-    );
-
+  ] = useState<OnboardingStep>(
+    parseStep(
+      params.step,
+    ),
+  );
   const [
     finishing,
     setFinishing,
   ] = useState(false);
-
   const [
     spotifyConnectSkipped,
     setSpotifyConnectSkipped,
-  ] = useState(false);
-
+  ] = useState(
+    params.spotify ===
+      "skipped",
+  );
+  const [
+    storedSpotifyConnected,
+    setStoredSpotifyConnected,
+  ] = useState(
+    params.spotify ===
+      "connected",
+  );
   const [
     errorMessage,
     setErrorMessage,
   ] = useState("");
+  const [
+    activity,
+    setActivity,
+  ] = useState<string | null>(
+    null,
+  );
+  const [
+    moods,
+    setMoods,
+  ] = useState<string[]>(
+    [],
+  );
+  const [
+    genres,
+    setGenres,
+  ] = useState<string[]>([
+    "Alternative R&B",
+    "Hip-hop",
+    "Electronic",
+  ]);
+  const [
+    familiarity,
+    setFamiliarity,
+  ] = useState<
+    | "Discovery"
+    | "Balanced"
+    | "Familiar"
+  >(
+    "Balanced",
+  );
+  const [
+    allowAdjacent,
+    setAllowAdjacent,
+  ] = useState(true);
+  const [
+    allowExplicit,
+    setAllowExplicit,
+  ] = useState(false);
+  const [
+    directRequest,
+    setDirectRequest,
+  ] = useState("");
+  const [
+    validationMessage,
+    setValidationMessage,
+  ] = useState("");
+  const [
+    hasSharedSceneReturn,
+    setHasSharedSceneReturn,
+  ] = useState(false);
+
+  const palette =
+    STEP_PALETTES[
+      step
+    ];
+  const colors =
+    useOnboardingPalette(
+      palette,
+    );
+  const isWide =
+    width >= 760;
+  const spotifyConnected =
+    (
+      params.spotify ===
+        "connected" ||
+      storedSpotifyConnected
+    ) &&
+    !spotifyConnectSkipped;
+  const sceneName =
+    useMemo(
+      () =>
+        buildFirstSceneName(
+          activity,
+          moods,
+        ),
+      [
+        activity,
+        moods,
+      ],
+    );
 
   useEffect(() => {
-    setSpotifyConnectSkipped(
+    let active =
+      true;
+
+    if (
       params.spotify ===
-        "skipped",
-    );
+      "connected"
+    ) {
+      setStoredSpotifyConnected(
+        true,
+      );
+      setSpotifyConnectSkipped(
+        false,
+      );
+    } else if (
+      params.spotify ===
+      "skipped"
+    ) {
+      setSpotifyConnectSkipped(
+        true,
+      );
+    }
+
+    readSpotifySession()
+      .then(
+        (session) => {
+          if (!active) {
+            return;
+          }
+
+          const connected =
+            Boolean(
+              session,
+            );
+
+          setStoredSpotifyConnected(
+            connected,
+          );
+
+          if (connected) {
+            setSpotifyConnectSkipped(
+              false,
+            );
+          }
+        },
+      )
+      .catch(() => {
+        /*
+         * Preserve the callback hint and keep onboarding usable
+         * when secure local Spotify storage is temporarily
+         * unavailable.
+         */
+      });
 
     setFinishing(
       false,
     );
+    setErrorMessage("");
 
-    setErrorMessage(
-      "",
-    );
+    return () => {
+      active = false;
+    };
   }, [
     params.spotify,
     user?.id,
@@ -135,12 +384,75 @@ export default function OnboardingScreen() {
     params.step,
   ]);
 
+  useEffect(() => {
+    let active =
+      true;
+
+    readPublicSceneReturn()
+      .then(
+        (destination) => {
+          if (active) {
+            setHasSharedSceneReturn(
+              Boolean(
+                destination,
+              ),
+            );
+          }
+        },
+      )
+      .catch(() => {
+        if (active) {
+          setHasSharedSceneReturn(
+            false,
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const goToStep = (
     nextStep: OnboardingStep,
   ): void => {
     setErrorMessage("");
+    setValidationMessage("");
     setStep(
       nextStep,
+    );
+    void Haptics.selectionAsync();
+  };
+
+  const goForward = (): void => {
+    if (
+      step ===
+        2 &&
+      !activity
+    ) {
+      setValidationMessage(
+        "Choose at least one activity before continuing.",
+      );
+      return;
+    }
+
+    if (
+      step ===
+        2 &&
+      moods.length ===
+        0
+    ) {
+      setValidationMessage(
+        "Choose at least one mood before continuing.",
+      );
+      return;
+    }
+
+    goToStep(
+      Math.min(
+        4,
+        step + 1,
+      ) as OnboardingStep,
     );
   };
 
@@ -149,9 +461,7 @@ export default function OnboardingScreen() {
       destination:
         OnboardingDestination,
     ): Promise<void> => {
-      if (
-        finishing
-      ) {
+      if (finishing) {
         return;
       }
 
@@ -159,19 +469,35 @@ export default function OnboardingScreen() {
         router.replace(
           "/login" as never,
         );
-
         return;
       }
 
-      setFinishing(
-        true,
-      );
-
+      setFinishing(true);
       setErrorMessage("");
 
       try {
         const expectedUserId =
           user.id;
+
+        if (
+          activity &&
+          moods.length > 0
+        ) {
+          await writeOnboardingSceneSeed(
+            expectedUserId,
+            {
+              activity,
+              moods,
+              genres,
+              familiarity,
+              allowAdjacentGenres:
+                allowAdjacent,
+              allowExplicit,
+              notes:
+                directRequest,
+            },
+          );
+        }
 
         await completeOnboarding(
           expectedUserId,
@@ -184,841 +510,1463 @@ export default function OnboardingScreen() {
             error,
           ),
         );
-
         setErrorMessage(
           error instanceof Error
             ? error.message
             : "Canal could not save your onboarding progress.",
         );
-
-        setFinishing(
-          false,
-        );
+        setFinishing(false);
       }
     };
 
-  return (
-    <SafeAreaView
-      style={
-        styles.safeArea
-      }
-      edges={[
-        "top",
-        "bottom",
-      ]}
-    >
-      <StatusBar style="auto" />
+  const goToHome =
+    (): void => {
+      void finishOnboarding(
+        "/(tabs)",
+      );
+    };
 
-      <View
+  const toggleMood = (
+    mood: string,
+  ): void => {
+    setValidationMessage("");
+    setMoods(
+      (current) => {
+        if (
+          current.includes(
+            mood,
+          )
+        ) {
+          return current.filter(
+            (value) =>
+              value !==
+              mood,
+          );
+        }
+
+        if (
+          current.length >=
+          5
+        ) {
+          setValidationMessage(
+            "You can choose up to five moods. Remove one before adding another.",
+          );
+          return current;
+        }
+
+        return [
+          ...current,
+          mood,
+        ];
+      },
+    );
+    void Haptics.selectionAsync();
+  };
+
+  const toggleGenre = (
+    genre: string,
+  ): void => {
+    setGenres(
+      (current) =>
+        current.includes(
+          genre,
+        )
+          ? current.filter(
+              (value) =>
+                value !==
+                genre,
+            )
+          : [
+              ...current,
+              genre,
+            ].slice(
+              -5,
+            ),
+    );
+    void Haptics.selectionAsync();
+  };
+
+  const actionLabel =
+    step ===
+    4
+      ? hasSharedSceneReturn
+        ? "Continue to shared Scene"
+        : spotifyConnectSkipped
+          ? "Enter Canal"
+          : "Shape my first Scene"
+      : step ===
+          3
+        ? "Use this direction"
+        : "Continue";
+
+  return (
+    <View
+      style={
+        styles.screen
+      }
+    >
+      <StatusBar
         style={
-          styles.screen
+          colorScheme ===
+          "dark"
+            ? "light"
+            : "dark"
+        }
+      />
+      <OnboardingAtmosphere
+        palette={
+          palette
+        }
+      />
+
+      <SafeAreaView
+        edges={[
+          "top",
+          "bottom",
+        ]}
+        style={
+          styles.safeArea
         }
       >
-        <View
+        <KeyboardAvoidingView
+          behavior={
+            process.env.EXPO_OS ===
+            "ios"
+              ? "padding"
+              : undefined
+          }
           style={
-            styles.header
+            styles.screen
           }
         >
-          <Text
-            style={
-              styles.brand
-            }
-          >
-            canal
-          </Text>
-
-          <Text
-            style={
-              styles.stepCount
-            }
-          >
-            {step + 1} of 3
-          </Text>
-        </View>
-
-        <View
-          accessibilityLabel={`Onboarding step ${step + 1} of 3`}
-          style={
-            styles.progress
-          }
-        >
-          {[
-            "Connect",
-            "Shape",
-            spotifyConnectSkipped
-              ? "Explore"
-              : "Export",
-          ].map(
-            (
-              label,
-              index,
-            ) => (
-              <View
-                key={
-                  label
-                }
-                style={
-                  styles.progressItem
-                }
-              >
-                <View
-                  style={[
-                    styles.progressLine,
-
-                    index <=
-                      step &&
-                      styles.progressLineActive,
-                  ]}
-                />
-
-                <Text
-                  style={[
-                    styles.progressLabel,
-
-                    index ===
-                      step &&
-                      styles.progressLabelActive,
-                  ]}
-                >
-                  {label}
-                </Text>
-              </View>
-            ),
-          )}
-        </View>
-
-        <ScrollView
-          contentContainerStyle={
-            styles.content
-          }
-          showsVerticalScrollIndicator={
-            false
-          }
-        >
-          {step ===
-          0 ? (
-            <ConnectStep />
-          ) : null}
-
-          {step ===
-          1 ? (
-            <ShapeStep
-              spotifyConnectSkipped={
-                spotifyConnectSkipped
-              }
-            />
-          ) : null}
-
-          {step ===
-          2 ? (
-            <ExportStep
-              spotifyConnectSkipped={
-                spotifyConnectSkipped
-              }
-            />
-          ) : null}
-        </ScrollView>
-
-        {errorMessage ? (
           <View
             style={
-              styles.errorCard
+              styles.headerWrap
             }
           >
-            <Text
-              style={
-                styles.errorText
+            <OnboardingHeader
+              onSkip={
+                step === 0
+                  ? () => {
+                      setSpotifyConnectSkipped(
+                        true,
+                      );
+                      goToStep(
+                        1,
+                      );
+                    }
+                  : step < 4
+                    ? goToHome
+                  : undefined
               }
-            >
-              {errorMessage}
-            </Text>
+              palette={
+                palette
+              }
+              skipLabel={
+                step ===
+                0
+                  ? "Not now"
+                  : "Go to Home"
+              }
+              step={
+                step
+              }
+              stepLabel={`${STEP_LABELS[step]} · ${step + 1} of ${STEP_LABELS.length}`}
+              totalSteps={
+                STEP_LABELS.length
+              }
+            />
           </View>
-        ) : null}
 
-        <View
-          style={
-            styles.footer
-          }
-        >
-          {step ===
-          0 ? (
-            <>
-              <PrimaryButton
-                label="Connect Spotify"
-                onPress={() => {
+          <ScrollView
+            contentContainerStyle={[
+              styles.content,
+              isWide &&
+                styles.contentWide,
+            ]}
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={
+              false
+            }
+          >
+            {step ===
+            0 ? (
+              <MusicStep
+                connected={
+                  spotifyConnected
+                }
+                colors={
+                  colors
+                }
+                onConnect={() =>
                   router.push({
                     pathname:
                       "/connect-music",
-
                     params: {
                       mode:
                         "onboarding",
                     },
-                  } as never);
-                }}
-              />
-
-              <SecondaryButton
-                label="Not now"
-                onPress={() => {
-                  setSpotifyConnectSkipped(
-                    true,
-                  );
-
-                  goToStep(
-                    1,
-                  );
-                }}
-              />
-            </>
-          ) : null}
-
-          {step ===
-          1 ? (
-            <>
-              <PrimaryButton
-                label={
-                  spotifyConnectSkipped
-                    ? "Next: Explore"
-                    : "Next: Export"
+                  } as never)
                 }
-                onPress={() =>
-                  goToStep(
-                    2,
+                palette={
+                  palette
+                }
+              />
+            ) : null}
+
+            {step ===
+            1 ? (
+              <IdentityStep
+                avatarUrl={
+                  user?.user_metadata?.avatar_url ??
+                  user?.user_metadata?.picture
+                }
+                colors={
+                  colors
+                }
+                displayName={
+                  profile?.displayName ??
+                  user?.user_metadata
+                    ?.display_name ??
+                  "Your Canal"
+                }
+                handle={
+                  profile?.handle ??
+                  "@yourhandle"
+                }
+                onChoosePhoto={() =>
+                  router.push(
+                    "/profile-picture" as never,
                   )
                 }
-              />
-
-              <SecondaryButton
-                label="Back"
-                onPress={() =>
-                  goToStep(
-                    0,
-                  )
+                palette={
+                  palette
                 }
               />
-            </>
+            ) : null}
+
+            {step ===
+            2 ? (
+              <TasteStep
+                activity={
+                  activity
+                }
+                allowAdjacent={
+                  allowAdjacent
+                }
+                allowExplicit={
+                  allowExplicit
+                }
+                colors={
+                  colors
+                }
+                familiarity={
+                  familiarity
+                }
+                genres={
+                  genres
+                }
+                moods={
+                  moods
+                }
+                onActivity={
+                  setActivity
+                }
+                onAdjacent={
+                  setAllowAdjacent
+                }
+                onExplicit={
+                  setAllowExplicit
+                }
+                onFamiliarity={
+                  setFamiliarity
+                }
+                onGenre={
+                  toggleGenre
+                }
+                onMood={
+                  toggleMood
+                }
+                palette={
+                  palette
+                }
+                spotifyConnected={
+                  spotifyConnected
+                }
+                validationMessage={
+                  validationMessage
+                }
+              />
+            ) : null}
+
+            {step ===
+            3 ? (
+              <FirstSceneStep
+                activity={
+                  activity
+                }
+                colors={
+                  colors
+                }
+                directRequest={
+                  directRequest
+                }
+                familiarity={
+                  familiarity
+                }
+                moods={
+                  moods
+                }
+                onDirectRequest={
+                  setDirectRequest
+                }
+                palette={
+                  palette
+                }
+                sceneName={
+                  sceneName
+                }
+              />
+            ) : null}
+
+            {step ===
+            4 ? (
+              <ReadyStep
+                colors={
+                  colors
+                }
+                hasSharedSceneReturn={
+                  hasSharedSceneReturn
+                }
+                palette={
+                  palette
+                }
+                sceneName={
+                  sceneName
+                }
+              />
+            ) : null}
+          </ScrollView>
+
+          {errorMessage ? (
+            <Text
+              accessibilityLiveRegion="assertive"
+              accessibilityRole="alert"
+              selectable
+              style={[
+                styles.errorText,
+                {
+                  color:
+                    colors.danger,
+                  borderColor:
+                    colors.line,
+                  backgroundColor:
+                    colors.glassStrong,
+                },
+              ]}
+            >
+              {errorMessage}
+            </Text>
           ) : null}
 
-          {step ===
-          2 ? (
-            <>
-              <PrimaryButton
-                disabled={
-                  finishing
-                }
-                label={
-                  spotifyConnectSkipped
-                    ? "Continue to Home"
-                    : "Shape my first Scene"
-                }
-                loading={
-                  finishing
-                }
-                onPress={() => {
-                  if (
-                    spotifyConnectSkipped
-                  ) {
-                    void finishOnboarding(
-                      "/(tabs)",
-                    );
-                  } else {
-                    void finishOnboarding(
-                      "/scene-studio",
-                    );
-                  }
-                }}
-              />
-
-              <SecondaryButton
-                disabled={
-                  finishing
-                }
-                label={
-                  spotifyConnectSkipped
-                    ? "Connect Spotify"
-                    : "Go to Home"
-                }
-                onPress={() => {
-                  if (
-                    spotifyConnectSkipped
-                  ) {
-                    router.push({
-                      pathname:
-                        "/connect-music",
-
-                      params: {
-                        mode:
-                          "onboarding",
-                      },
-                    } as never);
-                  } else {
-                    void finishOnboarding(
-                      "/(tabs)",
-                    );
-                  }
-                }}
-              />
-
+          <View
+            style={[
+              styles.footer,
+              {
+                borderColor:
+                  colors.line,
+                backgroundColor:
+                  colors.glassStrong,
+              },
+            ]}
+          >
+            {step > 0 ? (
               <Pressable
-                accessibilityLabel="Back to Shape"
+                accessibilityLabel={`Back to ${STEP_LABELS[step - 1]}`}
                 accessibilityRole="button"
                 disabled={
                   finishing
                 }
                 onPress={() =>
                   goToStep(
-                    1,
+                    (step -
+                      1) as OnboardingStep,
                   )
                 }
-                style={({
-                  pressed,
-                }) => [
-                  styles.backLink,
-
-                  pressed &&
-                    styles.pressed,
-                ]}
+                style={
+                  styles.backButton
+                }
               >
-                <Text
-                  style={
-                    styles.backLinkText
+                <Ionicons
+                  color={
+                    colors.ink
                   }
+                  name="chevron-back"
+                  size={20}
+                />
+                <Text
+                  style={[
+                    styles.backText,
+                    {
+                      color:
+                        colors.ink,
+                    },
+                  ]}
                 >
                   Back
                 </Text>
               </Pressable>
-            </>
-          ) : null}
-        </View>
-      </View>
-    </SafeAreaView>
-  );
-}
+            ) : (
+              <View
+                style={
+                  styles.backPlaceholder
+                }
+              />
+            )}
 
-function ConnectStep() {
-  return (
-    <View
-      style={
-        styles.step
-      }
-    >
-      <View
-        style={
-          styles.connectVisual
-        }
-      >
-        <View
-          style={
-            styles.canalDisc
-          }
-        >
-          <Text
-            style={
-              styles.canalDiscText
-            }
-          >
-            c
-          </Text>
-        </View>
-
-        <View
-          style={
-            styles.connector
-          }
-        >
-          <View
-            style={
-              styles.connectorDot
-            }
-          />
-
-          <View
-            style={
-              styles.connectorDot
-            }
-          />
-
-          <View
-            style={
-              styles.connectorDot
-            }
-          />
-        </View>
-
-        <View
-          style={
-            styles.spotifyDisc
-          }
-        >
-          <Text
-            style={
-              styles.spotifyDiscText
-            }
-          >
-            SP
-          </Text>
-        </View>
-      </View>
-
-      <Text
-        style={
-          styles.eyebrow
-        }
-      >
-        CONNECT
-      </Text>
-
-      <Text
-        style={
-          styles.title
-        }
-      >
-        Start with music you already love.
-      </Text>
-
-      <Text
-        style={
-          styles.description
-        }
-      >
-        Spotify gives Canal the artists,
-        genres, and tracks it needs to build
-        Scenes around your taste.
-      </Text>
-
-      <View
-        style={
-          styles.noteCard
-        }
-      >
-        <Text
-          style={
-            styles.noteTitle
-          }
-        >
-          Your call
-        </Text>
-
-        <Text
-          style={
-            styles.noteText
-          }
-        >
-          Connecting Spotify is optional
-          right now. You can explore Canal
-          first and connect later from Music
-          Services.
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function ShapeStep({
-  spotifyConnectSkipped,
-}: {
-  spotifyConnectSkipped: boolean;
-}) {
-  return (
-    <View
-      style={
-        styles.step
-      }
-    >
-      <View
-        style={
-          styles.shapeVisual
-        }
-      >
-        <View
-          style={
-            styles.scenePreviewHeader
-          }
-        >
-          <Text
-            style={
-              styles.scenePreviewLabel
-            }
-          >
-            {spotifyConnectSkipped
-              ? "PUBLIC SCENE"
-              : "YOUR SCENE"}
-          </Text>
-
-          <Text
-            style={
-              styles.scenePreviewName
-            }
-          >
-            Late Night Focus
-          </Text>
-        </View>
-
-        <View
-          style={
-            styles.chipRow
-          }
-        >
-          <View
-            style={[
-              styles.chip,
-              styles.orangeChip,
-            ]}
-          >
-            <Text
-              style={
-                styles.orangeChipText
-              }
-            >
-              Focused
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.chip,
-              styles.greenChip,
-            ]}
-          >
-            <Text
-              style={
-                styles.greenChipText
-              }
-            >
-              Low energy
-            </Text>
-          </View>
-        </View>
-
-        <View
-          style={
-            styles.mixRow
-          }
-        >
-          <View
-            style={
-              styles.mixCopy
-            }
-          >
-            <Text
-              style={
-                styles.mixLabel
-              }
-            >
-              Familiarity
-            </Text>
-
-            <Text
-              style={
-                styles.mixValue
-              }
-            >
-              Balanced
-            </Text>
-          </View>
-
-          <View
-            style={
-              styles.mixTrack
-            }
-          >
             <View
               style={
-                styles.mixFill
+                styles.footerAction
               }
-            />
+            >
+              {step ===
+              0 ? (
+                <OnboardingButton
+                  label={
+                    spotifyConnected
+                      ? "Continue"
+                      : "Continue without Spotify"
+                  }
+                  onPress={() => {
+                    setSpotifyConnectSkipped(
+                      !spotifyConnected,
+                    );
+                    goToStep(
+                      1,
+                    );
+                  }}
+                  palette={
+                    palette
+                  }
+                />
+              ) : step ===
+                4 ? (
+                <OnboardingButton
+                  disabled={
+                    finishing
+                  }
+                  label={
+                    actionLabel
+                  }
+                  loading={
+                    finishing
+                  }
+                  onPress={() =>
+                    void finishOnboarding(
+                      hasSharedSceneReturn ||
+                        spotifyConnectSkipped
+                        ? "/(tabs)"
+                        : "/scene-studio",
+                    )
+                  }
+                  palette={
+                    palette
+                  }
+                />
+              ) : (
+                <OnboardingButton
+                  label={
+                    actionLabel
+                  }
+                  onPress={
+                    goForward
+                  }
+                  palette={
+                    palette
+                  }
+                />
+              )}
+            </View>
           </View>
-        </View>
-      </View>
-
-      <Text
-        style={
-          styles.eyebrow
-        }
-      >
-        SHAPE
-      </Text>
-
-      <Text
-        style={
-          styles.title
-        }
-      >
-        Tell Canal what the moment needs.
-      </Text>
-
-      <Text
-        style={
-          styles.description
-        }
-      >
-        {spotifyConnectSkipped
-          ? "Explore how creators shape activity, mood, energy, duration, and artist mix. Connect Spotify when you want to create your own."
-          : "Set the activity, mood, energy, duration, and artist mix. Canal turns those choices into one cohesive Scene."}
-      </Text>
-
-      <View
-        style={
-          styles.detailRow
-        }
-      >
-        <Detail
-          number="01"
-          text="Pick the feeling"
-        />
-
-        <Detail
-          number="02"
-          text="Control the arc"
-        />
-
-        <Detail
-          number="03"
-          text="Tune the mix"
-        />
-      </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </View>
   );
 }
 
-function ExportStep({
-  spotifyConnectSkipped,
-}: {
-  spotifyConnectSkipped: boolean;
-}) {
-  if (
-    spotifyConnectSkipped
-  ) {
-    return (
-      <View
+type PaletteColors =
+  ReturnType<
+    typeof useOnboardingPalette
+  >;
+
+function StepCopy(
+  props: {
+    colors: PaletteColors;
+    eyebrow: string;
+    title: string;
+    description: string;
+  },
+) {
+  return (
+    <View
+      style={
+        styles.stepCopy
+      }
+    >
+      <Text
+        selectable
+        style={[
+          styles.eyebrow,
+          {
+            color:
+              props.colors.muted,
+          },
+        ]}
+      >
+        {props.eyebrow}
+      </Text>
+      <Text
+        selectable
+        style={[
+          styles.title,
+          {
+            color:
+              props.colors.ink,
+          },
+        ]}
+      >
+        {props.title}
+      </Text>
+      <Text
+        selectable
+        style={[
+          styles.description,
+          {
+            color:
+              props.colors.muted,
+          },
+        ]}
+      >
+        {props.description}
+      </Text>
+    </View>
+  );
+}
+
+function MusicStep(
+  props: {
+    connected: boolean;
+    colors: PaletteColors;
+    onConnect: () => void;
+    palette: OnboardingPalette;
+  },
+) {
+  return (
+    <View
+      style={
+        styles.stepLayout
+      }
+    >
+      <StepCopy
+        colors={
+          props.colors
+        }
+        description="Canal keeps a bounded, account-scoped library cache so recommendations load quickly without repeatedly asking Spotify for the same music."
+        eyebrow="BRING YOUR LISTENING HISTORY"
+        title="Connect music without giving up control."
+      />
+
+      <OnboardingPanel
+        palette={
+          props.palette
+        }
+        strong
         style={
-          styles.step
+          styles.workspace
+        }
+      >
+        <Text
+          selectable
+          style={[
+            styles.panelTitle,
+            {
+              color:
+                props.colors.ink,
+            },
+          ]}
+        >
+          Your music services
+        </Text>
+        <Text
+          selectable
+          style={[
+            styles.panelNote,
+            {
+              color:
+                props.colors.muted,
+            },
+          ]}
+        >
+          Connect now, or begin with Canal and add your library later.
+        </Text>
+
+        <Pressable
+          accessibilityLabel={
+            props.connected
+              ? "Spotify connected"
+              : "Connect Spotify"
+          }
+          accessibilityRole="button"
+          accessibilityState={{
+            selected:
+              props.connected,
+          }}
+          onPress={
+            props.onConnect
+          }
+          style={[
+            styles.serviceRow,
+            {
+              borderColor:
+                props.colors.line,
+            },
+          ]}
+        >
+          <View
+            style={
+              styles.spotifyMark
+            }
+          >
+            <Ionicons
+              color="#062910"
+              name="musical-notes"
+              size={21}
+            />
+          </View>
+          <View
+            style={
+              styles.flex
+            }
+          >
+            <Text
+              style={[
+                styles.serviceTitle,
+                {
+                  color:
+                    props.colors.ink,
+                },
+              ]}
+            >
+              Spotify
+            </Text>
+            <Text
+              selectable
+              style={[
+                styles.serviceDetail,
+                {
+                  color:
+                    props.colors.muted,
+                },
+              ]}
+            >
+              Top tracks, saved music, recent listening, playlist metadata
+            </Text>
+          </View>
+          <Text
+            style={[
+              styles.serviceState,
+              {
+                color:
+                  props.colors.ink,
+              },
+            ]}
+          >
+            {props.connected
+              ? "Connected"
+              : "Connect"}
+          </Text>
+        </Pressable>
+
+        <View
+          style={
+            styles.trustList
+          }
+        >
+          <TrustLine
+            colors={
+              props.colors
+            }
+            icon="shield-checkmark-outline"
+            text="Your Spotify password never enters Canal."
+          />
+          <TrustLine
+            colors={
+              props.colors
+            }
+            icon="layers-outline"
+            text="Stable song metadata is cached and deduplicated."
+          />
+          <TrustLine
+            colors={
+              props.colors
+            }
+            icon="refresh-outline"
+            text="Refreshes are occasional, bounded, and recoverable."
+          />
+        </View>
+      </OnboardingPanel>
+    </View>
+  );
+}
+
+function IdentityStep(
+  props: {
+    avatarUrl?: string | null;
+    colors: PaletteColors;
+    displayName: string;
+    handle: string;
+    onChoosePhoto: () => void;
+    palette: OnboardingPalette;
+  },
+) {
+  return (
+    <View
+      style={
+        styles.stepLayout
+      }
+    >
+      <StepCopy
+        colors={
+          props.colors
+        }
+        description="Your profile picture follows you through Stage chat, collaboration, Explore, reactions, and your Soundscape."
+        eyebrow="YOUR IDENTITY IN CANAL"
+        title="Choose the atmosphere people see."
+      />
+      <OnboardingPanel
+        palette={
+          props.palette
+        }
+        strong
+        style={
+          styles.workspace
         }
       >
         <View
           style={
-            styles.exploreVisual
+            styles.profilePreview
           }
         >
-          <Text
+          <CanalAvatar
+            avatarUrl={
+              props.avatarUrl
+            }
+            fallbackText={
+              props.displayName
+                .slice(0, 1)
+                .toUpperCase()
+            }
+            size={86}
+          />
+          <View
             style={
-              styles.exploreVisualMark
+              styles.flex
             }
           >
-            c
-          </Text>
+            <Text
+              selectable
+              style={[
+                styles.profileName,
+                {
+                  color:
+                    props.colors.ink,
+                },
+              ]}
+            >
+              {props.displayName}
+            </Text>
+            <Text
+              selectable
+              style={[
+                styles.profileHandle,
+                {
+                  color:
+                    props.colors.muted,
+                },
+              ]}
+            >
+              {props.handle}
+            </Text>
+          </View>
         </View>
 
+        <OnboardingButton
+          icon="color-palette-outline"
+          label="Choose a profile picture"
+          onPress={
+            props.onChoosePhoto
+          }
+          palette={
+            props.palette
+          }
+          secondary
+        />
         <Text
-          style={
-            styles.eyebrow
-          }
+          selectable
+          style={[
+            styles.privacyNote,
+            {
+              color:
+                props.colors.muted,
+            },
+          ]}
         >
-          EXPLORE
+          Pick one of ten Canal palettes, choose from your library, or take a photo. Your public Soundscape stays private until you publish it.
         </Text>
+      </OnboardingPanel>
+    </View>
+  );
+}
 
-        <Text
-          style={
-            styles.title
-          }
-        >
-          Start with Canal. Connect when you’re ready.
-        </Text>
-
-        <Text
-          style={
-            styles.description
-          }
-        >
-          Explore public Scenes and creator profiles now. Connect Spotify later from Music Services when you want to shape and export your own Scene.
-        </Text>
-
-        <View
-          style={
-            styles.noteCard
-          }
-        >
-          <Text
-            style={
-              styles.noteTitle
-            }
-          >
-            Explore now
-          </Text>
-
-          <Text
-            style={
-              styles.noteText
-            }
-          >
-            Your Home and Explore feeds are ready. Spotify stays optional until you choose to create.
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
+function TasteStep(
+  props: {
+    activity: string | null;
+    allowAdjacent: boolean;
+    allowExplicit: boolean;
+    colors: PaletteColors;
+    familiarity:
+      | "Discovery"
+      | "Balanced"
+      | "Familiar";
+    genres: string[];
+    moods: string[];
+    onActivity: (
+      value: string,
+    ) => void;
+    onAdjacent: (
+      value: boolean,
+    ) => void;
+    onExplicit: (
+      value: boolean,
+    ) => void;
+    onFamiliarity: (
+      value:
+        | "Discovery"
+        | "Balanced"
+        | "Familiar",
+    ) => void;
+    onGenre: (
+      value: string,
+    ) => void;
+    onMood: (
+      value: string,
+    ) => void;
+    palette: OnboardingPalette;
+    spotifyConnected: boolean;
+    validationMessage: string;
+  },
+) {
   return (
     <View
       style={
-        styles.step
+        styles.stepLayout
+      }
+    >
+      <StepCopy
+        colors={
+          props.colors
+        }
+        description="These choices seed your first recommendations. Likes, dislikes, Swaps, skips, replays, and favorites refine them later."
+        eyebrow="TUNE YOUR COMPASS"
+        title="Give Canal a strong first signal."
+      />
+      <OnboardingPanel
+        palette={
+          props.palette
+        }
+        strong
+        style={
+          styles.workspace
+        }
+      >
+        <View
+          style={
+            styles.detectedRow
+          }
+        >
+          <Ionicons
+            color={
+              props.colors.ink
+            }
+            name="sparkles-outline"
+            size={17}
+          />
+          <Text
+            selectable
+            style={[
+              styles.detectedText,
+              {
+                color:
+                  props.colors.muted,
+              },
+            ]}
+          >
+            {props.spotifyConnected
+              ? "Spotify connected · starting with your strongest signals"
+              : "Starting with Canal’s catalog · connect your library anytime"}
+          </Text>
+        </View>
+
+        <ChoiceGroup
+          colors={
+            props.colors
+          }
+          count={
+            props.activity
+              ? "1 selected"
+              : "Required"
+          }
+          label="What do you do most?"
+        >
+          {ACTIVITIES.map(
+            (value) => (
+              <OnboardingChoice
+                key={
+                  value
+                }
+                label={
+                  value
+                }
+                onPress={() =>
+                  props.onActivity(
+                    value,
+                  )
+                }
+                palette={
+                  props.palette
+                }
+                selected={
+                  props.activity ===
+                  value
+                }
+              />
+            ),
+          )}
+        </ChoiceGroup>
+
+        <ChoiceGroup
+          colors={
+            props.colors
+          }
+          count={`${props.moods.length}/5 selected`}
+          label="What should it feel like?"
+        >
+          {MOODS.map(
+            (value) => (
+              <OnboardingChoice
+                accessibilityHint="Select a mood, up to five"
+                key={
+                  value
+                }
+                label={
+                  value
+                }
+                onPress={() =>
+                  props.onMood(
+                    value,
+                  )
+                }
+                palette={
+                  props.palette
+                }
+                selected={
+                  props.moods.includes(
+                    value,
+                  )
+                }
+              />
+            ),
+          )}
+        </ChoiceGroup>
+
+        <ChoiceGroup
+          colors={
+            props.colors
+          }
+          count="Optional · up to 5"
+          label="Your starting sounds"
+        >
+          {GENRES.map(
+            (value) => (
+              <OnboardingChoice
+                key={
+                  value
+                }
+                label={
+                  value
+                }
+                onPress={() =>
+                  props.onGenre(
+                    value,
+                  )
+                }
+                palette={
+                  props.palette
+                }
+                selected={
+                  props.genres.includes(
+                    value,
+                  )
+                }
+              />
+            ),
+          )}
+        </ChoiceGroup>
+
+        <ChoiceGroup
+          colors={
+            props.colors
+          }
+          count={
+            props.familiarity
+          }
+          label="Familiarity"
+        >
+          {(
+            [
+              "Discovery",
+              "Balanced",
+              "Familiar",
+            ] as const
+          ).map(
+            (value) => (
+              <OnboardingChoice
+                key={
+                  value
+                }
+                label={
+                  value
+                }
+                onPress={() =>
+                  props.onFamiliarity(
+                    value,
+                  )
+                }
+                palette={
+                  props.palette
+                }
+                selected={
+                  props.familiarity ===
+                  value
+                }
+              />
+            ),
+          )}
+        </ChoiceGroup>
+
+        <PreferenceSwitch
+          colors={
+            props.colors
+          }
+          description="Try your exact choices first; expand only when needed"
+          label="Allow adjacent sounds"
+          onValueChange={
+            props.onAdjacent
+          }
+          value={
+            props.allowAdjacent
+          }
+        />
+        <PreferenceSwitch
+          colors={
+            props.colors
+          }
+          description="Keep the playback preference consistent"
+          label="Allow explicit tracks"
+          onValueChange={
+            props.onExplicit
+          }
+          value={
+            props.allowExplicit
+          }
+        />
+
+        {props.validationMessage ? (
+          <Text
+            accessibilityLiveRegion="assertive"
+            accessibilityRole="alert"
+            selectable
+            style={[
+              styles.validationText,
+              {
+                color:
+                  props.colors.danger,
+              },
+            ]}
+          >
+            {props.validationMessage}
+          </Text>
+        ) : null}
+      </OnboardingPanel>
+    </View>
+  );
+}
+
+function FirstSceneStep(
+  props: {
+    activity: string | null;
+    colors: PaletteColors;
+    directRequest: string;
+    familiarity: string;
+    moods: string[];
+    onDirectRequest: (
+      value: string,
+    ) => void;
+    palette: OnboardingPalette;
+    sceneName: string;
+  },
+) {
+  return (
+    <View
+      style={
+        styles.stepLayout
       }
     >
       <View
         style={
-          styles.exportVisual
+          styles.stepCopy
         }
       >
-        <View
-          style={
-            styles.cover
+        <StepCopy
+          colors={
+            props.colors
           }
+          description="This direction opens in the full Scene creator, where duration, energy, arc, genres, and playback preferences stay editable before generation."
+          eyebrow="MAKE THE FIRST MOMENT"
+          title="Start from a direction that already feels like you."
+        />
+        <Text
+          style={[
+            styles.fieldLabel,
+            {
+              color:
+                props.colors.muted,
+            },
+          ]}
         >
-          <View
-            style={
-              styles.waveRow
-            }
-          >
-            {[
-              35,
-              62,
-              48,
-              78,
-              52,
-              67,
-              39,
-            ].map(
-              (
-                height,
-                index,
-              ) => (
-                <View
-                  key={
-                    `${height}-${index}`
-                  }
-                  style={[
-                    styles.waveBar,
-
-                    {
-                      height,
-                    },
-                  ]}
-                />
-              ),
-            )}
-          </View>
-        </View>
-
-        <View
-          style={
-            styles.exportCopy
+          DIRECT CANAL
+        </Text>
+        <TextInput
+          accessibilityLabel="Direct Canal request"
+          maxLength={240}
+          multiline
+          onChangeText={
+            props.onDirectRequest
           }
-        >
-          <Text
-            style={
-              styles.exportLabel
-            }
-          >
-            READY TO EXPORT
-          </Text>
-
-          <Text
-            style={
-              styles.exportName
-            }
-          >
-            Late Night Focus
-          </Text>
-
-          <Text
-            style={
-              styles.exportMeta
-            }
-          >
-            18 tracks · 58 minutes
-          </Text>
-        </View>
+          placeholder="Soft motion, late summer air, no sharp transitions"
+          placeholderTextColor={
+            props.colors.muted
+          }
+          style={[
+            styles.directInput,
+            {
+              color:
+                props.colors.ink,
+              borderColor:
+                props.colors.line,
+            },
+          ]}
+          value={
+            props.directRequest
+          }
+        />
       </View>
 
-      <Text
+      <OnboardingPanel
+        accessibilityLabel="First Scene direction preview"
+        palette={
+          props.palette
+        }
+        strong
         style={
-          styles.eyebrow
+          styles.scenePreview
         }
       >
-        EXPORT
+        <Text
+          style={[
+            styles.sceneEyebrow,
+            {
+              color:
+                props.colors.muted,
+            },
+          ]}
+        >
+          YOUR FIRST SCENE
+        </Text>
+        <Text
+          selectable
+          style={[
+            styles.sceneName,
+            {
+              color:
+                props.colors.ink,
+            },
+          ]}
+        >
+          {props.sceneName}
+        </Text>
+        <EnergyRidge
+          color={
+            props.colors.ink
+          }
+        />
+        <Text
+          selectable
+          style={[
+            styles.sceneDna,
+            {
+              color:
+                props.colors.muted,
+            },
+          ]}
+        >
+          {props.activity ??
+            "Moment"}
+          {"  ·  "}
+          {props.moods.join(
+            " · ",
+          )}
+          {"  ·  "}
+          {props.familiarity}
+        </Text>
+        <Text
+          accessibilityLiveRegion="polite"
+          selectable
+          style={[
+            styles.previewStatus,
+            {
+              color:
+                props.colors.muted,
+            },
+          ]}
+        >
+          Activity, moods, familiarity, and Direct Canal are ready to carry into Scene Studio.
+        </Text>
+      </OnboardingPanel>
+    </View>
+  );
+}
+
+function ReadyStep(
+  props: {
+    colors: PaletteColors;
+    hasSharedSceneReturn: boolean;
+    palette: OnboardingPalette;
+    sceneName: string;
+  },
+) {
+  return (
+    <View
+      style={
+        styles.readyLayout
+      }
+    >
+      <View
+        accessibilityLabel="Canal setup complete"
+        style={[
+          styles.readyOrbit,
+          {
+            backgroundColor:
+              props.colors.glowA,
+            borderColor:
+              props.colors.line,
+          },
+        ]}
+      >
+        <Ionicons
+          color={
+            props.colors.ink
+          }
+          name="pulse-outline"
+          size={54}
+        />
+      </View>
+      <Text
+        selectable
+        style={[
+          styles.eyebrow,
+          {
+            color:
+              props.colors.muted,
+          },
+        ]}
+      >
+        YOUR CANAL IS READY
+      </Text>
+      <Text
+        selectable
+        style={[
+          styles.readyTitle,
+          {
+            color:
+              props.colors.ink,
+          },
+        ]}
+      >
+        Start with a moment. Let the rest keep evolving.
+      </Text>
+      <Text
+        selectable
+        style={[
+          styles.readyCopy,
+          {
+            color:
+              props.colors.muted,
+          },
+        ]}
+      >
+        {props.hasSharedSceneReturn
+          ? "Your shared Scene is still waiting. Canal will return you there after this final step."
+          : `${props.sceneName} is ready to finish in Scene Studio. Your profile and recommendations will keep improving across devices.`}
       </Text>
 
-      <Text
+      <OnboardingPanel
+        palette={
+          props.palette
+        }
         style={
-          styles.title
+          styles.readyPanel
         }
       >
-        Keep the Scene wherever you listen.
-      </Text>
-
-      <Text
-        style={
-          styles.description
-        }
-      >
-        Preview the final flow, make it
-        yours, and export it to Spotify as a
-        playlist when it feels right.
-      </Text>
+        <PermissionLine
+          colors={
+            props.colors
+          }
+          detail="Asked after an invite, reaction, comment, follow, or Stage change"
+          icon="notifications-outline"
+          label="Activity notifications"
+          state="When useful"
+        />
+        <PermissionLine
+          colors={
+            props.colors
+          }
+          detail="Requested only when you open Snapshot capture"
+          icon="camera-outline"
+          label="Camera and microphone"
+          state="Later"
+        />
+        <PermissionLine
+          colors={
+            props.colors
+          }
+          detail="Account-scoped Scenes, Snapshots, profile, and Stage changes"
+          icon="cloud-done-outline"
+          label="Cross-device sync"
+          state="Ready"
+        />
+      </OnboardingPanel>
 
       <View
+        accessibilityLabel="Canal navigation"
         style={
-          styles.noteCard
+          styles.navigationMap
         }
       >
-        <Text
-          style={
-            styles.noteTitle
-          }
-        >
-          You stay in control
-        </Text>
-
-        <Text
-          style={
-            styles.noteText
-          }
-        >
-          Canal never exports until you
-          choose to. You can also save a
-          Scene in Canal and return to it
-          later.
-        </Text>
+        {[
+          [
+            "home-outline",
+            "Home",
+          ],
+          [
+            "search-outline",
+            "Explore",
+          ],
+          [
+            "add-outline",
+            "Create",
+          ],
+          [
+            "albums-outline",
+            "Library",
+          ],
+          [
+            "person-outline",
+            "Profile",
+          ],
+        ].map(
+          ([
+            icon,
+            label,
+          ]) => (
+            <View
+              key={
+                label
+              }
+              style={
+                styles.navigationItem
+              }
+            >
+              <Ionicons
+                color={
+                  props.colors.ink
+                }
+                name={
+                  icon as keyof typeof Ionicons.glyphMap
+                }
+                size={20}
+              />
+              <Text
+                style={[
+                  styles.navigationText,
+                  {
+                    color:
+                      props.colors.muted,
+                  },
+                ]}
+              >
+                {label}
+              </Text>
+            </View>
+          ),
+        )}
       </View>
     </View>
   );
 }
 
-function Detail(
+function TrustLine(
   props: {
-    number: string;
+    colors: PaletteColors;
+    icon: keyof typeof Ionicons.glyphMap;
     text: string;
   },
 ) {
   return (
     <View
       style={
-        styles.detail
+        styles.trustLine
       }
     >
-      <Text
-        style={
-          styles.detailNumber
+      <Ionicons
+        color={
+          props.colors.ink
         }
-      >
-        {props.number}
-      </Text>
-
-      <Text
-        style={
-          styles.detailText
+        name={
+          props.icon
         }
+        size={18}
+      />
+      <Text
+        selectable
+        style={[
+          styles.trustText,
+          {
+            color:
+              props.colors.muted,
+          },
+        ]}
       >
         {props.text}
       </Text>
@@ -1026,12 +1974,71 @@ function Detail(
   );
 }
 
-function PrimaryButton(
+function ChoiceGroup(
   props: {
+    colors: PaletteColors;
+    count: string;
     label: string;
-    loading?: boolean;
-    disabled?: boolean;
-    onPress: () => void;
+    children: ReactNode;
+  },
+) {
+  return (
+    <View
+      style={
+        styles.choiceGroup
+      }
+    >
+      <View
+        style={
+          styles.groupHeader
+        }
+      >
+        <Text
+          selectable
+          style={[
+            styles.groupTitle,
+            {
+              color:
+                props.colors.ink,
+            },
+          ]}
+        >
+          {props.label}
+        </Text>
+        <Text
+          accessibilityLiveRegion="polite"
+          selectable
+          style={[
+            styles.groupCount,
+            {
+              color:
+                props.colors.muted,
+            },
+          ]}
+        >
+          {props.count}
+        </Text>
+      </View>
+      <View
+        style={
+          styles.choiceRow
+        }
+      >
+        {props.children}
+      </View>
+    </View>
+  );
+}
+
+function PreferenceSwitch(
+  props: {
+    colors: PaletteColors;
+    description: string;
+    label: string;
+    onValueChange: (
+      value: boolean,
+    ) => void;
+    value: boolean;
   },
 ) {
   return (
@@ -1039,247 +2046,339 @@ function PrimaryButton(
       accessibilityLabel={
         props.label
       }
-      accessibilityRole="button"
-      disabled={
-        props.disabled
+      accessibilityRole="switch"
+      accessibilityState={{
+        checked:
+          props.value,
+      }}
+      onPress={() =>
+        props.onValueChange(
+          !props.value,
+        )
       }
-      onPress={
-        props.onPress
-      }
-      style={({
-        pressed,
-      }) => [
-        styles.primaryButton,
-
-        props.disabled &&
-          styles.disabled,
-
-        pressed &&
-          styles.pressed,
+      style={[
+        styles.preferenceRow,
+        {
+          borderColor:
+            props.colors.line,
+        },
       ]}
     >
-      {props.loading ? (
-        <ActivityIndicator
-          color="#FFFFFF"
-        />
-      ) : (
+      <View
+        style={
+          styles.flex
+        }
+      >
         <Text
-          style={
-            styles.primaryButtonText
-          }
+          selectable
+          style={[
+            styles.preferenceTitle,
+            {
+              color:
+                props.colors.ink,
+            },
+          ]}
         >
           {props.label}
         </Text>
-      )}
+        <Text
+          selectable
+          style={[
+            styles.preferenceText,
+            {
+              color:
+                props.colors.muted,
+            },
+          ]}
+        >
+          {props.description}
+        </Text>
+      </View>
+      <Switch
+        accessible={false}
+        onValueChange={
+          props.onValueChange
+        }
+        pointerEvents="none"
+        trackColor={{
+          false:
+            props.colors.line,
+          true:
+            props.colors.glowA,
+        }}
+        value={
+          props.value
+        }
+      />
     </Pressable>
   );
 }
 
-function SecondaryButton(
+function PermissionLine(
   props: {
+    colors: PaletteColors;
+    detail: string;
+    icon: keyof typeof Ionicons.glyphMap;
     label: string;
-    disabled?: boolean;
-    onPress: () => void;
+    state: string;
   },
 ) {
   return (
-    <Pressable
-      accessibilityLabel={
-        props.label
-      }
-      accessibilityRole="button"
-      disabled={
-        props.disabled
-      }
-      onPress={
-        props.onPress
-      }
-      style={({
-        pressed,
-      }) => [
-        styles.secondaryButton,
-
-        props.disabled &&
-          styles.disabled,
-
-        pressed &&
-          styles.pressed,
+    <View
+      style={[
+        styles.permissionLine,
+        {
+          borderColor:
+            props.colors.line,
+        },
       ]}
     >
-      <Text
+      <Ionicons
+        color={
+          props.colors.ink
+        }
+        name={
+          props.icon
+        }
+        size={21}
+      />
+      <View
         style={
-          styles.secondaryButtonText
+          styles.flex
         }
       >
-        {props.label}
+        <Text
+          selectable
+          style={[
+            styles.permissionTitle,
+            {
+              color:
+                props.colors.ink,
+            },
+          ]}
+        >
+          {props.label}
+        </Text>
+        <Text
+          selectable
+          style={[
+            styles.permissionText,
+            {
+              color:
+                props.colors.muted,
+            },
+          ]}
+        >
+          {props.detail}
+        </Text>
+      </View>
+      <Text
+        style={[
+          styles.permissionState,
+          {
+            color:
+              props.colors.muted,
+          },
+        ]}
+      >
+        {props.state}
       </Text>
-    </Pressable>
+    </View>
   );
+}
+
+function EnergyRidge(
+  props: {
+    color: string;
+  },
+) {
+  const heights = [
+    16,
+    25,
+    20,
+    39,
+    27,
+    52,
+    34,
+    61,
+    44,
+    67,
+    54,
+    70,
+    58,
+    64,
+    47,
+    55,
+    38,
+    49,
+    31,
+    42,
+  ];
+
+  return (
+    <View
+      accessibilityLabel="A building Scene energy arc with waves"
+      style={
+        styles.ridge
+      }
+    >
+      {heights.map(
+        (
+          height,
+          index,
+        ) => (
+          <View
+            key={`${height}-${index}`}
+            style={{
+              flex: 1,
+              height:
+                Math.max(
+                  2,
+                  height / 8,
+                ),
+              borderRadius: 6,
+              backgroundColor:
+                props.color,
+              opacity:
+                0.54 +
+                index /
+                  80,
+              transform: [
+                {
+                  translateY:
+                    (70 -
+                      height) /
+                    4,
+                },
+              ],
+            }}
+          />
+        ),
+      )}
+    </View>
+  );
+}
+
+function buildFirstSceneName(
+  activity: string | null,
+  moods: string[],
+): string {
+  if (
+    moods.includes(
+      "Dreamy",
+    )
+  ) {
+    return "Afterlight on Mercer";
+  }
+
+  if (
+    moods.includes(
+      "Energized",
+    )
+  ) {
+    return "Voltage Before Sunrise";
+  }
+
+  if (
+    activity ===
+    "Wind down"
+  ) {
+    return "Windows Open After Midnight";
+  }
+
+  return "The Hours Between Plans";
 }
 
 const styles =
   StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor: canalDynamicColors.baseCanvas,
-    },
-
     screen: {
       flex: 1,
     },
-
-    header: {
-      flexDirection:
-        "row",
-      alignItems:
-        "center",
-      justifyContent:
-        "space-between",
-      paddingHorizontal: 24,
-      paddingTop: 10,
-    },
-
-    brand: {
-      color: canalDynamicColors.lavender,
-      fontSize: 24,
-      fontWeight: "900",
-      letterSpacing: -1,
-    },
-
-    stepCount: {
-      color: "#6D6B64",
-      fontSize: 12,
-      fontWeight: "800",
-      letterSpacing: 0.6,
-    },
-
-    progress: {
-      flexDirection:
-        "row",
-      gap: 8,
-      paddingHorizontal: 24,
-      marginTop: 20,
-    },
-
-    progressItem: {
+    safeArea: {
       flex: 1,
-    },
-
-    progressLine: {
-      height: 4,
-      borderRadius: 2,
       backgroundColor:
-        "#E9DED5",
+        "transparent",
     },
-
-    progressLineActive: {
-      backgroundColor:
-        "#4C46C8",
+    headerWrap: {
+      paddingHorizontal: 20,
+      paddingTop: 4,
     },
-
-    progressLabel: {
-      color: canalDynamicColors.muted,
-      fontSize: 10,
-      fontWeight: "800",
-      letterSpacing: 0.8,
-      marginTop: 7,
-      textTransform:
-        "uppercase",
-    },
-
-    progressLabelActive: {
-      color: canalDynamicColors.text,
-    },
-
     content: {
       flexGrow: 1,
-      paddingHorizontal: 24,
-      paddingTop: 22,
+      paddingHorizontal: 20,
+      paddingTop: 18,
       paddingBottom: 28,
+      justifyContent:
+        "center",
     },
-
-    step: {
+    contentWide: {
+      alignSelf:
+        "center",
+      width: "100%",
+      maxWidth: 980,
+    },
+    stepLayout: {
+      width: "100%",
+      gap: 26,
+    },
+    stepCopy: {
       flex: 1,
+      gap: 12,
     },
-
     eyebrow: {
-      color: canalDynamicColors.lavender,
       fontSize: 11,
-      fontWeight: "900",
-      letterSpacing: 1.8,
-      marginTop: 26,
+      fontWeight:
+        "500",
+      letterSpacing: 1.55,
     },
-
     title: {
-      fontFamily: "Georgia",
-      color: canalDynamicColors.text,
-      fontSize: 33,
-      lineHeight: 39,
-      fontWeight: "900",
-      letterSpacing: -1,
-      marginTop: 8,
+      maxWidth: 620,
+      fontFamily:
+        "Georgia",
+      fontSize: 43,
+      lineHeight: 44,
+      fontWeight:
+        "400",
+      letterSpacing: -1.9,
     },
-
     description: {
-      color: canalDynamicColors.muted,
-      fontSize: 15,
-      lineHeight: 23,
+      maxWidth: 590,
+      fontSize: 14,
+      lineHeight: 22,
+    },
+    workspace: {
+      width: "100%",
+      maxWidth: 580,
+      alignSelf:
+        "center",
+    },
+    panelTitle: {
+      fontFamily:
+        "Georgia",
+      fontSize: 24,
+      lineHeight: 28,
+      fontWeight:
+        "400",
+    },
+    panelNote: {
+      marginTop: 5,
+      fontSize: 10,
+      lineHeight: 15,
+    },
+    serviceRow: {
+      minHeight: 76,
       marginTop: 12,
-    },
-
-    connectVisual: {
-      minHeight: 190,
+      borderBottomWidth: 1,
       flexDirection:
         "row",
       alignItems:
         "center",
-      justifyContent:
-        "center",
-      borderWidth: 1,
-      borderColor:
-        "#EBDDD3",
-      borderRadius: 28,
-      backgroundColor: canalDynamicColors.surface,
+      gap: 11,
     },
-
-    canalDisc: {
-      width: 82,
-      height: 82,
-      borderRadius: 41,
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
-      backgroundColor:
-        "#4C46C8",
-    },
-
-    canalDiscText: {
-      color: canalDynamicColors.text,
-      fontSize: 44,
-      fontWeight: "900",
-      marginTop: -6,
-    },
-
-    connector: {
-      flexDirection:
-        "row",
-      gap: 7,
-      marginHorizontal: 18,
-    },
-
-    connectorDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 4,
-      backgroundColor:
-        "#D7CCC3",
-    },
-
-    spotifyDisc: {
-      width: 82,
-      height: 82,
-      borderRadius: 41,
+    spotifyMark: {
+      width: 43,
+      height: 43,
+      borderRadius: 22,
       alignItems:
         "center",
       justifyContent:
@@ -1287,350 +2386,332 @@ const styles =
       backgroundColor:
         "#1ED760",
     },
-
-    spotifyDiscText: {
-      color: "#07130B",
-      fontSize: 18,
-      fontWeight: "900",
+    flex: {
+      flex: 1,
     },
-
-    noteCard: {
-      borderWidth: 1,
-      borderColor:
-        "#F0DED0",
-      borderRadius: 20,
-      backgroundColor:
-        "#FFF1E7",
-      padding: 17,
-      marginTop: 24,
+    serviceTitle: {
+      fontSize: 13,
+      fontWeight:
+        "500",
     },
-
-    noteTitle: {
-      color: "#4E2C17",
+    serviceDetail: {
+      marginTop: 3,
+      fontSize: 9,
+      lineHeight: 14,
+    },
+    serviceState: {
+      fontSize: 10,
+      fontWeight:
+        "500",
+    },
+    trustList: {
+      gap: 12,
+      paddingTop: 16,
+    },
+    trustLine: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 9,
+    },
+    trustText: {
+      flex: 1,
+      fontSize: 10,
+      lineHeight: 15,
+    },
+    profilePreview: {
+      minHeight: 108,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 16,
+      marginBottom: 14,
+    },
+    profileName: {
+      fontFamily:
+        "Georgia",
+      fontSize: 24,
+      fontWeight:
+        "400",
+    },
+    profileHandle: {
+      marginTop: 4,
+      fontSize: 11,
+    },
+    privacyNote: {
+      marginTop: 12,
+      fontSize: 10,
+      lineHeight: 15,
+    },
+    detectedRow: {
+      minHeight: 38,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 7,
+    },
+    detectedText: {
+      flex: 1,
+      fontSize: 10,
+      lineHeight: 15,
+    },
+    choiceGroup: {
+      gap: 8,
+      marginTop: 14,
+    },
+    groupHeader: {
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      justifyContent:
+        "space-between",
+      gap: 10,
+    },
+    groupTitle: {
+      fontFamily:
+        "Georgia",
+      fontSize: 17,
+      fontWeight:
+        "400",
+    },
+    groupCount: {
+      fontSize: 9,
+      fontVariant: [
+        "tabular-nums",
+      ],
+    },
+    choiceRow: {
+      flexDirection:
+        "row",
+      flexWrap:
+        "wrap",
+      gap: 7,
+    },
+    preferenceRow: {
+      minHeight: 62,
+      borderBottomWidth: 1,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 14,
+    },
+    preferenceTitle: {
+      fontSize: 12,
+      fontWeight:
+        "500",
+    },
+    preferenceText: {
+      marginTop: 2,
+      fontSize: 9,
+      lineHeight: 14,
+    },
+    validationText: {
+      marginTop: 10,
+      fontSize: 10,
+      lineHeight: 15,
+    },
+    fieldLabel: {
+      marginTop: 8,
+      fontSize: 10,
+      fontWeight:
+        "500",
+      letterSpacing: 0.9,
+    },
+    directInput: {
+      minHeight: 84,
+      borderWidth: 0,
+      borderBottomWidth: 1,
+      paddingHorizontal: 2,
+      paddingVertical: 10,
       fontSize: 14,
-      fontWeight: "900",
+      lineHeight: 20,
+      textAlignVertical:
+        "top",
     },
-
-    noteText: {
-      color: "#76533C",
+    scenePreview: {
+      minHeight: 310,
+      width: "100%",
+      maxWidth: 580,
+      alignSelf:
+        "center",
+      justifyContent:
+        "space-between",
+    },
+    sceneEyebrow: {
+      fontSize: 9,
+      fontWeight:
+        "500",
+      letterSpacing: 1.5,
+    },
+    sceneName: {
+      marginTop: 8,
+      fontFamily:
+        "Georgia",
+      fontSize: 36,
+      lineHeight: 39,
+      fontWeight:
+        "400",
+      letterSpacing: -1.5,
+    },
+    ridge: {
+      minHeight: 72,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 2,
+      marginVertical: 16,
+    },
+    sceneDna: {
+      fontSize: 10,
+      lineHeight: 16,
+    },
+    previewStatus: {
+      marginTop: 15,
+      fontSize: 10,
+      lineHeight: 15,
+    },
+    readyLayout: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf:
+        "center",
+      alignItems:
+        "center",
+      gap: 14,
+      paddingVertical: 8,
+    },
+    readyOrbit: {
+      width: 156,
+      height: 156,
+      borderRadius: 78,
+      borderWidth: 1,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      marginBottom: 6,
+    },
+    readyTitle: {
+      maxWidth: 620,
+      fontFamily:
+        "Georgia",
+      fontSize: 42,
+      lineHeight: 44,
+      fontWeight:
+        "400",
+      letterSpacing: -1.8,
+      textAlign:
+        "center",
+    },
+    readyCopy: {
+      maxWidth: 590,
       fontSize: 13,
       lineHeight: 20,
-      marginTop: 6,
+      textAlign:
+        "center",
     },
-
-    shapeVisual: {
-      minHeight: 218,
-      borderRadius: 28,
-      backgroundColor:
-        "#191A18",
-      padding: 22,
+    readyPanel: {
+      width: "100%",
+      marginTop: 8,
     },
-
-    scenePreviewHeader: {
+    permissionLine: {
+      minHeight: 64,
       borderBottomWidth: 1,
-      borderBottomColor:
-        "#3A342F",
-      paddingBottom: 17,
-    },
-
-    scenePreviewLabel: {
-      color: "#F8954C",
-      fontSize: 10,
-      fontWeight: "900",
-      letterSpacing: 1.4,
-    },
-
-    scenePreviewName: {
-      color: canalDynamicColors.text,
-      fontSize: 22,
-      fontWeight: "800",
-      marginTop: 6,
-    },
-
-    chipRow: {
       flexDirection:
         "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginTop: 18,
+      alignItems:
+        "center",
+      gap: 11,
     },
-
-    chip: {
-      borderRadius: 999,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-    },
-
-    orangeChip: {
-      backgroundColor:
-        "#402719",
-    },
-
-    orangeChipText: {
-      color: "#FFAA70",
+    permissionTitle: {
       fontSize: 11,
-      fontWeight: "800",
+      fontWeight:
+        "500",
     },
-
-    greenChip: {
-      backgroundColor:
-        "#183323",
-    },
-
-    greenChipText: {
-      color: "#8FE3AA",
-      fontSize: 11,
-      fontWeight: "800",
-    },
-
-    mixRow: {
-      flexDirection:
-        "row",
-      alignItems:
-        "center",
-      marginTop: 24,
-    },
-
-    mixCopy: {
-      width: 96,
-    },
-
-    mixLabel: {
-      color: canalDynamicColors.muted,
-      fontSize: 10,
-      fontWeight: "700",
-    },
-
-    mixValue: {
-      color: canalDynamicColors.text,
-      fontSize: 13,
-      fontWeight: "800",
-      marginTop: 3,
-    },
-
-    mixTrack: {
-      flex: 1,
-      height: 7,
-      borderRadius: 4,
-      backgroundColor:
-        "#3A342F",
-    },
-
-    mixFill: {
-      width: "64%",
-      height: 7,
-      borderRadius: 4,
-      backgroundColor:
-        "#4C46C8",
-    },
-
-    detailRow: {
-      flexDirection:
-        "row",
-      gap: 8,
-      marginTop: 24,
-    },
-
-    detail: {
-      flex: 1,
-      minHeight: 78,
-      borderWidth: 1,
-      borderColor:
-        "#E8DED6",
-      borderRadius: 16,
-      backgroundColor: canalDynamicColors.surface,
-      padding: 12,
-    },
-
-    detailNumber: {
-      color: canalDynamicColors.lavender,
-      fontSize: 10,
-      fontWeight: "900",
-    },
-
-    detailText: {
-      color: canalDynamicColors.muted,
-      fontSize: 11,
-      lineHeight: 15,
-      fontWeight: "800",
-      marginTop: 8,
-    },
-
-    exportVisual: {
-      minHeight: 210,
-      flexDirection:
-        "row",
-      alignItems:
-        "center",
-      borderRadius: 28,
-      backgroundColor:
-        "#E96722",
-      padding: 20,
-    },
-
-    exploreVisual: {
-      minHeight: 210,
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
-      borderRadius: 28,
-      backgroundColor:
-        "#191A18",
-    },
-
-    exploreVisualMark: {
-      color: canalDynamicColors.lavender,
-      fontSize: 82,
-      fontWeight: "900",
-      lineHeight: 90,
-    },
-
-    cover: {
-      width: 126,
-      height: 142,
-      borderRadius: 21,
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
-      backgroundColor:
-        "#2A1911",
-    },
-
-    waveRow: {
-      height: 84,
-      flexDirection:
-        "row",
-      alignItems:
-        "center",
-      gap: 5,
-    },
-
-    waveBar: {
-      width: 7,
-      borderRadius: 4,
-      backgroundColor:
-        "#FF8C40",
-    },
-
-    exportCopy: {
-      flex: 1,
-      marginLeft: 18,
-    },
-
-    exportLabel: {
-      color: "#3D1C0A",
+    permissionText: {
+      marginTop: 2,
       fontSize: 9,
-      fontWeight: "900",
-      letterSpacing: 1.1,
+      lineHeight: 13,
     },
-
-    exportName: {
-      color: canalDynamicColors.text,
-      fontSize: 21,
-      lineHeight: 26,
-      fontWeight: "900",
-      marginTop: 8,
+    permissionState: {
+      fontSize: 9,
+      fontWeight:
+        "500",
     },
-
-    exportMeta: {
-      color: "#FFE4D2",
-      fontSize: 11,
-      fontWeight: "700",
-      marginTop: 8,
+    navigationMap: {
+      width: "100%",
+      flexDirection:
+        "row",
+      justifyContent:
+        "space-between",
+      paddingHorizontal: 8,
+      paddingTop: 4,
     },
-
-    errorCard: {
-      borderWidth: 1,
-      borderColor:
-        "#E5B5B0",
-      borderRadius: 13,
-      backgroundColor:
-        "#FFF0EE",
-      padding: 11,
-      marginHorizontal: 24,
-      marginBottom: 10,
+    navigationItem: {
+      minWidth: 48,
+      minHeight: 48,
+      alignItems:
+        "center",
+      justifyContent:
+        "center",
+      gap: 3,
     },
-
-    errorText: {
-      color: "#8D2F29",
-      fontSize: 12,
-      lineHeight: 17,
-      textAlign: "center",
+    navigationText: {
+      fontSize: 8,
     },
-
     footer: {
-      gap: 9,
+      minHeight: 84,
       borderTopWidth: 1,
-      borderTopColor:
-        "#EEE3DB",
-      backgroundColor: canalDynamicColors.baseCanvas,
-      paddingHorizontal: 24,
-      paddingTop: 14,
-      paddingBottom: 8,
-    },
-
-    primaryButton: {
-      minHeight: 56,
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: 10,
+      flexDirection:
+        "row",
       alignItems:
         "center",
-      justifyContent:
-        "center",
-      borderRadius: 18,
-      backgroundColor:
-        "#4C46C8",
+      gap: 12,
     },
-
-    primaryButtonText: {
-      color: "#FFFFFF",
-      fontSize: 15,
-      fontWeight: "900",
+    footerAction: {
+      flex: 1,
+      maxWidth: 430,
+      marginLeft: "auto",
     },
-
-    secondaryButton: {
-      minHeight: 48,
+    backButton: {
+      minWidth: 78,
+      minHeight: 54,
+      flexDirection:
+        "row",
       alignItems:
         "center",
-      justifyContent:
-        "center",
+      gap: 3,
+    },
+    backPlaceholder: {
+      width: 78,
+      minHeight: 54,
+    },
+    backText: {
+      fontSize: 11,
+      fontWeight:
+        "500",
+    },
+    errorText: {
+      marginHorizontal: 20,
+      marginBottom: 6,
       borderWidth: 1,
-      borderColor:
-        "#DDD0C6",
-      borderRadius: 16,
-      backgroundColor: canalDynamicColors.surface,
-    },
-
-    secondaryButtonText: {
-      color: "#514841",
-      fontSize: 14,
-      fontWeight: "800",
-    },
-
-    backLink: {
-      alignItems:
+      borderRadius: 14,
+      borderCurve:
+        "continuous",
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      fontSize: 10,
+      lineHeight: 15,
+      textAlign:
         "center",
-      justifyContent:
-        "center",
-      minHeight: 48,
-    },
-
-    backLinkText: {
-      color: canalDynamicColors.muted,
-      fontSize: 12,
-      fontWeight: "700",
-    },
-
-    disabled: {
-      opacity: 0.55,
-    },
-
-    pressed: {
-      opacity: 0.72,
-      transform: [
-        {
-          scale: 0.99,
-        },
-      ],
     },
   });

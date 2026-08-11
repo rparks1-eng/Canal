@@ -251,7 +251,12 @@ describe("Living Editorial core route interactions", () => {
     let renderer: any;
     await act(async () => { renderer = create(React.createElement(ActivityTabScreen)); });
     await act(async () => renderer.root.findByProps({ accessibilityLabel: "Clear Activity history" }).props.onPress());
-    expect(alert).toHaveBeenCalledWith("Clear activity history?", expect.any(String), expect.any(Array));
+    expect(alert).toHaveBeenCalledWith(
+      "Clear activity history?",
+      expect.any(String),
+      expect.any(Array),
+      expect.any(Object),
+    );
   });
 
   it("drives Search query results, exact deep links, empty state, errors, and back", async () => {
@@ -287,7 +292,12 @@ describe("Living Editorial core route interactions", () => {
     const firstConfirmation = alert.mock.calls.at(-1)?.[2] as Array<{ text: string; onPress?: () => void }>;
     await act(async () => firstConfirmation.find((action) => action.text === "Remove")?.onPress?.());
     expect(mockRemoveFavorite).toHaveBeenNthCalledWith(1, "late-night-drive");
-    expect(alert).toHaveBeenCalledWith("Unable to update", expect.any(String));
+    expect(alert).toHaveBeenCalledWith(
+      "Unable to update",
+      expect.any(String),
+      expect.any(Array),
+      expect.any(Object),
+    );
     await act(async () => remove.props.onPress());
     const retryConfirmation = alert.mock.calls.at(-1)?.[2] as Array<{ text: string; onPress?: () => void }>;
     await act(async () => retryConfirmation.find((action) => action.text === "Remove")?.onPress?.());
@@ -330,7 +340,12 @@ describe("Living Editorial core route interactions", () => {
     const confirmation = alert.mock.calls.at(-1)?.[2] as Array<{ text: string; onPress?: () => void }>;
     await act(async () => confirmation.find((action) => action.text === "Unblock")?.onPress?.());
     expect(mockUnblockUser).toHaveBeenCalledWith("maya.wav", "Maya Thompson", undefined);
-    expect(alert).toHaveBeenCalledWith("Unable to unblock", expect.any(String));
+    expect(alert).toHaveBeenCalledWith(
+      "Unable to unblock",
+      expect.any(String),
+      expect.any(Array),
+      expect.any(Object),
+    );
     await act(async () => renderer.root.findByProps({ accessibilityLabel: "Unblock Maya Thompson" }).props.onPress());
     const retryConfirmation = alert.mock.calls.at(-1)?.[2] as Array<{ text: string; onPress?: () => void }>;
     await act(async () => retryConfirmation.find((action) => action.text === "Unblock")?.onPress?.());

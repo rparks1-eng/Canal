@@ -12,5 +12,8 @@
     "**/*.ts",
     "**/*.tsx",
     "app/scene/stage"
+  ],
+  "exclude": [
+    "supabase/functions"
   ]
 }

@@ -5,6 +5,7 @@
     <key>com.apple.developer.associated-domains</key>
     <array>
       <string>applinks:canal.app</string>
+      <string>applinks:canal.expo.app</string>
     </array>
   </dict>
 </plist>

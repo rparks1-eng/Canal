@@ -6,13 +6,14 @@ import {
 
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 
 import {
   router,
@@ -201,7 +202,7 @@ function SceneCollectionContent() {
         return;
       }
 
-      Alert.alert(
+      CanalAlert.alert(
         "Delete collection?",
         `"${collection.title}" will be removed. Its Scenes stay in your Library.`,
         [

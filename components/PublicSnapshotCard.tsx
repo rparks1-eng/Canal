@@ -404,7 +404,7 @@ const styles =
 
     creatorName: {
       flexShrink: 1,
-      color: "#FFFFFF",
+      color: canalDynamicColors.fixedOverlayText,
       fontSize: 11,
       fontWeight: "800",
     },

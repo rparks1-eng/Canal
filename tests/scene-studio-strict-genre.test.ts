@@ -34,7 +34,14 @@ let mockAuthState = {
   sessionGeneration: "session-a1",
 };
 
-jest.mock("expo-router", () => ({ router: { replace: jest.fn() } }));
+jest.mock("expo-router", () => {
+  const ReactModule = jest.requireActual("react");
+  return {
+    router: { replace: jest.fn() },
+    useFocusEffect: (callback: () => void) =>
+      ReactModule.useEffect(callback, [callback]),
+  };
+});
 jest.mock("../providers/auth-provider", () => ({
   useAuth: () => mockAuthState,
 }));

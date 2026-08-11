@@ -12,13 +12,14 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../../providers/auth-provider";
@@ -142,7 +143,7 @@ function FriendProfileContent() {
     }
 
     if (isBlocked) {
-      Alert.alert(
+      CanalAlert.alert(
         "User is blocked",
         "Unblock this person before following them.",
       );
@@ -182,7 +183,7 @@ function FriendProfileContent() {
         error,
       );
 
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to update",
         "Canal could not update your Following list.",
       );
@@ -196,7 +197,7 @@ function FriendProfileContent() {
       return;
     }
 
-    Alert.alert(
+    CanalAlert.alert(
       `Block ${user.displayName}?`,
       `@${user.username} will be removed from Following and hidden from Discover.`,
       [
@@ -243,7 +244,7 @@ function FriendProfileContent() {
         error,
       );
 
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to block",
         "Canal could not block this person.",
       );
@@ -279,7 +280,7 @@ function FriendProfileContent() {
         error,
       );
 
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to unblock",
         "Canal could not unblock this person.",
       );
@@ -297,7 +298,7 @@ function FriendProfileContent() {
       user.visibility !==
       "public"
     ) {
-      Alert.alert(
+      CanalAlert.alert(
         "Private Soundscape",
         "This Soundscape cannot be shared.",
       );
@@ -329,13 +330,13 @@ function FriendProfileContent() {
         result.method ===
         "clipboard"
       ) {
-        Alert.alert(
+        CanalAlert.alert(
           "Soundscape copied",
           "The Soundscape was copied to your clipboard.",
         );
       }
     } catch (error) {
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to share",
         error instanceof Error
           ? error.message
@@ -1006,7 +1007,7 @@ function showPendingRelationshipSync(
     syncStatus ===
     "pending"
   ) {
-    Alert.alert(
+    CanalAlert.alert(
       "Saved on this device",
       "Canal will sync this change to your account when the connection returns.",
     );

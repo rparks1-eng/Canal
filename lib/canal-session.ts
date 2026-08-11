@@ -1,7 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { isSupabaseConfigured, supabase } from "./supabase";
+
 export type ListeningHistoryEntry = {
   id: string;
+  ownerId: string;
   sceneId: string;
   sceneName: string;
   startedAt: string;
@@ -22,6 +25,7 @@ export type SceneFeedbackRating =
 
 export type SceneFeedbackEntry = {
   id: string;
+  ownerId: string;
   sceneId: string;
   sceneName: string;
   rating: SceneFeedbackRating;
@@ -58,6 +62,12 @@ const HISTORY_KEY =
 const FEEDBACK_KEY =
   "@canal/scene-feedback";
 
+const HISTORY_ACCOUNT_KEY_PREFIX = `${HISTORY_KEY}:user:`;
+const FEEDBACK_ACCOUNT_KEY_PREFIX = `${FEEDBACK_KEY}:user:`;
+const LEGACY_HISTORY_QUARANTINE_KEY = "@canal/quarantine/listening-history/legacy-v1";
+const LEGACY_FEEDBACK_QUARANTINE_KEY = "@canal/quarantine/scene-feedback/legacy-v1";
+const LOCAL_SESSION_OWNER_ID = "local-anonymous";
+
 const FEED_KEY =
   "@canal/local-feed";
 
@@ -77,6 +87,55 @@ function createId(
       .slice(2, 9)
   );
 }
+
+type SessionIdentity = { ownerId: string; sessionFingerprint: string; accountGeneration: number };
+let sessionAccountGeneration = 0;
+let observedSessionFingerprint: string | null = null;
+
+function observeSessionFingerprint(fingerprint: string): void {
+  if (observedSessionFingerprint !== null && observedSessionFingerprint !== fingerprint) sessionAccountGeneration += 1;
+  observedSessionFingerprint = fingerprint;
+}
+
+if (isSupabaseConfigured && typeof supabase.auth.onAuthStateChange === "function") {
+  supabase.auth.onAuthStateChange((_event, session) => {
+    observeSessionFingerprint(session ? `${session.user.id}:${session.access_token}` : LOCAL_SESSION_OWNER_ID);
+  });
+}
+
+function sessionAccountChangedError(): Error {
+  return Object.assign(new Error("The active Canal account changed while listening history was being updated. Try again."), { code: "CANAL_SESSION_ACCOUNT_CHANGED" });
+}
+
+async function captureSessionIdentity(): Promise<SessionIdentity> {
+  if (!isSupabaseConfigured) return { ownerId: LOCAL_SESSION_OWNER_ID, sessionFingerprint: LOCAL_SESSION_OWNER_ID, accountGeneration: sessionAccountGeneration };
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  const sessionFingerprint = session ? `${session.user.id}:${session.access_token}` : LOCAL_SESSION_OWNER_ID;
+  observeSessionFingerprint(sessionFingerprint);
+  return { ownerId: session?.user.id ?? LOCAL_SESSION_OWNER_ID, sessionFingerprint, accountGeneration: sessionAccountGeneration };
+}
+
+async function assertSessionIdentity(expected: SessionIdentity): Promise<void> {
+  const current = await captureSessionIdentity();
+  if (current.ownerId !== expected.ownerId || current.sessionFingerprint !== expected.sessionFingerprint || current.accountGeneration !== expected.accountGeneration) throw sessionAccountChangedError();
+}
+
+function accountKey(prefix: string, ownerId: string): string { return `${prefix}${ownerId}`; }
+
+async function quarantineLegacySessionStores(): Promise<void> {
+  const [legacyHistory, legacyFeedback] = await Promise.all([AsyncStorage.getItem(HISTORY_KEY), AsyncStorage.getItem(FEEDBACK_KEY)]);
+  if (legacyHistory) {
+    if (!await AsyncStorage.getItem(LEGACY_HISTORY_QUARANTINE_KEY)) await AsyncStorage.setItem(LEGACY_HISTORY_QUARANTINE_KEY, legacyHistory);
+    await AsyncStorage.removeItem(HISTORY_KEY);
+  }
+  if (legacyFeedback) {
+    if (!await AsyncStorage.getItem(LEGACY_FEEDBACK_QUARANTINE_KEY)) await AsyncStorage.setItem(LEGACY_FEEDBACK_QUARANTINE_KEY, legacyFeedback);
+    await AsyncStorage.removeItem(FEEDBACK_KEY);
+  }
+}
+
+function ownedEntries<T extends { ownerId: string }>(entries: T[], ownerId: string): T[] { return entries.filter((entry) => entry.ownerId === ownerId); }
 
 async function readArray<T>(
   key: string,
@@ -113,12 +172,13 @@ async function writeArray<T>(
 export async function readListeningHistory(): Promise<
   ListeningHistoryEntry[]
 > {
-  const history =
-    await readArray<ListeningHistoryEntry>(
-      HISTORY_KEY,
-    );
+  const identity = await captureSessionIdentity();
+  await quarantineLegacySessionStores();
+  await assertSessionIdentity(identity);
+  const history = await readArray<ListeningHistoryEntry>(accountKey(HISTORY_ACCOUNT_KEY_PREFIX, identity.ownerId));
+  await assertSessionIdentity(identity);
 
-  return history.sort(
+  return ownedEntries(history, identity.ownerId).sort(
     (first, second) =>
       new Date(
         second.completedAt ??
@@ -134,72 +194,98 @@ export async function readListeningHistory(): Promise<
 export async function recordListeningHistory(
   input: Omit<
     ListeningHistoryEntry,
-    "id"
+    "id" | "ownerId"
   >,
 ): Promise<ListeningHistoryEntry> {
+  const identity = await captureSessionIdentity();
+  await quarantineLegacySessionStores();
+  await assertSessionIdentity(identity);
   const entry: ListeningHistoryEntry = {
     ...input,
 
     id:
       createId("history"),
+    ownerId: identity.ownerId,
   };
 
-  const history =
-    await readListeningHistory();
+  const key = accountKey(HISTORY_ACCOUNT_KEY_PREFIX, identity.ownerId);
+  const history = ownedEntries(await readArray<ListeningHistoryEntry>(key), identity.ownerId);
+  await assertSessionIdentity(identity);
 
   await writeArray(
-    HISTORY_KEY,
+    key,
     [entry, ...history].slice(
       0,
       100,
     ),
   );
+  try { await assertSessionIdentity(identity); } catch (error) { await writeArray(key, history); throw error; }
 
   return entry;
 }
 
 export async function clearListeningHistory(): Promise<void> {
-  await AsyncStorage.removeItem(
-    HISTORY_KEY,
-  );
+  const identity = await captureSessionIdentity();
+  await AsyncStorage.removeItem(accountKey(HISTORY_ACCOUNT_KEY_PREFIX, identity.ownerId));
+  await assertSessionIdentity(identity);
 }
 
 export async function readFeedbackEntries(): Promise<
   SceneFeedbackEntry[]
 > {
-  return readArray<SceneFeedbackEntry>(
-    FEEDBACK_KEY,
-  );
+  const identity = await captureSessionIdentity();
+  await quarantineLegacySessionStores();
+  await assertSessionIdentity(identity);
+  const entries = await readArray<SceneFeedbackEntry>(accountKey(FEEDBACK_ACCOUNT_KEY_PREFIX, identity.ownerId));
+  await assertSessionIdentity(identity);
+  return ownedEntries(entries, identity.ownerId);
 }
 
 export async function addFeedbackEntry(
   input: Omit<
     SceneFeedbackEntry,
-    "id" | "createdAt"
+    "id" | "ownerId" | "createdAt"
   >,
 ): Promise<SceneFeedbackEntry> {
+  const identity = await captureSessionIdentity();
+  await quarantineLegacySessionStores();
+  await assertSessionIdentity(identity);
   const entry: SceneFeedbackEntry = {
     ...input,
 
     id:
       createId("feedback"),
+    ownerId: identity.ownerId,
 
     createdAt:
       new Date().toISOString(),
   };
 
-  const entries =
-    await readFeedbackEntries();
+  const key = accountKey(FEEDBACK_ACCOUNT_KEY_PREFIX, identity.ownerId);
+  const entries = ownedEntries(await readArray<SceneFeedbackEntry>(key), identity.ownerId);
+  await assertSessionIdentity(identity);
 
   await writeArray(
-    FEEDBACK_KEY,
+    key,
     [entry, ...entries].slice(
       0,
       200,
     ),
   );
+  try { await assertSessionIdentity(identity); } catch (error) { await writeArray(key, entries); throw error; }
 
   return entry;
+}
+
+export async function readAccountOwnedSoundscapeHistory(expectedUserId: string): Promise<{ listening: ListeningHistoryEntry[]; feedback: SceneFeedbackEntry[] }> {
+  const identity = await captureSessionIdentity();
+  if (identity.ownerId !== expectedUserId || identity.ownerId === LOCAL_SESSION_OWNER_ID) throw sessionAccountChangedError();
+  const [listening, feedback] = await Promise.all([
+    readArray<ListeningHistoryEntry>(accountKey(HISTORY_ACCOUNT_KEY_PREFIX, identity.ownerId)),
+    readArray<SceneFeedbackEntry>(accountKey(FEEDBACK_ACCOUNT_KEY_PREFIX, identity.ownerId)),
+  ]);
+  await assertSessionIdentity(identity);
+  return { listening: ownedEntries(listening, identity.ownerId), feedback: ownedEntries(feedback, identity.ownerId) };
 }
 
 export async function readSharedSnapshots(): Promise<

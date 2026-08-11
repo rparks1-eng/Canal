@@ -19,6 +19,14 @@
               "invite": "*"
             },
             "comment": "Invite-bearing Canal Stage joins"
+          },
+          {
+            "/": "/public-scene",
+            "comment": "Legacy public Canal Scene links"
+          },
+          {
+            "/": "/public-soundscape",
+            "comment": "Public Canal Soundscape links"
           }
         ]
       }

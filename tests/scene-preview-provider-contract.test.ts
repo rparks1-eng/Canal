@@ -381,8 +381,13 @@ describe(
         expect(sceneDetailSource).toContain("addSpotifyArtworkToStoredScene");
         expect(sceneDetailSource).toContain("track.imageUrl ?");
         expect(nowPlayingSource).toContain("addSpotifyArtworkToStoredScene");
-        expect(nowPlayingSource).toContain("currentTrack.imageUrl ?");
-        expect(nowPlayingSource).toContain("track.imageUrl ?");
+        expect(nowPlayingSource).toContain(
+          "currentTrack.imageUrl && readyArtworkUrls.has(currentTrack.imageUrl)",
+        );
+        expect(nowPlayingSource).toContain(
+          "track.imageUrl && readyArtworkUrls.has(track.imageUrl)",
+        );
+        expect(nowPlayingSource).toContain("Image.prefetch(url)");
         expect(nowPlayingSource).toContain("styles.queueImage");
         expect([sceneDetailSource, nowPlayingSource].join("\n")).toContain(
           'from "expo-image"',

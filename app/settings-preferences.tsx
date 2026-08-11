@@ -2,8 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { CanalAlert } from "../lib/canal-alert";
 
 import { CanalAmbientBackground } from "../components/canal-ui/canal-ambient-background";
 import { logoutAllMusicPlatforms, retryIncompleteAccountCleanup } from "../lib/app-session";
@@ -103,7 +105,7 @@ export default function SettingsPreferencesScreen(): React.JSX.Element {
       return;
     }
 
-    Alert.alert(
+    CanalAlert.alert(
       "Log out of Canal?",
       message,
       [
@@ -131,7 +133,7 @@ function SectionContent(props: { loggingOut: boolean; requestLogout: () => void;
   if (props.section === "storage") return <View><View style={styles.info}><Text style={styles.infoTitle}>Local storage</Text><Text style={styles.infoText}>{props.storageCopy}</Text></View><Action label="Open full Data Controls" onPress={() => router.push("/data-controls")} /><Action label="Review Spotify cache and sync" onPress={() => router.push("/music-services")} /></View>;
   if (props.section === "safety") return <View><Toggle label="Collaboration invitations" note="Allow friends to invite you into Scenes and Stages." value={s.collaborationInvites} onChange={(v) => props.update("collaborationInvites", v)} /><Action label="Review blocked accounts" onPress={() => router.push("/blocked-users")} /></View>;
   if (props.section === "support") return <View><Action label="Email Canal support" onPress={() => { void Linking.openURL("mailto:support@canal.app?subject=Canal%20support"); }} /><Action label="Share safe diagnostics" onPress={() => { void Share.share({ title: "Canal diagnostics", message: "Canal 1.0.0 · Expo SDK 54 · no credentials included" }); }} /><View style={styles.info}><Text style={styles.infoTitle}>Canal 1.0.0</Text><Text style={styles.infoText}>Expo SDK 54 · Privacy and provider acknowledgements live in Data Controls.</Text></View></View>;
-  return <View><Action busy={props.loggingOut} disabled={props.loggingOut} label={props.loggingOut ? "Logging out…" : "Log out of this device"} onPress={props.requestLogout} /><Action label="Review data export and deletion" onPress={() => router.push("/data-controls")} danger /></View>;
+  return <View><Action busy={props.loggingOut} disabled={props.loggingOut} label={props.loggingOut ? "Logging out…" : "Log out of this device"} onPress={props.requestLogout} /><Action label="Permanently delete account" onPress={() => router.push("/delete-account")} danger /></View>;
 }
 
 function Toggle(props: { label: string; note: string; value: boolean; onChange: (value: boolean) => void }): React.JSX.Element { return <View style={styles.control}><View style={styles.controlCopy}><Text style={styles.controlTitle}>{props.label}</Text><Text style={styles.controlNote}>{props.note}</Text></View><Switch accessibilityLabel={props.label} onValueChange={props.onChange} trackColor={{ false: canalDynamicColors.line, true: canalDynamicColors.mint }} value={props.value} /></View>; }

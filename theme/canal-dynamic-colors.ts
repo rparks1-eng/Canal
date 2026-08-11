@@ -30,4 +30,6 @@ export const canalDynamicColors = {
   dangerSurface: dynamicColor("#FFF0EF", "#261716"),
   ambientWash: dynamicColor("rgba(255,255,255,0.22)", "rgba(4,23,39,0.08)"),
   onAccent: dynamicColor("#FFFFFF", "#0D3D4D"),
+  onDanger: dynamicColor("#FFFFFF", "#FFFFFF"),
+  fixedOverlayText: dynamicColor("#FFFFFF", "#FFFFFF"),
 } as const;

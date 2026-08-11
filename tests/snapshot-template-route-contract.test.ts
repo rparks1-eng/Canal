@@ -190,10 +190,10 @@ describe(
           );
         }
 
-        expect(composition).toContain("snapshot.templateBrandLabel");
         expect(composition).toContain("snapshot.templateTheme");
-
-        expect(composition).toContain('{snapshot.templateBrandLabel || "canal"}');
+        expect(composition).toContain("exportBrand = false");
+        expect(composition).toContain("{exportBrand ? (");
+        expect(composition).not.toContain("snapshot.templateBrandLabel");
       },
     );
 

@@ -10,13 +10,14 @@ import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 
 import {
   router,
@@ -1091,7 +1092,7 @@ function CreatorProfileScreenContent(
       const nextBlocked =
         !isBlocked;
 
-      Alert.alert(
+      CanalAlert.alert(
         nextBlocked
           ? `Block ${profile.displayName}?`
           : `Unblock ${profile.displayName}?`,
@@ -1137,7 +1138,7 @@ function CreatorProfileScreenContent(
         return;
       }
 
-      Alert.alert(
+      CanalAlert.alert(
         `Unblock @${reference.username}?`,
         `@${reference.username} can appear in Discover, search, and Following again.`,
         [

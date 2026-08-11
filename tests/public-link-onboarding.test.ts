@@ -6,6 +6,13 @@ const migration = fs.readFileSync(
   path.join(root, "supabase/migrations/20260809234903_public_link_onboarding.sql"),
   "utf8",
 );
+const redemptionFixMigration = fs.readFileSync(
+  path.join(
+    root,
+    "supabase/migrations/20260811162907_live_stage_invite_redemption_disambiguation.sql",
+  ),
+  "utf8",
+);
 const tokenClient = fs.readFileSync(path.join(root, "lib/stage-invite-tokens.ts"), "utf8");
 const previewClient = fs.readFileSync(path.join(root, "lib/public-link-previews.ts"), "utf8");
 
@@ -38,6 +45,15 @@ describe("public link onboarding security contract", () => {
     expect(migration).not.toContain("stage_code_value");
     expect(tokenClient).toContain("await assertSameUser(userId)");
     expect(tokenClient).toContain("Your Canal account changed");
+    expect(redemptionFixMigration).toContain(
+      "on conflict on constraint live_stage_members_pkey",
+    );
+    expect(redemptionFixMigration).toContain(
+      "update private.live_stage_invite_tokens as invite",
+    );
+    expect(redemptionFixMigration).toMatch(
+      /revoke all on function private[.]redeem_live_stage_invite_token[\s\S]*from public, anon, authenticated, service_role/u,
+    );
   });
 
   it("keeps token state private and exposes only hardened RPCs", () => {

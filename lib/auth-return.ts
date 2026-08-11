@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
   consumeDeferredDestination,
+  readDeferredDestination,
 } from "./deferred-destination";
 
 import type {
@@ -113,6 +114,38 @@ export async function consumePublicSceneReturn(): Promise<
         sceneId:
           parsed.sceneId,
       },
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function readPublicSceneReturn(): Promise<
+  | PublicSceneReturnRoute
+  | PublicDestination
+  | null
+> {
+  const deferredDestination = await readDeferredDestination();
+  if (deferredDestination) return deferredDestination;
+
+  const stored = await AsyncStorage.getItem(PUBLIC_SCENE_RETURN_KEY);
+  if (!stored) return null;
+
+  try {
+    const parsed = JSON.parse(stored) as {
+      ownerId?: unknown;
+      sceneId?: unknown;
+    };
+    if (
+      typeof parsed.ownerId !== "string" ||
+      typeof parsed.sceneId !== "string" ||
+      !safeLookupKey(parsed.ownerId) ||
+      !safeLookupKey(parsed.sceneId)
+    ) return null;
+
+    return {
+      pathname: "/public-scene",
+      params: { ownerId: parsed.ownerId, sceneId: parsed.sceneId },
     };
   } catch {
     return null;

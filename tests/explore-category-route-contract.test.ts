@@ -13,10 +13,12 @@ describe("Explore category route", () => {
     expect(exploreSource).toContain("Open ${value} ${props.kind} Scenes");
     expect(exploreSource).toContain("exploreCategoryIcon(props.kind, value)");
     expect(exploreSource).toContain("const categoryPresentation = scenePresentation({");
-    expect(exploreSource).toContain("color={categoryPresentation.accent}");
+    expect(exploreSource).toContain("{ backgroundColor: categoryPresentation.colors[1] }");
+    expect(exploreSource).toContain("{ backgroundColor: categoryPresentation.colors[0] }");
+    expect(exploreSource).toContain("{ backgroundColor: categoryPresentation.colors[2] }");
+    expect(exploreSource).toContain('color="#FFFFFF"');
     expect(exploreSource).toContain("styles.categoryGlyph");
     expect(exploreSource).toContain("styles.categoryCardLabel");
-    expect(exploreSource).not.toContain("backgroundColor: categoryPresentation.colors[2]");
     expect(exploreSource).not.toContain("categoryLabelScrim");
     expect(exploreSource).not.toContain("View Scenes</Text>");
     expect(layoutSource).toContain('name="explore-category"');
@@ -37,6 +39,16 @@ describe("Explore category route", () => {
     expect(exploreSource).toContain("item.creator.isVerified || item.creator.isCanal");
     expect(personalizationSource).toContain('stage.status ===');
     expect(personalizationSource).toContain('stage.visibility ===');
+  });
+
+  it("keeps dynamic search colors outside the Reanimated entering wrapper", () => {
+    expect(exploreSource).toContain(
+      '<Animated.View entering={FadeInUp.duration(260).delay(80)}>',
+    );
+    expect(exploreSource).toContain('<View style={styles.searchBox}>');
+    expect(exploreSource).not.toContain(
+      'entering={FadeInUp.duration(260).delay(80)} style={styles.searchBox}',
+    );
   });
 
   it("populates one unified category page with verified highlights and real popularity", () => {

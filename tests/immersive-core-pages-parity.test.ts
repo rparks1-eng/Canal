@@ -11,17 +11,18 @@ describe("immersive core page parity", () => {
     expect(layout).toContain('backgroundColor: "transparent"');
   });
 
-  it("gives Explore the editorial Live Stage hero and animated discovery hierarchy", () => {
+  it("gives Explore personalized highlighted Scenes, trending Stages, and routed discovery categories", () => {
     const explore = source("app/(tabs)/explore.tsx");
     expect(explore).toContain("CANAL DISCOVERY");
-    expect(explore).toContain("Step into the room.");
-    expect(explore).toContain("Browse Live Stages");
-    expect(explore).toContain('label="Stages"');
-    expect(explore).toContain("PublicStageCard");
+    expect(explore).toContain("Highlighted Scenes");
+    expect(explore).toContain("Popular Now");
+    expect(explore).toContain("TrendingStageCard");
+    expect(explore).toContain("categoryArtwork");
+    expect(explore).toContain('pathname: "/explore-category"');
     expect(explore).toContain('pathname: "/live-stage/[stageId]"');
     expect(explore).toContain("filterExploreStages");
     expect(explore).toContain("FadeInUp");
-    expect(explore).toContain("editorialFeature");
+    expect(explore).toContain("highlightedCard");
   });
 
   it("gives Library one living feature, compact rows, and complete header actions", () => {
@@ -30,7 +31,7 @@ describe("immersive core page parity", () => {
     expect(library).toContain("featuredSceneCard");
     expect(library).toContain("featuredManageButton");
     expect(library).toContain("openSceneActions");
-    expect(library).toContain("<CanalHeaderActions />");
+    expect(library).toContain("<CanalHeaderActions showSettings={false} />");
   });
 
   it("gives Settings the centered reference header and visual appearance preview", () => {

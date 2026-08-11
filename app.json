@@ -18,7 +18,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.raishawnparks.canal",
       "associatedDomains": [
-        "applinks:canal.app"
+        "applinks:canal.app",
+        "applinks:canal.expo.app"
       ],
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Canal to take photos and videos for Snapshots.",
@@ -51,6 +52,41 @@
               "scheme": "https",
               "host": "canal.app",
               "pathPrefix": "/stages/"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.app",
+              "pathPrefix": "/public-scene"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.app",
+              "pathPrefix": "/public-soundscape"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.expo.app",
+              "pathPrefix": "/scenes/"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.expo.app",
+              "pathPrefix": "/snapshots/"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.expo.app",
+              "pathPrefix": "/stages/"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.expo.app",
+              "pathPrefix": "/public-scene"
+            },
+            {
+              "scheme": "https",
+              "host": "canal.expo.app",
+              "pathPrefix": "/public-soundscape"
             }
           ]
         }

@@ -80,6 +80,16 @@ const OWNER_ID =
 const mockAlert =
   jest.fn();
 
+jest.mock(
+  "../lib/canal-alert",
+  () => ({
+    CanalAlert: {
+      alert: (...args: unknown[]) =>
+        mockAlert(...args),
+    },
+  }),
+);
+
 const mockAnnounce =
   jest.fn();
 

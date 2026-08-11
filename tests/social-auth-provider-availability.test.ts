@@ -58,7 +58,10 @@ describe("Canal social auth provider availability", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(fetchImpl).toHaveBeenCalledWith(
       "https://project.supabase.co/auth/v1/settings",
-      { headers: { apikey: "sb_publishable_test" } },
+      expect.objectContaining({
+        headers: { apikey: "sb_publishable_test" },
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 });

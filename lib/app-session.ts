@@ -1064,3 +1064,45 @@ export function isCanalLogoutIncompleteError(
     )
   );
 }
+
+export async function clearLocalAccountAfterDeletion(): Promise<void> {
+  try {
+    const {
+      clearSpotifySession,
+    } = await import(
+      "./spotify-auth"
+    );
+
+    await clearSpotifySession();
+  } catch {
+    // The remote account deletion is authoritative.
+  }
+
+  try {
+    const {
+      clearPlayerSession,
+    } = await import(
+      "./canal-player"
+    );
+
+    await clearPlayerSession();
+  } catch {
+    // Player state may not exist on this device.
+  }
+
+  try {
+    const {
+      supabase,
+    } = await import(
+      "./supabase"
+    );
+
+    await supabase.auth.signOut({
+      scope: "local",
+    });
+  } catch {
+    // Clearing app storage below also removes the local auth session.
+  }
+
+  await AsyncStorage.clear();
+}

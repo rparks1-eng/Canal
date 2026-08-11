@@ -7,7 +7,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Linking,
   Pressable,
@@ -16,6 +15,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../lib/canal-alert";
 
 import {
   createManualArtist,
@@ -168,7 +169,7 @@ export default function SpotifyArtistPicker({
       selections.length >=
       maxSelections
     ) {
-      Alert.alert(
+      CanalAlert.alert(
         "Artist limit reached",
         `Choose up to ${maxSelections} artists for this Scene.`,
       );
@@ -238,7 +239,7 @@ export default function SpotifyArtistPicker({
         artist.spotifyUrl,
       );
     } catch {
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to open Spotify",
         "Canal could not open this artist.",
       );

@@ -639,13 +639,34 @@ function FacetRail(props: {
                 pressed && styles.pressed,
               ]}
             >
-              <Text numberOfLines={1} style={styles.categoryCardLabel}>{value}</Text>
-              <Ionicons
-                color={categoryPresentation.accent}
-                name={icon as never}
-                size={45}
-                style={styles.categoryGlyph}
-              />
+              <View
+                style={[
+                  styles.categoryArtwork,
+                  { backgroundColor: categoryPresentation.colors[1] },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.categoryOrb,
+                    styles.categoryOrbOne,
+                    { backgroundColor: categoryPresentation.colors[0] },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.categoryOrb,
+                    styles.categoryOrbTwo,
+                    { backgroundColor: categoryPresentation.colors[2] },
+                  ]}
+                />
+                <Ionicons
+                  color="#FFFFFF"
+                  name={icon as never}
+                  size={25}
+                  style={styles.categoryGlyph}
+                />
+              </View>
+              <Text numberOfLines={2} style={styles.categoryCardLabel}>{value}</Text>
             </Pressable>
           );
         })}
@@ -689,13 +710,34 @@ function StageFacetRail(props: {
               onPress={() => props.onSelect(selected ? { kind: "all" } : { kind: props.kind, value })}
               style={({ pressed }) => [styles.categoryCard, pressed && styles.pressed]}
             >
-              <Text numberOfLines={1} style={styles.categoryCardLabel}>{value}</Text>
-              <Ionicons
-                color={presentation.accent}
-                name={icon as never}
-                size={45}
-                style={styles.categoryGlyph}
-              />
+              <View
+                style={[
+                  styles.categoryArtwork,
+                  { backgroundColor: presentation.colors[1] },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.categoryOrb,
+                    styles.categoryOrbOne,
+                    { backgroundColor: presentation.colors[0] },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.categoryOrb,
+                    styles.categoryOrbTwo,
+                    { backgroundColor: presentation.colors[2] },
+                  ]}
+                />
+                <Ionicons
+                  color="#FFFFFF"
+                  name={icon as never}
+                  size={25}
+                  style={styles.categoryGlyph}
+                />
+              </View>
+              <Text numberOfLines={2} style={styles.categoryCardLabel}>{value}</Text>
               {selected ? <View style={[styles.categorySelectedDot, { backgroundColor: presentation.accent }]} /> : null}
             </Pressable>
           );
@@ -1215,26 +1257,26 @@ export default function ExploreScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInUp.duration(260).delay(80)}>
-        <TextInput
-          accessibilityLabel={activeContent === "stages" ? "Search Live Stages" : "Search public Scenes"}
-          value={
-            query
-          }
-          onChangeText={
-            setQuery
-          }
-          placeholder={activeContent === "stages"
-            ? "Search Stages, hosts, activities, songs, or artists"
-            : "Search Scenes, activities, moods, genres, or creators"}
-          placeholderTextColor={canalDynamicColors.muted}
-          autoCapitalize="none"
-          autoCorrect={
-            false
-          }
-          style={
-            styles.searchInput
-          }
-        />
+          <View style={styles.searchBox}>
+            <Ionicons
+              color={canalDynamicColors.muted}
+              name="search-outline"
+              size={20}
+            />
+            <TextInput
+              accessibilityLabel={activeContent === "stages" ? "Search Live Stages" : "Search public Scenes"}
+              value={query}
+              onChangeText={setQuery}
+              placeholder={activeContent === "stages"
+                ? "Search Stages, hosts, activities, songs, or artists"
+                : "Search Scenes, activities, moods, genres, or creators"}
+              placeholderTextColor={canalDynamicColors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              style={styles.searchInput}
+            />
+          </View>
         </Animated.View>
 
         {!loading &&
@@ -1783,6 +1825,7 @@ const styles =
 
     title: {
       color: canalDynamicColors.text,
+      fontFamily: "Georgia",
       fontSize: 38,
       fontWeight: "500",
       letterSpacing: -1.1,
@@ -1832,9 +1875,9 @@ const styles =
       color: "#173D50",
     },
 
-    exploreModeTextLive: {
-      color: "#FFE8E5",
-    },
+        exploreModeTextLive: {
+          color: canalDynamicColors.danger,
+        },
 
     exploreModeCount: {
       minWidth: 23,
@@ -1900,8 +1943,8 @@ const styles =
     },
 
     categoryCard: {
-      width: 64,
-      minHeight: 84,
+      width: 76,
+      minHeight: 104,
       alignItems: "center",
       justifyContent: "flex-start",
       gap: 5,
@@ -1918,13 +1961,14 @@ const styles =
         },
 
         categoryArtwork: {
-          width: 78,
-          height: 78,
+          width: 64,
+          height: 64,
       overflow: "hidden",
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 22,
+      borderRadius: 32,
       borderCurve: "continuous",
+      boxShadow: "0 10px 24px rgba(35,55,89,0.16)",
     },
 
     categoryOrb: {
@@ -1947,9 +1991,9 @@ const styles =
     },
 
     categoryCardLabel: {
-      width: 64,
+      width: 76,
       color: canalDynamicColors.text,
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: "600",
       textAlign: "center",
       textTransform: "capitalize",
@@ -2042,20 +2086,27 @@ const styles =
     },
 
     searchInput: {
-      minHeight: 49,
-      borderWidth: 1,
-      borderColor:
-        canalDynamicColors.line,
-      borderRadius: 18,
-      backgroundColor: canalDynamicColors.surface,
+      flex: 1,
+      minHeight: 48,
       color: canalDynamicColors.text,
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: "500",
       letterSpacing: -0.2,
       lineHeight: 20,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      marginBottom: 0,
+      paddingVertical: 0,
+    },
+
+    searchBox: {
+      minHeight: 50,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      borderRadius: 25,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.surface,
+      paddingHorizontal: 15,
     },
 
     segmentedControl: {

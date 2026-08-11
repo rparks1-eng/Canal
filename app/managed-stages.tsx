@@ -4,7 +4,6 @@ import { Stack, router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,6 +11,8 @@ import {
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../lib/canal-alert";
 
 import { CanalAmbientBackground } from "../components/canal-ui/canal-ambient-background";
 import { SceneCardBackdrop } from "../components/canal-ui/scene-card-visual";
@@ -211,7 +212,7 @@ function ManagedStageCard(props: { stage: LiveStage; busy: boolean; onMutate: (s
           accessibilityState={{ disabled: props.busy, busy: props.busy }}
           disabled={props.busy}
           onPress={() => live
-            ? Alert.alert("End Stage?", "You can restart it later.", [{ text: "Cancel", style: "cancel" }, { text: "End Stage", style: "destructive", onPress: () => void props.onMutate(stage, "end") }])
+            ? CanalAlert.alert("End Stage?", "You can restart it later.", [{ text: "Cancel", style: "cancel" }, { text: "End Stage", style: "destructive", onPress: () => void props.onMutate(stage, "end") }])
             : void props.onMutate(stage, "restart")}
           style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
         >
@@ -224,7 +225,7 @@ function ManagedStageCard(props: { stage: LiveStage; busy: boolean; onMutate: (s
             accessibilityRole="button"
             accessibilityState={{ disabled: props.busy, busy: props.busy }}
             disabled={props.busy}
-            onPress={() => Alert.alert("Delete this Stage?", "This permanently removes its chat, collaborators, and queue.", [{ text: "Cancel", style: "cancel" }, { text: "Delete Stage", style: "destructive", onPress: () => void props.onMutate(stage, "delete") }])}
+            onPress={() => CanalAlert.alert("Delete this Stage?", "This permanently removes its chat, collaborators, and queue.", [{ text: "Cancel", style: "cancel" }, { text: "Delete Stage", style: "destructive", onPress: () => void props.onMutate(stage, "delete") }])}
             style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
           >
             <Ionicons color={canalDynamicColors.danger} name="trash-outline" size={19} />

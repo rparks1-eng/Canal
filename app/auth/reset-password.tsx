@@ -7,7 +7,6 @@ import {
 
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,6 +16,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 
 import * as Linking from "expo-linking";
 
@@ -252,7 +253,7 @@ export default function ResetPasswordScreen() {
           throw signOutError;
         }
 
-        Alert.alert(
+        CanalAlert.alert(
           "Password updated",
           "Your Canal password has been changed. Sign in using the new password.",
           [

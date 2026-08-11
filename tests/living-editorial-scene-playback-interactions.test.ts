@@ -118,6 +118,28 @@ jest.mock("../lib/soundscape", () => ({
   readSoundscape: jest.fn(async () => ({ id: `sound-${mockAuth.user.id}`, userId: mockAuth.user.id, displayName: mockAuth.user.id === "owner-a" ? "Listener A" : "Listener B", username: "listener", bio: "Music notes", genres: ["Rock"], favoriteArtists: ["Artist"], visibility: "private", snapshotIds: [] })),
   saveSoundscape: (...args: unknown[]) => mockSaveSoundscape(...args),
 }));
+jest.mock("../lib/soundscape-collector", () => ({
+  collectSoundscapeAggregationInput: jest.fn(async (accountId: string, period: unknown) => ({
+    accountId,
+    period,
+    generatedAt: "2026-08-11T00:00:00.000Z",
+    scenes: [],
+    stages: [],
+    discoveries: [],
+    songDna: [],
+    listening: [],
+    feedback: [],
+    snapshots: [],
+  })),
+}));
+jest.mock("../lib/soundscape-cloud", () => ({
+  loadCommonGroundProjection: jest.fn(async () => null),
+  loadCommonGroundState: jest.fn(async () => null),
+  loadSoundscapeArchive: jest.fn(async () => null),
+  refreshSoundscapeArchive: jest.fn(async () => null),
+  setCommonGroundApproval: jest.fn(async () => undefined),
+  setSoundscapeShareVisibility: jest.fn(async () => undefined),
+}));
 
 import SceneFeedbackScreen from "../app/scene-feedback";
 import SceneCollaborationScreen from "../app/scene-collaboration";
@@ -458,35 +480,45 @@ describe("Living Editorial Scene playback interactions", () => {
     await act(async () => renderer.unmount());
   });
 
-  it("renders Soundscape form, toggle, share and exact back behavior", async () => {
+  it("renders the current Soundscape archive and preserves exact back behavior", async () => {
+    const reduceMotion = jest
+      .spyOn(AccessibilityInfo, "isReduceMotionEnabled")
+      .mockResolvedValue(true);
     const renderer = await render(React.createElement(SoundscapeScreen));
-    const back = renderer.root.findByProps({ accessibilityLabel: "Back to profile" });
+    await act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
+    const back = renderer.root.findByProps({ accessibilityLabel: "Back" });
+    (jest.requireMock("expo-router") as any).router.canGoBack.mockReturnValueOnce(false);
     await act(async () => back.props.onPress());
     expect(mockReplace).toHaveBeenCalledWith("/(tabs)/profile");
-    const edit = renderer.root.findByProps({ accessibilityLabel: "Edit Soundscape" });
-    expect(Math.max(effectiveStyle(edit).minHeight ?? 0, effectiveStyle(edit).height ?? 0)).toBeGreaterThanOrEqual(48);
-    await act(async () => edit.props.onPress());
-    const save = renderer.root.findByProps({ accessibilityLabel: "Save Soundscape" });
-    await act(async () => { void save.props.onPress(); void save.props.onPress(); await Promise.resolve(); });
-    expect(mockSaveSoundscape).toHaveBeenCalledTimes(1);
-    const toggle = renderer.root.findByProps({ accessibilityLabel: "Public Soundscape" });
-    await act(async () => toggle.props.onValueChange(true));
-    expect(mockSaveSoundscape).toHaveBeenCalled();
-    const share = renderer.root.findByProps({ accessibilityLabel: "Share Soundscape" });
-    await act(async () => share.props.onPress());
-    expect(mockShare).toHaveBeenCalledTimes(1);
+    expect(renderer.root.findByProps({ accessibilityLabel: "Refresh Soundscape" })).toBeTruthy();
+    expect(renderer.root.findAll((node: any) => node.props.accessibilityRole === "tab").length).toBeGreaterThanOrEqual(10);
     expect(renderer.root.findAll((node: any) => node.props.allowFontScaling === false)).toHaveLength(0);
+    await act(async () => renderer.unmount());
+    reduceMotion.mockRestore();
   });
 
   it("remounts Soundscape for account B without retaining A's visible identity", async () => {
+    const reduceMotion = jest
+      .spyOn(AccessibilityInfo, "isReduceMotionEnabled")
+      .mockResolvedValue(true);
     const a = await render(React.createElement(SoundscapeScreen));
-    expect(a.root.findAll((node: any) => node.props.children === "Listener A").length).toBeGreaterThan(0);
+    await act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
     await act(async () => a.unmount());
     mockAuth = { user: { id: "owner-b" }, accountEpoch: 2, sessionGeneration: 2 };
     const b = await render(React.createElement(SoundscapeScreen));
-    expect(b.root.findAll((node: any) => node.props.children === "Listener A")).toHaveLength(0);
-    expect(b.root.findAll((node: any) => node.props.children === "Listener B").length).toBeGreaterThan(0);
+    await act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
     expect((jest.requireMock("../lib/soundscape") as any).readSoundscape).toHaveBeenCalledTimes(2);
+    expect(
+      (jest.requireMock("../lib/soundscape-collector") as any)
+        .collectSoundscapeAggregationInput,
+    ).toHaveBeenNthCalledWith(1, "owner-a", expect.any(Object));
+    expect(
+      (jest.requireMock("../lib/soundscape-collector") as any)
+        .collectSoundscapeAggregationInput,
+    ).toHaveBeenNthCalledWith(2, "owner-b", expect.any(Object));
+    expect(JSON.stringify(b.toJSON())).not.toContain("Listener A");
+    await act(async () => b.unmount());
+    reduceMotion.mockRestore();
   });
 
   it("keeps route-owned handlers while applying editorial and playback modes", () => {
@@ -510,8 +542,10 @@ describe("Living Editorial Scene playback interactions", () => {
     expect(player).toContain("setOverride(sceneAtmosphere(scene))");
     expect(player).toContain("const presentation = scenePresentation(scene)");
     expect(player).toContain('backgroundColor: `${presentation.colors[2]}24`');
-    expect(soundscape).toContain("saveSoundscape");
-    expect(soundscape).toContain('accessibilityLabel="Public Soundscape"');
+    expect(soundscape).toContain("collectSoundscapeAggregationInput");
+    expect(soundscape).toContain("loadSoundscapeArchive");
+    expect(soundscape).toContain("setSoundscapeShareVisibility");
+    expect(soundscape).toContain("shareSoundscapeProjection");
     for (const content of [
       collaboration,
       detail,

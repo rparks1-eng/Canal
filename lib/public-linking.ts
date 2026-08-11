@@ -10,16 +10,26 @@ const PUBLIC_STAGE_PATTERN =
 const OPAQUE_INVITE_PATTERN =
   /^[A-Za-z0-9_-]{43}$/u;
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+const SOUNDSCAPE_PERIOD_KEY_PATTERN =
+  /^(?:\d{4}|\d{4}-(?:winter|spring|summer|fall))$/u;
+
 export type PublicDestination =
   | `/scenes/${string}`
   | `/snapshots/${string}`
-  | `/stages/${string}/join?invite=${string}`;
+  | `/stages/${string}/join?invite=${string}`
+  | `/public-soundscape?ownerId=${string}&periodKind=${"year" | "season"}&periodKey=${string}`;
 
 export type PublicRouteParams = Readonly<{
   invite?: string;
   sceneId?: string;
   snapshotId?: string;
   stageId?: string;
+  ownerId?: string;
+  periodKind?: string;
+  periodKey?: string;
 }>;
 
 export function canalPublicOrigin(): string {
@@ -127,6 +137,26 @@ export function parsePublicDestination(
     PUBLIC_STAGE_PATTERN,
   );
 
+  if (url.pathname === "/public-soundscape" && !url.hash) {
+    const ownerId = url.searchParams.get("ownerId") ?? "";
+    const periodKind = url.searchParams.get("periodKind") ?? "";
+    const periodKey = url.searchParams.get("periodKey") ?? "";
+    const keys = Array.from(url.searchParams.keys());
+    const kindMatchesKey = periodKind === "year"
+      ? /^\d{4}$/u.test(periodKey)
+      : periodKind === "season" && /^\d{4}-(?:winter|spring|summer|fall)$/u.test(periodKey);
+    if (
+      UUID_PATTERN.test(ownerId) &&
+      SOUNDSCAPE_PERIOD_KEY_PATTERN.test(periodKey) &&
+      kindMatchesKey &&
+      keys.length === 3 &&
+      keys.every((key) => ["ownerId", "periodKind", "periodKey"].includes(key))
+    ) {
+      return `/public-soundscape?ownerId=${ownerId.toLowerCase()}&periodKind=${periodKind}&periodKey=${periodKey}` as PublicDestination;
+    }
+    return null;
+  }
+
   if (!stageMatch || url.hash) {
     return null;
   }
@@ -175,6 +205,17 @@ export function publicDestinationFromRoute(
   ) {
     return parsePublicDestination(
       `/stages/${params.stageId}/join?invite=${encodeURIComponent(params.invite)}`,
+    );
+  }
+
+  if (
+    rootSegment === "public-soundscape" &&
+    typeof params.ownerId === "string" &&
+    typeof params.periodKind === "string" &&
+    typeof params.periodKey === "string"
+  ) {
+    return parsePublicDestination(
+      `/public-soundscape?ownerId=${encodeURIComponent(params.ownerId)}&periodKind=${encodeURIComponent(params.periodKind)}&periodKey=${encodeURIComponent(params.periodKey)}`,
     );
   }
 

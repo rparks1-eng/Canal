@@ -1,6 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Alert, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView, StyleSheet, Text, View } from "react-native";
+
+import { CanalAlert } from "../../../lib/canal-alert";
 
 import { PublicPreviewActions, PublicPreviewState } from "../../../components/public-preview";
 import { getPublicStageLinkPreview, type PublicLinkPreview } from "../../../lib/public-link-previews";
@@ -43,7 +45,7 @@ export default function StageInvitePreviewScreen() {
       router.replace({ pathname: "/live-stage/[stageId]", params: { stageId } });
     } catch (error) {
       setExpired(true);
-      Alert.alert("Invitation unavailable", error instanceof Error ? error.message : "This Stage invitation is unavailable.");
+      CanalAlert.alert("Invitation unavailable", error instanceof Error ? error.message : "This Stage invitation is unavailable.");
     } finally {
       setRedeeming(false);
     }

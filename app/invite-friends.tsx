@@ -9,13 +9,14 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../lib/canal-alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -56,7 +57,7 @@ function InviteFriendsContent() {
         result.method ===
         "clipboard"
       ) {
-        Alert.alert(
+        CanalAlert.alert(
           "Invite copied",
           "The Canal invite was copied to your clipboard.",
         );
@@ -67,7 +68,7 @@ function InviteFriendsContent() {
           ? error.message
           : "Canal could not share this invite.";
       setShareError(message);
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to share",
         message,
       );

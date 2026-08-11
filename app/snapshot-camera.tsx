@@ -4,7 +4,9 @@ import { CameraView, useCameraPermissions, type CameraMode, type CameraType } fr
 import { Image } from "expo-image";
 import { Stack, router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+
+import { CanalAlert } from "../lib/canal-alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SnapshotMediaPreview } from "../components/snapshot-media-preview";
@@ -77,7 +79,7 @@ export default function SnapshotCameraScreen() {
     try {
       const result = await camera.current.takePictureAsync({ quality: 0.85 });
       if (result?.uri) setCapture(persistSnapshotCaptureDraft({ uri: result.uri, type: "photo" }, draftScope));
-    } catch { Alert.alert("Camera unavailable", "Canal could not take that photo. Try again."); }
+    } catch { CanalAlert.alert("Camera unavailable", "Canal could not take that photo. Try again."); }
     finally { setBusy(false); }
   }
 
@@ -86,14 +88,14 @@ export default function SnapshotCameraScreen() {
     if (recording) {
       const supportsPause = camera.current.getSupportedFeatures().toggleRecordingAsyncAvailable;
       if (!supportsPause) {
-        Alert.alert("Pause unavailable", "This device cannot pause a recording. Finish this clip or record a new one.");
+        CanalAlert.alert("Pause unavailable", "This device cannot pause a recording. Finish this clip or record a new one.");
         return;
       }
       try {
         await camera.current.toggleRecordingAsync();
         setRecordingPaused((current) => !current);
       } catch {
-        Alert.alert("Video unavailable", "Canal could not pause or resume that video. Try finishing the clip.");
+        CanalAlert.alert("Video unavailable", "Canal could not pause or resume that video. Try finishing the clip.");
       }
       return;
     }
@@ -105,7 +107,7 @@ export default function SnapshotCameraScreen() {
     try {
       const result = await camera.current.recordAsync({ maxDuration: 10 });
       if (result?.uri) setCapture(persistSnapshotCaptureDraft({ uri: result.uri, type: "video" }, draftScope));
-    } catch { Alert.alert("Video unavailable", "Canal could not record that video. Try again."); }
+    } catch { CanalAlert.alert("Video unavailable", "Canal could not record that video. Try again."); }
     finally { setRecording(false); setRecordingPaused(false); setBusy(false); setSecondsRemaining(10); }
   }
 

@@ -22,10 +22,11 @@ describe("owned Snapshot Soundscape contract", () => {
   });
 
   it("derives the owner Soundscape from all Snapshots instead of a manual featured list", () => {
-    const soundscape = read("app/soundscape.tsx");
+    const collector = read("lib/soundscape-collector.ts");
     const detail = read("app/snapshots/[snapshotId].tsx");
-    expect(soundscape).toMatch(/const featuredSnapshots\s*=\s*useMemo\(\(\) => \{\s*return snapshots;/u);
-    expect(soundscape).not.toContain("Remove from Soundscape");
+    expect(collector).toContain("readSnapshots");
+    expect(collector).toContain("snapshots.slice(0, 250).map");
+    expect(collector).toContain("snapshot.visibility === \"public\"");
     expect(detail).toContain("Saved to your Soundscape");
     expect(detail).not.toContain("Add to Soundscape");
   });

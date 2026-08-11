@@ -390,6 +390,7 @@ describe("Living Editorial Snapshot and share interactions", () => {
       "Delete collection?",
       '"Night Routes" will be removed. Its Scenes stay in your Library.',
       expect.any(Array),
+      expect.any(Object),
     );
     expectNamedActionsAtLeast48(collection);
   });

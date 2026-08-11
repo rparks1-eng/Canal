@@ -17,7 +17,9 @@ describe("Explore pull-to-refresh", () => {
 
   it("keeps the full loading card out of pull refreshes", () => {
     expect(source).toContain('const isPullRefresh = mode === "refresh"');
-    expect(source).toMatch(/if \(!isPullRefresh\) \{\s*setLoading\(true\);/);
+    expect(source).toMatch(
+      /if \(!isPullRefresh && !hasRenderedContentRef[.]current\) \{\s*setLoading\(true\);/,
+    );
     expect(source).toMatch(/setRefreshing\(\s*false,?\s*\);/);
   });
 });

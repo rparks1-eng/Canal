@@ -94,8 +94,10 @@ describe("Home overhaul contract", () => {
 
   it("prefills only the chosen mood and direction while still requiring activity", () => {
     expect(studioSource).toContain("quickMood?: string; direct?: string; anchorTrackId?: string");
-    expect(studioSource).toContain("moods: quickMoodSeed ? [quickMoodSeed] : []");
-    expect(studioSource).toContain("notes: directSeed");
+    expect(studioSource).toContain(
+      "moods: quickMoodSeed ? [quickMoodSeed] : nextDraft.moods",
+    );
+    expect(studioSource).toContain("notes: directSeed || nextDraft.notes");
     expect(studioSource).toContain('if (nextStep !== "moment" && !activityChosen)');
     expect(studioSource).toContain("Choose what you are doing before continuing.");
   });

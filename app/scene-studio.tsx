@@ -110,6 +110,7 @@ import {
 import {
   readScenes,
 } from "../lib/scenes";
+import { consumeOnboardingSceneSeed } from "../lib/onboarding-scene-seed";
 import type { StoredScene } from "../lib/scenes";
 
 import {
@@ -316,8 +317,16 @@ export default function SceneStudioScreen() {
     : undefined;
   const reshootOwnerId = typeof params.reshootOwnerId === "string" && params.reshootOwnerId.length <= 64 ? params.reshootOwnerId : "";
   const reshootSceneId = typeof params.reshootSceneId === "string" && params.reshootSceneId.length <= 160 ? params.reshootSceneId : "";
-  const combineSceneIds = typeof params.combineSceneIds === "string" ? params.combineSceneIds.split(",").filter((id) => /^[A-Za-z0-9-]{1,160}$/u.test(id)).slice(0, 4) : [];
-  const combineSceneKey = combineSceneIds.join(",");
+  const combineSceneIds = useMemo(
+    () =>
+      typeof params.combineSceneIds === "string"
+        ? params.combineSceneIds
+            .split(",")
+            .filter((id) => /^[A-Za-z0-9-]{1,160}$/u.test(id))
+            .slice(0, 4)
+        : [],
+    [params.combineSceneIds],
+  );
   const {
     user,
     accountEpoch,
@@ -515,6 +524,51 @@ export default function SceneStudioScreen() {
 
           if (!shouldResumePreview) {
             let nextDraft = freshDraft();
+            let seededActivity = false;
+            if (!reshootOwnerId && !reshootSceneId) {
+              const onboardingSeed = await consumeOnboardingSceneSeed(
+                operationScope.userId,
+              ).catch(() => null);
+              if (!canCommit()) return;
+              if (onboardingSeed) {
+                const activityOption = SCENE_ACTIVITY_OPTIONS.find(
+                  (option) =>
+                    option.value === onboardingSeed.activity.trim().toLowerCase() ||
+                    option.label.toLowerCase() === onboardingSeed.activity.trim().toLowerCase(),
+                );
+                const seededMoods = onboardingSeed.moods
+                  .map((mood) => {
+                    const normalized = mood.trim().toLowerCase();
+                    return SCENE_MOOD_OPTIONS.find(
+                      (option) => option.value === normalized || option.label.toLowerCase() === normalized,
+                    )?.value;
+                  })
+                  .filter((mood): mood is SceneMood => Boolean(mood))
+                  .slice(0, 5);
+                const seededGenres = onboardingSeed.genres
+                  .map((genre) =>
+                    SCENE_GENRE_OPTIONS.find(
+                      (option) => option.toLowerCase() === genre.trim().toLowerCase(),
+                    ),
+                  )
+                  .filter((genre): genre is (typeof SCENE_GENRE_OPTIONS)[number] => Boolean(genre))
+                  .slice(0, 5);
+                const familiarity = onboardingSeed.familiarity.trim().toLowerCase();
+                const familiarityLevel = familiarity === "familiar" ? 15 : familiarity === "discovery" ? 85 : 50;
+                nextDraft = {
+                  ...nextDraft,
+                  activity: activityOption?.value ?? nextDraft.activity,
+                  moods: seededMoods,
+                  preferredGenres: seededGenres,
+                  familiarity: sceneFamiliarityFromLevel(familiarityLevel),
+                  familiarityLevel,
+                  allowAdjacentGenres: onboardingSeed.allowAdjacentGenres,
+                  allowExplicit: onboardingSeed.allowExplicit,
+                  notes: onboardingSeed.notes,
+                };
+                seededActivity = Boolean(activityOption);
+              }
+            }
             if (reshootOwnerId && reshootSceneId) {
               try {
                 const [publicSource, personalScenes] = await Promise.all([loadPublicScene(reshootOwnerId, reshootSceneId), readScenes()]);
@@ -530,7 +584,7 @@ export default function SceneStudioScreen() {
               moods: quickMoodSeed ? [quickMoodSeed] : nextDraft.moods,
               notes: directSeed || nextDraft.notes,
             });
-            setActivityChosen(Boolean(reshootOwnerId && reshootSceneId));
+            setActivityChosen(Boolean(reshootOwnerId && reshootSceneId) || seededActivity);
         setMomentError(null);
         setStudioStep("moment");
         setLoadedScope(operationScope);
@@ -576,7 +630,7 @@ export default function SceneStudioScreen() {
   }, [
     currentScope,
         directSeed,
-        combineSceneKey,
+        combineSceneIds,
         quickMoodSeed,
         resetToken,
         reshootOwnerId,

@@ -19,7 +19,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   FlatList,
   KeyboardAvoidingView,
@@ -31,6 +30,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
@@ -1441,7 +1442,7 @@ export default function LiveStageScreen() {
       return;
     }
 
-    Alert.alert(
+    CanalAlert.alert(
       "End this Stage?",
       "The queue and chat will become read-only for everyone.",
       [
@@ -1702,7 +1703,7 @@ export default function LiveStageScreen() {
   }
 
   function confirmDeleteOwnMessage(message: LiveStageMessage) {
-    Alert.alert("Delete message?", "This removes it from the Stage chat for everyone.", [
+    CanalAlert.alert("Delete message?", "This removes it from the Stage chat for everyone.", [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => { void (async () => { await deleteLiveStageMessage(message.id); await loadRoom(); })(); } },
     ]);
@@ -1722,7 +1723,7 @@ export default function LiveStageScreen() {
 
   function viewReactionMembers(message: LiveStageMessage, reaction: LiveStageMessageReaction) {
     const names = (message.reactionUsers[reaction] ?? []).map((member) => member.displayName);
-    Alert.alert(`${reaction} reactions`, names.length > 0 ? names.join("\n") : "No reactions yet.");
+    CanalAlert.alert(`${reaction} reactions`, names.length > 0 ? names.join("\n") : "No reactions yet.");
   }
 
   async function performModeration(
@@ -1911,7 +1912,7 @@ export default function LiveStageScreen() {
     const reason =
       reportReason;
 
-    Alert.alert(
+    CanalAlert.alert(
       "Report this message?",
       `Report ${draft.displayName}'s message for ${selectedReason.label.toLowerCase()}?`,
       [
@@ -1971,7 +1972,7 @@ export default function LiveStageScreen() {
       return;
     }
 
-    Alert.alert(
+    CanalAlert.alert(
       "Remove this message?",
       `Remove ${message.displayName}'s message from Stage chat?`,
       [
@@ -2039,7 +2040,7 @@ export default function LiveStageScreen() {
           ? `Change ${participant.displayName}'s role to listener?`
           : `Remove ${participant.displayName} from this Stage? They will not be able to rejoin this Stage.`;
 
-    Alert.alert(
+    CanalAlert.alert(
       `${actionLabel} ${participant.displayName}?`,
       confirmation,
       [

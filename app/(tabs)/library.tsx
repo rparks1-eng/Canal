@@ -9,7 +9,6 @@ import {
 
 import {
   ActivityIndicator,
-  Alert,
   Animated as NativeAnimated,
   Pressable,
   ScrollView,
@@ -18,6 +17,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 
 import {
   router,
@@ -738,7 +739,7 @@ export default function LibraryScreen() {
   const confirmSceneDelete = (scene: StoredScene): void => {
     const removingSavedScene = scene.libraryType === "saved";
 
-    Alert.alert(
+    CanalAlert.alert(
       removingSavedScene ? "Remove Scene?" : "Delete Scene?",
       removingSavedScene
         ? `"${scene.name}" will be removed from your Library and saved Scenes.`
@@ -793,7 +794,7 @@ export default function LibraryScreen() {
   };
 
   const confirmSnapshotDelete = (snapshot: Snapshot): void => {
-    Alert.alert(
+    CanalAlert.alert(
       "Delete Snapshot?",
       `"${snapshot.sceneName}" will be permanently removed from your account and Soundscape.`,
       [

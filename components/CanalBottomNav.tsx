@@ -36,6 +36,7 @@ import {
   CanalAtmosphereContext,
   CANAL_ATMOSPHERE_TRANSITION_MS,
 } from "../theme/canal-atmosphere-context";
+import { useCanalNavigationHidden } from "../providers/navigation-visibility-provider";
 
 const ITEMS = [
   {
@@ -174,6 +175,7 @@ function navigationAtmosphere(pathname: string, isDark: boolean) {
 export default function CanalBottomNav() {
   const { override } = use(CanalAtmosphereContext);
   const pathname = usePathname();
+  const navigationHidden = useCanalNavigationHidden();
   const isDark = useColorScheme() === "dark";
   const reduceMotion = useReducedMotion();
   const navigationInFlightRef = useRef<string | null>(null);
@@ -229,6 +231,14 @@ export default function CanalBottomNav() {
     : isDark
       ? "rgba(238, 255, 252, 0.86)"
       : "rgba(7, 39, 51, 0.80)";
+
+  if (
+    navigationHidden ||
+    pathname.startsWith("/soundscape") ||
+    pathname.startsWith("/public-soundscape")
+  ) {
+    return null;
+  }
 
   const navigationItems = (
     <View style={styles.itemsRow}>

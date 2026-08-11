@@ -8,7 +8,6 @@ import {
 import {
   AccessibilityInfo,
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +16,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../lib/canal-alert";
 
 import {
   router,
@@ -377,7 +378,7 @@ function SnapshotTemplatesContent() {
     (
       template: SnapshotTemplate,
     ): void => {
-      Alert.alert(
+      CanalAlert.alert(
         "Delete this template?",
         "Published Snapshots keep their captured design and attribution.",
         [

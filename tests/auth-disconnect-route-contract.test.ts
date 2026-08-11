@@ -554,7 +554,7 @@ describe(
         expect(
           login,
         ).toContain(
-          "Sign In to Canal",
+          "Sign in to Canal",
         );
 
         expect(

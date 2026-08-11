@@ -1564,6 +1564,21 @@ function ProfileScreenContent() {
           </View>
         ) : null}
 
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open your Soundscape"
+          accessibilityHint="Opens your ten-chapter listening history"
+          onPress={() => router.push("/soundscape")}
+          style={({ pressed }) => [styles.soundscapeEntry, pressed && styles.pressed]}
+        >
+          <View style={styles.soundscapeEntryCopy}>
+            <Text style={styles.soundscapeEntryEyebrow}>YOUR LIVING MUSIC PORTRAIT</Text>
+            <Text style={styles.soundscapeEntryTitle}>Soundscape</Text>
+            <Text style={styles.soundscapeEntryDescription}>Daily rhythm, discoveries, Scenes, Stages, and Common Ground.</Text>
+          </View>
+          <Ionicons color={canalDynamicColors.mint} name="arrow-forward" size={20} />
+        </Pressable>
+
         <View style={styles.profileActions}>
           <Pressable
             accessibilityRole="button"
@@ -3432,6 +3447,45 @@ const styles =
       backgroundColor: "rgba(141, 229, 210, 0.17)",
       borderWidth: 1,
       borderColor: "rgba(141, 229, 210, 0.25)",
+    },
+
+    soundscapeEntry: {
+      minHeight: 112,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      paddingHorizontal: 19,
+      paddingVertical: 17,
+      backgroundColor: "rgba(80, 132, 155, 0.19)",
+      borderWidth: 1,
+      borderColor: "rgba(141, 229, 210, 0.22)",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+    },
+
+    soundscapeEntryCopy: {
+      flex: 1,
+    },
+
+    soundscapeEntryEyebrow: {
+      color: canalDynamicColors.mint,
+      fontSize: 9,
+      letterSpacing: 1.25,
+      fontWeight: "800",
+    },
+
+    soundscapeEntryTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 22,
+      fontWeight: "700",
+      marginTop: 5,
+    },
+
+    soundscapeEntryDescription: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 4,
     },
 
     editButtonText: {

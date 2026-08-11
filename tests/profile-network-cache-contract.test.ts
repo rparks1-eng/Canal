@@ -11,9 +11,10 @@ describe("Profile network cache contract", () => {
     expect(source).toContain("PROFILE_NETWORK_CACHE_TTL_MS");
     expect(source).toContain("profileNetworkCache.get(userId)");
     expect(source).toContain("profileNetworkCache.delete(userId)");
-    expect(source).toContain("setConnectionSummary(cachedNetwork?.summary ?? null)");
-    expect(source).toContain("setPlaylistExports(cachedNetwork?.exports ?? [])");
-    expect(source).toContain("setSocialDataResolved(\n              Boolean(cachedNetwork)");
+    expect(source).toContain("const cachedNetwork = readCachedProfileNetwork(user?.id)");
+    expect(source).toContain("setConnectionSummary(cachedNetwork.summary)");
+    expect(source).toContain("setPlaylistExports(cachedNetwork.exports)");
+    expect(source).toContain("Boolean(cachedNetwork) || hasNetworkDataRef.current");
   });
 
   it("refreshes the cache only with the current identity's resolved data", () => {

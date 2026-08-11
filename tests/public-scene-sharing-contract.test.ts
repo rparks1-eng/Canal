@@ -353,7 +353,7 @@ describe(
           "busy:",
         );
         expect(source).toContain(
-          "Share Public Scene",
+          'accessibilityLabel={`Share ${item.scene.name}`}',
         );
         expect(source).toContain(
           "savePublicSceneToLibrary(",

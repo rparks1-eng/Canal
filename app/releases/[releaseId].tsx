@@ -9,13 +9,14 @@ import {
 import {
   AccessibilityInfo,
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 
 import {
   router,
@@ -1095,7 +1096,7 @@ function CreatorReleaseDetailContent(
         return;
       }
 
-      Alert.alert(
+      CanalAlert.alert(
         "Open voting?",
         "Opening is irreversible. Canal will freeze the current ordered Scene IDs and revisions from the public collection.",
         [
@@ -1126,7 +1127,7 @@ function CreatorReleaseDetailContent(
         return;
       }
 
-      Alert.alert(
+      CanalAlert.alert(
         "Close voting?",
         "Listeners will no longer be able to cast or change a favorite. Final totals and winner information will become visible.",
         [

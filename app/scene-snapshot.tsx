@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -18,6 +17,7 @@ import {
 
 import {
   router,
+  useFocusEffect,
   useLocalSearchParams,
 } from "expo-router";
 import { Image } from "expo-image";
@@ -90,6 +90,9 @@ import {
 import {
   useConnectivity,
 } from "../providers/connectivity-provider";
+import {
+  useReconnectReload,
+} from "../hooks/use-reconnect-reload";
 import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 
 type SnapshotPalette = {
@@ -289,10 +292,15 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
 
   const publishInFlight =
     useRef(false);
+  const sceneLoadGeneration =
+    useRef(0);
 
   const loadScene =
     useCallback(
       async (): Promise<void> => {
+        const generation =
+          sceneLoadGeneration.current + 1;
+        sceneLoadGeneration.current = generation;
         setIsLoadingScene(
           true,
         );
@@ -372,13 +380,16 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
               ? await addSpotifyArtworkToStoredScene(stageScene)
               : null
           );
-          setScene(nextScene);
-          setSelectedTrackId((current) =>
-            nextScene?.tracks.some((track) => track.id === current)
-              ? current
-              : nextScene?.tracks[0]?.id ?? "",
-          );
+          if (sceneLoadGeneration.current === generation) {
+            setScene(nextScene);
+            setSelectedTrackId((current) =>
+              nextScene?.tracks.some((track) => track.id === current)
+                ? current
+                : nextScene?.tracks[0]?.id ?? "",
+            );
+          }
         } catch (error) {
+          if (sceneLoadGeneration.current !== generation) return;
           console.error(
             "Unable to load Scene for Snapshot:",
             error,
@@ -399,9 +410,9 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
               loadFailure,
           );
         } finally {
-          setIsLoadingScene(
-            false,
-          );
+          if (sceneLoadGeneration.current === generation) {
+            setIsLoadingScene(false);
+          }
         }
       },
       [
@@ -418,11 +429,16 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
       ],
     );
 
-  useEffect(() => {
-    void loadScene();
-  }, [
-    loadScene,
-  ]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadScene();
+      return () => {
+        sceneLoadGeneration.current += 1;
+      };
+    }, [loadScene]),
+  );
+
+  useReconnectReload(loadScene);
 
   const selectedTrack = useMemo<SceneTrack | undefined>(
     () => scene?.tracks.find((track) => track.id === selectedTrackId) ?? scene?.tracks[0],

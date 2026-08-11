@@ -10,7 +10,6 @@ import {
 
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -18,6 +17,8 @@ import {
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 
 import {
   router,
@@ -816,7 +817,7 @@ function SceneDetailContent() {
         return;
       }
 
-      Alert.alert(
+      CanalAlert.alert(
         "Delete Scene?",
         `"${scene.name}" will be removed from this device.`,
         [

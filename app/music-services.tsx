@@ -10,13 +10,14 @@ import {
 import {
   AccessibilityInfo,
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../lib/canal-alert";
 
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
@@ -2552,7 +2553,7 @@ export default function MusicServicesScreen() {
         return;
       }
 
-      Alert.alert(
+      CanalAlert.alert(
         "Disconnect Spotify?",
         `Remove ${accountName} from this Canal account on this device? Your Spotify account and Canal data are not deleted.`,
         [
@@ -2579,7 +2580,7 @@ export default function MusicServicesScreen() {
         return;
       }
 
-      Alert.alert(
+      CanalAlert.alert(
         "Log Out of Canal?",
         "End only this device's current Canal session and disconnect Spotify for this account? Your account and cloud data are not deleted.",
         [

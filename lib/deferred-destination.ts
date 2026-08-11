@@ -68,6 +68,17 @@ export async function consumeDeferredDestination(): Promise<
   });
 }
 
+export async function readDeferredDestination(): Promise<
+  PublicDestination | null
+> {
+  return serialize(async () => {
+    const stored = await AsyncStorage.getItem(
+      DEFERRED_DESTINATION_KEY,
+    );
+    return stored ? parsePublicDestination(stored) : null;
+  });
+}
+
 export async function restoreDeferredDestination(
   destination: PublicDestination,
 ): Promise<void> {

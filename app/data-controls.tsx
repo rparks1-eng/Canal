@@ -10,7 +10,6 @@ import {
 } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     Pressable,
     ScrollView,
@@ -20,6 +19,8 @@ import {
     Text,
     View,
 } from "react-native";
+
+import { CanalAlert } from "../lib/canal-alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -306,7 +307,7 @@ export default function DataControlsScreen() {
           exportText,
         );
 
-        Alert.alert(
+        CanalAlert.alert(
           "Data copied",
           "Your Canal data export was copied to the clipboard.",
         );
@@ -318,7 +319,7 @@ export default function DataControlsScreen() {
         "Export sharing is unavailable in this browser.",
       );
     } catch (error) {
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to export",
         error instanceof Error
           ? error.message
@@ -330,7 +331,7 @@ export default function DataControlsScreen() {
   }
 
   function confirmReset() {
-    Alert.alert(
+    CanalAlert.alert(
       "Clear Canal data on this device?",
       "This removes Canal data stored on this device and disconnects Spotify. It does not delete your Canal account or cloud Scenes, Snapshots, Stages, profile, relationships, or playlist history.",
       [
@@ -357,7 +358,7 @@ export default function DataControlsScreen() {
 
       await clearAllCanalData();
 
-      Alert.alert(
+      CanalAlert.alert(
         "Device data cleared",
         "Local Canal data was removed. Your Canal account and cloud data were not deleted.",
         [
@@ -369,7 +370,7 @@ export default function DataControlsScreen() {
         ],
       );
     } catch (error) {
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to reset",
         error instanceof Error
           ? error.message

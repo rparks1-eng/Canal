@@ -23,9 +23,8 @@ describe("web account actions", () => {
     const auth = read("lib/canal-auth.ts");
 
     expect(login).toContain("readCanalSocialAuthProviderAvailability()");
-    expect(login).toContain("socialProviders?.google !== true");
-    expect(login).toContain("socialProviders?.apple !== true");
-    expect(login).toContain("Google and Apple sign-in are not enabled");
+    expect(login).toMatch(/socialAvailability[?][.]google !==\s*true/u);
+    expect(login).toMatch(/socialAvailability[?][.]apple !==\s*true/u);
     expect(auth).toContain("WebBrowser.maybeCompleteAuthSession()");
     expect(auth).toContain("skipBrowserRedirect:");
     expect(auth).toContain("openAuthSessionAsync(");
@@ -34,17 +33,17 @@ describe("web account actions", () => {
   it("keeps email sign-in and account creation independent from social-provider availability", () => {
     const login = read("app/login.tsx");
     const primaryDisabledIndex = login.indexOf(
-      "disabled={emailSubmissionDisabled}",
+      "disabled={\n                    isSubmitDisabled",
     );
     const primaryButtonContract = login.slice(
       Math.max(0, primaryDisabledIndex - 500),
       primaryDisabledIndex + 100,
     );
 
-    expect(login).toContain("const emailSubmissionDisabled =");
+    expect(login).toContain("const isSubmitDisabled =");
     expect(primaryDisabledIndex).toBeGreaterThan(0);
-    expect(login).toContain("if (!emailSubmissionDisabled)");
-    expect(primaryButtonContract).not.toContain("socialProviders");
+    expect(login).toMatch(/const isSubmitDisabled\s*=\s*loading \|\|\s*!configured;/u);
+    expect(primaryButtonContract).not.toContain("socialAvailability");
     expect(login).toContain('accessibilityLabel="Display name"');
     expect(login).toContain('accessibilityLabel="Handle"');
     expect(login).toContain('accessibilityLabel="Email"');

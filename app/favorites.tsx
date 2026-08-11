@@ -10,13 +10,14 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../lib/canal-alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../providers/auth-provider";
@@ -86,7 +87,7 @@ function FavoritesScreenContent() {
           error,
         );
 
-        Alert.alert(
+        CanalAlert.alert(
           "Unable to load",
           "Canal could not load your Favorites.",
         );
@@ -125,7 +126,7 @@ function FavoritesScreenContent() {
         error,
       );
 
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to update",
         "Canal could not remove this favorite.",
       );
@@ -135,7 +136,7 @@ function FavoritesScreenContent() {
   }
 
   function confirmRemoveFavorite(scene: PublicScene) {
-    Alert.alert(
+    CanalAlert.alert(
       `Remove ${scene.name} from Favorites?`,
       "The Scene stays available in Explore.",
       [

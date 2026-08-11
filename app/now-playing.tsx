@@ -22,6 +22,7 @@ import {
 
 import {
   router,
+  useFocusEffect,
   useLocalSearchParams,
 } from "expo-router";
 
@@ -92,6 +93,18 @@ import {
 import {
   useConnectivity,
 } from "../providers/connectivity-provider";
+
+import {
+  RecoveryNotice,
+} from "../components/recovery-notice";
+
+import {
+  useReconnectReload,
+} from "../hooks/use-reconnect-reload";
+
+import {
+  classifyRecoveryIssue,
+} from "../lib/recovery-issue";
 
 import {
   useAuth,
@@ -633,11 +646,28 @@ export default function NowPlayingScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    void loadPlayer();
-  }, [
-    loadPlayer,
-  ]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadPlayer();
+
+      return () => {
+        playerLoadGenerationRef.current += 1;
+      };
+    }, [loadPlayer]),
+  );
+
+  useReconnectReload(loadPlayer);
+
+  const storageRecoveryIssue = useMemo(
+    () =>
+      storageIssue
+        ? classifyRecoveryIssue(new Error(storageIssue), {
+            service: "canal",
+            connectivityStatus,
+          })
+        : null,
+    [connectivityStatus, storageIssue],
+  );
 
   useEffect(() => {
     if (
@@ -1259,15 +1289,12 @@ export default function NowPlayingScreen() {
               : "Nothing is playing"}
           </Text>
 
-          {storageIssue ? (
-            <Text
-              selectable
-              style={
-                styles.missingCopy
-              }
-            >
-              {storageIssue}
-            </Text>
+          {storageRecoveryIssue ? (
+            <RecoveryNotice
+              busy={storageBusy}
+              issue={storageRecoveryIssue}
+              onAction={recoverStorage}
+            />
           ) : null}
 
           {storageIssue ? (

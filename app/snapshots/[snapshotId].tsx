@@ -11,7 +11,6 @@ import {
 } from "react";
 import {
     ActivityIndicator,
-    Alert,
   Linking,
   Modal,
     Pressable,
@@ -22,6 +21,8 @@ import {
     TextInput,
     View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../../providers/auth-provider";
@@ -504,12 +505,12 @@ function SnapshotDetailContent() {
       );
 
       if (result.warning) {
-        Alert.alert(
+        CanalAlert.alert(
           "Saved on this device",
           result.warning,
         );
       } else {
-        Alert.alert(
+        CanalAlert.alert(
           "Snapshot updated",
           "Your note and mood were saved to Canal.",
         );
@@ -520,7 +521,7 @@ function SnapshotDetailContent() {
         error,
       );
 
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to save",
         error instanceof Error
           ? error.message
@@ -551,7 +552,7 @@ function SnapshotDetailContent() {
       await setSnapshotLike(snapshotId, nextLiked, user.id);
     } catch (error) {
       await loadSocial();
-      Alert.alert("Unable to update like", error instanceof Error ? error.message : "Try again shortly.");
+      CanalAlert.alert("Unable to update like", error instanceof Error ? error.message : "Try again shortly.");
     } finally {
       setSocialAction("");
     }
@@ -570,7 +571,7 @@ function SnapshotDetailContent() {
       setReplyingTo(null);
       await loadSocial();
     } catch (error) {
-      Alert.alert("Unable to post comment", error instanceof Error ? error.message : "Try again shortly.");
+      CanalAlert.alert("Unable to post comment", error instanceof Error ? error.message : "Try again shortly.");
     } finally {
       setSocialAction("");
     }
@@ -586,7 +587,7 @@ function SnapshotDetailContent() {
       await setSnapshotCommentLike(snapshotId, comment.id, !comment.likedByMe, user.id);
       await loadSocial();
     } catch (error) {
-      Alert.alert("Unable to update comment", error instanceof Error ? error.message : "Try again shortly.");
+      CanalAlert.alert("Unable to update comment", error instanceof Error ? error.message : "Try again shortly.");
     } finally {
       setSocialAction("");
     }
@@ -624,7 +625,7 @@ function SnapshotDetailContent() {
       );
 
       if (result.warning) {
-        Alert.alert(
+        CanalAlert.alert(
           "Visibility pending",
           result.warning,
         );
@@ -635,7 +636,7 @@ function SnapshotDetailContent() {
         error,
       );
 
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to update",
         error instanceof Error
           ? error.message
@@ -667,7 +668,7 @@ function SnapshotDetailContent() {
             : undefined,
       });
     } catch (error) {
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to share",
         error instanceof Error
           ? error.message
@@ -683,7 +684,7 @@ function SnapshotDetailContent() {
     try {
       await Linking.openURL(spotifyUrl);
     } catch {
-      Alert.alert("Unable to open Spotify", "Canal could not open this track.");
+      CanalAlert.alert("Unable to open Spotify", "Canal could not open this track.");
     }
   }
 
@@ -692,7 +693,7 @@ function SnapshotDetailContent() {
       return;
     }
 
-    Alert.alert(
+    CanalAlert.alert(
       "Delete this Snapshot?",
       "This removes the Snapshot from your device and Soundscape.",
       [
@@ -740,7 +741,7 @@ function SnapshotDetailContent() {
       }
 
       if (result.warning) {
-        Alert.alert(
+        CanalAlert.alert(
           "Deleted on this device",
           result.warning,
         );
@@ -755,7 +756,7 @@ function SnapshotDetailContent() {
         error,
       );
 
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to delete",
         error instanceof Error
           ? error.message

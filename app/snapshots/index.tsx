@@ -11,7 +11,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +18,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../../lib/canal-alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../../providers/auth-provider";
@@ -116,7 +117,7 @@ function SnapshotsContent() {
           error,
         );
 
-        Alert.alert(
+        CanalAlert.alert(
           "Unable to load",
           "Canal could not load your Snapshots.",
         );
@@ -181,13 +182,13 @@ function SnapshotsContent() {
         result.method ===
         "clipboard"
       ) {
-        Alert.alert(
+        CanalAlert.alert(
           "Snapshot copied",
           "The Snapshot was copied to your clipboard.",
         );
       }
     } catch (error) {
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to share",
         error instanceof Error
           ? error.message
@@ -199,7 +200,7 @@ function SnapshotsContent() {
   function confirmDelete(
     snapshot: Snapshot,
   ) {
-    Alert.alert(
+    CanalAlert.alert(
       "Delete this Snapshot?",
       `The moment from ${snapshot.sceneName} will be removed.`,
       [
@@ -247,7 +248,7 @@ function SnapshotsContent() {
           result.warning,
         );
 
-        Alert.alert(
+        CanalAlert.alert(
           "Deleted on this device",
           result.warning,
         );
@@ -260,7 +261,7 @@ function SnapshotsContent() {
         error,
       );
 
-      Alert.alert(
+      CanalAlert.alert(
         "Unable to delete",
         "Canal could not delete this Snapshot.",
       );

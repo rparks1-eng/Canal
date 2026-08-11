@@ -7,7 +7,7 @@ import {
     useRef,
     useState,
 } from "react";
-import { Alert } from "react-native";
+import { CanalAlert } from "../lib/canal-alert";
 
 import {
     disconnectSpotifyOnly,
@@ -716,7 +716,7 @@ export function useSpotifyConnection(
   const connect =
     useCallback(async () => {
       if (!spotifyClientId) {
-        Alert.alert(
+        CanalAlert.alert(
           "Spotify Client ID missing",
           "Add EXPO_PUBLIC_SPOTIFY_CLIENT_ID to the project's .env.local file and fully reload Canal.",
         );
@@ -738,7 +738,7 @@ export function useSpotifyConnection(
             .ownerId !==
           user?.id
       ) {
-        Alert.alert(
+        CanalAlert.alert(
           "Spotify is still loading",
           "Try the connection button again.",
         );
@@ -938,7 +938,7 @@ export function useSpotifyConnection(
           if (
             isCurrentAttempt()
           ) {
-            Alert.alert(
+            CanalAlert.alert(
               "Spotify connection failed",
               response.error?.message ??
                 response.params
@@ -1189,7 +1189,7 @@ export function useSpotifyConnection(
           null,
         );
 
-        Alert.alert(
+        CanalAlert.alert(
           "Unable to open Spotify",
           isCanalAccountChangedError(
             error,
@@ -1416,7 +1416,7 @@ export function useSpotifyConnection(
           error,
         );
 
-        Alert.alert(
+        CanalAlert.alert(
           "Unable to disconnect",
           isCanalAccountChangedError(
             error,
@@ -1537,7 +1537,7 @@ export function useSpotifyConnection(
           error,
         );
 
-        Alert.alert(
+        CanalAlert.alert(
           "Unable to change account",
           isCanalAccountChangedError(
             error,

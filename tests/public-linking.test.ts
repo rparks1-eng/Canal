@@ -24,7 +24,7 @@ describe("public Canal linking", () => {
     }
   });
 
-  it("accepts only the three canonical destination families", () => {
+  it("accepts only the canonical destination families", () => {
     expect(parsePublicDestination(`https://canal.app/scenes/${SCENE_ID}`))
       .toBe(`/scenes/${SCENE_ID}`);
     expect(parsePublicDestination(`canal:///snapshots/${SNAPSHOT_ID}`))
@@ -32,6 +32,8 @@ describe("public Canal linking", () => {
     const invite = "A".repeat(43);
     expect(parsePublicDestination(`/stages/${STAGE_ID}/join?invite=${invite}`))
       .toBe(`/stages/${STAGE_ID}/join?invite=${invite}`);
+    expect(parsePublicDestination(`/public-soundscape?ownerId=${SCENE_ID}&periodKind=year&periodKey=2026`))
+      .toBe(`/public-soundscape?ownerId=${SCENE_ID}&periodKind=year&periodKey=2026`);
   });
 
   it("recognizes only exact public preview route state for the auth guard", () => {
@@ -43,6 +45,11 @@ describe("public Canal linking", () => {
       stageId: STAGE_ID,
       invite: "A".repeat(43),
     })).toBe(`/stages/${STAGE_ID}/join?invite=${"A".repeat(43)}`);
+    expect(publicDestinationFromRoute("public-soundscape", {
+      ownerId: SCENE_ID,
+      periodKind: "season",
+      periodKey: "2026-fall",
+    })).toBe(`/public-soundscape?ownerId=${SCENE_ID}&periodKind=season&periodKey=2026-fall`);
 
     expect(publicDestinationFromRoute("settings", {})).toBeNull();
     expect(publicDestinationFromRoute("scenes", { sceneId: "private-local-id" }))
@@ -61,6 +68,8 @@ describe("public Canal linking", () => {
     `/stages/${STAGE_ID}/join?invite=bad%2Ftoken`,
     `/stages/${STAGE_ID}/join?invite=good-token&next=/settings`,
     "javascript:alert(1)",
+    `/public-soundscape?ownerId=${SCENE_ID}&periodKind=year&periodKey=2026-fall`,
+    `/public-soundscape?ownerId=${SCENE_ID}&periodKind=year&periodKey=2026&next=/settings`,
   ])("rejects unsafe or non-allowlisted destination %s", (input) => {
     expect(parsePublicDestination(input)).toBeNull();
   });
@@ -84,8 +93,20 @@ describe("public Canal linking", () => {
     const android = JSON.parse(fs.readFileSync(path.join(root, "public/.well-known/assetlinks.json"), "utf8"));
 
     expect(appConfig.expo.ios.associatedDomains).toContain("applinks:canal.app");
+    expect(appConfig.expo.ios.associatedDomains).toContain("applinks:canal.expo.app");
     expect(appConfig.expo.android.package).toBe("com.raishawnparks.canal");
     expect(appConfig.expo.android.intentFilters[0].autoVerify).toBe(true);
+    expect(appConfig.expo.android.intentFilters[0].data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ host: "canal.expo.app", pathPrefix: "/scenes/" }),
+        expect.objectContaining({ host: "canal.expo.app", pathPrefix: "/public-soundscape" }),
+      ]),
+    );
+    expect(apple.applinks.details[0].components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ "/": "/public-soundscape" }),
+      ]),
+    );
     expect(apple.applinks.details[0].appID)
       .toBe("6UBGGFVD92.com.raishawnparks.canal");
     expect(android[0].target.package_name).toBe("com.raishawnparks.canal");

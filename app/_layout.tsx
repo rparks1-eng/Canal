@@ -34,8 +34,13 @@ import {
 import {
   NotificationCenterProvider,
 } from "../providers/notification-center-provider";
+import { CanalNavigationVisibilityProvider } from "../providers/navigation-visibility-provider";
 
 import CanalBottomNav from "../components/CanalBottomNav";
+
+import {
+  CanalAlertHost,
+} from "../components/canal-alert-host";
 
 import {
   CanalAmbientBackground,
@@ -133,6 +138,8 @@ function CanalNavigator() {
       sceneId?: string;
       snapshotId?: string;
       stageId?: string;
+      periodKind?: string;
+      periodKey?: string;
     }>();
 
   const {
@@ -372,6 +379,9 @@ function CanalNavigator() {
             sceneId: routeParams.sceneId,
             snapshotId: routeParams.snapshotId,
             stageId: routeParams.stageId,
+            ownerId: routeParams.ownerId,
+            periodKind: routeParams.periodKind,
+            periodKey: routeParams.periodKey,
           },
         );
 
@@ -581,6 +591,8 @@ function CanalNavigator() {
     routeParams.sceneId,
     routeParams.snapshotId,
     routeParams.stageId,
+    routeParams.periodKind,
+    routeParams.periodKey,
     routeKey,
     segments,
     session,
@@ -623,7 +635,9 @@ function CanalNavigator() {
     rootSegment !== "auth" &&
     rootSegment !== "onboarding" &&
     rootSegment !== "connect-music" &&
-    rootSegment !== "spotify-callback";
+    rootSegment !== "spotify-callback" &&
+    rootSegment !== "soundscape" &&
+    rootSegment !== "public-soundscape";
 
   return (
     <View style={styles.navigatorShell}>
@@ -815,7 +829,10 @@ export default function RootLayout() {
             <AuthProvider>
               <NotificationCenterProvider>
                 <AnalyticsProvider>
-                  <CanalNavigator />
+                  <CanalNavigationVisibilityProvider>
+                    <CanalNavigator />
+                    <CanalAlertHost />
+                  </CanalNavigationVisibilityProvider>
                 </AnalyticsProvider>
               </NotificationCenterProvider>
             </AuthProvider>

@@ -9,13 +9,14 @@ import {
 import {
   AccessibilityInfo,
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import { CanalAlert } from "../lib/canal-alert";
 
 import {
   router,
@@ -353,7 +354,7 @@ export function LegacySettingsScreen() {
         return;
       }
 
-      Alert.alert(
+      CanalAlert.alert(
         "Log Out of Canal?",
         "This ends only this device's current Canal session and disconnects Spotify for this account. Your Canal account, cloud data, and saved Scenes are not deleted.",
         [

@@ -1152,7 +1152,7 @@ const styles =
       padding: 20,
     },
 
-    publicKicker: { color: "rgba(255,255,255,.62)", fontSize: 9, fontWeight: "900", letterSpacing: 1.4, marginBottom: 5 },
+    publicKicker: { color: canalDynamicColors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.4, marginBottom: 5 },
 
     artwork: {
       width: 92,

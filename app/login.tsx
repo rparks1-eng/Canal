@@ -1,21 +1,29 @@
-import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 
+import type {
+  ReactNode,
+} from "react";
+
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
+
+import {
+  Ionicons,
+} from "@expo/vector-icons";
 
 import {
   router,
@@ -23,16 +31,8 @@ import {
 } from "expo-router";
 
 import {
-  rememberDeferredDestination,
-} from "../lib/deferred-destination";
-
-import {
-  loginModeFromParam,
-} from "../lib/login-route";
-
-import type {
-  LoginMode,
-} from "../lib/login-route";
+  StatusBar,
+} from "expo-status-bar";
 
 import type {
   Session,
@@ -43,10 +43,29 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  OnboardingAtmosphere,
+  OnboardingButton,
+  OnboardingHeader,
+  OnboardingPanel,
+  useOnboardingPalette,
+} from "../components/auth-onboarding-ui";
+
+import {
   signInWithEmail,
   signInWithSocial,
   signUpWithEmail,
 } from "../lib/canal-auth";
+
+import {
+  readPublicSceneReturn,
+} from "../lib/auth-return";
+
+import {
+  isOnboardingRequired,
+  markOnboardingRequired,
+  ONBOARDING_METADATA_KEY,
+  rememberPendingSignup,
+} from "../lib/onboarding";
 
 import {
   readCanalSocialAuthProviderAvailability,
@@ -57,15 +76,19 @@ import type {
 } from "../lib/social-auth-providers";
 
 import {
-  isOnboardingRequired,
-  markOnboardingRequired,
-  ONBOARDING_METADATA_KEY,
-  rememberPendingSignup,
-} from "../lib/onboarding";
-
-import {
   useAuth,
 } from "../providers/auth-provider";
+
+type LoginMode =
+  | "sign-in"
+  | "create-account";
+
+type FieldErrors = {
+  displayName?: string;
+  handle?: string;
+  email?: string;
+  password?: string;
+};
 
 async function continueAfterAccountLogin(
   session: Session,
@@ -87,7 +110,6 @@ function isFirstSocialSignIn(
     Date.parse(
       session.user.created_at,
     );
-
   const lastSignInAt =
     Date.parse(
       session.user.last_sign_in_at ??
@@ -104,110 +126,280 @@ function isFirstSocialSignIn(
     Math.abs(
       lastSignInAt -
         createdAt,
-    ) <
-      120_000
+    ) < 120_000
   );
 }
 
+function validateFields(
+  input: {
+    mode: LoginMode;
+    displayName: string;
+    handle: string;
+    email: string;
+    password: string;
+  },
+): FieldErrors {
+  const errors: FieldErrors =
+    {};
+
+  if (
+    input.mode ===
+      "create-account" &&
+    input.displayName.trim()
+      .length < 2
+  ) {
+    errors.displayName =
+      "Enter the name people will see in Canal.";
+  }
+
+  if (
+    input.mode ===
+      "create-account" &&
+    !/^@?[a-zA-Z0-9_]{3,24}$/u.test(
+      input.handle.trim(),
+    )
+  ) {
+    errors.handle =
+      "Use 3–24 letters, numbers, or underscores.";
+  }
+
+  if (
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(
+      input.email.trim(),
+    )
+  ) {
+    errors.email =
+      "Enter a valid email address.";
+  }
+
+  if (
+    input.password.length < 8
+  ) {
+    errors.password =
+      "Use at least 8 characters.";
+  }
+
+  return errors;
+}
+
 export default function LoginScreen() {
-  const params = useLocalSearchParams<{
-    destination?: string;
-    mode?: string | string[];
-  }>();
-
-  const requestedMode =
-    loginModeFromParam(
-      params.mode,
-    );
-
+  const params =
+    useLocalSearchParams<{
+      mode?: string;
+      deleted?: string;
+    }>();
+  const {
+    width,
+  } =
+    useWindowDimensions();
+  const colorScheme =
+    useColorScheme();
   const {
     configured,
   } =
     useAuth();
-
+  const colors =
+    useOnboardingPalette(
+      "violet",
+    );
   const [
     mode,
     setMode,
-  ] =
-    useState<LoginMode>(
-      requestedMode,
-    );
-
+  ] = useState<LoginMode>(
+    params.mode ===
+      "create-account"
+      ? "create-account"
+      : "sign-in",
+  );
   const [
     displayName,
     setDisplayName,
   ] = useState("");
-
   const [
     handle,
     setHandle,
   ] = useState("");
-
   const [
     email,
     setEmail,
   ] = useState("");
-
   const [
     password,
     setPassword,
   ] = useState("");
-
+  const [
+    showPassword,
+    setShowPassword,
+  ] = useState(false);
   const [
     loading,
     setLoading,
   ] = useState(false);
-
-  const [
-    socialProviders,
-    setSocialProviders,
-  ] = useState<CanalSocialAuthProviderAvailability | null>(null);
-
-  useEffect(() => {
-    let active = true;
-
-    if (!configured) {
-      setSocialProviders({ google: false, apple: false });
-      return () => { active = false; };
-    }
-
-    void readCanalSocialAuthProviderAvailability()
-      .then((availability) => {
-        if (active) setSocialProviders(availability);
-      })
-      .catch(() => {
-        if (active) setSocialProviders({ google: false, apple: false });
-      });
-
-    return () => { active = false; };
-  }, [configured]);
-
-  const submissionInFlight =
-    useRef(false);
-
-  useEffect(() => {
-    if (typeof params.destination === "string") {
-      void rememberDeferredDestination(
-        params.destination,
-      );
-    }
-  }, [params.destination]);
-
-  useEffect(() => {
-    setMode(requestedMode);
-    setMessage("");
-    setErrorMessage("");
-  }, [requestedMode]);
-
   const [
     message,
     setMessage,
   ] = useState("");
-
   const [
     errorMessage,
     setErrorMessage,
   ] = useState("");
+  const [
+    fieldErrors,
+    setFieldErrors,
+  ] = useState<FieldErrors>(
+    {},
+  );
+  const [
+    hasSharedSceneReturn,
+    setHasSharedSceneReturn,
+  ] = useState(false);
+  const [
+    socialAvailability,
+    setSocialAvailability,
+  ] = useState<CanalSocialAuthProviderAvailability | null>(
+    null,
+  );
+  const authInFlightRef =
+    useRef(false);
+
+  const isWide =
+    width >= 760;
+
+  useEffect(() => {
+    let active =
+      true;
+
+    readPublicSceneReturn()
+      .then(
+        (destination) => {
+          if (active) {
+            setHasSharedSceneReturn(
+              Boolean(
+                destination,
+              ),
+            );
+          }
+        },
+      )
+      .catch(() => {
+        if (active) {
+          setHasSharedSceneReturn(
+            false,
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active =
+      true;
+
+    if (!configured) {
+      setSocialAvailability({
+        google: false,
+        apple: false,
+      });
+
+      return () => {
+        active = false;
+      };
+    }
+
+    setSocialAvailability(
+      null,
+    );
+    readCanalSocialAuthProviderAvailability()
+      .then(
+        (availability) => {
+          if (active) {
+            setSocialAvailability(
+              availability,
+            );
+          }
+        },
+      )
+      .catch(() => {
+        if (active) {
+          setSocialAvailability({
+            google: false,
+            apple: false,
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    configured,
+  ]);
+
+  useEffect(() => {
+    if (
+      params.mode ===
+      "create-account"
+    ) {
+      setMode(
+        "create-account",
+      );
+    }
+  }, [
+    params.mode,
+  ]);
+
+  useEffect(() => {
+    if (
+      params.deleted === "1"
+    ) {
+      setErrorMessage("");
+      setMessage(
+        "Your Canal account was permanently deleted.",
+      );
+    }
+  }, [
+    params.deleted,
+  ]);
+
+  const formTitle =
+    mode ===
+    "sign-in"
+      ? "Welcome back"
+      : "Create your Canal";
+  const formNote =
+    mode ===
+    "sign-in"
+      ? "Return to the moment you left."
+      : "Build your Canal identity first. Connect music after.";
+  const isSubmitDisabled =
+    loading ||
+    !configured;
+  const statusMessage =
+    errorMessage ||
+    message;
+  const statusIsError =
+    Boolean(
+      errorMessage,
+    );
+  const inputStyle =
+    useMemo(
+      () => [
+        styles.input,
+        {
+          color:
+            colors.ink,
+          borderColor:
+            colors.line,
+        },
+      ],
+      [
+        colors.ink,
+        colors.line,
+      ],
+    );
 
   const changeMode = (
     nextMode: LoginMode,
@@ -215,18 +407,80 @@ export default function LoginScreen() {
     setMode(
       nextMode,
     );
-
+    setFieldErrors(
+      {},
+    );
     setMessage("");
     setErrorMessage("");
   };
 
+  const updateField = (
+    field: keyof FieldErrors,
+    value: string,
+    update: (
+      nextValue: string,
+    ) => void,
+  ): void => {
+    update(
+      value,
+    );
+    setFieldErrors(
+      (current) => {
+        if (!current[field]) {
+          return current;
+        }
+
+        const next = {
+          ...current,
+        };
+        delete next[field];
+        return next;
+      },
+    );
+    setErrorMessage(
+      (current) =>
+        current ===
+        "Check the highlighted fields and try again."
+          ? ""
+          : current,
+    );
+  };
+
   const submitEmail =
     async (): Promise<void> => {
-      if (submissionInFlight.current) {
+      if (
+        loading ||
+        authInFlightRef.current
+      ) {
         return;
       }
 
-      submissionInFlight.current = true;
+      const errors =
+        validateFields({
+          mode,
+          displayName,
+          handle,
+          email,
+          password,
+        });
+
+      setFieldErrors(
+        errors,
+      );
+
+      if (
+        Object.keys(
+          errors,
+        ).length > 0
+      ) {
+        setErrorMessage(
+          "Check the highlighted fields and try again.",
+        );
+        return;
+      }
+
+      authInFlightRef.current =
+        true;
       setLoading(true);
       setMessage("");
       setErrorMessage("");
@@ -245,7 +499,6 @@ export default function LoginScreen() {
           await continueAfterAccountLogin(
             session,
           );
-
           return;
         }
 
@@ -263,15 +516,12 @@ export default function LoginScreen() {
           await rememberPendingSignup(
             email,
           );
-
           setMessage(
-            "Your Canal account was created. Open the confirmation email, confirm the account, then return here and sign in.",
+            "Your Canal account is ready. Confirm the email, then return here and sign in; your shared destination will still be waiting.",
           );
-
           setMode(
             "sign-in",
           );
-
           return;
         }
 
@@ -284,7 +534,6 @@ export default function LoginScreen() {
         await markOnboardingRequired(
           result.session.user.id,
         );
-
         await continueAfterAccountLogin(
           result.session,
         );
@@ -295,7 +544,8 @@ export default function LoginScreen() {
             : "Canal could not authenticate your account.",
         );
       } finally {
-        submissionInFlight.current = false;
+        authInFlightRef.current =
+          false;
         setLoading(false);
       }
     };
@@ -306,11 +556,18 @@ export default function LoginScreen() {
         | "google"
         | "apple",
     ): Promise<void> => {
-      if (submissionInFlight.current) {
+      if (
+        loading ||
+        authInFlightRef.current ||
+        socialAvailability?.[
+          provider
+        ] !== true
+      ) {
         return;
       }
 
-      submissionInFlight.current = true;
+      authInFlightRef.current =
+        true;
       setLoading(true);
       setMessage("");
       setErrorMessage("");
@@ -341,817 +598,1170 @@ export default function LoginScreen() {
             : `${provider} sign-in failed.`,
         );
       } finally {
-        submissionInFlight.current = false;
+        authInFlightRef.current =
+          false;
         setLoading(false);
       }
     };
 
-  const emailSubmissionDisabled =
-    loading ||
-    !configured;
-
   return (
-    <SafeAreaView
+    <View
       style={
-        styles.safeArea
+        styles.screen
       }
-      edges={[
-        "top",
-        "bottom",
-      ]}
     >
-      <KeyboardAvoidingView
+      <StatusBar
         style={
-          styles.flex
+          colorScheme ===
+          "dark"
+            ? "light"
+            : "dark"
         }
-        behavior={
-          Platform.OS ===
-          "ios"
-            ? "padding"
-            : undefined
+      />
+      <OnboardingAtmosphere palette="violet" />
+
+      <SafeAreaView
+        edges={[
+          "top",
+          "bottom",
+        ]}
+        style={
+          styles.safeArea
         }
       >
-        <ScrollView
-          contentContainerStyle={
-            styles.content
+        <KeyboardAvoidingView
+          behavior={
+            process.env.EXPO_OS ===
+            "ios"
+              ? "padding"
+              : undefined
           }
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={
-            false
+          style={
+            styles.screen
           }
         >
-          <View
-            style={
-              styles.logo
+          <ScrollView
+            contentContainerStyle={
+              styles.content
             }
-          >
-            <Text
-              style={
-                styles.logoText
-              }
-            >
-              c
-            </Text>
-          </View>
-
-          <Text
-            style={
-              styles.brand
-            }
-          >
-            canal
-          </Text>
-
-          <Text
-            style={
-              styles.title
-            }
-          >
-            {mode ===
-            "sign-in"
-              ? "Welcome back."
-              : "Create your Canal account."}
-          </Text>
-
-          <Text
-            style={
-              styles.subtitle
-            }
-          >
-            Sign in to Canal first. Music
-            platforms are connected after
-            your Canal account is active.
-          </Text>
-
-          {!configured ? (
-            <View
-              style={
-                styles.configurationBox
-              }
-            >
-              <Text
-                style={
-                  styles.configurationTitle
-                }
-              >
-                Supabase setup required
-              </Text>
-
-              <Text
-                style={
-                  styles.configurationText
-                }
-              >
-                Your Supabase URL or
-                publishable key is missing
-                from Canal&apos;s
-                .env.local file.
-              </Text>
-            </View>
-          ) : null}
-
-          <View
-            style={
-              styles.modeContainer
-            }
-          >
-            <Pressable
-              accessibilityLabel="Sign in mode"
-              accessibilityRole="button"
-              accessibilityState={{ selected: mode === "sign-in" }}
-              onPress={() =>
-                changeMode(
-                  "sign-in",
-                )
-              }
-              style={[
-                styles.modeButton,
-
-                mode ===
-                  "sign-in" &&
-                  styles.modeButtonSelected,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.modeText,
-
-                  mode ===
-                    "sign-in" &&
-                    styles.modeTextSelected,
-                ]}
-              >
-                Sign In
-              </Text>
-            </Pressable>
-
-            <Pressable
-              accessibilityLabel="Create account mode"
-              accessibilityRole="button"
-              accessibilityState={{ selected: mode === "create-account" }}
-              onPress={() =>
-                changeMode(
-                  "create-account",
-                )
-              }
-              style={[
-                styles.modeButton,
-
-                mode ===
-                  "create-account" &&
-                  styles.modeButtonSelected,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.modeText,
-
-                  mode ===
-                    "create-account" &&
-                    styles.modeTextSelected,
-                ]}
-              >
-                Create Account
-              </Text>
-            </Pressable>
-          </View>
-
-          {mode ===
-          "create-account" ? (
-            <>
-              <Text
-                style={
-                  styles.inputLabel
-                }
-              >
-                Display name
-              </Text>
-
-              <TextInput
-                accessibilityLabel="Display name"
-                value={
-                  displayName
-                }
-                onChangeText={
-                  setDisplayName
-                }
-                placeholder="Your name"
-                placeholderTextColor={canalDynamicColors.muted}
-                autoCapitalize="words"
-                maxLength={60}
-                style={
-                  styles.input
-                }
-              />
-
-              <Text
-                style={
-                  styles.inputLabel
-                }
-              >
-                Handle
-              </Text>
-
-              <TextInput
-                accessibilityLabel="Handle"
-                value={
-                  handle
-                }
-                onChangeText={
-                  setHandle
-                }
-                placeholder="@yourhandle"
-                placeholderTextColor={canalDynamicColors.muted}
-                autoCapitalize="none"
-                autoCorrect={
-                  false
-                }
-                maxLength={24}
-                style={
-                  styles.input
-                }
-              />
-            </>
-          ) : null}
-
-          <Text
-            style={
-              styles.inputLabel
-            }
-          >
-            Email
-          </Text>
-
-          <TextInput
-            accessibilityLabel="Email"
-            value={
-              email
-            }
-            onChangeText={
-              setEmail
-            }
-            placeholder="you@example.com"
-            placeholderTextColor={canalDynamicColors.muted}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={
               false
             }
-            textContentType="emailAddress"
-            style={
-              styles.input
-            }
-          />
-
-          <Text
-            style={
-              styles.inputLabel
-            }
           >
-            Password
-          </Text>
+            <OnboardingHeader palette="violet" />
 
-          <TextInput
-            accessibilityLabel="Password"
-            value={
-              password
-            }
-            onChangeText={
-              setPassword
-            }
-            placeholder="At least 8 characters"
-            placeholderTextColor={canalDynamicColors.muted}
-            secureTextEntry
-            textContentType={
-              mode ===
-              "sign-in"
-                ? "password"
-                : "newPassword"
-            }
-            returnKeyType="go"
-            onSubmitEditing={() => {
-              if (!emailSubmissionDisabled) {
-                void submitEmail();
-              }
-            }}
-            style={
-              styles.input
-            }
-          />
-
-          {mode ===
-          "sign-in" ? (
-            <Pressable
-              accessibilityLabel="Forgot password"
-              accessibilityRole="button"
-              onPress={() =>
-                router.push(
-                  "/auth/forgot-password" as never,
-                )
-              }
-              style={
-                styles.forgotButton
-              }
+            <View
+              style={[
+                styles.layout,
+                isWide &&
+                  styles.layoutWide,
+              ]}
             >
-              <Text
+              <View
                 style={
-                  styles.forgotText
+                  styles.story
                 }
               >
-                Forgot password?
-              </Text>
-            </Pressable>
-          ) : null}
+                <Text
+                  selectable
+                  style={[
+                    styles.eyebrow,
+                    {
+                      color:
+                        colors.muted,
+                    },
+                  ]}
+                >
+                  YOUR MUSIC, MADE SITUATIONAL
+                </Text>
 
-          <Pressable
-            accessibilityLabel={
-              mode === "sign-in"
-                ? "Sign In to Canal"
-                : "Create Canal Account"
-            }
-            accessibilityRole="button"
-            accessibilityState={{
-              busy: loading,
-              disabled: emailSubmissionDisabled,
-            }}
-            disabled={emailSubmissionDisabled}
-            onPress={() =>
-              void submitEmail()
-            }
-            style={({
-              pressed,
-            }) => [
-              styles.primaryButton,
+                <Text
+                  selectable
+                  style={[
+                    styles.heroTitle,
+                    {
+                      color:
+                        colors.ink,
+                    },
+                  ]}
+                >
+                  A living map of how you want life to sound.
+                </Text>
 
-              emailSubmissionDisabled &&
-                styles.disabled,
+                <Text
+                  selectable
+                  style={[
+                    styles.heroCopy,
+                    {
+                      color:
+                        colors.muted,
+                    },
+                  ]}
+                >
+                  Sign in once for Scenes, Canal Live, Snapshots, your Soundscape, and every shared link.
+                </Text>
 
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator
-                color="#FFFFFF"
-              />
-            ) : (
-              <Text
+                {hasSharedSceneReturn ? (
+                  <View
+                    accessibilityLabel="A shared Scene is waiting after sign in"
+                    style={[
+                      styles.returnRow,
+                      {
+                        borderColor:
+                          colors.line,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      color={
+                        colors.ink
+                      }
+                      name="arrow-redo-outline"
+                      size={22}
+                    />
+                    <View
+                      style={
+                        styles.flex
+                      }
+                    >
+                      <Text
+                        selectable
+                        style={[
+                          styles.returnTitle,
+                          {
+                            color:
+                              colors.ink,
+                          },
+                        ]}
+                      >
+                        Your shared Scene is waiting
+                      </Text>
+                      <Text
+                        selectable
+                        style={[
+                          styles.returnText,
+                          {
+                            color:
+                              colors.muted,
+                          },
+                        ]}
+                      >
+                        Canal will bring you back after account setup.
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                <View
+                  style={
+                    styles.featureGrid
+                  }
+                >
+                  {[
+                    [
+                      "pulse-outline",
+                      "Scenes",
+                      "Intent-led playlists",
+                    ],
+                    [
+                      "radio-outline",
+                      "Canal Live",
+                      "Shared taste in motion",
+                    ],
+                    [
+                      "camera-outline",
+                      "Snapshots",
+                      "Music inside the moment",
+                    ],
+                    [
+                      "planet-outline",
+                      "Soundscape",
+                      "Your evolving identity",
+                    ],
+                  ].map(
+                    ([
+                      icon,
+                      label,
+                      detail,
+                    ]) => (
+                      <View
+                        key={
+                          label
+                        }
+                        style={
+                          styles.feature
+                        }
+                      >
+                        <Ionicons
+                          color={
+                            colors.ink
+                          }
+                          name={
+                            icon as keyof typeof Ionicons.glyphMap
+                          }
+                          size={20}
+                        />
+                        <View>
+                          <Text
+                            selectable
+                            style={[
+                              styles.featureTitle,
+                              {
+                                color:
+                                  colors.ink,
+                              },
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                          <Text
+                            selectable
+                            style={[
+                              styles.featureText,
+                              {
+                                color:
+                                  colors.muted,
+                              },
+                            ]}
+                          >
+                            {detail}
+                          </Text>
+                        </View>
+                      </View>
+                    ),
+                  )}
+                </View>
+              </View>
+
+              <OnboardingPanel
+                accessibilityLabel="Canal account access"
+                palette="violet"
+                strong
                 style={
-                  styles.primaryButtonText
+                  styles.authPanel
                 }
               >
+                {hasSharedSceneReturn ? (
+                  <View
+                    style={[
+                      styles.compactReturn,
+                      {
+                        borderColor:
+                          colors.line,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      color={
+                        colors.ink
+                      }
+                      name="musical-notes-outline"
+                      size={18}
+                    />
+                    <Text
+                      selectable
+                      style={[
+                        styles.compactReturnText,
+                        {
+                          color:
+                            colors.muted,
+                        },
+                      ]}
+                    >
+                      Shared Scene preserved
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View
+                  accessibilityLabel="Account mode"
+                  accessibilityRole="tablist"
+                  style={[
+                    styles.segment,
+                    {
+                      backgroundColor:
+                        colors.line,
+                    },
+                  ]}
+                >
+                  {(
+                    [
+                      [
+                        "sign-in",
+                        "Sign in",
+                      ],
+                      [
+                        "create-account",
+                        "Create account",
+                      ],
+                    ] as const
+                  ).map(
+                    ([
+                      value,
+                      label,
+                    ]) => (
+                      <Pressable
+                        accessibilityRole="tab"
+                        accessibilityState={{
+                          selected:
+                            mode ===
+                            value,
+                        }}
+                        key={
+                          value
+                        }
+                        onPress={() =>
+                          changeMode(
+                            value,
+                          )
+                        }
+                        style={[
+                          styles.segmentButton,
+                          mode ===
+                            value && {
+                            backgroundColor:
+                              colors.glassStrong,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.segmentText,
+                            {
+                              color:
+                                colors.ink,
+                            },
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    ),
+                  )}
+                </View>
+
+                <Text
+                  selectable
+                  style={[
+                    styles.formTitle,
+                    {
+                      color:
+                        colors.ink,
+                    },
+                  ]}
+                >
+                  {formTitle}
+                </Text>
+                <Text
+                  selectable
+                  style={[
+                    styles.formNote,
+                    {
+                      color:
+                        colors.muted,
+                    },
+                  ]}
+                >
+                  {formNote}
+                </Text>
+
+                {!configured ? (
+                  <View
+                    accessibilityRole="alert"
+                    style={
+                      styles.configurationBox
+                    }
+                  >
+                    <Text
+                      selectable
+                      style={[
+                        styles.configurationTitle,
+                        {
+                          color:
+                            colors.danger,
+                        },
+                      ]}
+                    >
+                      Supabase setup required
+                    </Text>
+                    <Text
+                      selectable
+                      style={[
+                        styles.configurationText,
+                        {
+                          color:
+                            colors.danger,
+                        },
+                      ]}
+                    >
+                      Canal is missing its public Supabase URL or publishable key.
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View
+                  style={
+                    styles.fields
+                  }
+                >
+                  {mode ===
+                  "create-account" ? (
+                    <>
+                      <Field
+                        color={
+                          colors.ink
+                        }
+                        errorColor={
+                          colors.danger
+                        }
+                        error={
+                          fieldErrors.displayName
+                        }
+                        label="Display name"
+                      >
+                        <TextInput
+                          accessibilityLabel="Display name"
+                          autoCapitalize="words"
+                          autoComplete="name"
+                          maxLength={60}
+                          onChangeText={(value) =>
+                            updateField(
+                              "displayName",
+                              value,
+                              setDisplayName,
+                            )
+                          }
+                          placeholder="How you’ll appear"
+                          placeholderTextColor={
+                            colors.muted
+                          }
+                          style={
+                            inputStyle
+                          }
+                          value={
+                            displayName
+                          }
+                        />
+                      </Field>
+                      <Field
+                        color={
+                          colors.ink
+                        }
+                        errorColor={
+                          colors.danger
+                        }
+                        error={
+                          fieldErrors.handle
+                        }
+                        label="Handle"
+                      >
+                        <TextInput
+                          accessibilityLabel="Handle"
+                          autoCapitalize="none"
+                          autoComplete="username-new"
+                          autoCorrect={
+                            false
+                          }
+                          maxLength={24}
+                          onChangeText={(value) =>
+                            updateField(
+                              "handle",
+                              value,
+                              setHandle,
+                            )
+                          }
+                          placeholder="@yourhandle"
+                          placeholderTextColor={
+                            colors.muted
+                          }
+                          style={
+                            inputStyle
+                          }
+                          value={
+                            handle
+                          }
+                        />
+                      </Field>
+                    </>
+                  ) : null}
+
+                  <Field
+                    color={
+                      colors.ink
+                    }
+                    errorColor={
+                      colors.danger
+                    }
+                    error={
+                      fieldErrors.email
+                    }
+                    label="Email"
+                  >
+                    <TextInput
+                      accessibilityLabel="Email"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                      autoCorrect={
+                        false
+                      }
+                      keyboardType="email-address"
+                      onChangeText={(value) =>
+                        updateField(
+                          "email",
+                          value,
+                          setEmail,
+                        )
+                      }
+                      placeholder="you@example.com"
+                      placeholderTextColor={
+                        colors.muted
+                      }
+                      style={
+                        inputStyle
+                      }
+                      textContentType="emailAddress"
+                      value={
+                        email
+                      }
+                    />
+                  </Field>
+
+                  <Field
+                    color={
+                      colors.ink
+                    }
+                    errorColor={
+                      colors.danger
+                    }
+                    error={
+                      fieldErrors.password
+                    }
+                    label="Password"
+                  >
+                    <View
+                      style={
+                        styles.passwordField
+                      }
+                    >
+                      <TextInput
+                        accessibilityLabel="Password"
+                        autoComplete={
+                          mode ===
+                          "sign-in"
+                            ? "current-password"
+                            : "new-password"
+                        }
+                        onChangeText={(value) =>
+                          updateField(
+                            "password",
+                            value,
+                            setPassword,
+                          )
+                        }
+                        placeholder="At least 8 characters"
+                        placeholderTextColor={
+                          colors.muted
+                        }
+                        secureTextEntry={
+                          !showPassword
+                        }
+                        style={[
+                          inputStyle,
+                          styles.passwordInput,
+                        ]}
+                        textContentType={
+                          mode ===
+                          "sign-in"
+                            ? "password"
+                            : "newPassword"
+                        }
+                        value={
+                          password
+                        }
+                      />
+                      <Pressable
+                        accessibilityLabel={
+                          showPassword
+                            ? "Hide password"
+                            : "Show password"
+                        }
+                        accessibilityRole="button"
+                        onPress={() =>
+                          setShowPassword(
+                            (current) =>
+                              !current,
+                          )
+                        }
+                        style={
+                          styles.passwordButton
+                        }
+                      >
+                        <Text
+                          style={[
+                            styles.passwordButtonText,
+                            {
+                              color:
+                                colors.ink,
+                            },
+                          ]}
+                        >
+                          {showPassword
+                            ? "Hide"
+                            : "Show"}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </Field>
+                </View>
+
                 {mode ===
-                "sign-in"
-                  ? "Sign In to Canal"
-                  : "Create Canal Account"}
-              </Text>
-            )}
-          </Pressable>
+                "sign-in" ? (
+                  <Pressable
+                    accessibilityLabel="Forgot password"
+                    accessibilityRole="button"
+                    onPress={() =>
+                      router.push(
+                        "/auth/forgot-password" as never,
+                      )
+                    }
+                    style={
+                      styles.forgotButton
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.forgotText,
+                        {
+                          color:
+                            colors.ink,
+                        },
+                      ]}
+                    >
+                      Forgot password?
+                    </Text>
+                  </Pressable>
+                ) : null}
 
-          <View
-            style={
-              styles.dividerRow
-            }
-          >
-            <View
-              style={
-                styles.divider
-              }
-            />
+                <OnboardingButton
+                  disabled={
+                    isSubmitDisabled
+                  }
+                  label={
+                    mode ===
+                    "sign-in"
+                      ? "Sign in to Canal"
+                      : "Create Canal account"
+                  }
+                  loading={
+                    loading
+                  }
+                  onPress={() =>
+                    void submitEmail()
+                  }
+                  palette="violet"
+                />
 
-            <Text
-              style={
-                styles.dividerText
-              }
-            >
-              OR
-            </Text>
+                <View
+                  style={
+                    styles.dividerRow
+                  }
+                >
+                  <View
+                    style={[
+                      styles.divider,
+                      {
+                        backgroundColor:
+                          colors.line,
+                      },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.dividerText,
+                      {
+                        color:
+                          colors.muted,
+                      },
+                    ]}
+                  >
+                    OR
+                  </Text>
+                  <View
+                    style={[
+                      styles.divider,
+                      {
+                        backgroundColor:
+                          colors.line,
+                      },
+                    ]}
+                  />
+                </View>
 
-            <View
-              style={
-                styles.divider
-              }
-            />
-          </View>
+                <View
+                  style={
+                    styles.socialRow
+                  }
+                >
+                  <OnboardingButton
+                    accessibilityHint={
+                      socialAvailability?.google ===
+                      true
+                        ? "Sign in to Canal with Google"
+                        : "Google sign-in is temporarily unavailable"
+                    }
+                    disabled={
+                      isSubmitDisabled ||
+                      socialAvailability?.google !==
+                        true
+                    }
+                    icon="logo-google"
+                    label="Google"
+                    onPress={() =>
+                      void submitSocial(
+                        "google",
+                      )
+                    }
+                    palette="violet"
+                    secondary
+                  />
+                  <OnboardingButton
+                    accessibilityHint={
+                      socialAvailability?.apple ===
+                      true
+                        ? "Sign in to Canal with Apple"
+                        : "Apple sign-in is temporarily unavailable"
+                    }
+                    disabled={
+                      isSubmitDisabled ||
+                      socialAvailability?.apple !==
+                        true
+                    }
+                    icon="logo-apple"
+                    label="Apple"
+                    onPress={() =>
+                      void submitSocial(
+                        "apple",
+                      )
+                    }
+                    palette="violet"
+                    secondary
+                  />
+                </View>
 
-          <Pressable
-            accessibilityLabel="Continue with Google"
-            accessibilityRole="button"
-            accessibilityState={{
-              busy: loading,
-              disabled:
-                loading ||
-                !configured ||
-                socialProviders?.google !== true,
-            }}
-            disabled={
-              loading ||
-              !configured ||
-              socialProviders?.google !== true
-            }
-            onPress={() =>
-              void submitSocial(
-                "google",
-              )
-            }
-            style={({
-              pressed,
-            }) => [
-              styles.socialButton,
+                {statusMessage ? (
+                  <View
+                    accessibilityLiveRegion="polite"
+                    accessibilityRole={
+                      statusIsError
+                        ? "alert"
+                        : "summary"
+                    }
+                    style={[
+                      styles.statusBox,
+                      statusIsError
+                        ? styles.errorBox
+                        : styles.messageBox,
+                    ]}
+                  >
+                    <Text
+                      selectable
+                      style={[
+                        styles.statusText,
+                        {
+                          color:
+                            statusIsError
+                              ? colors.danger
+                              : colors.success,
+                        },
+                      ]}
+                    >
+                      {statusMessage}
+                    </Text>
+                  </View>
+                ) : null}
 
-              (loading ||
-                !configured ||
-                socialProviders?.google !== true) &&
-                styles.disabled,
-
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Text
-              style={
-                styles.socialButtonText
-              }
-            >
-              Continue with Google
-            </Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityLabel="Continue with Apple"
-            accessibilityRole="button"
-            accessibilityState={{
-              busy: loading,
-              disabled:
-                loading ||
-                !configured ||
-                socialProviders?.apple !== true,
-            }}
-            disabled={
-              loading ||
-              !configured ||
-              socialProviders?.apple !== true
-            }
-            onPress={() =>
-              void submitSocial(
-                "apple",
-              )
-            }
-            style={({
-              pressed,
-            }) => [
-              styles.appleButton,
-
-              (loading ||
-                !configured ||
-                socialProviders?.apple !== true) &&
-                styles.disabled,
-
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Text
-              style={
-                styles.appleButtonText
-              }
-            >
-              Continue with Apple
-            </Text>
-          </Pressable>
-
-          {configured && socialProviders && (!socialProviders.google || !socialProviders.apple) ? (
-            <Text accessibilityLiveRegion="polite" style={styles.socialAvailabilityText}>
-              {!socialProviders.google && !socialProviders.apple
-                ? "Google and Apple sign-in are not enabled for this Canal environment yet."
-                : `${socialProviders.google ? "Apple" : "Google"} sign-in is not enabled for this Canal environment yet.`}
-            </Text>
-          ) : null}
-
-          {message ? (
-            <View
-              style={
-                styles.messageBox
-              }
-            >
-              <Text
-                style={
-                  styles.messageText
-                }
-              >
-                {message}
-              </Text>
+                <Text
+                  selectable
+                  style={[
+                    styles.privacy,
+                    {
+                      color:
+                        colors.muted,
+                    },
+                  ]}
+                >
+                  {mode ===
+                  "create-account"
+                    ? "Canal authentication stays separate from Spotify authorization. You can review account and privacy controls after setup."
+                    : "Canal authentication stays separate from Spotify authorization."}
+                </Text>
+              </OnboardingPanel>
             </View>
-          ) : null}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
+  );
+}
 
-          {errorMessage ? (
-            <View
-              style={
-                styles.errorBox
-              }
-            >
-              <Text
-                style={
-                  styles.errorText
-                }
-              >
-                {errorMessage}
-              </Text>
-            </View>
-          ) : null}
-
-          <Text
-            style={
-              styles.musicNotice
-            }
-          >
-            Spotify is not used to create
-            your Canal account. It is linked
-            only after account authentication.
-          </Text>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+function Field(
+  props: {
+    label: string;
+    error?: string;
+    errorColor: string;
+    color: string;
+    children: ReactNode;
+  },
+) {
+  return (
+    <View
+      style={
+        styles.field
+      }
+    >
+      <Text
+        style={[
+          styles.fieldLabel,
+          {
+            color:
+              props.color,
+          },
+        ]}
+      >
+        {props.label}
+      </Text>
+      {props.children}
+      {props.error ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          accessibilityRole="alert"
+          selectable
+          style={[
+            styles.fieldError,
+            {
+              color:
+                props.errorColor,
+            },
+          ]}
+        >
+          {props.error}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
 const styles =
   StyleSheet.create({
-    flex: {
+    screen: {
       flex: 1,
     },
-
     safeArea: {
       flex: 1,
-      backgroundColor: canalDynamicColors.baseCanvas,
+      backgroundColor:
+        "transparent",
     },
-
     content: {
       flexGrow: 1,
-      paddingHorizontal: 24,
-      paddingTop: 22,
-      paddingBottom: 45,
+      paddingHorizontal: 20,
+      paddingTop: 6,
+      paddingBottom: 34,
+      gap: 22,
     },
-
-    logo: {
-      width: 68,
-      height: 68,
-      borderRadius: 34,
-      alignItems:
-        "center",
+    layout: {
+      flex: 1,
+      gap: 24,
       justifyContent:
+        "center",
+    },
+    layoutWide: {
+      flexDirection:
+        "row",
+      alignItems:
         "center",
       alignSelf:
         "center",
-      backgroundColor:
-        "#4C46C8",
+      width: "100%",
+      maxWidth: 980,
+      gap: 38,
     },
-
-    logoText: {
-      color: "#FFFFFF",
-      fontSize: 39,
-      fontWeight: "900",
-      marginTop: -5,
+    story: {
+      flex: 1.08,
+      gap: 14,
+      paddingVertical: 12,
     },
-
-    brand: {
-      color: canalDynamicColors.lavender,
-      fontSize: 21,
-      fontWeight: "900",
-      textAlign: "center",
-      marginTop: 10,
+    eyebrow: {
+      fontSize: 11,
+      fontWeight:
+        "500",
+      letterSpacing: 1.6,
     },
-
-    title: {
-      fontFamily: "Georgia",
-      color: canalDynamicColors.text,
-      fontSize: 28,
-      lineHeight: 34,
-      fontWeight: "900",
-      textAlign: "center",
-      marginTop: 19,
+    heroTitle: {
+      maxWidth: 600,
+      fontFamily:
+        "Georgia",
+      fontSize: 46,
+      lineHeight: 47,
+      fontWeight:
+        "400",
+      letterSpacing: -2.2,
     },
-
-    subtitle: {
-      color: canalDynamicColors.muted,
-      fontSize: 14,
-      lineHeight: 21,
-      textAlign: "center",
-      marginTop: 7,
-      marginBottom: 20,
+    heroCopy: {
+      maxWidth: 520,
+      fontSize: 15,
+      lineHeight: 23,
     },
-
-    configurationBox: {
-      backgroundColor: canalDynamicColors.warningSurface,
-      borderRadius: 17,
-      padding: 14,
-      marginBottom: 15,
+    flex: {
+      flex: 1,
     },
-
-    configurationTitle: {
-      color: "#A64B0C",
-      fontSize: 14,
-      fontWeight: "900",
+    returnRow: {
+      maxWidth: 520,
+      minHeight: 62,
+      borderTopWidth: 1,
+      borderBottomWidth: 1,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 12,
+      paddingVertical: 10,
     },
-
-    configurationText: {
-      color: "#7B5234",
+    returnTitle: {
       fontSize: 12,
-      lineHeight: 18,
-      marginTop: 4,
+      fontWeight:
+        "500",
     },
-
-    modeContainer: {
-      flexDirection: "row",
-      backgroundColor:
-        "#EEE7E1",
-      borderRadius: 14,
+    returnText: {
+      marginTop: 2,
+      fontSize: 10,
+      lineHeight: 15,
+    },
+    featureGrid: {
+      flexDirection:
+        "row",
+      flexWrap:
+        "wrap",
+      gap: 14,
+      paddingTop: 8,
+    },
+    feature: {
+      minWidth: 150,
+      flexGrow: 1,
+      flexBasis: "45%",
+      minHeight: 74,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 10,
+    },
+    featureTitle: {
+      fontFamily:
+        "Georgia",
+      fontSize: 16,
+      fontWeight:
+        "400",
+    },
+    featureText: {
+      marginTop: 2,
+      fontSize: 9,
+    },
+    authPanel: {
+      flex: 0.92,
+      width: "100%",
+      maxWidth: 450,
+      alignSelf:
+        "center",
+    },
+    compactReturn: {
+      minHeight: 38,
+      borderBottomWidth: 1,
+      flexDirection:
+        "row",
+      alignItems:
+        "center",
+      gap: 8,
+      paddingBottom: 10,
+      marginBottom: 12,
+    },
+    compactReturnText: {
+      fontSize: 10,
+      fontWeight:
+        "500",
+    },
+    segment: {
+      borderRadius: 16,
+      borderCurve:
+        "continuous",
       padding: 4,
-      marginBottom: 16,
+      flexDirection:
+        "row",
+      gap: 4,
     },
-
-    modeButton: {
+    segmentButton: {
       flex: 1,
       minHeight: 48,
-      borderRadius: 11,
+      borderRadius: 13,
+      borderCurve:
+        "continuous",
       alignItems:
         "center",
       justifyContent:
         "center",
     },
-
-    modeButtonSelected: {
-      backgroundColor: canalDynamicColors.surface,
+    segmentText: {
+      fontSize: 12,
+      fontWeight:
+        "500",
     },
-
-    modeText: {
-      color: canalDynamicColors.muted,
-      fontSize: 13,
-      fontWeight: "800",
+    formTitle: {
+      marginTop: 18,
+      fontFamily:
+        "Georgia",
+      fontSize: 29,
+      lineHeight: 32,
+      fontWeight:
+        "400",
+      letterSpacing: -1,
     },
-
-    modeTextSelected: {
-      color: canalDynamicColors.lavender,
-    },
-
-    inputLabel: {
-      color: canalDynamicColors.muted,
+    formNote: {
+      marginTop: 3,
+      marginBottom: 12,
       fontSize: 11,
-      fontWeight: "800",
-      marginBottom: 6,
-      marginTop: 10,
+      lineHeight: 16,
     },
-
+    fields: {
+      gap: 10,
+    },
+    field: {
+      gap: 3,
+    },
+    fieldLabel: {
+      fontSize: 10,
+      fontWeight:
+        "500",
+      letterSpacing: 0.8,
+      textTransform:
+        "uppercase",
+    },
     input: {
-      minHeight: 50,
-      borderWidth: 1,
-      borderColor:
-        "#E2DAD4",
-      borderRadius: 15,
-      backgroundColor: canalDynamicColors.surface,
-      color: canalDynamicColors.text,
+      minHeight: 48,
+      borderWidth: 0,
+      borderBottomWidth: 1,
+      borderRadius: 0,
+      backgroundColor:
+        "transparent",
+      paddingHorizontal: 2,
+      paddingVertical: 8,
       fontSize: 15,
-      paddingHorizontal: 14,
     },
-
+    fieldError: {
+      fontSize: 10,
+      lineHeight: 14,
+    },
+    passwordField: {
+      position:
+        "relative",
+    },
+    passwordInput: {
+      paddingRight: 58,
+    },
+    passwordButton: {
+      position:
+        "absolute",
+      right: 0,
+      top: 0,
+      minWidth: 52,
+      minHeight: 48,
+      alignItems:
+        "flex-end",
+      justifyContent:
+        "center",
+    },
+    passwordButtonText: {
+      fontSize: 10,
+      fontWeight:
+        "500",
+    },
     forgotButton: {
       alignSelf:
         "flex-end",
       minHeight: 48,
-      justifyContent: "center",
-      paddingVertical: 10,
-    },
-
-    forgotText: {
-      color: canalDynamicColors.lavender,
-      fontSize: 12,
-      fontWeight: "800",
-    },
-
-    primaryButton: {
-      minHeight: 54,
-      borderRadius: 17,
-      alignItems:
-        "center",
       justifyContent:
         "center",
-      backgroundColor:
-        "#4C46C8",
-      marginTop: 12,
     },
-
-    primaryButtonText: {
-      color: "#FFFFFF",
-      fontSize: 16,
-      fontWeight: "900",
+    forgotText: {
+      fontSize: 11,
+      fontWeight:
+        "500",
     },
-
     dividerRow: {
-      flexDirection: "row",
+      minHeight: 36,
+      flexDirection:
+        "row",
       alignItems:
         "center",
-      marginVertical: 17,
+      gap: 10,
     },
-
     divider: {
       flex: 1,
       height: 1,
-      backgroundColor:
-        "#DED6D0",
     },
-
     dividerText: {
-      color: canalDynamicColors.muted,
-      fontSize: 10,
-      fontWeight: "800",
-      marginHorizontal: 11,
+      fontSize: 9,
+      fontWeight:
+        "500",
     },
-
-    socialButton: {
-      minHeight: 52,
-      borderWidth: 1,
-      borderColor:
-        "#DAD2CC",
+    socialRow: {
+      flexDirection:
+        "row",
+      gap: 9,
+    },
+    configurationBox: {
+      marginBottom: 12,
       borderRadius: 16,
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
-      backgroundColor: canalDynamicColors.surface,
-    },
-
-    socialButtonText: {
-      color: "#2A2724",
-      fontSize: 14,
-      fontWeight: "900",
-    },
-
-    appleButton: {
-      minHeight: 52,
-      borderRadius: 16,
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
+      borderCurve:
+        "continuous",
+      padding: 12,
       backgroundColor:
-        "#111111",
-      marginTop: 10,
+        "rgba(170, 63, 61, 0.13)",
     },
-
-    appleButtonText: {
-      color: "#FFFFFF",
-      fontSize: 14,
-      fontWeight: "900",
-    },
-
-    socialAvailabilityText: {
-      color: canalDynamicColors.muted,
-      fontSize: 11,
-      lineHeight: 16,
-      marginTop: 10,
-      textAlign: "center",
-    },
-
-    messageBox: {
-      backgroundColor: canalDynamicColors.successSurface,
-      borderRadius: 15,
-      padding: 13,
-      marginTop: 15,
-    },
-
-    messageText: {
-      color: "#1D7138",
+    configurationTitle: {
       fontSize: 12,
-      lineHeight: 18,
+      fontWeight:
+        "500",
     },
-
-    errorBox: {
-      backgroundColor: canalDynamicColors.dangerSurface,
-      borderRadius: 15,
-      padding: 13,
-      marginTop: 15,
-    },
-
-    errorText: {
-      color: canalDynamicColors.danger,
-      fontSize: 12,
-      lineHeight: 18,
-    },
-
-    musicNotice: {
-      color: "#6D6B64",
+    configurationText: {
+      marginTop: 3,
       fontSize: 10,
-      lineHeight: 16,
-      textAlign: "center",
-      marginTop: 17,
-      paddingHorizontal: 12,
+      lineHeight: 15,
     },
-
-    disabled: {
-      opacity: 0.45,
+    statusBox: {
+      borderRadius: 14,
+      borderCurve:
+        "continuous",
+      padding: 11,
+      marginTop: 10,
     },
-
-    pressed: {
-      opacity: 0.7,
+    messageBox: {
+      backgroundColor:
+        "rgba(54, 159, 104, 0.15)",
+    },
+    errorBox: {
+      backgroundColor:
+        "rgba(183, 63, 76, 0.14)",
+    },
+    statusText: {
+      fontSize: 10,
+      lineHeight: 15,
+    },
+    privacy: {
+      marginTop: 12,
+      fontSize: 9,
+      lineHeight: 14,
+      textAlign:
+        "center",
     },
   });
