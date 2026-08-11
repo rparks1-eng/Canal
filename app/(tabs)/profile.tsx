@@ -90,6 +90,7 @@ import {
 } from "../../lib/scenes";
 
 import {
+  readLocalSnapshotsWithStatus,
   readSnapshotsWithStatus,
 } from "../../lib/snapshots";
 
@@ -407,6 +408,10 @@ function ProfileScreenContent() {
       null,
     );
 
+  const snapshotRefreshRef = useRef<Promise<void> | null>(null);
+  const hasRenderedProfileRef = useRef(Boolean(cachedAuthProfile));
+  const hasNetworkDataRef = useRef(Boolean(initialNetworkCache));
+
   const mountedRef =
     useRef(
       true,
@@ -457,16 +462,14 @@ function ProfileScreenContent() {
         const nextLoad =
           (async (): Promise<void> => {
             const cachedNetwork = readCachedProfileNetwork(user?.id);
-            setLoading(
-              true,
-            );
-            setConnectionSummary(cachedNetwork?.summary ?? null);
-            setPlaylistExports(cachedNetwork?.exports ?? []);
-            setCollections(
-              [],
-            );
+            if (!hasRenderedProfileRef.current) setLoading(true);
+            if (cachedNetwork) {
+              setConnectionSummary(cachedNetwork.summary);
+              setPlaylistExports(cachedNetwork.exports);
+              hasNetworkDataRef.current = true;
+            }
             setSocialDataResolved(
-              Boolean(cachedNetwork),
+              Boolean(cachedNetwork) || hasNetworkDataRef.current,
             );
             setCollectionDataResolved(
               false,
@@ -547,6 +550,7 @@ function ProfileScreenContent() {
                 setProfile(
                   next,
                 );
+                hasRenderedProfileRef.current = true;
 
                 setDraft(
                   next,
@@ -619,7 +623,7 @@ function ProfileScreenContent() {
                 );
 
             const snapshotLoad =
-              readSnapshotsWithStatus()
+              readLocalSnapshotsWithStatus()
                 .then(
                   (
                     snapshotResult,
@@ -638,6 +642,21 @@ function ProfileScreenContent() {
                       snapshotResult.warning ??
                         null,
                     );
+
+                    if (!snapshotRefreshRef.current) {
+                      snapshotRefreshRef.current = readSnapshotsWithStatus()
+                        .then((cloudResult) => {
+                          if (!isCurrent()) return;
+                          setSoundscapeSnapshots(cloudResult.value);
+                          setSnapshotError(cloudResult.warning ?? null);
+                        })
+                        .catch((error: unknown) => {
+                          if (isCurrent()) setSnapshotError(error);
+                        })
+                        .finally(() => {
+                          snapshotRefreshRef.current = null;
+                        });
+                    }
                   },
                 )
                 .catch(
@@ -690,6 +709,7 @@ function ProfileScreenContent() {
                       exports: nextExports,
                       cachedAt: Date.now(),
                     });
+                    hasNetworkDataRef.current = true;
                     setSocialDataResolved(
                       true,
                     );

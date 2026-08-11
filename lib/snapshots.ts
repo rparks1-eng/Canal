@@ -139,15 +139,44 @@ class SnapshotAccountChangedError extends Error {
   }
 }
 
+const activeSnapshotReads = new Map<string, Promise<SnapshotResult<Snapshot[]>>>();
+
 export async function readSnapshotsWithStatus(): Promise<
   SnapshotResult<Snapshot[]>
 > {
   const expectedUserId =
     await getSnapshotSessionUserId();
+  const key = expectedUserId ?? "signed-out";
+  const existing = activeSnapshotReads.get(key);
+  if (existing) return existing;
 
-  return readSnapshotsForUser(
-    expectedUserId,
-  );
+  const read = readSnapshotsForUser(expectedUserId);
+  activeSnapshotReads.set(key, read);
+  try {
+    return await read;
+  } finally {
+    if (activeSnapshotReads.get(key) === read) {
+      activeSnapshotReads.delete(key);
+    }
+  }
+}
+
+export async function readLocalSnapshotsWithStatus(): Promise<
+  SnapshotResult<Snapshot[]>
+> {
+  const expectedUserId =
+    await getSnapshotSessionUserId();
+  const storageKey =
+    getSnapshotStorageKey(expectedUserId);
+  const localSnapshots =
+    await readLocalSnapshots(storageKey, expectedUserId);
+
+  await assertExpectedSnapshotUser(expectedUserId);
+
+  return {
+    value: localSnapshots,
+    cloudStatus: "local-only",
+  };
 }
 
 async function readSnapshotsForUser(

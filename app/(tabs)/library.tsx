@@ -84,6 +84,7 @@ import {
 
 import {
   deleteSnapshotWithStatus,
+  readLocalSnapshotsWithStatus,
   readSnapshotsWithStatus,
   updateSnapshotWithStatus,
 } from "../../lib/snapshots";
@@ -305,6 +306,8 @@ export default function LibraryScreen() {
     new Map<string, NativeAnimated.Value>(),
   ).current;
   const scrollStartY = useRef<number | null>(null);
+  const hydratedRef = useRef(false);
+  const backgroundRefreshRef = useRef<Promise<void> | null>(null);
 
   const motionForScene = useCallback(
     (sceneId: string): NativeAnimated.Value => {
@@ -343,35 +346,51 @@ export default function LibraryScreen() {
   const load =
     useCallback(
       async (): Promise<void> => {
-        setLoading(
-          true,
-        );
+        if (!hydratedRef.current) setLoading(true);
 
         setLoadIssue(
           null,
         );
 
         try {
-          try {
-            await syncScenesWithCloud();
-          } catch (syncError) {
-            console.warn(
-              "Canal could not refresh cross-device Scenes; showing the latest local Library instead:",
-              syncError,
-            );
-          }
-
           const [
             nextScenes,
             snapshotResult,
           ] = await Promise.all([
             readScenes(),
-            readSnapshotsWithStatus(),
+            readLocalSnapshotsWithStatus(),
           ]);
 
           setScenes(nextScenes);
           setSnapshots(snapshotResult.value);
           setSnapshotWarning(snapshotResult.warning ?? "");
+          hydratedRef.current = true;
+          setLoading(false);
+
+          if (!backgroundRefreshRef.current) {
+            backgroundRefreshRef.current = (async () => {
+              const [sceneSync, cloudSnapshots] = await Promise.allSettled([
+                syncScenesWithCloud(),
+                readSnapshotsWithStatus(),
+              ]);
+
+              if (sceneSync.status === "fulfilled") {
+                setScenes(await readScenes());
+              } else {
+                console.warn(
+                  "Canal could not refresh cross-device Scenes; showing the latest local Library instead:",
+                  sceneSync.reason,
+                );
+              }
+
+              if (cloudSnapshots.status === "fulfilled") {
+                setSnapshots(cloudSnapshots.value.value);
+                setSnapshotWarning(cloudSnapshots.value.warning ?? "");
+              }
+            })().finally(() => {
+              backgroundRefreshRef.current = null;
+            });
+          }
         } catch (error) {
           setLoadIssue(
             classifyRecoveryIssue(
@@ -384,9 +403,7 @@ export default function LibraryScreen() {
             ),
           );
         } finally {
-          setLoading(
-            false,
-          );
+          setLoading(false);
         }
       },
       [

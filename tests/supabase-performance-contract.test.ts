@@ -14,12 +14,19 @@ describe("Supabase performance contracts", () => {
   );
 
   it("filters public live Stages before ordering and limiting", () => {
-    expect(liveStages).toContain('export async function readPublicLiveStages()');
+    expect(liveStages).toContain('export async function readPublicLiveStages(');
     expect(liveStages).toMatch(
       /\.eq\("status", "live"\)\s*\.eq\("visibility", "public"\)\s*\.order\("updated_at"/,
     );
-    expect(explore).toContain("readPublicLiveStages()");
+    expect(explore).toContain("readPublicLiveStages({ force: isPullRefresh })");
     expect(category).toContain("readPublicLiveStages()");
+  });
+
+  it("deduplicates and briefly caches account-scoped public Stage reads", () => {
+    expect(liveStages).toContain("PUBLIC_STAGE_CACHE_TTL_MS = 20_000");
+    expect(liveStages).toContain("publicStageCache.get(currentUserId)");
+    expect(liveStages).toContain("publicStageReads.get(currentUserId)");
+    expect(liveStages).toContain("publicStageCache.set(currentUserId");
   });
 
   it("shares one Realtime channel per Stage or Snapshot until the final cleanup", () => {

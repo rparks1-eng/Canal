@@ -739,7 +739,13 @@ export async function readLiveStages(): Promise<
   );
 }
 
-export async function readPublicLiveStages(): Promise<LiveStage[]> {
+const PUBLIC_STAGE_CACHE_TTL_MS = 20_000;
+const publicStageCache = new Map<string, { cachedAt: number; stages: LiveStage[] }>();
+const publicStageReads = new Map<string, Promise<LiveStage[]>>();
+
+export async function readPublicLiveStages(
+  options: { force?: boolean } = {},
+): Promise<LiveStage[]> {
   if (!isSupabaseConfigured) {
     return (await readLocalLiveStages()).filter(
       (stage) => stage.status === "live" && stage.visibility === "public",
@@ -747,6 +753,19 @@ export async function readPublicLiveStages(): Promise<LiveStage[]> {
   }
 
   const currentUserId = await getCurrentUserId();
+  const cached = publicStageCache.get(currentUserId);
+  if (
+    !options.force &&
+    cached &&
+    Date.now() - cached.cachedAt < PUBLIC_STAGE_CACHE_TTL_MS
+  ) {
+    return [...cached.stages];
+  }
+
+  const existing = publicStageReads.get(currentUserId);
+  if (!options.force && existing) return existing;
+
+  const read = (async (): Promise<LiveStage[]> => {
   const { data, error } = await supabase
     .from("live_stages")
     .select(LIVE_STAGE_COLUMNS)
@@ -769,7 +788,19 @@ export async function readPublicLiveStages(): Promise<LiveStage[]> {
 
   await assertCurrentLiveStageUser(currentUserId);
 
-  return normalizeLiveStageRows(rows, members, currentUserId);
+    const stages = normalizeLiveStageRows(rows, members, currentUserId);
+    publicStageCache.set(currentUserId, { cachedAt: Date.now(), stages });
+    return [...stages];
+  })();
+
+  publicStageReads.set(currentUserId, read);
+  try {
+    return await read;
+  } finally {
+    if (publicStageReads.get(currentUserId) === read) {
+      publicStageReads.delete(currentUserId);
+    }
+  }
 }
 
 export async function readHostedLiveStages(): Promise<LiveStage[]> {

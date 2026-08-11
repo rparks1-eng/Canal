@@ -172,7 +172,6 @@ export async function loadProfileConnectionSummary(
   const [
     followingCount,
     followerCount,
-    followState,
   ] =
     await Promise.all([
       loadProfileFollowingCount(
@@ -185,11 +184,20 @@ export async function loadProfileConnectionSummary(
         account,
       ),
 
-      loadProfileFollowStateForViewer(
-        targetProfileId,
-        account,
-      ),
     ]);
+
+  const followState =
+    targetProfileId === account.viewerId
+      ? {
+          profileId: targetProfileId,
+          viewerId: account.viewerId,
+          isOwnProfile: true,
+          viewerIsFollowing: false,
+        }
+      : await loadProfileFollowStateForViewer(
+          targetProfileId,
+          account,
+        );
 
   await assertProfileSocialAccount(
     account,

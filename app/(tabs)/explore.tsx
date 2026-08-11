@@ -740,6 +740,7 @@ function VerifiedCreatorRail(props: {
 
 export default function ExploreScreen() {
   const loadRequestId = useRef(0);
+  const hasRenderedContentRef = useRef(false);
   const params = useLocalSearchParams<{ content?: string }>();
   const {
     refresh:
@@ -826,7 +827,7 @@ export default function ExploreScreen() {
 
         setRefreshing(isPullRefresh);
 
-        if (!isPullRefresh) {
+        if (!isPullRefresh && !hasRenderedContentRef.current) {
           setLoading(true);
         }
 
@@ -842,7 +843,7 @@ export default function ExploreScreen() {
         ] =
           await Promise.allSettled([
             loadExploreScenes({ force: isPullRefresh }),
-            readPublicLiveStages(),
+            readPublicLiveStages({ force: isPullRefresh }),
             readSpotifyLibrarySnapshot(),
           ]);
 
@@ -863,6 +864,7 @@ export default function ExploreScreen() {
           sceneResult.status ===
           "fulfilled"
         ) {
+          hasRenderedContentRef.current = true;
           setScenes(
             rankExploreScenes(
               sceneResult.value,
@@ -888,6 +890,7 @@ export default function ExploreScreen() {
         }
 
         if (stageResult.status === "fulfilled") {
+          hasRenderedContentRef.current = true;
           const publicStages = rankExploreStages(
             stageResult.value,
             tasteSnapshot,
