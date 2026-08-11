@@ -26,6 +26,14 @@ import {
   rememberDeferredDestination,
 } from "../lib/deferred-destination";
 
+import {
+  loginModeFromParam,
+} from "../lib/login-route";
+
+import type {
+  LoginMode,
+} from "../lib/login-route";
+
 import type {
   Session,
 } from "@supabase/supabase-js";
@@ -50,10 +58,6 @@ import {
 import {
   useAuth,
 } from "../providers/auth-provider";
-
-type LoginMode =
-  | "sign-in"
-  | "create-account";
 
 async function continueAfterAccountLogin(
   session: Session,
@@ -100,7 +104,13 @@ function isFirstSocialSignIn(
 export default function LoginScreen() {
   const params = useLocalSearchParams<{
     destination?: string;
+    mode?: string | string[];
   }>();
+
+  const requestedMode =
+    loginModeFromParam(
+      params.mode,
+    );
 
   const {
     configured,
@@ -112,7 +122,7 @@ export default function LoginScreen() {
     setMode,
   ] =
     useState<LoginMode>(
-      "sign-in",
+      requestedMode,
     );
 
   const [
@@ -150,6 +160,12 @@ export default function LoginScreen() {
       );
     }
   }, [params.destination]);
+
+  useEffect(() => {
+    setMode(requestedMode);
+    setMessage("");
+    setErrorMessage("");
+  }, [requestedMode]);
 
   const [
     message,
