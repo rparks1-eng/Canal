@@ -6,6 +6,7 @@ import { ConnectivityProvider } from "../providers/connectivity-provider";
 import {
   DEFAULT_SCENE_STUDIO_DRAFT,
   generateSceneFromSpotify,
+  getAdjacentSceneGenreFamilies,
   getSceneTrackGenreMatch,
   normalizeSceneGenreFamilies,
 } from "../lib/scene-studio";
@@ -95,6 +96,7 @@ function snapshot(): SpotifyLibrarySnapshot {
 const strictDraft = {
   ...DEFAULT_SCENE_STUDIO_DRAFT,
   preferredGenres: ["Rock", "R&B"],
+  allowAdjacentGenres: false,
   durationMinutes: 30,
 };
 
@@ -102,6 +104,18 @@ describe("Scene Studio strict genre correctness", () => {
   it("normalizes canonical families without collapsing hybrids", () => {
     expect(normalizeSceneGenreFamilies(["Alt Rock", "R & B", "hip-hop / trap"]))
       .toEqual(["rock", "r&b", "hip-hop"]);
+  });
+
+  it("keeps the adjacent family graph deterministic and bounded", () => {
+    expect(getAdjacentSceneGenreFamilies(["Rock"])).toEqual([
+      "indie",
+      "pop",
+      "hip-hop",
+      "electronic",
+      "country",
+    ]);
+    expect(getAdjacentSceneGenreFamilies(["Rock", "Indie"]))
+      .not.toContain("rock");
   });
 
   it("treats indie and alternative rock variants as canonical Rock", () => {
@@ -121,7 +135,7 @@ describe("Scene Studio strict genre correctness", () => {
       underfilled: true,
       action: "broaden-genres-or-shorten-duration",
     });
-    expect(result.selectionStatus?.message).toContain("Turn on adjacent genres");
+    expect(result.selectionStatus?.message).toContain("Allow adjacent sounds");
   });
 
   it("marks an explicitly enabled adjacent hybrid as low confidence", () => {
@@ -137,6 +151,35 @@ describe("Scene Studio strict genre correctness", () => {
       matchedFamilies: ["rock"],
     });
     expect(hybrid?.genreMatch?.whyMatched).toContain("adjacent genre metadata was allowed");
+  });
+
+  it("fills only the remaining duration from adjacent families when enabled", () => {
+    const adjacentSnapshot = snapshot();
+    adjacentSnapshot.trackGenres = {
+      rock: ["alternative rock"],
+      rnb: ["neo soul"],
+      hybrid: ["indie pop"],
+      missing: ["country"],
+    };
+    const result = generateSceneFromSpotify(
+      {
+        ...strictDraft,
+        preferredGenres: ["Rock"],
+        allowAdjacentGenres: true,
+        durationMinutes: 9,
+      },
+      adjacentSnapshot,
+      { variationSeed: "strict-then-adjacent" },
+    );
+
+    expect(result.trackSignals).toHaveLength(3);
+    expect(result.trackSignals.find((signal) => signal.track.id === "rock")?.genreMatch?.confidence)
+      .toBe("high");
+    expect(result.trackSignals.filter((signal) => signal.genreMatch?.confidence === "low"))
+      .toHaveLength(2);
+    expect(result.selectionStatus).toMatchObject({ underfilled: false });
+    expect(result.selectionStatus?.message).toContain("adjacent");
+    expect(result.rationale.join(" ")).toContain("adjacent genre and mood signals");
   });
 
   it("accepts a rap-rock hybrid when Hip hop is explicitly selected", () => {

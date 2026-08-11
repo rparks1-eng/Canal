@@ -233,6 +233,7 @@ describe(
           {
             ...DEFAULT_SCENE_STUDIO_DRAFT,
             preferredGenres: ["Rock", "R&B"],
+            allowAdjacentGenres: false,
           },
           library,
           { variationSeed: "missing-genre-signals" },

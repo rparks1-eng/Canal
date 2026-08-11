@@ -461,6 +461,7 @@ export type GeneratedTrackGenreMatch = {
   confidence: "high" | "low" | "unscoped";
   detectedFamilies: SceneGenreFamily[];
   matchedFamilies: SceneGenreFamily[];
+  adjacentFamilies?: SceneGenreFamily[];
   whyMatched: string;
 };
 
@@ -514,7 +515,7 @@ export const DEFAULT_SCENE_STUDIO_DRAFT: SceneStudioDraft = {
   activity: "focus",
   moods: [],
   preferredGenres: [],
-  allowAdjacentGenres: false,
+  allowAdjacentGenres: true,
   durationMinutes: 35,
   energy: "medium",
   familiarity: "balanced",
@@ -1013,6 +1014,25 @@ const GENRE_FAMILY_PATTERNS: readonly (
   ["reggae", ["reggae", "dancehall", "dub", "ska"]],
 ];
 
+const ADJACENT_GENRE_FAMILIES: Readonly<
+  Record<SceneGenreFamily, readonly SceneGenreFamily[]>
+> = {
+  pop: ["dance", "r&b", "indie", "electronic"],
+  "hip-hop": ["r&b", "pop", "electronic", "rock"],
+  "r&b": ["hip-hop", "pop", "jazz", "dance"],
+  rock: ["indie", "pop", "hip-hop", "electronic", "country"],
+  indie: ["rock", "pop", "ambient", "electronic", "country"],
+  electronic: ["dance", "ambient", "pop", "hip-hop"],
+  dance: ["electronic", "pop", "afrobeats", "latin", "r&b", "reggae"],
+  afrobeats: ["dance", "latin", "r&b", "reggae"],
+  latin: ["dance", "reggae", "jazz", "afrobeats"],
+  jazz: ["r&b", "classical", "ambient", "latin"],
+  classical: ["ambient", "jazz"],
+  ambient: ["electronic", "classical", "indie", "jazz"],
+  country: ["rock", "indie"],
+  reggae: ["afrobeats", "latin", "dance"],
+};
+
 export function normalizeSceneGenreFamilies(
   genres: readonly string[],
 ): SceneGenreFamily[] {
@@ -1058,6 +1078,21 @@ function selectedGenreFamilies(
   return normalizeSceneGenreFamilies(draft.preferredGenres);
 }
 
+export function getAdjacentSceneGenreFamilies(
+  genres: readonly string[],
+): SceneGenreFamily[] {
+  const selected = normalizeSceneGenreFamilies(genres);
+  const adjacent = new Set<SceneGenreFamily>();
+
+  selected.forEach((family) => {
+    ADJACENT_GENRE_FAMILIES[family].forEach((candidate) => {
+      if (!selected.includes(candidate)) adjacent.add(candidate);
+    });
+  });
+
+  return Array.from(adjacent);
+}
+
 export function getSceneTrackGenreMatch(
   genres: readonly string[],
   draft: Pick<
@@ -1078,25 +1113,33 @@ export function getSceneTrackGenreMatch(
   }
 
   const matched = detected.filter((family) => selected.includes(family));
-  const hasAdjacent = detected.some((family) => !selected.includes(family));
-  const accepted = detected.length > 0 && matched.length > 0 &&
-    (draft.allowAdjacentGenres || !hasAdjacent);
+  const extraFamilies = detected.filter((family) => !selected.includes(family));
+  const adjacent = getAdjacentSceneGenreFamilies(draft.preferredGenres);
+  const adjacentMatches = detected.filter((family) => adjacent.includes(family));
+  const hasExtraFamilies = extraFamilies.length > 0;
+  const strictMatch = detected.length > 0 && matched.length > 0 && !hasExtraFamilies;
+  const relaxedMatch = draft.allowAdjacentGenres && detected.length > 0 && (
+    matched.length > 0 || adjacentMatches.length > 0
+  );
 
   return {
-    confidence: accepted && !hasAdjacent ? "high" : "low",
+    confidence: strictMatch ? "high" : "low",
     detectedFamilies: detected,
     matchedFamilies: matched,
+    adjacentFamilies: adjacentMatches,
     whyMatched: detected.length === 0
       ? "Excluded because genre metadata is missing."
-      : accepted && hasAdjacent
+      : strictMatch
+        ? `Strict match: ${matched.join(", ")}.`
+        : relaxedMatch && matched.length > 0
         ? `Matched ${matched.join(", ")}; adjacent genre metadata was allowed.`
-        : accepted
-          ? `Strict match: ${matched.join(", ")}.`
+        : relaxedMatch
+          ? `Filled from adjacent ${adjacentMatches.join(", ")} signals after strict matches ran out.`
           : `Excluded by strict genre selection (${selected.join(", ")}).`,
   };
 }
 
-function candidateMatchesGenreSelection(
+function isStrictGenreCandidate(
   candidate: InternalCandidate,
   draft: SceneStudioDraft,
 ): boolean {
@@ -1104,9 +1147,61 @@ function candidateMatchesGenreSelection(
     return true;
   }
 
+  return getSceneTrackGenreMatch(candidate.genres, {
+    preferredGenres: draft.preferredGenres,
+    allowAdjacentGenres: false,
+  }).confidence === "high";
+}
+
+function isAdjacentGenreCandidate(
+  candidate: InternalCandidate,
+  draft: SceneStudioDraft,
+): boolean {
+  if (!draft.allowAdjacentGenres || draft.preferredGenres.length === 0) {
+    return false;
+  }
+
   const match = getSceneTrackGenreMatch(candidate.genres, draft);
-  return match.matchedFamilies.length > 0 &&
-    (draft.allowAdjacentGenres || match.confidence === "high");
+  return match.confidence === "low" && (
+    match.matchedFamilies.length > 0 ||
+    (match.adjacentFamilies?.length ?? 0) > 0
+  );
+}
+
+function getAdjacentMoodKeywords(draft: SceneStudioDraft): string[] {
+  if (draft.moods.length === 0) return [];
+
+  const selectedKeywords = new Set(
+    draft.moods.flatMap((mood) => MOOD_GENRE_KEYWORDS[mood].map(normalizeText)),
+  );
+  const selectedFamilies = new Set(normalizeSceneGenreFamilies(Array.from(selectedKeywords)));
+
+  return Array.from(new Set(
+    SCENE_MOOD_OPTIONS
+      .map((option) => option.value)
+      .filter((mood) => !draft.moods.includes(mood))
+      .filter((mood) => normalizeSceneGenreFamilies(MOOD_GENRE_KEYWORDS[mood])
+        .some((family) => selectedFamilies.has(family)))
+      .flatMap((mood) => MOOD_GENRE_KEYWORDS[mood])
+      .filter((keyword) => !selectedKeywords.has(normalizeText(keyword))),
+  ));
+}
+
+function getAdjacentFillScore(
+  candidate: InternalCandidate,
+  draft: SceneStudioDraft,
+): number {
+  const match = getSceneTrackGenreMatch(candidate.genres, draft);
+  const adjacentMoodKeywords = getAdjacentMoodKeywords(draft);
+  const adjacentMoodMatches = candidate.genres.filter((genre) =>
+    includesKeyword(genre, adjacentMoodKeywords)
+  ).length;
+
+  return (
+    match.matchedFamilies.length * 24 +
+    (match.adjacentFamilies?.length ?? 0) * 16 +
+    Math.min(adjacentMoodMatches * 3, 12)
+  );
 }
 
 function seededUnitInterval(
@@ -1812,8 +1907,7 @@ function buildCandidatePool(
       (candidate) =>
         candidate.score >
           -500 &&
-        !rejectedTrackIds.has(candidate.track.id) &&
-        candidateMatchesGenreSelection(candidate, draft),
+        !rejectedTrackIds.has(candidate.track.id),
     )
     .sort(
       (first, second) =>
@@ -2277,6 +2371,9 @@ function buildSelectionStatus(
   const underfilled = selectedDurationMinutes < draft.durationMinutes;
   const strictGenres = draft.preferredGenres.length > 0 &&
     !draft.allowAdjacentGenres;
+  const adjacentTrackCount = signals.filter(
+    (signal) => signal.genreMatch?.confidence === "low",
+  ).length;
 
   if (!underfilled) {
     return {
@@ -2284,7 +2381,9 @@ function buildSelectionStatus(
       requestedDurationMinutes: draft.durationMinutes,
       selectedDurationMinutes,
       action: "none",
-      message: "The requested duration was filled.",
+      message: adjacentTrackCount > 0
+        ? `Strict matches came first; Canal used ${adjacentTrackCount} adjacent ${adjacentTrackCount === 1 ? "track" : "tracks"} to fill the requested duration.`
+        : "The requested duration was filled with strict matches.",
     };
   }
 
@@ -2296,8 +2395,10 @@ function buildSelectionStatus(
       ? "broaden-genres-or-shorten-duration"
       : "shorten-duration",
     message: strictGenres
-      ? `Only ${selectedDurationMinutes} of ${draft.durationMinutes} minutes matched strictly. Turn on adjacent genres, broaden genres, or shorten the Scene.`
-      : `Only ${selectedDurationMinutes} of ${draft.durationMinutes} minutes were available. Shorten the Scene to match.`,
+      ? `Only ${selectedDurationMinutes} of ${draft.durationMinutes} minutes matched strictly. Turn on Allow adjacent sounds, broaden genres, or shorten the Scene.`
+      : draft.preferredGenres.length > 0
+        ? `Only ${selectedDurationMinutes} of ${draft.durationMinutes} minutes were available even after adjacent genre and mood expansion. Broaden the direction or shorten the Scene.`
+        : `Only ${selectedDurationMinutes} of ${draft.durationMinutes} minutes were available. Shorten the Scene to match.`,
   };
 }
 
@@ -2352,6 +2453,12 @@ function buildRationale(
       `The strongest matching genre signals were ${genres
         .slice(0, 4)
         .join(", ")}.`,
+    );
+  }
+
+  if (signals.some((signal) => signal.genreMatch?.confidence === "low")) {
+    rationale.push(
+      "Strict matches were selected first; adjacent genre and mood signals filled the remaining duration.",
     );
   }
 
@@ -2652,14 +2759,38 @@ export function generateSceneFromSpotify(
         EMPTY_SCENE_REASON_BIAS,
     );
 
+  const strictCandidates = candidatePool.filter((candidate) =>
+    isStrictGenreCandidate(candidate, draft)
+  );
+  const adjacentCandidates = candidatePool
+    .filter((candidate) =>
+      !isStrictGenreCandidate(candidate, draft) &&
+      isAdjacentGenreCandidate(candidate, draft)
+    );
+  const adjacentFillScores = new Map(
+    adjacentCandidates.map((candidate) => [
+      candidate.track.id,
+      getAdjacentFillScore(candidate, draft),
+    ]),
+  );
+  adjacentCandidates.sort((first, second) => {
+    const adjacentDifference =
+      (adjacentFillScores.get(second.track.id) ?? 0) -
+      (adjacentFillScores.get(first.track.id) ?? 0);
+    return adjacentDifference || second.score - first.score;
+  });
+  const selectionPool = draft.allowAdjacentGenres
+    ? [...strictCandidates, ...adjacentCandidates]
+    : strictCandidates;
+
   let selected =
     selectTracksForDuration(
-      candidatePool,
+      selectionPool,
       draft,
     );
 
   const anchorCandidate = options.anchorTrackId
-    ? candidatePool.find((candidate) => candidate.track.id === options.anchorTrackId)
+    ? selectionPool.find((candidate) => candidate.track.id === options.anchorTrackId)
     : undefined;
   if (anchorCandidate && !selected.some((candidate) => candidate.track.id === anchorCandidate.track.id)) {
     selected = selected.length > 0

@@ -57,4 +57,18 @@ describe("Create Scene Living Glass experience", () => {
     expect(source).toContain("Refines ranking");
     expect(model).toContain("scoreSceneDirectionText(");
   });
+
+  it("puts a direct adjacent-fill policy in Sound and defaults new Scenes to it", () => {
+    const model = fs.readFileSync(path.join(process.cwd(), "lib/scene-studio.ts"), "utf8");
+    const soundStart = source.indexOf('studioStep === "sound"');
+    const flowStart = source.indexOf('studioStep === "flow"');
+    const adjacentControl = source.indexOf('accessibilityLabel="Allow adjacent sounds"');
+
+    expect(adjacentControl).toBeGreaterThan(soundStart);
+    expect(adjacentControl).toBeLessThan(flowStart);
+    expect(source).toContain('accessibilityRole="switch"');
+    expect(source).toContain("Strict matches first. If needed, fill the remaining time from nearby genre and mood families.");
+    expect(source).not.toContain('label="Strict genres"');
+    expect(model).toMatch(/DEFAULT_SCENE_STUDIO_DRAFT[\s\S]*?allowAdjacentGenres:\s*true/u);
+  });
 });

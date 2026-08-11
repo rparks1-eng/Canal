@@ -1149,6 +1149,25 @@ export default function SceneStudioScreen() {
             {genreQuery.trim() && genreSuggestions.length === 0 ? <Text style={styles.genreEmptyText}>No supported genre matches yet. Try a broader spelling.</Text> : null}
           </View>
         </BlurView>
+        <BlurView intensity={38} tint="dark" style={styles.adjacentPolicyCard}>
+          <Pressable
+            accessibilityHint="Strict matches are selected first. If they cannot fill the requested length, Canal uses nearby genre and mood families for the remainder."
+            accessibilityLabel="Allow adjacent sounds"
+            accessibilityRole="switch"
+            accessibilityState={{ checked: visibleDraft.allowAdjacentGenres, disabled: !scopeReady }}
+            disabled={!scopeReady}
+            onPress={() => updateDraft("allowAdjacentGenres", !visibleDraft.allowAdjacentGenres)}
+            style={({ pressed }) => [styles.adjacentPolicyRow, pressed && styles.pressed]}
+          >
+            <View style={styles.adjacentPolicyCopy}>
+              <Text style={styles.adjacentPolicyTitle}>Allow adjacent sounds</Text>
+              <Text style={styles.adjacentPolicyHelper}>Strict matches first. If needed, fill the remaining time from nearby genre and mood families.</Text>
+            </View>
+            <View style={[styles.compactSwitch, visibleDraft.allowAdjacentGenres && styles.compactSwitchSelected]}>
+              <View style={[styles.compactSwitchKnob, visibleDraft.allowAdjacentGenres && styles.compactSwitchKnobSelected]} />
+            </View>
+          </Pressable>
+        </BlurView>
         <BlurView intensity={38} tint="dark" style={styles.soundTuningCard}>
           <View style={styles.energyCard}>
             <Text accessibilityRole="header" style={styles.sectionTitle}>Energy</Text>
@@ -1223,15 +1242,6 @@ export default function SceneStudioScreen() {
           />
           <PreferenceRow
             disabled={!scopeReady}
-            helper="When on, tracks with adjacent or unselected genre families stay out of the generated Scene."
-            label="Strict genres"
-            onValueChange={(strictGenres) =>
-              updateDraft("allowAdjacentGenres", !strictGenres)
-            }
-            value={!visibleDraft.allowAdjacentGenres}
-          />
-          <PreferenceRow
-            disabled={!scopeReady}
             helper="Filters tracks used in your twelve most recent saved Scenes before generation."
             label="Fresh tracks"
             onValueChange={(avoidRecentSceneTracks) =>
@@ -1296,7 +1306,7 @@ export default function SceneStudioScreen() {
               <View style={styles.miniWave}>{[14, 34, 22, 42, 18, 29, 12].map((height, index) => <View key={`${height}-${index}`} style={[styles.waveBar, { height }]} />)}</View>
             </View>
             <View style={styles.summaryGrid}>
-              <View style={styles.summaryCard}><Text style={styles.summaryLabel}>Sound</Text><Text style={styles.summaryValue}>{visibleDraft.preferredGenres.slice(0, 2).join(" + ") || "Open direction"}</Text></View>
+              <View style={styles.summaryCard}><Text style={styles.summaryLabel}>Sound</Text><Text style={styles.summaryValue}>{visibleDraft.preferredGenres.slice(0, 2).join(" + ") || "Open direction"}{visibleDraft.preferredGenres.length > 0 ? visibleDraft.allowAdjacentGenres ? " · adjacent fill" : " · strict only" : ""}</Text></View>
               <View style={styles.summaryCard}><Text style={styles.summaryLabel}>Discovery</Text><Text style={styles.summaryValue}>{getSceneFamiliarityLevel(visibleDraft)}% new</Text></View>
               <View style={styles.summaryCard}><Text style={styles.summaryLabel}>Length</Text><Text style={styles.summaryValue}>{visibleDraft.durationMinutes} minutes</Text></View>
               <View style={styles.summaryCard}><Text style={styles.summaryLabel}>Arc</Text><Text style={styles.summaryValue}>{visibleDraft.arc}</Text></View>
@@ -1347,6 +1357,7 @@ const styles = StyleSheet.create({
   moodCount:{color:"rgba(255,255,255,.66)",fontSize:11,fontVariant:["tabular-nums"],fontWeight:"700"},moodConstellation:{flexDirection:"row",flexWrap:"wrap",gap:6},moodOrb:{alignItems:"center",borderRadius:999,justifyContent:"center",minHeight:48,minWidth:72,paddingHorizontal:12},moodOrbIdle:{backgroundColor:"rgba(255,255,255,.06)",borderColor:"rgba(255,255,255,.15)",borderWidth:1},moodOrbSelected:{backgroundColor:"rgba(114,216,196,.92)"},moodOrbPressed:{opacity:.72},moodOrbText:{color:"rgba(255,255,255,.82)",fontSize:12,fontWeight:"700"},moodOrbTextSelected:{color:"#103C46"},
   textInput:{backgroundColor:"rgba(8,29,50,.26)",borderColor:"rgba(255,255,255,.17)",borderRadius:17,borderWidth:1,color: canalDynamicColors.text,fontSize:14,minHeight:48,paddingHorizontal:12,paddingVertical:9},sceneNameInput:{fontFamily:"Georgia",fontSize:17},notesInput:{minHeight:66,textAlignVertical:"top"},genreSearchInput:{marginTop:0},genreSuggestions:{gap:5},genreSuggestionLabel:{color: canalDynamicColors.muted,fontSize:10,fontWeight:"800"},genreEmptyText:{color: canalDynamicColors.muted,fontSize:12},selectedGenreSection:{gap:5},selectedGenreLabel:{color: canalDynamicColors.mint,fontSize:10,fontWeight:"800"},
   sliderGrid:{gap:7},soundTuningCard:{alignItems:"stretch",backgroundColor:"rgba(255,255,255,.055)",borderRadius:20,flexDirection:"row",overflow:"hidden",paddingHorizontal:12,paddingVertical:10},energyCard:{flex:4,gap:3},sliderCard:{flex:6,gap:3},soundTuningDivider:{backgroundColor:"rgba(255,255,255,.1)",marginHorizontal:10,width:StyleSheet.hairlineWidth},energyScale:{flexDirection:"row",position:"relative"},energyLine:{backgroundColor:"rgba(255,255,255,.18)",height:1,left:16,position:"absolute",right:16,top:35},energyChoice:{alignItems:"center",flex:1,justifyContent:"space-between",minHeight:48,paddingTop:7},energyChoiceText:{color:"rgba(255,255,255,.54)",fontSize:9,fontWeight:"700"},energyChoiceTextSelected:{color:"#DFFFF7",fontWeight:"900"},energyMarker:{backgroundColor:"rgba(255,255,255,.28)",borderRadius:3,height:5,width:5},energyMarkerSelected:{backgroundColor:"#72D8C4",height:8,width:8},familiarityLabels:{alignItems:"center",flexDirection:"row",justifyContent:"space-between"},familiarityLabel:{color:"rgba(255,255,255,.55)",fontSize:9,fontWeight:"700"},familiarityValue:{color:"#DFFFF7",fontSize:11,fontWeight:"800"},
+  adjacentPolicyCard:{backgroundColor:"rgba(255,255,255,.055)",borderRadius:18,overflow:"hidden"},adjacentPolicyRow:{alignItems:"center",flexDirection:"row",gap:12,minHeight:64,paddingHorizontal:12,paddingVertical:8},adjacentPolicyCopy:{flex:1,gap:2},adjacentPolicyTitle:{color:canalDynamicColors.text,fontSize:13,fontWeight:"800"},adjacentPolicyHelper:{color:canalDynamicColors.muted,fontSize:10,lineHeight:14},
   preferencesGrid:{flexDirection:"row",gap:4},preferenceRow:{alignItems:"center",borderRadius:12,flex:1,gap:5,justifyContent:"center",minHeight:66,paddingHorizontal:3,paddingVertical:6},preferenceRowSelected:{backgroundColor:"rgba(114,216,196,.08)"},compactSwitch:{backgroundColor:"rgba(255,255,255,.16)",borderRadius:8,height:16,padding:2,width:28},compactSwitchSelected:{backgroundColor:"rgba(114,216,196,.72)"},compactSwitchKnob:{backgroundColor:"rgba(255,255,255,.76)",borderRadius:6,height:12,width:12},compactSwitchKnobSelected:{alignSelf:"flex-end",backgroundColor:"#F5FFFC"},preferenceLabel:{color:"rgba(255,255,255,.62)",fontSize:9,fontWeight:"700",lineHeight:11,textAlign:"center"},preferenceLabelSelected:{color:"#FFFFFF"},policyRow:{paddingBottom:2},
   inlineNavigation:{alignItems:"center",flexDirection:"row",justifyContent:"space-between",gap:10},inlineButton:{alignItems:"center",justifyContent:"center",minHeight:48,paddingHorizontal:8},inlineButtonText:{color:"#C7FFF2",fontSize:14,fontWeight:"800"},inlineHint:{color:"rgba(255,255,255,.58)",fontSize:11,flex:1},
   reviewHero:{alignItems:"center",gap:8,paddingVertical:18},reviewEyebrow:{color: canalDynamicColors.mint,fontSize:10,fontWeight:"900",letterSpacing:1.5},reviewName:{color:"#FFFFFF",fontFamily:"Georgia",fontSize:30,fontWeight:"700",textAlign:"center"},reviewSubtitle:{color:"rgba(255,255,255,.7)",fontSize:13,textAlign:"center"},miniWave:{alignItems:"center",flexDirection:"row",gap:5,height:48},waveBar:{backgroundColor:"#72D8C4",borderRadius:4,width:5},summaryGrid:{flexDirection:"row",flexWrap:"wrap",gap:8},summaryCard:{backgroundColor:"rgba(255,255,255,.07)",borderRadius:17,gap:4,minHeight:74,padding:12,width:"48%"},summaryLabel:{color:"rgba(255,255,255,.55)",fontSize:10,fontWeight:"800"},summaryValue:{color:"#FFFFFF",fontSize:13,fontWeight:"800"},

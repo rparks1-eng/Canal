@@ -103,7 +103,7 @@ describe("Scene recommendation feedback local-first sync", () => {
 
   it.each([
     ["familiarity", { familiarityLevel: 90 }],
-    ["genre strictness", { allowAdjacentGenres: true }],
+    ["genre strictness", { allowAdjacentGenres: false }],
     ["direct request", { notes: "no guitar solos" }],
     ["recent tracks", { includeRecent: false }],
     ["duration", { durationMinutes: 70 }],
