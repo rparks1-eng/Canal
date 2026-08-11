@@ -82,11 +82,7 @@ import {
 } from "../lib/spotify-library";
 
 import {
-  updateUserDirectedScenePreview,
-} from "../lib/scene-studio-manual-preview";
-
-import {
-  refillGeneratedSceneToDuration,
+  regenerateGeneratedSceneEditor,
 } from "../lib/scene-preview-editor";
 
 import {
@@ -937,7 +933,6 @@ export default function SceneStudioScreen() {
       let preview;
 
       if (shouldResumePreview && existing.kind === "ready") {
-        const updated = updateUserDirectedScenePreview(existing.value, activationDraft);
         const candidates = generateSceneWithSpotifyGenreFallback(
           activationDraft,
           snapshot,
@@ -956,7 +951,10 @@ export default function SceneStudioScreen() {
             reasonBias: learning.reasonBias,
           },
         );
-        preview = refillGeneratedSceneToDuration(updated, candidates);
+        // Returning from Preview means the listener changed the generation
+        // intent. Replace the editable playlist as one regeneration instead
+        // of retaining the old sequence and merely filling extra duration.
+        preview = regenerateGeneratedSceneEditor(existing.value, candidates);
       } else {
         preview = generateSceneWithSpotifyGenreFallback(activationDraft, snapshot, {
           variationSeed,
