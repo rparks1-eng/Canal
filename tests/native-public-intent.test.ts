@@ -15,7 +15,7 @@ describe("native public intents", () => {
     mockStorage.clear();
   });
 
-  it("opens an allowlisted HTTPS destination as a signed-out public preview", async () => {
+  it("hands an allowlisted HTTPS destination to the signed-out Login guard", async () => {
     const scene = "/scenes/550e8400-e29b-41d4-a716-446655440000";
     expect(redirectSystemPath({
       initial: true,

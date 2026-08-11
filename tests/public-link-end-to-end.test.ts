@@ -33,7 +33,7 @@ describe("public link end-to-end contract", () => {
     mockStorage.clear();
   });
 
-  it("keeps exact canonical previews visible before authentication", () => {
+  it("routes exact canonical shares to Login while preserving the destination", () => {
     expect(publicDestinationFromRoute("scenes", {
       sceneId: SCENE_SHARE_ID,
     })).toBe(`/scenes/${SCENE_SHARE_ID}`);
@@ -47,7 +47,7 @@ describe("public link end-to-end contract", () => {
 
     const layout = read("app/_layout.tsx");
     expect(layout).toMatch(
-      /if \(deferredDestination\) \{\s*return;\s*\}/u,
+      /if \(deferredDestination\) \{[\s\S]*rememberDeferredDestination\(\s*deferredDestination,[\s\S]*pathname:\s*"\/login",[\s\S]*destination:\s*deferredDestination/u,
     );
     expect(read("app/+native-intent.ts")).toMatch(
       /if \(destination\) \{\s*return destination;\s*\}/u,

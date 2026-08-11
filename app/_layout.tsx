@@ -70,6 +70,7 @@ import {
 } from "../lib/auth-return";
 
 import {
+  rememberDeferredDestination,
   restoreDeferredDestination,
 } from "../lib/deferred-destination";
 
@@ -84,6 +85,11 @@ type OnboardingState =
   | "complete";
 
 function CanalNavigator() {
+  const signedOutPublicRedirectRef =
+    useRef<string | null>(
+      null,
+    );
+
   const [
     reducedMotion,
     setReducedMotion,
@@ -370,8 +376,45 @@ function CanalNavigator() {
         );
 
       if (deferredDestination) {
+        if (
+          signedOutPublicRedirectRef.current ===
+            deferredDestination
+        ) {
+          return;
+        }
+
+        signedOutPublicRedirectRef.current =
+          deferredDestination;
+
+        void rememberDeferredDestination(
+          deferredDestination,
+        )
+          .catch(
+            () => false,
+          )
+          .then(
+            () => {
+              if (
+                activeUserIdRef.current ===
+                  null
+              ) {
+                router.replace({
+                  pathname:
+                    "/login",
+                  params: {
+                    destination:
+                      deferredDestination,
+                  },
+                } as never);
+              }
+            },
+          );
+
         return;
       }
+
+      signedOutPublicRedirectRef.current =
+        null;
 
       if (
         rootSegment ===
