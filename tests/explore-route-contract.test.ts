@@ -85,6 +85,8 @@ describe(
         expect(source).toContain('title="Moods"');
         expect(source).toContain('title="Genres"');
         expect(source).toContain("Verified creators");
+        expect(source).not.toContain("categoryLabelScrim");
+        expect(source).toContain("textShadowColor");
         expect(source).not.toContain("loadPublicSnapshotFeed");
       },
     );

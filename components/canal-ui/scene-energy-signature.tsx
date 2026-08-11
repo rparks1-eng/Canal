@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import type { StyleProp, ViewStyle } from "react-native";
 import type { StoredScene } from "../../lib/scenes";
@@ -20,7 +20,7 @@ export function sceneEnergyArcPoints(scene: ArcScene): number[] {
   const center = energy === "high" ? 0.66 : energy === "low" ? 0.36 : 0.52;
   const amplitude = energy === "high" ? 0.34 : energy === "low" ? 0.22 : 0.3;
   const frequency = energy === "high" ? 1.45 : energy === "low" ? 0.78 : 1.05;
-  const count = 33;
+  const count = 49;
 
   return Array.from({ length: count }, (_, index) => {
     const progress = index / (count - 1);
@@ -46,8 +46,8 @@ export function SceneEnergySignature(props: {
   const arc = sceneArcShape(props.scene);
   const arcLabel = arc === "waves" ? "Waves" : arc === "build" ? "Build" : "Steady";
   const normalizedEnergy = energy.toLowerCase();
-  const strokeHeight = normalizedEnergy === "high" ? 3.5 : normalizedEnergy === "low" ? 2 : 2.75;
-  const glowHeight = normalizedEnergy === "high" ? 8 : normalizedEnergy === "low" ? 5 : 6.5;
+  const strokeHeight = normalizedEnergy === "high" ? 2.8 : normalizedEnergy === "low" ? 2 : 2.4;
+  const glowHeight = normalizedEnergy === "high" ? 6 : normalizedEnergy === "low" ? 4 : 5;
 
   return (
     <View
@@ -57,10 +57,10 @@ export function SceneEnergySignature(props: {
       <View style={styles.lineCanvas}>
         {points.slice(0, -1).map((point, index) => {
           const next = points[index + 1];
-          const pointTop = (1 - point) * 32 + 1;
-          const nextTop = (1 - next) * 32 + 1;
+          const pointTop = (1 - point) * 42 + 1;
+          const nextTop = (1 - next) * 42 + 1;
           const midpoint = (pointTop + nextTop) / 2;
-          const angle = Math.atan2(nextTop - pointTop, 8) * (180 / Math.PI);
+          const angle = Math.atan2(nextTop - pointTop, 4) * (180 / Math.PI);
           return (
             <View key={`${props.scene.id}:arc:${index}`} style={styles.lineCell}>
               <View
@@ -89,19 +89,15 @@ export function SceneEnergySignature(props: {
           );
         })}
       </View>
-      <Text numberOfLines={1} style={[styles.label, { color: props.accent }]}>
-        {energy} energy · {arcLabel} arc
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { minHeight: 40, minWidth: 88, justifyContent: "center", gap: 4 },
-  containerCompact: { minWidth: 64, minHeight: 34 },
-  lineCanvas: { height: 36, flexDirection: "row", overflow: "hidden" },
+  container: { minHeight: 46, minWidth: 88, justifyContent: "center" },
+  containerCompact: { minWidth: 64, minHeight: 42 },
+  lineCanvas: { height: 46, flexDirection: "row", overflow: "hidden" },
   lineCell: { flex: 1, position: "relative" },
-  lineGlow: { position: "absolute", left: "-18%", width: "136%", borderRadius: 8, opacity: 0.2 },
-  lineStroke: { position: "absolute", left: "-14%", width: "128%", borderRadius: 4, opacity: 0.96 },
-  label: { fontSize: 8, fontWeight: "900", letterSpacing: 0.45, textTransform: "uppercase" },
+  lineGlow: { position: "absolute", left: "-34%", width: "168%", borderRadius: 8, opacity: 0.18 },
+  lineStroke: { position: "absolute", left: "-30%", width: "160%", borderRadius: 4, opacity: 0.9 },
 });

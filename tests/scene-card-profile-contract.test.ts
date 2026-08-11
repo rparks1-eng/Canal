@@ -10,12 +10,17 @@ const surfaces = [
 ].map((file) => fs.readFileSync(path.join(process.cwd(), file), "utf8"));
 
 describe("shared Scene card profile", () => {
-  it("owns the complete visual identity stack", () => {
+  it("owns the simple vibrant visual identity stack", () => {
     expect(component).toContain("SceneEnergySignature");
-    expect(component).toContain("SceneMoodBreakdown");
-    expect(component).toContain("SceneGenreBreakdown");
+    expect(component).toContain("sceneCardDescriptors");
+    expect(component).toContain("styles.descriptorText");
+    expect(component).toContain("styles.descriptorDot");
+    expect(component).not.toContain("styles.categoryChip");
+    expect(component).not.toContain("SceneMoodBreakdown");
+    expect(component).not.toContain("SceneGenreBreakdown");
+    expect(component).not.toContain("MOOD MIX");
+    expect(component).not.toContain("GENRE DNA");
     expect(component).toContain("SceneCardProfileVariant");
-    expect(component).toContain("reserveSpace={grid}");
   });
 
   it("drives every primary Scene discovery surface", () => {

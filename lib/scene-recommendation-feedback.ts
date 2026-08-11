@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { readAccountCanalSettings } from "./app-settings";
 
 import {
   createSceneStudioDraft,
@@ -6,6 +7,7 @@ import {
   SCENE_ACTIVITY_OPTIONS,
 } from "./scene-studio";
 import type { SceneStudioDraft } from "./scene-studio";
+import { readRelevantLikedTrackIds, readTemporarilyDislikedTrackIds } from "./song-preferences";
 import type { StoredScene } from "./scenes";
 import {
   buildSceneReasonBias,
@@ -580,6 +582,15 @@ export async function readSceneRecommendationLearning(
   currentScope: () => SceneStudioScope | null,
   draft: SceneStudioDraft,
 ): Promise<SceneRecommendationLearning> {
+  const accountSettings = await readAccountCanalSettings(scope.userId);
+  if (!sameSceneStudioScope(scope, currentScope()) || !accountSettings.songLearningEnabled) {
+    return {
+      rejectedTrackIds: [],
+      deprioritizedTrackIds: [],
+      preferredTrackIds: [],
+      reasonBias: buildSceneReasonBias([]),
+    };
+  }
   const intentKey = sceneRecommendationIntentKey(draft);
   let events = await readLocal(scope);
   if (!sameSceneStudioScope(scope, currentScope())) return {
@@ -636,6 +647,21 @@ export async function readSceneRecommendationLearning(
     if (event.action === "doesnt_match") rejected.add(event.trackId);
     else if (["swap", "remove", "skip"].includes(event.action)) deprioritized.add(event.trackId);
     else if (["favorite", "replay"].includes(event.action)) preferred.add(event.trackId);
+  }
+  const [likedTrackIds, temporarilyDislikedTrackIds] = await Promise.all([
+    readRelevantLikedTrackIds(scope, currentScope, draft),
+    readTemporarilyDislikedTrackIds(scope, currentScope),
+  ]);
+  if (!sameSceneStudioScope(scope, currentScope())) return {
+    rejectedTrackIds: [],
+    deprioritizedTrackIds: [],
+    preferredTrackIds: [],
+    reasonBias: buildSceneReasonBias([]),
+  };
+  for (const trackId of likedTrackIds) preferred.add(trackId);
+  for (const trackId of temporarilyDislikedTrackIds) {
+    preferred.delete(trackId);
+    deprioritized.add(trackId);
   }
   return {
     rejectedTrackIds: [...rejected],

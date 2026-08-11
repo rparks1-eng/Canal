@@ -16,6 +16,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   router,
@@ -35,6 +36,8 @@ import { Image } from "expo-image";
 import { SceneCardBackdrop } from "../components/canal-ui/scene-card-visual";
 import { SceneDnaPanel } from "../components/canal-ui/scene-dna-panel";
 import { scenePresentation } from "../components/canal-ui/scene-signature";
+import { CanalAmbientBackground } from "../components/canal-ui/canal-ambient-background";
+import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 
 import {
   classifyAnalyticsFailure,
@@ -60,6 +63,9 @@ import {
   loadPublicScene,
   savePublicSceneToLibrary,
 } from "../lib/social";
+import {
+  addSpotifyArtworkToStoredScene,
+} from "../lib/spotify-scene-artwork";
 
 import type {
   PublicCanalScene,
@@ -145,6 +151,11 @@ export default function PublicSceneScreen() {
   ] = useState(false);
 
   const [
+    playing,
+    setPlaying,
+  ] = useState(false);
+
+  const [
     sharing,
     setSharing,
   ] = useState(false);
@@ -191,6 +202,8 @@ export default function PublicSceneScreen() {
     useRef(false);
   const saveInFlight =
     useRef(false);
+  const playInFlight =
+    useRef(false);
   const shareInFlight =
     useRef(false);
   const loadGeneration =
@@ -229,6 +242,21 @@ export default function PublicSceneScreen() {
 
           if (generation !== loadGeneration.current) return;
           setItem(publicScene);
+
+          if (publicScene.scene.tracks.some((track) => !track.imageUrl)) {
+            void addSpotifyArtworkToStoredScene(publicScene.scene)
+              .then((sceneWithArtwork) => {
+                if (generation !== loadGeneration.current) return;
+
+                setItem((current) =>
+                  current?.ownerId === publicScene.ownerId &&
+                  current.sceneId === publicScene.sceneId
+                    ? { ...current, scene: sceneWithArtwork }
+                    : current,
+                );
+              })
+              .catch(() => undefined);
+          }
 
           try {
             const snapshots = await loadPublicSourceSnapshots(sceneId, ownerId);
@@ -313,6 +341,62 @@ export default function PublicSceneScreen() {
         saveInFlight.current =
           false;
         setSaving(
+          false,
+        );
+      }
+    };
+
+  const play =
+    async (): Promise<void> => {
+      if (
+        playInFlight.current ||
+        !item ||
+        playing
+      ) {
+        return;
+      }
+
+      playInFlight.current =
+        true;
+      setPlaying(
+        true,
+      );
+      setErrorMessage("");
+
+      try {
+        const playableScene =
+          item.isMine
+            ? item.scene
+            : await savePublicSceneToLibrary(
+                item,
+              );
+
+        setItem((current) =>
+          current?.ownerId === item.ownerId &&
+          current.sceneId === item.sceneId
+            ? {
+                ...current,
+                savedByMe: true,
+              }
+            : current,
+        );
+
+        router.push({
+          pathname: "/now-playing",
+          params: {
+            sceneId: playableScene.id,
+          },
+        } as never);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not prepare this Scene for playback.",
+        );
+      } finally {
+        playInFlight.current =
+          false;
+        setPlaying(
           false,
         );
       }
@@ -602,6 +686,7 @@ export default function PublicSceneScreen() {
         "bottom",
       ]}
     >
+      <CanalAmbientBackground />
       <View
         style={
           styles.header
@@ -668,6 +753,7 @@ export default function PublicSceneScreen() {
                 }
               >
                 <SceneCardBackdrop presentation={scenePresentation(item.scene)} scene={item.scene} />
+                <Text style={styles.publicKicker}>PUBLIC SCENE</Text>
                 <Text
                   style={
                     styles.sceneName
@@ -731,154 +817,35 @@ export default function PublicSceneScreen() {
                   </Text>
                 </Pressable>
 
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Export Public Scene to Spotify"
-                  accessibilityState={{
-                    busy:
-                      exporting ||
-                      checkingConnection,
-                    disabled:
-                      exporting ||
-                      checkingConnection ||
-                      connectivityStatus ===
-                        "offline",
-                  }}
-                  disabled={
-                    exporting ||
-                    checkingConnection ||
-                    connectivityStatus ===
-                      "offline"
-                  }
-                  onPress={() =>
-                    void exportToSpotify()
-                  }
-                  style={[
-                    styles.spotifyButton,
-
-                    (
-                      exporting ||
-                      checkingConnection ||
-                      connectivityStatus ===
-                        "offline"
-                    ) &&
-                      styles.disabledButton,
-                  ]}
-                >
-                  {exporting ||
-                  checkingConnection ? (
-                    <ActivityIndicator
-                      color="#07130B"
-                    />
-                  ) : (
-                    <Text
-                      style={
-                        styles.spotifyButtonText
-                      }
-                    >
-                      Export to My Spotify
-                    </Text>
-                  )}
-                </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Save Private Copy"
-                  accessibilityState={{
-                    busy: saving,
-                    disabled:
-                      item.isMine ||
-                      item.savedByMe ||
-                      saving,
-                  }}
-                  disabled={
-                    item.isMine ||
-                    item.savedByMe ||
-                    saving
-                  }
-                  onPress={() =>
-                    void save()
-                  }
-                  style={[
-                    styles.saveButton,
-
-                    (
-                      item.isMine ||
-                      item.savedByMe
-                    ) &&
-                      styles.disabledButton,
-                  ]}
-                >
-                  {saving ? (
-                    <ActivityIndicator
-                      color="#F47A24"
-                    />
-                  ) : (
-                    <Text
-                      style={
-                        styles.saveButtonText
-                      }
-                    >
-                      {item.isMine
-                        ? "This Scene Is Yours"
-                        : item.savedByMe
-                          ? "Saved to Library"
-                          : "Save Private Copy"}
-                    </Text>
-                  )}
-                </Pressable>
-
-                <Pressable
-                  accessibilityHint="Opens your device sharing options."
-                  accessibilityLabel={`Share ${item.scene.name}`}
-                  accessibilityRole="button"
-                  accessibilityState={{
-                    busy:
-                      sharing,
-                    disabled:
-                      sharing,
-                  }}
-                  disabled={
-                    sharing
-                  }
-                  onPress={() =>
-                    void share()
-                  }
-                  style={[
-                    styles.shareButton,
-
-                    sharing &&
-                      styles.disabledButton,
-                  ]}
-                >
-                  {sharing ? (
-                    <View
-                      style={
-                        styles.shareBusy
-                      }
-                    >
-                      <ActivityIndicator
-                        color="#1B1B1B"
-                      />
-
-                      <Text
-                        style={
-                          styles.shareButtonText
-                        }
-                      >
-                        Sharing…
-                      </Text>
-                    </View>
-                  ) : (
-                    <Text
-                      style={
-                        styles.shareButtonText
-                      }
-                    >
-                      Share Public Scene
-                    </Text>
-                  )}
-                </Pressable>
+                <View style={styles.primaryActions}>
+                  <Pressable
+                    accessibilityHint={item.isMine ? "Start this Scene." : "Saves a private copy to your Library the first time, then starts the Scene."}
+                    accessibilityLabel={`Play ${item.scene.name}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ busy: playing }}
+                    disabled={playing}
+                    onPress={() => void play()}
+                    style={[styles.playSceneButton, { backgroundColor: scenePresentation(item.scene).accent }]}
+                  >
+                    {playing ? <ActivityIndicator color={scenePresentation(item.scene).accentText} /> : <Ionicons color={scenePresentation(item.scene).accentText} name="play" size={18} />}
+                    <Text style={[styles.playSceneText, { color: scenePresentation(item.scene).accentText }]}>Play Scene</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityHint="Use this Scene as inspiration and optionally blend it with personal Scenes from your Library."
+                    accessibilityLabel={`Reshoot ${item.scene.name}`}
+                    accessibilityRole="button"
+                    onPress={() => router.push({ pathname: "/scene-reshoot", params: { ownerId: item.ownerId, sceneId: item.sceneId } } as never)}
+                    style={[styles.reshootButton, { backgroundColor: scenePresentation(item.scene).accent }]}
+                  >
+                    <Ionicons color={scenePresentation(item.scene).accentText} name="color-wand-outline" size={20} />
+                    <Text style={[styles.reshootText, { color: scenePresentation(item.scene).accentText }]}>Reshoot</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.secondaryActions}>
+                  <PublicAction accessibilityLabel={item.isMine ? "Your Scene" : item.savedByMe ? "Saved private copy" : "Save Private Copy"} busy={saving} disabled={item.isMine || item.savedByMe || saving} icon={item.savedByMe ? "checkmark" : "bookmark-outline"} label={item.isMine ? "Yours" : item.savedByMe ? "Saved" : "Save"} onPress={() => void save()} />
+                  <PublicAction accessibilityLabel="Export Public Scene to Spotify" busy={exporting || checkingConnection} disabled={exporting || checkingConnection || connectivityStatus === "offline"} icon="musical-notes-outline" label="Spotify" onPress={() => void exportToSpotify()} />
+                  <PublicAction accessibilityHint="Opens your system sharing options." accessibilityLabel={`Share ${item.scene.name}`} busy={sharing} disabled={sharing} icon="share-outline" label="Share" onPress={() => void share()} />
+                </View>
               </View>
 
               {message ? (
@@ -1022,10 +989,13 @@ export default function PublicSceneScreen() {
                     track,
                     index,
                   ) => (
-                    <View
+                    <Pressable
+                      accessibilityLabel={`Open song context for ${track.title}`}
+                      accessibilityRole="button"
                       key={
                         `${track.id}-${index}`
                       }
+                      onPress={() => router.push({ pathname: "/song-context", params: { trackId: track.id, trackTitle: track.title, artistName: track.artist, artworkUrl: track.imageUrl ?? "", spotifyUrl: track.spotifyUrl ?? "", genreHints: item.scene.genres } } as never)}
                       style={
                         styles.trackRow
                       }
@@ -1063,7 +1033,8 @@ export default function PublicSceneScreen() {
                           {track.artist}
                         </Text>
                       </View>
-                    </View>
+                      <Ionicons color={canalDynamicColors.muted} name="chevron-forward" size={17} />
+                    </Pressable>
                   ),
                 )}
               </View>
@@ -1110,6 +1081,10 @@ function Detail(
   );
 }
 
+function PublicAction(props: { accessibilityHint?: string; accessibilityLabel?: string; busy?: boolean; disabled?: boolean; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }): React.JSX.Element {
+  return <Pressable accessibilityHint={props.accessibilityHint} accessibilityLabel={props.accessibilityLabel ?? props.label} accessibilityRole="button" accessibilityState={{ busy: props.busy, disabled: props.disabled }} disabled={props.disabled} onPress={props.onPress} style={({ pressed }) => [styles.publicAction, props.disabled && styles.disabledButton, pressed && styles.publicActionPressed]}>{props.busy ? <ActivityIndicator color={canalDynamicColors.text} /> : <Ionicons color={canalDynamicColors.text} name={props.icon} size={20} />}<Text style={styles.publicActionText}>{props.label}</Text></Pressable>;
+}
+
 const styles =
   StyleSheet.create({
     safeArea: {
@@ -1136,7 +1111,7 @@ const styles =
         "center",
       justifyContent:
         "center",
-      backgroundColor: canalDynamicColors.surface,
+      backgroundColor: "transparent",
     },
 
     backText: {
@@ -1170,12 +1145,14 @@ const styles =
 
     hero: {
       alignItems:
-        "center",
-      backgroundColor: canalDynamicColors.surface,
-      borderRadius: 24,
+        "flex-start",
+      backgroundColor: "rgba(255,255,255,.055)",
+      borderRadius: 28,
       overflow: "hidden",
-      padding: 22,
+      padding: 20,
     },
+
+    publicKicker: { color: "rgba(255,255,255,.62)", fontSize: 9, fontWeight: "900", letterSpacing: 1.4, marginBottom: 5 },
 
     artwork: {
       width: 92,
@@ -1198,7 +1175,7 @@ const styles =
       color: canalDynamicColors.text,
       fontSize: 24,
       fontWeight: "900",
-      textAlign: "center",
+      textAlign: "left",
       marginTop: 0,
     },
 
@@ -1212,12 +1189,22 @@ const styles =
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-      backgroundColor: canalDynamicColors.surface,
+      backgroundColor: "transparent",
       borderRadius: 13,
       paddingHorizontal: 13,
       paddingVertical: 9,
       marginTop: 13,
     },
+
+    primaryActions: { alignSelf:"stretch", flexDirection:"row", gap:8, marginTop:16 },
+    playSceneButton: { alignItems:"center", borderRadius:17, flex:1, flexDirection:"row", gap:8, justifyContent:"center", minHeight:52, paddingHorizontal:12 },
+    playSceneText: { fontSize:14, fontWeight:"900" },
+    reshootButton: { alignItems:"center", borderRadius:17, flex:1, flexDirection:"row", gap:8, justifyContent:"center", minHeight:52, paddingHorizontal:12 },
+    reshootText: { fontSize:14, fontWeight:"900" },
+    secondaryActions: { alignSelf:"stretch", flexDirection:"row", justifyContent:"space-around", marginTop:8 },
+    publicAction: { alignItems:"center", gap:3, justifyContent:"center", minHeight:52, minWidth:72 },
+    publicActionText: { color:canalDynamicColors.text, fontSize:10, fontWeight:"800" },
+    publicActionPressed: { opacity:.58 },
 
     creatorText: {
       color: canalDynamicColors.gold,
@@ -1354,9 +1341,9 @@ const styles =
     },
 
     detailCard: {
-      backgroundColor: canalDynamicColors.surface,
+      backgroundColor: "rgba(255,255,255,.045)",
       borderRadius: 22,
-      padding: 18,
+      padding: 16,
     },
 
     sectionTitle: {
@@ -1440,4 +1427,3 @@ const styles =
       marginTop: 3,
     },
   });
-import { canalDynamicColors } from "../theme/canal-dynamic-colors";

@@ -28,7 +28,7 @@ import {
   isExploreCategoryKind,
   popularExploreCategoryScenes,
 } from "../../lib/explore-categories";
-import { readLiveStages } from "../../lib/live-stages";
+import { readPublicLiveStages } from "../../lib/live-stages";
 import type { LiveStage } from "../../lib/live-stages";
 import { loadExploreScenes } from "../../lib/social";
 import type { PublicCanalScene } from "../../lib/social";
@@ -115,7 +115,7 @@ export default function ExploreCategoryScreen() {
     try {
       const [nextScenes, nextStages] = await Promise.all([
         loadExploreScenes({ force: refresh }),
-        readLiveStages(),
+        readPublicLiveStages(),
       ]);
       setScenes(nextScenes);
       setStages(nextStages);

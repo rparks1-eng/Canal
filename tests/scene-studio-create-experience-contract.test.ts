@@ -9,10 +9,10 @@ describe("Create Scene Living Glass experience", () => {
     expect(source).not.toContain("styles.atmosphereButton");
     expect(source).toContain('<View style={styles.actionDock}>');
     expect(source).not.toContain('tint="dark" style={styles.actionDock}');
-    expect(source).toContain('backgroundColor:"transparent",bottom:112');
+    expect(source).toContain('paddingBottom:220');
+    expect(source).toContain('backgroundColor:"transparent",bottom:146');
     expect(source).toContain('paddingHorizontal:42');
     expect(source).toContain('minHeight:48');
-    expect(source).toContain("paddingBottom:250");
   });
 
   it("keeps the cycling atmosphere active until the route leaves after Generate", () => {
@@ -52,8 +52,8 @@ describe("Create Scene Living Glass experience", () => {
     expect(source).toContain('Choose at least one mood before continuing.');
     expect(source).toContain("draft.moods.length >= 5");
     expect(source).toContain("Remove one before adding another");
-    expect(source).toContain("{visibleDraft.moods.length}/5 selected");
-    expect(source).toContain("Choose one to five moods");
+    expect(source).toContain("{visibleDraft.moods.length}/5");
+    expect(source).toContain("Choose up to five.");
     expect(source).toContain("Refines ranking");
     expect(model).toContain("scoreSceneDirectionText(");
   });

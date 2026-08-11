@@ -102,6 +102,7 @@ import { canalTypography } from "../theme/canal-typography";
 import { CanalAtmosphereContext } from "../theme/canal-atmosphere-context";
 import { sceneAtmosphere, scenePresentation } from "../components/canal-ui/scene-signature";
 import { SceneDnaPanel } from "../components/canal-ui/scene-dna-panel";
+import { readAccountCanalSettings } from "../lib/app-settings";
 
 function formatTime(
   totalSeconds: number,
@@ -192,6 +193,19 @@ export default function NowPlayingScreen() {
   const accountKey =
     user?.id ??
     "";
+
+  const [trueBlackPlayback, setTrueBlackPlayback] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (!accountKey) {
+      setTrueBlackPlayback(false);
+      return () => { active = false; };
+    }
+    void readAccountCanalSettings(accountKey).then((settings) => {
+      if (active) setTrueBlackPlayback(settings.trueBlackPlayback);
+    });
+    return () => { active = false; };
+  }, [accountKey]);
 
   const params =
     useLocalSearchParams<{
@@ -1209,7 +1223,7 @@ export default function NowPlayingScreen() {
   ) {
     return (
       <SafeAreaView
-        style={styles.safeArea}
+        style={[styles.safeArea, trueBlackPlayback && styles.trueBlackPlayback]}
       >
         <View
           style={
@@ -1228,7 +1242,7 @@ export default function NowPlayingScreen() {
   ) {
     return (
       <SafeAreaView
-        style={styles.safeArea}
+        style={[styles.safeArea, trueBlackPlayback && styles.trueBlackPlayback]}
       >
         <View
           style={
@@ -1321,7 +1335,7 @@ export default function NowPlayingScreen() {
   if (!currentTrack) {
     return (
       <SafeAreaView
-        style={styles.safeArea}
+        style={[styles.safeArea, trueBlackPlayback && styles.trueBlackPlayback]}
       >
         <View
           style={
@@ -1394,7 +1408,7 @@ export default function NowPlayingScreen() {
 
   return (
     <SafeAreaView
-      style={styles.safeArea}
+      style={[styles.safeArea, trueBlackPlayback && styles.trueBlackPlayback]}
       edges={[
         "top",
         "bottom",
@@ -1846,6 +1860,9 @@ const styles =
     safeArea: {
       flex: 1,
       backgroundColor: "transparent",
+    },
+    trueBlackPlayback: {
+      backgroundColor: "#000000",
     },
 
     center: {

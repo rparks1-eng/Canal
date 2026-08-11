@@ -129,6 +129,29 @@ type SnapshotFilter =
   | "photo"
   | "video";
 
+type LibraryDnaKind = "activity" | "mood" | "genre";
+
+const LIBRARY_DNA_KINDS: readonly LibraryDnaKind[] = [
+  "activity",
+  "mood",
+  "genre",
+];
+
+function libraryDnaTokens(value?: string): string[] {
+  return (value ?? "")
+    .split(/[,•|/]/u)
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function sceneDnaValues(scene: StoredScene, kind: LibraryDnaKind): string[] {
+  if (kind === "activity") {
+    return libraryDnaTokens(scene.activity);
+  }
+
+  return libraryDnaTokens(kind === "mood" ? scene.emotions : scene.genres);
+}
+
 const LIBRARY_MENU_SCROLL_DISMISS_DISTANCE = 12;
 
 type OpenLibraryActions = {
@@ -232,6 +255,9 @@ export default function LibraryScreen() {
     useState<LibraryFilter>(
       "all",
     );
+
+  const [dnaKind, setDnaKind] = useState<LibraryDnaKind>("activity");
+  const [dnaValue, setDnaValue] = useState("");
 
   const [
     layout,
@@ -446,6 +472,15 @@ export default function LibraryScreen() {
               return false;
             }
 
+            if (
+              dnaValue &&
+              !sceneDnaValues(scene, dnaKind).some(
+                (value) => value.toLocaleLowerCase() === dnaValue.toLocaleLowerCase(),
+              )
+            ) {
+              return false;
+            }
+
             if (!needle) {
               return true;
             }
@@ -473,10 +508,42 @@ export default function LibraryScreen() {
       },
       [
         filter,
+        dnaKind,
+        dnaValue,
         query,
         scenes,
       ],
     );
+
+  const scenesById = useMemo(
+    () => new Map(scenes.map((scene) => [scene.id, scene])),
+    [scenes],
+  );
+
+  const dnaOptions = useMemo(() => {
+    const values = section === "scenes"
+      ? scenes.flatMap((scene) => sceneDnaValues(scene, dnaKind))
+      : snapshots.flatMap((snapshot) => {
+          const sourceScene = scenesById.get(snapshot.sceneId);
+
+          if (dnaKind === "activity") {
+            return libraryDnaTokens(snapshot.sceneActivity ?? sourceScene?.activity);
+          }
+
+          if (dnaKind === "mood") {
+            return [
+              ...libraryDnaTokens(snapshot.mood),
+              ...(sourceScene ? sceneDnaValues(sourceScene, "mood") : []),
+            ];
+          }
+
+          return sourceScene ? sceneDnaValues(sourceScene, "genre") : [];
+        });
+
+    return Array.from(
+      new Map(values.map((value) => [value.toLocaleLowerCase(), value])).values(),
+    ).sort((left, right) => left.localeCompare(right));
+  }, [dnaKind, scenes, scenesById, section, snapshots]);
 
   const filteredSnapshots =
     useMemo(
@@ -490,6 +557,27 @@ export default function LibraryScreen() {
             snapshot.mediaType === snapshotFilter;
 
           if (!matchesFilter) {
+            return false;
+          }
+
+          const sourceScene = scenesById.get(snapshot.sceneId);
+          const snapshotDna = dnaKind === "activity"
+            ? libraryDnaTokens(snapshot.sceneActivity ?? sourceScene?.activity)
+            : dnaKind === "mood"
+              ? [
+                  ...libraryDnaTokens(snapshot.mood),
+                  ...(sourceScene ? sceneDnaValues(sourceScene, "mood") : []),
+                ]
+              : sourceScene
+                ? sceneDnaValues(sourceScene, "genre")
+                : [];
+
+          if (
+            dnaValue &&
+            !snapshotDna.some(
+              (value) => value.toLocaleLowerCase() === dnaValue.toLocaleLowerCase(),
+            )
+          ) {
             return false;
           }
 
@@ -511,7 +599,7 @@ export default function LibraryScreen() {
             .includes(needle);
         });
       },
-      [query, snapshotFilter, snapshots],
+      [dnaKind, dnaValue, query, scenesById, snapshotFilter, snapshots],
     );
 
   const changeVisibility =
@@ -770,8 +858,19 @@ export default function LibraryScreen() {
             </Text>
           </View>
 
-            <CanalHeaderActions />
+            <CanalHeaderActions showSettings={false} />
         </Animated.View>
+
+        <TextInput
+          accessibilityLabel="Search your Library"
+          value={query}
+          onChangeText={setQuery}
+          placeholder={section === "scenes" ? "Search Scenes" : "Search Snapshots"}
+          placeholderTextColor={canalDynamicColors.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.searchInput}
+        />
 
         <View accessibilityRole="tablist" style={styles.sectionToggle}>
           {(["scenes", "snapshots"] as LibrarySection[]).map((value) => (
@@ -805,67 +904,11 @@ export default function LibraryScreen() {
           ))}
         </View>
 
-        {section === "scenes" ? <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open Scene collaboration"
-          accessibilityHint="Review collaboration invitations and shared Scenes."
-          onPress={() =>
-            router.push(
-              "/scene-collaboration" as never,
-            )
-          }
-          style={({ pressed }) => [
-            styles.collaborationButton,
-            pressed &&
-              styles.pressed,
-          ]}
-        >
-          <View>
-            <Text
-              style={
-                styles.collaborationTitle
-              }
-            >
-              Scene collaboration
-            </Text>
-
-            <Text
-              style={
-                styles.collaborationText
-              }
-            >
-              Invitations, shared edits, and revision conflicts
-            </Text>
-          </View>
-
-          <Text
-            style={
-              styles.arrow
-            }
-          >
-            ›
-          </Text>
-        </Pressable> : null}
-
-        <TextInput
-          accessibilityLabel="Search your Library"
-          value={
-            query
-          }
-          onChangeText={
-            setQuery
-          }
-          placeholder={section === "scenes" ? "Search Scenes" : "Search Snapshots"}
-          placeholderTextColor={canalDynamicColors.muted}
-          autoCapitalize="none"
-          autoCorrect={
-            false
-          }
-          style={
-            styles.searchInput
-          }
-        />
-
+        <View style={styles.filterHierarchy}>
+        <View style={styles.collectionFilterGroup}>
+        <Text style={styles.secondaryFilterLabel}>
+          {section === "scenes" ? "Collection" : "Snapshot type"}
+        </Text>
         <View
           style={
             styles.filters
@@ -933,8 +976,8 @@ export default function LibraryScreen() {
           >
             {(
               [
-                ["list", "list-outline"],
                 ["grid", "grid-outline"],
+                ["list", "list-outline"],
               ] as const
             ).map(([value, icon]) => (
               <Pressable
@@ -956,6 +999,79 @@ export default function LibraryScreen() {
               </Pressable>
             ))}
           </View>
+        </View>
+        </View>
+
+        <View style={styles.dnaPanel}>
+          <View style={styles.dnaHeader}>
+            <View style={styles.dnaHeaderCopy}>
+              <Text style={styles.filterGroupLabel}>Scene DNA</Text>
+              <Text style={styles.dnaHelper}>
+                Filter independently by the feeling and context behind each {section === "scenes" ? "Scene" : "Snapshot"}.
+              </Text>
+            </View>
+            {dnaValue ? (
+              <Pressable
+                accessibilityLabel="Clear Scene DNA filter"
+                accessibilityRole="button"
+                onPress={() => setDnaValue("")}
+                style={styles.clearDnaButton}
+              >
+                <Text style={styles.clearDnaText}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          <View accessibilityRole="tablist" style={styles.dnaKindRow}>
+            {LIBRARY_DNA_KINDS.map((kind) => (
+              <Pressable
+                key={kind}
+                accessibilityLabel={`Filter Library by ${kind}`}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: dnaKind === kind }}
+                onPress={() => {
+                  setDnaKind(kind);
+                  setDnaValue("");
+                }}
+                style={[styles.dnaKindButton, dnaKind === kind && styles.dnaKindButtonSelected]}
+              >
+                <Text style={[styles.dnaKindText, dnaKind === kind && styles.dnaKindTextSelected]}>
+                  {kind.charAt(0).toUpperCase() + kind.slice(1)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <ScrollView
+            horizontal
+            contentContainerStyle={styles.dnaValueRow}
+            showsHorizontalScrollIndicator={false}
+          >
+            <Pressable
+              accessibilityLabel={`Show all ${dnaKind} values`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: !dnaValue }}
+              onPress={() => setDnaValue("")}
+              style={[styles.dnaValueButton, !dnaValue && styles.dnaValueButtonSelected]}
+            >
+              <Text style={[styles.dnaValueText, !dnaValue && styles.dnaValueTextSelected]}>All</Text>
+            </Pressable>
+            {dnaOptions.map((value) => (
+              <Pressable
+                key={value}
+                accessibilityLabel={`Filter by ${dnaKind} ${value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: dnaValue === value }}
+                onPress={() => setDnaValue(value)}
+                style={[styles.dnaValueButton, dnaValue === value && styles.dnaValueButtonSelected]}
+              >
+                <Text style={[styles.dnaValueText, dnaValue === value && styles.dnaValueTextSelected]}>
+                  {value}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
         </View>
 
         {message ? (
@@ -1017,7 +1133,7 @@ export default function LibraryScreen() {
                 styles.emptyTitle
               }
             >
-              {query.trim() || (section === "scenes" ? filter !== "all" : snapshotFilter !== "all")
+              {query.trim() || dnaValue || (section === "scenes" ? filter !== "all" : snapshotFilter !== "all")
                 ? `No matching ${section === "scenes" ? "Scenes" : "Snapshots"}`
                 : `No ${section === "scenes" ? "Scenes" : "Snapshots"} yet`}
             </Text>
@@ -1027,7 +1143,7 @@ export default function LibraryScreen() {
                 styles.emptyText
               }
             >
-              {query.trim() || (section === "scenes" ? filter !== "all" : snapshotFilter !== "all")
+              {query.trim() || dnaValue || (section === "scenes" ? filter !== "all" : snapshotFilter !== "all")
                 ? "Try another search or filter."
                 : section === "scenes"
                   ? "Create a Scene or save one from Explore. Saved work remains available when you’re offline."
@@ -1348,31 +1464,25 @@ const styles =
 
     content: {
       paddingHorizontal: 20,
-      paddingTop: 10,
+      paddingTop: 0,
       paddingBottom: 120,
       gap: 11,
     },
 
     header: {
-      position: "relative",
       flexDirection: "row",
       alignItems:
-        "center",
+        "flex-start",
       justifyContent:
         "space-between",
-      marginBottom: 2,
+      paddingTop: 12,
+      marginBottom: 22,
     },
 
     headerCopy: {
       flex: 1,
       minWidth: 0,
-      paddingRight: 104,
-    },
-
-    headerActions: {
-      position: "absolute",
-      top: 0,
-      right: 0,
+      paddingRight: 4,
     },
 
     eyebrow: {
@@ -1497,6 +1607,31 @@ const styles =
       paddingHorizontal: 14,
     },
 
+    filterGroupLabel: {
+      color: canalDynamicColors.text,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+      textTransform: "uppercase",
+    },
+
+    filterHierarchy: {
+      flexDirection: "column-reverse",
+      gap: 8,
+    },
+
+    collectionFilterGroup: {
+      gap: 2,
+    },
+
+    secondaryFilterLabel: {
+      color: canalDynamicColors.muted,
+      fontSize: 9,
+      fontWeight: "800",
+      letterSpacing: 0.65,
+      textTransform: "uppercase",
+    },
+
     filters: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -1507,13 +1642,114 @@ const styles =
     },
 
     filterButton: {
-      borderWidth: 1,
+      minHeight: 48,
+      borderWidth: 0,
       borderColor:
         "#E2DAD4",
-      borderRadius: 13,
-      backgroundColor: canalDynamicColors.surface,
-      paddingHorizontal: 11,
+      borderRadius: 12,
+      backgroundColor: "transparent",
+      paddingHorizontal: 8,
       paddingVertical: 8,
+      justifyContent: "center",
+    },
+
+    dnaPanel: {
+      gap: 10,
+      paddingVertical: 4,
+    },
+
+    dnaHeader: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+
+    dnaHeaderCopy: {
+      flex: 1,
+      gap: 3,
+    },
+
+    dnaHelper: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+
+    clearDnaButton: {
+      minWidth: 48,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    clearDnaText: {
+      color: canalDynamicColors.gold,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    dnaKindRow: {
+      minHeight: 52,
+      flexDirection: "row",
+      gap: 4,
+      padding: 4,
+      borderRadius: 16,
+      backgroundColor: canalDynamicColors.surface,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+    },
+
+    dnaKindButton: {
+      flex: 1,
+      minHeight: 44,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 12,
+    },
+
+    dnaKindButtonSelected: {
+      backgroundColor: canalDynamicColors.warningSurface,
+    },
+
+    dnaKindText: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    dnaKindTextSelected: {
+      color: canalDynamicColors.text,
+    },
+
+    dnaValueRow: {
+      gap: 8,
+      paddingRight: 18,
+    },
+
+    dnaValueButton: {
+      minHeight: 48,
+      justifyContent: "center",
+      paddingHorizontal: 15,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.surface,
+    },
+
+    dnaValueButtonSelected: {
+      borderColor: canalDynamicColors.gold,
+      backgroundColor: canalDynamicColors.warningSurface,
+    },
+
+    dnaValueText: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    dnaValueTextSelected: {
+      color: canalDynamicColors.text,
     },
 
     filterSpacer: {
@@ -1540,8 +1776,6 @@ const styles =
     },
 
     filterSelected: {
-      borderColor:
-        "#F47A24",
       backgroundColor: canalDynamicColors.warningSurface,
     },
 

@@ -19,6 +19,25 @@ describe("published Snapshot composition", () => {
     expect(composition).toContain("snapshot.sceneActivity");
     expect(composition).toContain("snapshot.trackImageUrl");
     expect(composition).toContain("snapshot.trackTitle");
+    expect(composition).toContain("<SceneCardBackdrop");
+    expect(composition).toContain("fallbackPresentation");
+    expect(composition).not.toContain("<LivingCover");
+  });
+
+  it("freezes video thumbnails app-wide and plays only an opened Snapshot", () => {
+    const preview = read("components/snapshot-media-preview.tsx");
+    const composition = read("components/snapshot-composition.tsx");
+    const feed = read("components/PublicSnapshotCard.tsx");
+    const library = read("app/(tabs)/library.tsx");
+    const detail = read("app/snapshots/[snapshotId].tsx");
+
+    expect(preview).toContain("if (autoPlay) instance.play()");
+    expect(preview).toContain("else instance.pause()");
+    expect(composition).toContain("playVideo = false");
+    expect(composition).toContain("autoPlay={playVideo}");
+    expect(feed).not.toContain("playVideo");
+    expect(library).not.toContain("playVideo");
+    expect(detail).toContain("<SnapshotComposition snapshot={snapshot} height={500} playVideo />");
   });
 
   it("overlays notes and free-standing song details without in-app Canal branding", () => {

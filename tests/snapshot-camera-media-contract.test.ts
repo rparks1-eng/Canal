@@ -21,7 +21,8 @@ describe("Snapshot camera media contract", () => {
     expect(source).toContain("height={520} autoPlay");
     const preview = read("components/snapshot-media-preview.tsx");
     expect(preview).toContain("instance.loop = true");
-    expect(preview).toContain("if (background || autoPlay) instance.play()");
+    expect(preview).toContain("if (autoPlay) instance.play()");
+    expect(preview).toContain("else instance.pause()");
     expect(source).toContain('pathname: "/scene-snapshot"');
     expect(source).toContain("router.push({");
     expect(source).toContain("Use in Snapshot");
@@ -35,7 +36,7 @@ describe("Snapshot camera media contract", () => {
   it("uses captured media as the composer canvas and permits an in-source song change", () => {
     const composer = read("app/scene-snapshot.tsx");
     expect(composer).toContain("readLiveStage(params.stageId)");
-    expect(composer).toContain("SnapshotMediaPreview uri={mediaUri} type={mediaType} background");
+    expect(composer).toContain("SnapshotMediaPreview uri={mediaUri} type={mediaType} background autoPlay");
     expect(composer).toContain('accessibilityRole="radiogroup"');
     expect(composer).toContain("setSelectedTrackId(track.id)");
     expect(composer).toContain("trackId: selectedTrack?.id");

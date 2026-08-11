@@ -33,6 +33,9 @@ import {
 } from "../../components/PublicSnapshotCard";
 
 import { ProfileAvatar } from "../../components/profile-avatar";
+import { SceneCardProfile } from "../../components/canal-ui/scene-card-profile";
+import { SceneCardBackdrop } from "../../components/canal-ui/scene-card-visual";
+import { scenePresentation } from "../../components/canal-ui/scene-signature";
 
 import {
   RecoveryNotice,
@@ -2259,6 +2262,7 @@ function CreatorProfileScreenContent(
                 (scene) => {
                   const key =
                     `${scene.ownerId}:${scene.sceneId}`;
+                  const presentation = scenePresentation(scene.scene);
 
                   return (
                     <View
@@ -2289,52 +2293,13 @@ function CreatorProfileScreenContent(
                           styles.scenePressable
                         }
                       >
-                        <View
-                          style={
-                            styles.sceneArtwork
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.sceneArtworkText
-                            }
-                          >
-                            {scene.scene.name
-                              .charAt(
-                                0,
-                              )
-                              .toUpperCase()}
-                          </Text>
-                        </View>
-
-                        <View
-                          style={
-                            styles.sceneText
-                          }
-                        >
-                          <Text
-                            numberOfLines={
-                              1
-                            }
-                            style={
-                              styles.sceneName
-                            }
-                          >
-                            {scene.scene.name}
-                          </Text>
-
-                          <Text
-                            style={
-                              styles.sceneMeta
-                            }
-                          >
-                            {scene.scene.activity ||
-                              "Any activity"}{" "}
-                            ·{" "}
-                            {scene.scene.tracks.length}{" "}
-                            tracks
-                          </Text>
-                        </View>
+                        <SceneCardBackdrop presentation={presentation} scene={scene.scene} />
+                        <SceneCardProfile
+                          accent={presentation.accent}
+                          metadata={`${scene.scene.activity || "Any activity"} · ${scene.scene.tracks.length} tracks`}
+                          scene={scene.scene}
+                          variant="compact"
+                        />
                       </Pressable>
 
                       <Pressable
@@ -2788,43 +2753,11 @@ const styles =
 
     scenePressable: {
       flex: 1,
-      flexDirection: "row",
-      alignItems:
-        "center",
-    },
-
-    sceneArtwork: {
-      width: 52,
-      height: 52,
+      minHeight: 118,
+      overflow: "hidden",
       borderRadius: 15,
-      alignItems:
-        "center",
-      justifyContent:
-        "center",
-      backgroundColor: canalDynamicColors.warningSurface,
-      marginRight: 11,
-    },
-
-    sceneArtworkText: {
-      color: canalDynamicColors.lavender,
-      fontSize: 21,
-      fontWeight: "900",
-    },
-
-    sceneText: {
-      flex: 1,
-    },
-
-    sceneName: {
-      color: canalDynamicColors.text,
-      fontSize: 15,
-      fontWeight: "900",
-    },
-
-    sceneMeta: {
-      color: canalDynamicColors.muted,
-      fontSize: 10,
-      marginTop: 4,
+      borderCurve: "continuous",
+      padding: 12,
     },
 
     saveButton: {

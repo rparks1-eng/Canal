@@ -960,7 +960,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
           ]}
         >
           {mediaUri ? (
-            <SnapshotMediaPreview uri={mediaUri} type={mediaType} background />
+            <SnapshotMediaPreview uri={mediaUri} type={mediaType} background autoPlay />
           ) : null}
           {mediaUri ? <View style={styles.mediaScrim} /> : null}
           {!reduceTransparency && snapshotFormat === "living-story" ? <View

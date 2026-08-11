@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,6 +18,13 @@ import { CanalAmbientBackground } from "../components/canal-ui/canal-ambient-bac
 import { useLinerNotesContext } from "../components/liner-notes/useLinerNotesContext";
 import type { GeniusSongContext } from "../lib/genius-context-contract";
 import { getSceneById, type SceneTrack, type StoredScene } from "../lib/scenes";
+import { captureSceneStudioScope } from "../lib/scene-studio-scope";
+import { classifyCanalSongDna, type SongSceneMoodEvidence } from "../lib/song-dna";
+import { persistSongDna, readSongDisliked, readSongLiked, readSongSceneMoodEvidence, setSongDisliked, setSongLiked } from "../lib/song-preferences";
+import {
+  normalizeSongSceneActionInput,
+  songSceneActionParams,
+} from "../lib/song-scene-actions";
 import { useAuth } from "../providers/auth-provider";
 import { useConnectivity } from "../providers/connectivity-provider";
 import { canalDynamicColors } from "../theme/canal-dynamic-colors";
@@ -25,20 +32,41 @@ import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 type FieldState = "loading" | "empty" | "error" | "offline" | "ready";
 
 export default function SongContextScreen(): React.JSX.Element {
-  const params = useLocalSearchParams<{ sceneId?: string; trackId?: string }>();
+  const params = useLocalSearchParams<{ sceneId?: string; trackId?: string; trackTitle?: string; artistName?: string; artworkUrl?: string; spotifyUrl?: string; genreHints?: string }>();
   const sceneId = typeof params.sceneId === "string" ? params.sceneId : "";
   const trackId = typeof params.trackId === "string" ? params.trackId : "";
-  const { sessionGeneration, user } = useAuth();
+  const trackTitle = typeof params.trackTitle === "string" ? params.trackTitle.slice(0, 300) : "";
+  const artistName = typeof params.artistName === "string" ? params.artistName.slice(0, 300) : "";
+  const requestedArtworkUrl = typeof params.artworkUrl === "string" && /^https:\/\//u.test(params.artworkUrl)
+    ? params.artworkUrl
+    : undefined;
+  const { accountEpoch, sessionGeneration, user } = useAuth();
   const { refresh, status: connectivityStatus } = useConnectivity();
   const [scene, setScene] = useState<StoredScene | null>(null);
   const [track, setTrack] = useState<SceneTrack | null>(null);
   const [trackLoading, setTrackLoading] = useState(true);
+  const [liked, setLiked] = useState(false);
+  const [disliked, setDisliked] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
+  const [likeError, setLikeError] = useState("");
+  const [sceneMoodEvidence, setSceneMoodEvidence] = useState<SongSceneMoodEvidence[]>([]);
+  const scope = useMemo(() => captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration }), [accountEpoch, sessionGeneration, user?.id]);
+  const currentScopeRef = useRef(scope);
+  const persistedDnaKeyRef = useRef("");
+  currentScopeRef.current = scope;
 
   useEffect(() => {
     let active = true;
     setTrackLoading(true);
     setScene(null);
     setTrack(null);
+
+    if (!sceneId && trackId && trackTitle && artistName) {
+      setTrack({ id: trackId, title: trackTitle, artist: artistName, imageUrl: requestedArtworkUrl });
+      setTrackLoading(false);
+      return () => { active = false; };
+    }
+
     void getSceneById(sceneId).then((nextScene) => {
       if (!active) return;
       const nextTrack = nextScene?.tracks.find((candidate) => candidate.id === trackId) ?? null;
@@ -50,7 +78,7 @@ export default function SongContextScreen(): React.JSX.Element {
       setTrackLoading(false);
     });
     return () => { active = false; };
-  }, [sceneId, trackId, user?.id]);
+  }, [artistName, requestedArtworkUrl, sceneId, trackId, trackTitle, user?.id]);
 
   const linerNotesTrack = useMemo(() => track ? {
     title: track.title,
@@ -66,10 +94,113 @@ export default function SongContextScreen(): React.JSX.Element {
   const song = genius.context?.song;
   const state: FieldState = trackLoading ? "loading" : track ? genius.state : "error";
   const artworkUrl = song?.artworkUrl ?? track?.imageUrl;
+  const songAction = useMemo(() => normalizeSongSceneActionInput({
+    trackId: track?.id,
+    title: track?.title,
+    artist: track?.artist,
+    artworkUrl,
+    spotifyUrl: track?.spotifyUrl ?? params.spotifyUrl,
+  }), [artworkUrl, params.spotifyUrl, track]);
+  const genreHints = useMemo(() => typeof params.genreHints === "string"
+    ? params.genreHints.slice(0, 1_000).split("|").map((value) => value.trim()).filter(Boolean).slice(0, 12)
+    : [], [params.genreHints]);
+  const songDna = useMemo(() => classifyCanalSongDna({
+    title: track?.title,
+    artist: track?.artist,
+    album: song?.album,
+    genreHints,
+    story: song?.description,
+    sceneMoodEvidence,
+  }), [genreHints, sceneMoodEvidence, song?.album, song?.description, track?.artist, track?.title]);
+
+  useEffect(() => {
+    let active = true;
+    setSceneMoodEvidence([]);
+    if (!songAction || !scope) return () => { active = false; };
+    void readSongSceneMoodEvidence(songAction.trackId, scope, () => currentScopeRef.current).then((evidence) => {
+      if (active) setSceneMoodEvidence(evidence);
+    });
+    return () => { active = false; };
+  }, [scope, songAction]);
+
+  useEffect(() => {
+    if (!songAction || !scope) return;
+    const persistenceKey = `${scope.userId}:${songAction.trackId}:${songDna.taxonomyVersion}:${songDna.genres.join("|")}:${songDna.moods.join("|")}:${songDna.confidence}`;
+    if (persistedDnaKeyRef.current === persistenceKey) return;
+    persistedDnaKeyRef.current = persistenceKey;
+    void persistSongDna(songAction, songDna, scope, () => currentScopeRef.current).catch(() => {
+      if (persistedDnaKeyRef.current === persistenceKey) persistedDnaKeyRef.current = "";
+    });
+  }, [scope, songAction, songDna]);
+
+  useEffect(() => {
+    let active = true;
+    setLiked(false);
+    setDisliked(false);
+    setLikeError("");
+    if (!songAction || !scope) return () => { active = false; };
+    void Promise.all([
+      readSongLiked(songAction.trackId, scope, () => currentScopeRef.current),
+      readSongDisliked(songAction.trackId, scope, () => currentScopeRef.current),
+    ])
+      .then(([nextLiked, nextDisliked]) => { if (active) { setLiked(nextLiked); setDisliked(nextDisliked); } })
+      .catch(() => { if (active) setLikeError("Like status is temporarily unavailable."); });
+    return () => { active = false; };
+  }, [scope, songAction]);
+
+  const toggleLike = async (): Promise<void> => {
+    if (!songAction || !scope || likeBusy) return;
+    const nextLiked = !liked;
+    setLikeBusy(true);
+    setLikeError("");
+    try {
+      await setSongLiked(songAction, songDna, nextLiked, scope, () => currentScopeRef.current);
+      setLiked(nextLiked);
+      if (nextLiked) setDisliked(false);
+    } catch {
+      setLikeError("Could not update this song. Try again.");
+    } finally {
+      setLikeBusy(false);
+    }
+  };
+
+  const toggleDislike = async (): Promise<void> => {
+    if (!songAction || !scope || likeBusy) return;
+    const nextDisliked = !disliked;
+    setLikeBusy(true);
+    setLikeError("");
+    try {
+      await setSongDisliked(songAction, songDna, nextDisliked, scope, () => currentScopeRef.current);
+      setDisliked(nextDisliked);
+      if (nextDisliked) setLiked(false);
+    } catch {
+      setLikeError("Could not update this song. Try again.");
+    } finally {
+      setLikeBusy(false);
+    }
+  };
+
+  const addToScene = (): void => {
+    if (!songAction) return;
+    router.push({ pathname: "/add-song-to-scene", params: songSceneActionParams(songAction) } as never);
+  };
+
+  const createSceneFromSong = (): void => {
+    if (!songAction) return;
+    router.push({
+      pathname: "/scene-studio",
+      params: {
+        reset: String(Date.now()),
+        anchorTrackId: songAction.trackId,
+        direct: `Build this Scene around ${songAction.title} by ${songAction.artist}.`,
+      },
+    } as never);
+  };
 
   const goBack = (): void => {
     if (router.canGoBack()) router.back();
-    else router.replace({ pathname: "/scenes/[sceneId]", params: { sceneId } } as never);
+    else if (sceneId) router.replace({ pathname: "/scenes/[sceneId]", params: { sceneId } } as never);
+    else router.replace("/(tabs)");
   };
 
   return (
@@ -81,7 +212,7 @@ export default function SongContextScreen(): React.JSX.Element {
         </Pressable>
         <View style={styles.headerCopy}>
           <Text style={styles.eyebrow}>SONG CONTEXT</Text>
-          <Text numberOfLines={1} style={styles.headerScene}>{scene?.name ?? "Scene track"}</Text>
+          <Text numberOfLines={1} style={styles.headerScene}>{scene?.name ?? (sceneId ? "Scene track" : "New to your orbit")}</Text>
         </View>
         <View style={styles.headerButton} />
       </View>
@@ -100,6 +231,39 @@ export default function SongContextScreen(): React.JSX.Element {
             <Text style={styles.artist}>{track?.artist ?? "Unknown artist"}</Text>
             <Text style={styles.album}>{song?.album ?? placeholderFor(state, "No album context found")}</Text>
           </View>
+          <View style={styles.songPreferenceActions}>
+            <Pressable accessibilityLabel={liked ? "Unlike song" : "Like song"} accessibilityRole="button" accessibilityState={{ busy: likeBusy, selected: liked }} disabled={!songAction || !scope || likeBusy} onPress={() => { void toggleLike(); }} style={({ pressed }) => [styles.likeButton, pressed && styles.pressed]}>
+              <Ionicons color={liked ? canalDynamicColors.mint : canalDynamicColors.text} name={liked ? "heart" : "heart-outline"} size={23} />
+            </Pressable>
+            <Pressable accessibilityLabel={disliked ? "Remove song dislike" : "Dislike song"} accessibilityHint="Temporarily deprioritizes this song in future Scene generation" accessibilityRole="button" accessibilityState={{ busy: likeBusy, selected: disliked }} disabled={!songAction || !scope || likeBusy} onPress={() => { void toggleDislike(); }} style={({ pressed }) => [styles.likeButton, pressed && styles.pressed]}>
+              <Ionicons color={disliked ? canalDynamicColors.danger : canalDynamicColors.text} name={disliked ? "remove-circle" : "remove-circle-outline"} size={21} />
+            </Pressable>
+          </View>
+        </View>
+
+        <View accessibilityLabel="Canal Song DNA" style={styles.songDna}>
+          <View style={styles.dnaHeading}>
+            <Text style={styles.dnaEyebrow}>CANAL SONG DNA</Text>
+            <View accessibilityLabel="Canal Song DNA beta" style={styles.dnaBeta}>
+              <Ionicons color={canalDynamicColors.muted} name="flask-outline" size={12} />
+              <Text style={styles.dnaBetaText}>BETA</Text>
+            </View>
+          </View>
+          <DnaRow label="Genre" values={songDna.genres} />
+          <DnaRow label="Mood" values={songDna.moods} />
+          <Text style={styles.dnaSource}>{`${songDna.confidence.toUpperCase()} CONFIDENCE · ${songDna.sources.map((source) => source.toUpperCase()).join(" + ")}`}</Text>
+          {likeError ? <Text accessibilityLiveRegion="polite" style={styles.likeError}>{likeError}</Text> : null}
+        </View>
+
+        <View style={styles.songActions}>
+          <Pressable accessibilityLabel={`Add ${track?.title ?? "song"} to a Scene`} accessibilityRole="button" disabled={!songAction} onPress={addToScene} style={({ pressed }) => [styles.songAction, pressed && styles.pressed, !songAction && styles.actionDisabled]}>
+            <Ionicons color={canalDynamicColors.text} name="add-circle-outline" size={20} />
+            <Text style={styles.songActionText}>Add to Scene</Text>
+          </Pressable>
+          <Pressable accessibilityLabel={`Create a Scene from ${track?.title ?? "song"}`} accessibilityRole="button" disabled={!songAction} onPress={createSceneFromSong} style={({ pressed }) => [styles.songAction, pressed && styles.pressed, !songAction && styles.actionDisabled]}>
+            <Ionicons color={canalDynamicColors.text} name="sparkles-outline" size={19} />
+            <Text style={styles.songActionText}>Create Scene</Text>
+          </Pressable>
         </View>
 
         <ContextStatus state={state} onRetry={() => { void refresh(); genius.retry(); }} />
@@ -187,7 +351,7 @@ function matchLabel(song?: GeniusSongContext): string | undefined {
 }
 
 function ContextStatus(props: { state: FieldState; onRetry: () => void }): React.JSX.Element {
-  if (props.state === "ready") return <View style={styles.statusRow}><Ionicons color={canalDynamicColors.mint} name="checkmark-circle-outline" size={18} /><Text style={styles.statusText}>Context matched by Genius</Text></View>;
+  if (props.state === "ready") return <></>;
   if (props.state === "loading") return <View accessibilityLiveRegion="polite" style={styles.statusRow}><ActivityIndicator color={canalDynamicColors.mint} /><Text style={styles.statusText}>Loading Genius context…</Text></View>;
   const title = props.state === "empty" ? "No context found" : props.state === "offline" ? "You’re offline" : "Context unavailable";
   return <View accessibilityLiveRegion="polite" style={styles.statusCard}><View style={styles.statusCopy}><Text style={styles.statusTitle}>{title}</Text><Text style={styles.statusBody}>The complete song page remains visible. Missing fields are marked below.</Text></View>{props.state !== "empty" ? <Pressable accessibilityLabel="Retry song context" accessibilityRole="button" onPress={props.onRetry} style={styles.retryButton}><Ionicons color={canalDynamicColors.text} name="refresh-outline" size={18} /></Pressable> : null}</View>;
@@ -195,6 +359,10 @@ function ContextStatus(props: { state: FieldState; onRetry: () => void }): React
 
 function ContextSection(props: { icon: keyof typeof Ionicons.glyphMap; title: string; children: React.ReactNode }): React.JSX.Element {
   return <View style={styles.section}><View style={styles.sectionHeader}><Ionicons color={canalDynamicColors.mint} name={props.icon} size={19} /><Text style={styles.sectionTitle}>{props.title}</Text></View>{props.children}</View>;
+}
+
+function DnaRow(props: { label: string; values: readonly string[] }): React.JSX.Element {
+  return <View style={styles.dnaRow}><Text style={styles.dnaLabel}>{props.label}</Text><Text style={styles.dnaValues}>{props.values.length ? props.values.join("  ·  ") : "Still learning"}</Text></View>;
 }
 
 function EmptyField(props: { state: FieldState; text: string }): React.JSX.Element {
@@ -206,7 +374,7 @@ function DetailRow(props: { label: string; value?: string; state: FieldState }):
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: canalDynamicColors.baseCanvas },
+  safeArea: { flex: 1, backgroundColor: "transparent" },
   header: { minHeight: 64, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10 },
   headerButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   headerCopy: { flex: 1, alignItems: "center" },
@@ -217,9 +385,26 @@ const styles = StyleSheet.create({
   artwork: { width: 112, height: 112, borderRadius: 18, borderCurve: "continuous" },
   artworkEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: canalDynamicColors.elevated },
   heroCopy: { flex: 1, gap: 6 },
+  songPreferenceActions: { alignItems: "center" },
+  likeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   title: { color: canalDynamicColors.text, fontSize: 25, fontWeight: "900", lineHeight: 29 },
   artist: { color: canalDynamicColors.text, fontSize: 16, fontWeight: "700" },
   album: { color: canalDynamicColors.muted, fontSize: 13, lineHeight: 18 },
+  songDna: { paddingHorizontal: 4, paddingVertical: 12, gap: 9, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: canalDynamicColors.line },
+  dnaEyebrow: { color: canalDynamicColors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
+  dnaHeading: { minHeight: 24, flexDirection: "row", alignItems: "center", gap: 9 },
+  dnaBeta: { flexDirection: "row", alignItems: "center", gap: 4 },
+  dnaBetaText: { color: canalDynamicColors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  dnaRow: { minHeight: 28, flexDirection: "row", alignItems: "flex-start", gap: 14 },
+  dnaLabel: { width: 48, color: canalDynamicColors.muted, fontSize: 11, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.7 },
+  dnaValues: { flex: 1, color: canalDynamicColors.text, fontSize: 14, fontWeight: "800", lineHeight: 19 },
+  dnaSource: { color: canalDynamicColors.muted, fontSize: 9, fontWeight: "800", letterSpacing: 0.6 },
+  likeError: { color: canalDynamicColors.danger, fontSize: 12, fontWeight: "700" },
+  songActions: { minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 18 },
+  songAction: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 8 },
+  songActionText: { color: canalDynamicColors.text, fontSize: 12, fontWeight: "800" },
+  actionDisabled: { opacity: 0.42 },
+  pressed: { opacity: 0.7 },
   statusRow: { minHeight: 48, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 9 },
   statusText: { color: canalDynamicColors.muted, fontSize: 13, fontWeight: "700" },
   statusCard: { minHeight: 68, padding: 14, borderRadius: 18, borderCurve: "continuous", backgroundColor: canalDynamicColors.warningSurface, flexDirection: "row", alignItems: "center", gap: 10 },
@@ -233,14 +418,14 @@ const styles = StyleSheet.create({
   body: { color: canalDynamicColors.muted, fontSize: 14, lineHeight: 21 },
   emptyField: { color: canalDynamicColors.muted, fontSize: 14, fontStyle: "italic" },
   creditsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  creditTile: { width: "48%", minHeight: 62, paddingHorizontal: 11, paddingVertical: 9, gap: 4, borderRadius: 14, borderCurve: "continuous", backgroundColor: canalDynamicColors.canvas },
+  creditTile: { width: "48%", minHeight: 62, paddingHorizontal: 11, paddingVertical: 9, gap: 4, borderRadius: 14, borderCurve: "continuous", backgroundColor: canalDynamicColors.elevated },
   creditLabel: { color: canalDynamicColors.muted, fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.65 },
   creditNames: { color: canalDynamicColors.text, fontSize: 12, fontWeight: "800", lineHeight: 16 },
   detailRow: { minHeight: 42, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 18 },
   fieldLabel: { color: canalDynamicColors.muted, fontSize: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8 },
   fieldValue: { flex: 1, color: canalDynamicColors.text, fontSize: 14, fontWeight: "700", textAlign: "right" },
   notesRail: { gap: 10, paddingRight: 18 },
-  noteCard: { width: 266, minHeight: 220, padding: 14, gap: 9, borderRadius: 18, borderCurve: "continuous", backgroundColor: canalDynamicColors.canvas },
+  noteCard: { width: 266, minHeight: 220, padding: 14, gap: 9, borderRadius: 18, borderCurve: "continuous", backgroundColor: canalDynamicColors.elevated },
   noteHeader: { minHeight: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   noteLabel: { color: canalDynamicColors.mint, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   noteCount: { color: canalDynamicColors.muted, fontSize: 10, fontWeight: "800", fontVariant: ["tabular-nums"] },

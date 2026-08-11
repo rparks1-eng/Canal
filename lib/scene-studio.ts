@@ -2632,6 +2632,7 @@ export function generateSceneFromSpotify(
     rejectedTrackIds?: readonly string[];
     deprioritizedTrackIds?: readonly string[];
     preferredTrackIds?: readonly string[];
+    anchorTrackId?: string;
     existingSceneNames?: readonly string[];
     reasonBias?: SceneReasonBias;
   } = {},
@@ -2651,11 +2652,20 @@ export function generateSceneFromSpotify(
         EMPTY_SCENE_REASON_BIAS,
     );
 
-  const selected =
+  let selected =
     selectTracksForDuration(
       candidatePool,
       draft,
     );
+
+  const anchorCandidate = options.anchorTrackId
+    ? candidatePool.find((candidate) => candidate.track.id === options.anchorTrackId)
+    : undefined;
+  if (anchorCandidate && !selected.some((candidate) => candidate.track.id === anchorCandidate.track.id)) {
+    selected = selected.length > 0
+      ? [anchorCandidate, ...selected.slice(0, -1)]
+      : [anchorCandidate];
+  }
 
   if (selected.length === 0 && draft.preferredGenres.length === 0) {
     throw new Error(
@@ -2862,6 +2872,7 @@ export function generateSceneWithSpotifyGenreFallback(
     rejectedTrackIds?: readonly string[];
     deprioritizedTrackIds?: readonly string[];
     preferredTrackIds?: readonly string[];
+    anchorTrackId?: string;
     existingSceneNames?: readonly string[];
     reasonBias?: SceneReasonBias;
   } = {},

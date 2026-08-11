@@ -25,6 +25,7 @@ const MAX_OEMBED_RESPONSE_CHARACTERS =
 
 const liveStageArtworkCache = new Map<string, Promise<string | null>>();
 const snapshotArtworkCache = new Map<string, Promise<string | null>>();
+const orbitArtworkCache = new Map<string, Promise<string | null>>();
 const MAX_SNAPSHOT_ARTWORK_CACHE_ENTRIES = 256;
 
 type FetchLike = (
@@ -98,6 +99,40 @@ function trackWithArtwork(
   };
 }
 
+function loadCachedSpotifyArtworkUrl(
+  trackId: string,
+  fetcher: FetchLike,
+): Promise<string | null> {
+  if (fetcher !== fetch) {
+    return loadSpotifyArtworkUrl(trackId, fetcher);
+  }
+
+  let request = orbitArtworkCache.get(trackId);
+
+  if (!request) {
+    request = loadSpotifyArtworkUrl(trackId, fetcher);
+    orbitArtworkCache.set(trackId, request);
+  }
+
+  return request;
+}
+
+export async function addSpotifyArtworkToTracks(
+  tracks: readonly SpotifyTrack[],
+  fetcher: FetchLike = fetch,
+): Promise<SpotifyTrack[]> {
+  return Promise.all(tracks.slice(0, 12).map(async (track) => {
+    if (track.album?.imageUrl || track.album?.images?.[0]?.url) return track;
+    try {
+      const imageUrl = await loadCachedSpotifyArtworkUrl(track.id, fetcher);
+      return imageUrl ? trackWithArtwork(track, imageUrl) : track;
+    } catch {
+      orbitArtworkCache.delete(track.id);
+      return track;
+    }
+  }));
+}
+
 export async function addSpotifyArtworkToGeneratedScene(
   result: GeneratedSceneResult,
   fetcher: FetchLike = fetch,
@@ -120,7 +155,7 @@ export async function addSpotifyArtworkToGeneratedScene(
         }
 
         try {
-          const imageUrl = await loadSpotifyArtworkUrl(
+          const imageUrl = await loadCachedSpotifyArtworkUrl(
             signal.track.id,
             fetcher,
           );
@@ -229,7 +264,7 @@ export async function addSpotifyArtworkToStoredScene(
         }
 
         try {
-          const imageUrl = await loadSpotifyArtworkUrl(track.id, fetcher);
+          const imageUrl = await loadCachedSpotifyArtworkUrl(track.id, fetcher);
 
           return imageUrl
             ? { ...track, imageUrl }

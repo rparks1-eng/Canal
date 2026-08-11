@@ -2,6 +2,7 @@ import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 import {
   use,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -36,7 +37,15 @@ import {
 import {
   Ionicons,
 } from "@expo/vector-icons";
-import Animated, { FadeInRight, FadeOutRight } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  FadeInRight,
+  FadeOutRight,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import {
   RecoveryNotice,
@@ -230,6 +239,7 @@ function SceneDetailContent() {
     setOverride,
   } = use(CanalAtmosphereContext);
   const reduceTransparency = useCanalReduceTransparency();
+  const reduceMotion = useReducedMotion();
   const {
     accountEpoch,
     sessionGeneration,
@@ -319,6 +329,20 @@ function SceneDetailContent() {
   ] = useState("");
   const [profileVisible, setProfileVisible] = useState(false);
   const [heroActionsVisible, setHeroActionsVisible] = useState(false);
+  const profileProgress = useSharedValue(0);
+  const profileAnimatedStyle = useAnimatedStyle(() => ({
+    marginTop: 15 * profileProgress.value,
+    maxHeight: 250 * profileProgress.value,
+    opacity: profileProgress.value,
+    transform: [{ translateY: 10 * (1 - profileProgress.value) }],
+  }));
+
+  useEffect(() => {
+    profileProgress.value = withTiming(profileVisible ? 1 : 0, {
+      duration: reduceMotion ? 0 : 460,
+      easing: Easing.bezier(0.22, 1, 0.36, 1),
+    });
+  }, [profileProgress, profileVisible, reduceMotion]);
 
   const exportInFlight =
     useRef(false);
@@ -933,7 +957,55 @@ function SceneDetailContent() {
           <Ionicons color={canalDynamicColors.text} name="chevron-back" size={24} />
         </Pressable>
 
-        <View style={styles.headerSpacer} />
+        <View style={styles.pageMenuArea}>
+          {heroActionsVisible ? (
+            <Animated.View
+              accessibilityLabel="Scene actions"
+              accessibilityRole="menu"
+              entering={FadeInRight.duration(160)}
+              exiting={FadeOutRight.duration(120)}
+              onTouchStart={(event) => event.stopPropagation()}
+              onTouchEnd={(event) => event.stopPropagation()}
+              style={styles.pageActionLedgeMotion}
+            >
+              <View style={styles.heroActionLedge}>
+                <Pressable
+                  accessibilityLabel="Share Scene"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setHeroActionsVisible(false);
+                    void share();
+                  }}
+                  style={styles.heroLedgeAction}
+                >
+                  <Ionicons color={canalDynamicColors.text} name="share-outline" size={18} />
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Delete Scene"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setHeroActionsVisible(false);
+                    confirmDelete();
+                  }}
+                  style={styles.heroLedgeAction}
+                >
+                  <Ionicons color={canalDynamicColors.danger} name="trash-outline" size={18} />
+                </Pressable>
+              </View>
+            </Animated.View>
+          ) : null}
+          <Pressable
+            accessibilityLabel="Manage Scene"
+            accessibilityRole="button"
+            accessibilityState={{ expanded: heroActionsVisible }}
+            onTouchStart={(event) => event.stopPropagation()}
+            onTouchEnd={(event) => event.stopPropagation()}
+            onPress={() => setHeroActionsVisible((current) => !current)}
+            style={({ pressed }) => [styles.pageMenuButton, pressed && styles.pressed]}
+          >
+            <Ionicons color={presentation.accent} name="ellipsis-vertical" size={19} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -967,52 +1039,13 @@ function SceneDetailContent() {
             />
           </Pressable>
           <Pressable
-            accessibilityLabel="Manage Scene"
+            accessibilityLabel="Duplicate Scene"
             accessibilityRole="button"
-            accessibilityState={{ expanded: heroActionsVisible }}
-            onTouchStart={(event) => event.stopPropagation()}
-            onTouchEnd={(event) => event.stopPropagation()}
-            onPress={() => setHeroActionsVisible((current) => !current)}
-            style={({ pressed }) => [styles.heroMenuButton, pressed && styles.pressed]}
+            onPress={() => void duplicate()}
+            style={({ pressed }) => [styles.heroDuplicate, pressed && styles.pressed]}
           >
-            <Ionicons color={presentation.accent} name="ellipsis-vertical" size={19} />
+            <Ionicons color={presentation.accent} name="copy-outline" size={20} />
           </Pressable>
-          {heroActionsVisible ? (
-            <Animated.View
-              accessibilityLabel="Scene actions"
-              accessibilityRole="menu"
-              entering={FadeInRight.duration(160)}
-              exiting={FadeOutRight.duration(120)}
-              onTouchStart={(event) => event.stopPropagation()}
-              onTouchEnd={(event) => event.stopPropagation()}
-              style={styles.heroActionLedgeMotion}
-            >
-              <View style={styles.heroActionLedge}>
-                <Pressable
-                  accessibilityLabel="Share Scene"
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setHeroActionsVisible(false);
-                    void share();
-                  }}
-                  style={styles.heroLedgeAction}
-                >
-                  <Ionicons color={canalDynamicColors.text} name="share-outline" size={18} />
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Delete Scene"
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setHeroActionsVisible(false);
-                    confirmDelete();
-                  }}
-                  style={styles.heroLedgeAction}
-                >
-                  <Ionicons color={canalDynamicColors.danger} name="trash-outline" size={18} />
-                </Pressable>
-              </View>
-            </Animated.View>
-          ) : null}
           <View
             style={[
               styles.heroAccentLine,
@@ -1116,8 +1149,13 @@ function SceneDetailContent() {
             ) : null}
           </View>
 
-          {profileVisible ? (
-            <View accessibilityLabel="Scene profile details" style={styles.heroProfile}>
+          <Animated.View
+            accessibilityElementsHidden={!profileVisible}
+            accessibilityLabel="Scene profile details"
+            importantForAccessibility={profileVisible ? "auto" : "no-hide-descendants"}
+            pointerEvents={profileVisible ? "auto" : "none"}
+            style={[styles.heroProfile, profileAnimatedStyle]}
+          >
               {[
                 ["Genres", scene.genres || "Spotify taste"],
                 ["Artists", scene.artists || "Multiple artists"],
@@ -1130,8 +1168,7 @@ function SceneDetailContent() {
                   <Text style={styles.detailValue}>{value}</Text>
                 </View>
               ))}
-            </View>
-          ) : null}
+          </Animated.View>
 
           <Pressable
             accessibilityRole="button"
@@ -1152,6 +1189,39 @@ function SceneDetailContent() {
         </View>
 
         <View style={styles.actionGrid}>
+          {scene.libraryType ===
+            "created" &&
+          user?.id ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Manage Scene collaboration"
+              onPress={() =>
+                router.push({
+                  pathname:
+                    "/scene-collaboration",
+
+                  params: {
+                    ownerId:
+                      user.id,
+                    sceneId:
+                      scene.id,
+                  },
+                } as never)
+              }
+              style={({ pressed }) => [
+                styles.actionButton,
+                pressed &&
+                  styles.pressed,
+              ]}
+            >
+              <Ionicons
+                color={presentation.accent}
+                name="people-outline"
+                size={23}
+              />
+            </Pressable>
+          ) : null}
+
           <Pressable
             accessibilityLabel="Create Snapshot"
             accessibilityRole="button"
@@ -1192,58 +1262,6 @@ function SceneDetailContent() {
               color={presentation.accent}
               name="camera-outline"
               size={23}
-            />
-          </Pressable>
-
-          {scene.libraryType ===
-            "created" &&
-          user?.id ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Manage Scene collaboration"
-              onPress={() =>
-                router.push({
-                  pathname:
-                    "/scene-collaboration",
-
-                  params: {
-                    ownerId:
-                      user.id,
-                    sceneId:
-                      scene.id,
-                  },
-                } as never)
-              }
-              style={({ pressed }) => [
-                styles.actionButton,
-                pressed &&
-                  styles.pressed,
-              ]}
-            >
-              <Ionicons
-                color={presentation.accent}
-                name="people-outline"
-                size={23}
-              />
-            </Pressable>
-          ) : null}
-
-          <Pressable
-            accessibilityLabel="Duplicate Scene"
-            accessibilityRole="button"
-            onPress={() =>
-              void duplicate()
-            }
-            style={({ pressed }) => [
-              styles.actionButton,
-              pressed &&
-                styles.pressed,
-            ]}
-          >
-            <Ionicons
-              color={presentation.accent}
-              name="copy-outline"
-              size={22}
             />
           </Pressable>
 
@@ -1477,9 +1495,25 @@ const styles =
       backgroundColor: "rgba(5, 42, 66, 0.42)",
     },
 
-    headerSpacer: {
+    pageMenuArea: {
+      position: "relative",
       width: 48,
       height: 48,
+      zIndex: 20,
+    },
+
+    pageMenuButton: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    pageActionLedgeMotion: {
+      position: "absolute",
+      zIndex: 21,
+      top: 0,
+      right: 48,
     },
 
     content: {
@@ -1513,22 +1547,15 @@ const styles =
       justifyContent: "center",
     },
 
-    heroMenuButton: {
+    heroDuplicate: {
       position: "absolute",
       zIndex: 5,
       top: 8,
-      right: 52,
+      left: 8,
       width: 48,
       height: 48,
       alignItems: "center",
       justifyContent: "center",
-    },
-
-    heroActionLedgeMotion: {
-      position: "absolute",
-      zIndex: 6,
-      top: 8,
-      right: 100,
     },
 
     heroActionLedge: {
@@ -1724,7 +1751,7 @@ const styles =
 
     heroProfile: {
       width: "100%",
-      marginTop: 15,
+      overflow: "hidden",
     },
 
     profileToggle: {

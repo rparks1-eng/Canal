@@ -5,7 +5,7 @@ const scene = (id: string, energy: string) => ({ id, name: "Signal", activity: "
 describe("Scene energy signatures", () => {
   it("renders a deterministic continuous arc", () => {
     expect(sceneEnergyArcPoints(scene("one", "medium"))).toEqual(sceneEnergyArcPoints(scene("one", "medium")));
-    expect(sceneEnergyArcPoints(scene("one", "medium"))).toHaveLength(33);
+    expect(sceneEnergyArcPoints(scene("one", "medium"))).toHaveLength(49);
   });
 
   it("makes high energy visibly stronger than low energy", () => {

@@ -54,6 +54,7 @@ describe(
             },
           ),
         ).toEqual({
+          ...DEFAULT_CANAL_SETTINGS,
           defaultSceneVisibility:
             "public",
           showListeningActivity:

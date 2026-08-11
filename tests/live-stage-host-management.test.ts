@@ -37,8 +37,13 @@ describe("live Stage host management", () => {
     expect(route).toContain("Your live rooms");
     expect(route).not.toContain("Delete Stage");
     expect(profileRoute).toContain('router.push("/managed-stages")');
-    expect(managedRoute).toContain("Live rooms first, followed by your newest ended Stages.");
-    expect(managedRoute).toContain('a.status === "live" ? -1 : 1');
+    expect(managedRoute).toContain('type StageFilter = "active" | "past"');
+    expect(managedRoute).toContain('filter === "active" ? stage.status === "live" : stage.status !== "live"');
+    expect(managedRoute).toContain('accessibilityLabel="Filter My Stages"');
+    expect(managedRoute).toContain('accessibilityRole="tab"');
+    expect(managedRoute).toContain("getCurrentLiveStageTrack(stage)");
+    expect(managedRoute).toContain("stagePresentation(stage)");
+    expect(managedRoute).toContain("<SceneCardBackdrop presentation={presentation} />");
     expect(managedRoute).toContain("Restart");
     expect(managedRoute).toContain("Delete Stage");
   });
@@ -53,7 +58,9 @@ describe("live Stage host management", () => {
 
   it("keeps host actions accessible, offline-safe, and account-scoped", () => {
     expect(managedRoute).toContain('accessibilityLabel={`Manage ${stage.name}`}');
-    expect(managedRoute).toMatch(/action:[\s\S]*minHeight: 52/u);
+    expect(managedRoute).toContain('accessibilityLabel="Back to Profile"');
+    expect(managedRoute).toContain('router.canGoBack() ? router.back() : router.replace("/(tabs)/profile")');
+    expect(managedRoute).toMatch(/actionButton:[\s\S]*minHeight: 54/u);
     expect(managedRoute).toContain('accessibilityLabel={`Delete ${stage.name}`}');
     expect(managedRoute).toContain('stage.status === "live"');
   });

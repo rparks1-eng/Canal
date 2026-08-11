@@ -6,24 +6,42 @@ describe("Explore category route", () => {
   const exploreSource = fs.readFileSync(path.join(process.cwd(), "app", "(tabs)", "explore.tsx"), "utf8");
   const layoutSource = fs.readFileSync(path.join(process.cwd(), "app", "(tabs)", "_layout.tsx"), "utf8");
   const socialSource = fs.readFileSync(path.join(process.cwd(), "lib", "social.ts"), "utf8");
+  const personalizationSource = fs.readFileSync(path.join(process.cwd(), "lib", "explore-personalization.ts"), "utf8");
 
   it("routes every designed category icon into a hidden tab detail screen", () => {
     expect(exploreSource).toContain('pathname: "/explore-category"');
     expect(exploreSource).toContain("Open ${value} ${props.kind} Scenes");
     expect(exploreSource).toContain("exploreCategoryIcon(props.kind, value)");
     expect(exploreSource).toContain("const categoryPresentation = scenePresentation({");
-    expect(exploreSource).toContain("backgroundColor: categoryPresentation.colors[2]");
-    expect(exploreSource).toContain("backgroundColor: categoryPresentation.colors[0]");
-    expect(exploreSource).toContain("backgroundColor: categoryPresentation.colors[1]");
-    expect(exploreSource).toContain("styles.categoryLabelScrim");
+    expect(exploreSource).toContain("color={categoryPresentation.accent}");
+    expect(exploreSource).toContain("styles.categoryGlyph");
+    expect(exploreSource).toContain("styles.categoryCardLabel");
+    expect(exploreSource).not.toContain("backgroundColor: categoryPresentation.colors[2]");
+    expect(exploreSource).not.toContain("categoryLabelScrim");
     expect(exploreSource).not.toContain("View Scenes</Text>");
     expect(layoutSource).toContain('name="explore-category"');
     expect(layoutSource).toMatch(/name="explore-category"[\s\S]*?href: null/u);
   });
 
+  it("places personalized highlights and trending live Stages before the category directory", () => {
+    const highlighted = exploreSource.indexOf("Highlighted Scenes");
+    const popular = exploreSource.indexOf("Popular Now");
+    const activities = exploreSource.indexOf('title="Activities"');
+
+    expect(highlighted).toBeGreaterThan(-1);
+    expect(popular).toBeGreaterThan(highlighted);
+    expect(activities).toBeGreaterThan(popular);
+    expect(exploreSource).toContain("readSpotifyLibrarySnapshot()");
+    expect(exploreSource).toContain("rankExploreScenes(");
+    expect(exploreSource).toContain("rankExploreStages(");
+    expect(exploreSource).toContain("item.creator.isVerified || item.creator.isCanal");
+    expect(personalizationSource).toContain('stage.status ===');
+    expect(personalizationSource).toContain('stage.visibility ===');
+  });
+
   it("populates one unified category page with verified highlights and real popularity", () => {
     expect(categorySource).toContain("loadExploreScenes({ force: refresh })");
-    expect(categorySource).toContain("readLiveStages()");
+    expect(categorySource).toContain("readPublicLiveStages()");
     expect(categorySource).toContain("filterExploreCategoryScenes");
     expect(categorySource).toContain("highlightedExploreCategoryScenes");
     expect(categorySource).toContain("popularExploreCategoryScenes");

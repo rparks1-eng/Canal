@@ -26,6 +26,7 @@ import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 import { CanalAmbientBackground } from "../components/canal-ui/canal-ambient-background";
+import { SettingsHub } from "../components/settings/settings-hub";
 
 import Animated, {
   FadeInUp,
@@ -63,7 +64,7 @@ function safeBack(): void {
   );
 }
 
-export default function SettingsScreen() {
+export function LegacySettingsScreen() {
   const {
     accountEpoch,
     user,
@@ -860,6 +861,11 @@ export default function SettingsScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+export default function SettingsScreen(): React.JSX.Element {
+  const { profile, user } = useAuth();
+  return <SettingsHub displayName={profile?.displayName ?? user?.email?.split("@")[0] ?? "Canal Listener"} handle={profile?.handle ? `@${profile.handle}` : user?.email ?? "Canal account"} />;
 }
 
 const styles =

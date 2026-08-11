@@ -5,7 +5,8 @@ import { StyleSheet, Text, View } from "react-native";
 
 import type { Snapshot } from "../lib/snapshots";
 import type { SnapshotTemplateTheme } from "../lib/snapshot-templates";
-import { LivingCover } from "./living-cover";
+import { SceneCardBackdrop } from "./canal-ui/scene-card-visual";
+import { scenePresentation } from "./canal-ui/scene-signature";
 import { SnapshotMediaPreview } from "./snapshot-media-preview";
 
 type SnapshotCompositionProps = {
@@ -13,6 +14,7 @@ type SnapshotCompositionProps = {
   height?: number;
   compact?: boolean;
   exportBrand?: boolean;
+  playVideo?: boolean;
   overlayRef?: RefObject<View | null>;
 };
 
@@ -21,9 +23,24 @@ export const SnapshotComposition = forwardRef<View, SnapshotCompositionProps>(fu
   height = 430,
   compact = false,
   exportBrand = false,
+  playVideo = false,
   overlayRef,
 }, ref) {
-  const palette = snapshotPalette(snapshot.templateTheme);
+  const hasUploadedMedia = Boolean(snapshot.mediaUri && snapshot.mediaType);
+  const fallbackPresentation = scenePresentation({
+    name: snapshot.sceneName,
+    activity: snapshot.sceneActivity ?? "",
+    emotions: snapshot.mood ?? "",
+    energy: "medium",
+  });
+  const palette = hasUploadedMedia
+    ? snapshotPalette(snapshot.templateTheme)
+    : {
+        backgroundColor: fallbackPresentation.colors[2],
+        textColor: "#F6FEFF",
+        mutedTextColor: "#D9F2F0",
+        accentColor: fallbackPresentation.accent,
+      };
 
   return (
     <View
@@ -35,20 +52,23 @@ export const SnapshotComposition = forwardRef<View, SnapshotCompositionProps>(fu
         { height, backgroundColor: palette.backgroundColor },
       ]}
     >
-      {snapshot.mediaUri && snapshot.mediaType ? (
+      {hasUploadedMedia ? (
         <SnapshotMediaPreview
-          uri={snapshot.mediaUri}
-          type={snapshot.mediaType}
+          uri={snapshot.mediaUri!}
+          type={snapshot.mediaType!}
           background
+          autoPlay={playVideo}
         />
       ) : (
-        <LivingCover
-          activity={snapshot.sceneActivity}
-          capturedAt={snapshot.createdAt}
-          mood={snapshot.mood}
-          showCopy={false}
-          style={styles.livingCover}
-          title={snapshot.sceneName}
+        <SceneCardBackdrop
+          presentation={fallbackPresentation}
+          scene={{
+            id: snapshot.sceneId,
+            name: snapshot.sceneName,
+            activity: snapshot.sceneActivity ?? "",
+            energy: "medium",
+            genres: "",
+          }}
         />
       )}
 
@@ -201,12 +221,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-  },
-  livingCover: {
-    ...StyleSheet.absoluteFillObject,
-    aspectRatio: undefined,
-    borderRadius: 0,
-    minHeight: 0,
   },
   coverScrim: {
     ...StyleSheet.absoluteFillObject,

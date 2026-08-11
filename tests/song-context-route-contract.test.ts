@@ -50,4 +50,13 @@ describe("Song context route", () => {
     expect(contextSource).toContain("if (router.canGoBack()) router.back()");
     expect(contextSource).toContain('pathname: "/scenes/[sceneId]"');
   });
+
+  it("offers complete add-to-Scene and anchored creation actions", () => {
+    expect(contextSource).toContain('pathname: "/add-song-to-scene"');
+    expect(contextSource).toContain('pathname: "/scene-studio"');
+    expect(contextSource).toContain("anchorTrackId: songAction.trackId");
+    expect(contextSource).toContain("songSceneActionParams(songAction)");
+    expect(contextSource).toContain("Add to Scene");
+    expect(contextSource).toContain("Create Scene");
+  });
 });

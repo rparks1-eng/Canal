@@ -8,7 +8,8 @@ function SnapshotVideo({ uri, background = false, autoPlay = false }: { uri: str
   const player = useVideoPlayer(uri, (instance) => {
     instance.loop = true;
     instance.muted = background;
-    if (background || autoPlay) instance.play();
+    if (autoPlay) instance.play();
+    else instance.pause();
   });
   return <VideoView player={player} style={styles.media} nativeControls={!background} contentFit="cover" />;
 }

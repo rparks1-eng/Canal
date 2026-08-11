@@ -85,6 +85,17 @@ describe("Scene recommendation quality and learning", () => {
     expect(generationDifferenceRate(familiar, regenerated)).toBeGreaterThanOrEqual(0.5);
   });
 
+  it("keeps an eligible user-selected orbit track in the generated Scene", () => {
+    const snapshot = library();
+    const anchorTrackId = "track-239";
+    const generated = generateSceneFromSpotify(DEFAULT_SCENE_STUDIO_DRAFT, snapshot, {
+      variationSeed: "orbit-anchor",
+      preferredTrackIds: [anchorTrackId],
+      anchorTrackId,
+    });
+    expect(generated.scene.tracks.map((track) => track.id)).toContain(anchorTrackId);
+  });
+
   it("reports strict genre precision, diversity, repetition, familiarity, and rejection improvement", () => {
     const snapshot = library();
     const rejected = ["track-1", "track-2"];

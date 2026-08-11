@@ -256,6 +256,11 @@ async function openReview(
 ): Promise<void> {
   await act(async () => {
     renderer.root.findByProps({
+      accessibilityLabel: "Focus",
+    }).props.onPress();
+  });
+  await act(async () => {
+    renderer.root.findByProps({
       accessibilityLabel: "Calm",
     }).props.onPress();
   });

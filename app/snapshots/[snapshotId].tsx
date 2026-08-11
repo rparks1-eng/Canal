@@ -962,7 +962,7 @@ function SnapshotDetailContent() {
           />
         </View>
 
-        <SnapshotComposition snapshot={snapshot} height={500} />
+        <SnapshotComposition snapshot={snapshot} height={500} playVideo />
 
         <View style={styles.socialBar}>
           <Pressable

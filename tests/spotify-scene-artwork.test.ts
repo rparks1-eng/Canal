@@ -3,6 +3,7 @@ import {
   addSpotifyArtworkToLiveStage,
   addSpotifyArtworkToSnapshot,
   addSpotifyArtworkToStoredScene,
+  addSpotifyArtworkToTracks,
 } from "../lib/spotify-scene-artwork";
 
 import {
@@ -60,6 +61,17 @@ function result() {
 }
 
 describe("Spotify Scene artwork", () => {
+  it("hydrates a bounded orbit track with Spotify artwork", async () => {
+    const source = result().trackSignals[0]!.track;
+    const fetcher = jest.fn(async () => ({
+      ok: true,
+      text: async () => JSON.stringify({ thumbnail_url: "https://i.scdn.co/image/orbit-cover" }),
+    }));
+    const [enriched] = await addSpotifyArtworkToTracks([source], fetcher);
+    expect(enriched?.album?.imageUrl).toBe("https://i.scdn.co/image/orbit-cover");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("fills missing artwork from a bounded allowlisted Spotify oEmbed response", async () => {
     const fetcher = jest.fn(async () => ({
       ok: true,

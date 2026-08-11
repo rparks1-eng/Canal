@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -37,6 +38,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { ProfileAvatar } from "../../components/profile-avatar";
+import { CanalHeaderActions } from "../../components/canal-ui/canal-header-actions";
 import { SceneCardProfile } from "../../components/canal-ui/scene-card-profile";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
 import {
@@ -79,7 +81,7 @@ import {
 
 import {
   getCurrentLiveStageTrack,
-  readLiveStages,
+  readPublicLiveStages,
 } from "../../lib/live-stages";
 
 import type {
@@ -93,6 +95,13 @@ import {
   exploreCategoryIcon,
   exploreCategoryValues,
 } from "../../lib/explore-categories";
+import {
+  rankExploreScenes,
+  rankExploreStages,
+} from "../../lib/explore-personalization";
+import {
+  readSpotifyLibrarySnapshot,
+} from "../../lib/spotify-library";
 
 type ExploreContent =
   | "scenes"
@@ -207,6 +216,202 @@ function PublicStageCard({ stage }: { stage: LiveStage }) {
         </View>
         <Text style={styles.stagePlay}>›</Text>
       </View>
+    </Pressable>
+  );
+}
+
+function HighlightedSceneCard({
+  item,
+}: {
+  item: PublicCanalScene;
+}) {
+  const presentation =
+    scenePresentation(
+      item.scene,
+    );
+
+  return (
+    <Pressable
+      accessibilityLabel={`Open highlighted Scene ${item.scene.name}`}
+      accessibilityRole="button"
+      onPress={() =>
+        router.push({
+          pathname:
+            "/public-scene",
+          params: {
+            ownerId:
+              item.ownerId,
+            sceneId:
+              item.sceneId,
+          },
+        } as never)
+      }
+      style={({
+        pressed,
+      }) => [
+        styles.highlightedCard,
+        {
+          backgroundColor:
+            presentation.colors[2],
+        },
+        pressed &&
+          styles.pressed,
+      ]}
+    >
+      <SceneCardBackdrop
+        presentation={
+          presentation
+        }
+        scene={
+          item.scene
+        }
+      />
+
+      <View
+        style={
+          styles.highlightedCreator
+        }
+      >
+        <ProfileAvatar
+          avatarUrl={
+            item.creator.avatarUrl
+          }
+          displayName={
+            item.creator.displayName
+          }
+          size={30}
+        />
+        <Text
+          numberOfLines={1}
+          style={
+            styles.highlightedCreatorName
+          }
+        >
+          {item.creator.displayName}
+        </Text>
+        <VerifiedAccountBadge
+          size={14}
+        />
+      </View>
+
+      <View
+        style={
+          styles.highlightedCopy
+        }
+      >
+        <Text
+          numberOfLines={2}
+          style={
+            styles.highlightedName
+          }
+        >
+          {item.scene.name}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={
+            styles.highlightedMeta
+          }
+        >
+          {item.scene.activity ||
+            "Any moment"} · {item.scene.tracks.length} tracks
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function TrendingStageCard({
+  stage,
+}: {
+  stage: LiveStage;
+}) {
+  const presentation =
+    stagePresentation(
+      stage,
+    );
+  const currentTrack =
+    getCurrentLiveStageTrack(
+      stage,
+    );
+
+  return (
+    <Pressable
+      accessibilityLabel={`Join trending Stage ${stage.name}`}
+      accessibilityRole="button"
+      onPress={() =>
+        router.push({
+          pathname:
+            "/live-stage/[stageId]",
+          params: {
+            stageId:
+              stage.id,
+          },
+        })
+      }
+      style={({
+        pressed,
+      }) => [
+        styles.trendingStageCard,
+        {
+          backgroundColor:
+            presentation.colors[2],
+        },
+        pressed &&
+          styles.pressed,
+      ]}
+    >
+      <SceneCardBackdrop
+        presentation={
+          presentation
+        }
+      />
+
+      <View
+        style={
+          styles.trendingLiveLine
+        }
+      >
+        <View
+          style={
+            styles.liveDot
+          }
+        />
+        <Text
+          style={
+            styles.trendingLiveText
+          }
+        >
+          LIVE
+        </Text>
+        <Text
+          style={
+            styles.trendingAudience
+          }
+        >
+          {stage.listenerCount} listening
+        </Text>
+      </View>
+
+      <Text
+        numberOfLines={2}
+        style={
+          styles.trendingStageName
+        }
+      >
+        {stage.name}
+      </Text>
+
+      <Text
+        numberOfLines={1}
+        style={
+          styles.trendingStageMeta
+        }
+      >
+        {currentTrack
+          ? `${currentTrack.title} · ${currentTrack.artist}`
+          : `${stage.activity || "Live music"} · ${stage.hostName}`}
+      </Text>
     </Pressable>
   );
 }
@@ -400,9 +605,6 @@ function FacetRail(props: {
   return (
     <View style={styles.discoverySection}>
       <View style={styles.discoveryHeading}>
-        <View style={[styles.discoveryIcon, { backgroundColor: `${props.accent}24` }]}>
-          <Ionicons color={props.accent} name={props.icon} size={18} />
-        </View>
         <Text style={styles.discoveryTitle}>{props.title}</Text>
         <Pressable
           accessibilityLabel={`View all ${props.title.toLowerCase()}`}
@@ -414,7 +616,7 @@ function FacetRail(props: {
         </Pressable>
       </View>
       <ScrollView horizontal contentContainerStyle={styles.discoveryRail} showsHorizontalScrollIndicator={false}>
-        {props.values.map((value, index) => {
+        {props.values.slice(0, 5).map((value) => {
           const icon = exploreCategoryIcon(props.kind, value);
           const categoryPresentation = scenePresentation({
             name: "",
@@ -437,13 +639,13 @@ function FacetRail(props: {
                 pressed && styles.pressed,
               ]}
             >
-              <View style={[styles.categoryArtwork, { backgroundColor: categoryPresentation.colors[2] }]}>
-                <View style={[styles.categoryOrb, styles.categoryOrbOne, { backgroundColor: categoryPresentation.colors[0] }]} />
-                <View style={[styles.categoryOrb, styles.categoryOrbTwo, { backgroundColor: categoryPresentation.colors[1] }]} />
-                <Ionicons color={categoryPresentation.accent} name={icon as never} size={28 + (index % 2)} />
-                <View style={styles.categoryLabelScrim} />
-                <Text numberOfLines={2} style={styles.categoryCardLabel}>{value}</Text>
-              </View>
+              <Text numberOfLines={1} style={styles.categoryCardLabel}>{value}</Text>
+              <Ionicons
+                color={categoryPresentation.accent}
+                name={icon as never}
+                size={45}
+                style={styles.categoryGlyph}
+              />
             </Pressable>
           );
         })}
@@ -465,26 +667,39 @@ function StageFacetRail(props: {
   return (
     <View style={styles.discoverySection}>
       <View style={styles.discoveryHeading}>
-        <View style={[styles.discoveryIcon, { backgroundColor: `${props.accent}24` }]}>
-          <Ionicons color={props.accent} name={props.icon} size={18} />
-        </View>
         <Text style={styles.discoveryTitle}>{props.title}</Text>
       </View>
       <ScrollView horizontal contentContainerStyle={styles.discoveryRail} showsHorizontalScrollIndicator={false}>
-        <Pressable accessibilityRole="button" onPress={() => props.onSelect({ kind: "all" })} style={styles.discoveryChip}>
-          <Text style={styles.discoveryChipText}>All</Text>
-        </Pressable>
-        {props.values.map((value) => (
-          <Pressable
-            key={`${props.kind}:${value}`}
-            accessibilityRole="button"
-            accessibilityState={{ selected: props.selected.kind === props.kind && props.selected.value === value }}
-            onPress={() => props.onSelect({ kind: props.kind, value })}
-            style={styles.discoveryChip}
-          >
-            <Text numberOfLines={1} style={styles.discoveryChipText}>{value}</Text>
-          </Pressable>
-        ))}
+        {props.values.slice(0, 5).map((value) => {
+          const selected = props.selected.kind === props.kind && props.selected.value === value;
+          const icon = exploreCategoryIcon(props.kind, value);
+          const presentation = scenePresentation({
+            name: "",
+            activity: props.kind === "activity" ? value : "",
+            emotions: props.kind === "mood" ? value : "",
+            genres: "",
+            energy: "medium",
+          });
+          return (
+            <Pressable
+              key={`${props.kind}:${value}`}
+              accessibilityLabel={`Filter live Stages by ${value}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              onPress={() => props.onSelect(selected ? { kind: "all" } : { kind: props.kind, value })}
+              style={({ pressed }) => [styles.categoryCard, pressed && styles.pressed]}
+            >
+              <Text numberOfLines={1} style={styles.categoryCardLabel}>{value}</Text>
+              <Ionicons
+                color={presentation.accent}
+                name={icon as never}
+                size={45}
+                style={styles.categoryGlyph}
+              />
+              {selected ? <View style={[styles.categorySelectedDot, { backgroundColor: presentation.accent }]} /> : null}
+            </Pressable>
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -524,6 +739,7 @@ function VerifiedCreatorRail(props: {
 }
 
 export default function ExploreScreen() {
+  const loadRequestId = useRef(0);
   const params = useLocalSearchParams<{ content?: string }>();
   const {
     refresh:
@@ -605,6 +821,7 @@ export default function ExploreScreen() {
   const load =
     useCallback(
       async (mode: "initial" | "refresh" = "initial"): Promise<void> => {
+        const requestId = ++loadRequestId.current;
         const isPullRefresh = mode === "refresh";
 
         setRefreshing(isPullRefresh);
@@ -621,18 +838,36 @@ export default function ExploreScreen() {
         const [
           sceneResult,
           stageResult,
+          tasteResult,
         ] =
           await Promise.allSettled([
             loadExploreScenes({ force: isPullRefresh }),
-            readLiveStages(),
+            readPublicLiveStages(),
+            readSpotifyLibrarySnapshot(),
           ]);
+
+        if (
+          loadRequestId.current !==
+          requestId
+        ) {
+          return;
+        }
+
+        const tasteSnapshot =
+          tasteResult.status ===
+          "fulfilled"
+            ? tasteResult.value
+            : null;
 
         if (
           sceneResult.status ===
           "fulfilled"
         ) {
           setScenes(
-            sceneResult.value,
+            rankExploreScenes(
+              sceneResult.value,
+              tasteSnapshot,
+            ),
           );
         } else {
           setLoadErrors(
@@ -653,22 +888,33 @@ export default function ExploreScreen() {
         }
 
         if (stageResult.status === "fulfilled") {
-          const publicStages = stageResult.value.filter((stage) =>
-            stage.status === "live" && stage.visibility === "public",
+          const publicStages = rankExploreStages(
+            stageResult.value,
+            tasteSnapshot,
           );
-          const hydratedStages: LiveStage[] = [];
+          setStages(publicStages);
 
-          for (let offset = 0; offset < publicStages.length; offset += 4) {
-            const batch = publicStages.slice(offset, offset + 4);
-            hydratedStages.push(...await Promise.all(
-              batch.map((stage) => addSpotifyArtworkToLiveStage(
-                stage,
-                [stage.currentTrackIndex],
-              )),
-            ));
-          }
+          void (async () => {
+            const hydratedStages: LiveStage[] = [];
+            for (let offset = 0; offset < publicStages.length; offset += 4) {
+              const batch = publicStages.slice(offset, offset + 4);
+              hydratedStages.push(...await Promise.all(
+                batch.map((stage) => addSpotifyArtworkToLiveStage(
+                  stage,
+                  [stage.currentTrackIndex],
+                )),
+              ));
+            }
 
-          setStages(hydratedStages);
+            if (loadRequestId.current === requestId) {
+              setStages(
+                rankExploreStages(
+                  hydratedStages,
+                  tasteSnapshot,
+                ),
+              );
+            }
+          })().catch(() => undefined);
         } else {
           setLoadErrors((current) => ({
             ...current,
@@ -696,6 +942,9 @@ export default function ExploreScreen() {
     useCallback(
       () => {
         void load();
+        return () => {
+          loadRequestId.current += 1;
+        };
       },
       [
         load,
@@ -750,6 +999,34 @@ export default function ExploreScreen() {
     ).entries()].map(([ownerId, creator]) => ({ ownerId, creator })),
     [scenes],
   );
+  const highlightedScenes =
+    useMemo(
+      () =>
+        scenes
+          .filter(
+            (item) =>
+              item.creator.isVerified ||
+              item.creator.isCanal,
+          )
+          .slice(
+            0,
+            6,
+          ),
+      [
+        scenes,
+      ],
+    );
+  const trendingStages =
+    useMemo(
+      () =>
+        stages.slice(
+          0,
+          6,
+        ),
+      [
+        stages,
+      ],
+    );
 
   const filteredStages = useMemo(() => {
     return filterExploreStages(stages, query, stageFilter, stageFacet);
@@ -884,7 +1161,7 @@ export default function ExploreScreen() {
             styles.header
           }
         >
-          <View>
+          <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>CANAL DISCOVERY</Text>
             <Text
               style={
@@ -904,6 +1181,8 @@ export default function ExploreScreen() {
                 : "See what is happening live across Canal right now."}
             </Text>
           </View>
+
+          <CanalHeaderActions showSettings={false} />
 
         </Animated.View>
 
@@ -954,6 +1233,99 @@ export default function ExploreScreen() {
           }
         />
         </Animated.View>
+
+        {!loading &&
+        !query.trim() ? (
+          <Animated.View
+            entering={FadeInUp.duration(260).delay(100)}
+            style={styles.featureCatalog}
+          >
+            {activeContent ===
+              "scenes" ? (
+              <View
+                style={styles.featureSection}
+              >
+                <View
+                  style={styles.featureHeading}
+                >
+                  <Text
+                    style={styles.featureHeadingTitle}
+                  >
+                    Highlighted Scenes
+                  </Text>
+                  <Text
+                    style={styles.featureHeadingMeta}
+                  >
+                    FOR YOU
+                  </Text>
+                </View>
+
+                {highlightedScenes.length >
+                0 ? (
+                  <ScrollView
+                    contentContainerStyle={styles.featureRail}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                  >
+                    {highlightedScenes.map(
+                      (item) => (
+                        <HighlightedSceneCard
+                          item={item}
+                          key={`highlight:${item.ownerId}:${item.sceneId}`}
+                        />
+                      ),
+                    )}
+                  </ScrollView>
+                ) : (
+                  <Text style={styles.featureEmpty}>
+                    Verified Scenes will appear here as they match your listening.
+                  </Text>
+                )}
+              </View>
+            ) : null}
+
+            <View
+              style={styles.featureSection}
+            >
+              <View
+                style={styles.featureHeading}
+              >
+                <Text
+                  style={styles.featureHeadingTitle}
+                >
+                  Popular Now
+                </Text>
+                <Text
+                  style={styles.featureHeadingMeta}
+                >
+                  LIVE STAGES
+                </Text>
+              </View>
+
+              {trendingStages.length >
+              0 ? (
+                <ScrollView
+                  contentContainerStyle={styles.featureRail}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                >
+                  {trendingStages.map(
+                    (stage) => (
+                      <TrendingStageCard
+                        key={`trending:${stage.id}`}
+                        stage={stage}
+                      />
+                    ),
+                  )}
+                </ScrollView>
+              ) : (
+                <Text style={styles.featureEmpty}>
+                  Trending public Stages will appear as listeners go live.
+                </Text>
+              )}
+            </View>
+          </Animated.View>
+        ) : null}
 
         {activeContent === "stages" ? (
           <Animated.View entering={FadeInUp.duration(220)}>
@@ -1108,7 +1480,7 @@ export default function ExploreScreen() {
               </Animated.View>
             ))}
           </View>
-        ) : filteredScenes.length ===
+        ) : activeContent === "scenes" && !query.trim() ? null : filteredScenes.length ===
           0 ? (
           <View
             style={
@@ -1247,18 +1619,155 @@ const styles =
 
     content: {
       paddingHorizontal: 20,
-      paddingTop: 10,
+      paddingTop: 0,
       paddingBottom: 120,
       gap: 11,
+    },
+
+    featureCatalog: {
+      gap: 22,
+      paddingTop: 5,
+    },
+
+    featureSection: {
+      gap: 9,
+    },
+
+    featureHeading: {
+      minHeight: 32,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+
+    featureHeadingTitle: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 22,
+      fontWeight: "500",
+    },
+
+    featureHeadingMeta: {
+      color: canalDynamicColors.muted,
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+
+    featureRail: {
+      gap: 10,
+      paddingRight: 20,
+      paddingBottom: 3,
+    },
+
+    featureEmpty: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      lineHeight: 17,
+      paddingVertical: 10,
+    },
+
+    highlightedCard: {
+      width: 208,
+      minHeight: 172,
+      overflow: "hidden",
+      justifyContent: "space-between",
+      borderRadius: 24,
+      borderCurve: "continuous",
+      padding: 14,
+      boxShadow: "0 13px 30px rgba(2, 28, 47, 0.18)",
+    },
+
+    highlightedCreator: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+
+    highlightedCreatorName: {
+      flex: 1,
+      color: canalDynamicColors.text,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+
+    highlightedCopy: {
+      gap: 5,
+    },
+
+    highlightedName: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 22,
+      fontWeight: "500",
+      lineHeight: 25,
+    },
+
+    highlightedMeta: {
+      color: canalDynamicColors.muted,
+      fontSize: 10,
+    },
+
+    trendingStageCard: {
+      width: 190,
+      minHeight: 156,
+      overflow: "hidden",
+      borderRadius: 23,
+      borderCurve: "continuous",
+      padding: 14,
+      boxShadow: "0 13px 30px rgba(2, 28, 47, 0.16)",
+    },
+
+    trendingLiveLine: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+
+    trendingLiveText: {
+      color: canalDynamicColors.danger,
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+
+    trendingAudience: {
+      flex: 1,
+      color: canalDynamicColors.muted,
+      fontSize: 9,
+      textAlign: "right",
+    },
+
+    trendingStageName: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 21,
+      fontWeight: "500",
+      lineHeight: 24,
+      marginTop: 27,
+    },
+
+    trendingStageMeta: {
+      color: canalDynamicColors.muted,
+      fontSize: 10,
+      marginTop: 7,
     },
 
     header: {
       flexDirection: "row",
       alignItems:
-        "center",
+        "flex-start",
       justifyContent:
         "space-between",
-      marginBottom: 2,
+      paddingTop: 12,
+      marginBottom: 22,
+    },
+
+    headerCopy: {
+      flex: 1,
+      minWidth: 0,
+      paddingRight: 4,
     },
 
     eyebrow: {
@@ -1387,12 +1896,14 @@ const styles =
       paddingRight: 20,
     },
 
-        categoryCard: {
-          width: 82,
-          minHeight: 82,
-          alignItems: "center",
-          justifyContent: "center",
-        },
+    categoryCard: {
+      width: 64,
+      minHeight: 84,
+      alignItems: "center",
+      justifyContent: "flex-start",
+      gap: 5,
+      paddingTop: 2,
+    },
 
         discoveryAllButton: {
           width: 48,
@@ -1432,29 +1943,26 @@ const styles =
       top: -9,
     },
 
-        categoryCardLabel: {
-          position: "absolute",
-          left: 6,
-          right: 6,
-          bottom: 7,
-          color: canalDynamicColors.text,
-          fontSize: 10,
-          fontWeight: "900",
-          textAlign: "center",
-          textTransform: "capitalize",
-          textShadowColor: "rgba(0,0,0,0.56)",
-          textShadowOffset: { width: 0, height: 1 },
-          textShadowRadius: 3,
-        },
+    categoryCardLabel: {
+      width: 64,
+      color: canalDynamicColors.text,
+      fontSize: 10,
+      fontWeight: "600",
+      textAlign: "center",
+      textTransform: "capitalize",
+    },
 
-        categoryLabelScrim: {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: 34,
-          backgroundColor: canalDynamicColors.surface,
-        },
+    categoryGlyph: {
+      textShadowColor: "rgba(27,39,78,0.28)",
+      textShadowOffset: { width: 0, height: 7 },
+      textShadowRadius: 9,
+    },
+
+    categorySelectedDot: {
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+    },
 
     discoveryChip: {
       minHeight: 48,

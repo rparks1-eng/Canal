@@ -21,9 +21,9 @@ describe(
         "app/_layout.tsx",
       );
 
-    const library =
+    const activity =
       source(
-        "app/(tabs)/library.tsx",
+        "components/activity-screen.tsx",
       );
 
     const detail =
@@ -46,7 +46,7 @@ describe(
         );
 
         expect(
-          library,
+          activity,
         ).toMatch(
           /accessibilityLabel="Open Scene collaboration"[\s\S]*router[.]push[\s\S]*["/]scene-collaboration/,
         );

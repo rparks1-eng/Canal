@@ -362,6 +362,22 @@ const localSubscribers =
     Set<() => void>
   >();
 
+type CloudLiveStageSubscriber = {
+  onChange: () => void;
+  onStatus?: (status: LiveStageSubscriptionStatus) => void;
+};
+
+type CloudLiveStageSubscription = {
+  channel: ReturnType<typeof supabase.channel> | null;
+  status: LiveStageSubscriptionStatus;
+  subscribers: Set<CloudLiveStageSubscriber>;
+};
+
+const cloudLiveStageSubscriptions = new Map<
+  string,
+  CloudLiveStageSubscription
+>();
+
 type LocalLiveStageIdentity = {
   ownerId: string;
   username: string;
@@ -721,6 +737,39 @@ export async function readLiveStages(): Promise<
     members,
     currentUserId,
   );
+}
+
+export async function readPublicLiveStages(): Promise<LiveStage[]> {
+  if (!isSupabaseConfigured) {
+    return (await readLocalLiveStages()).filter(
+      (stage) => stage.status === "live" && stage.visibility === "public",
+    );
+  }
+
+  const currentUserId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from("live_stages")
+    .select(LIVE_STAGE_COLUMNS)
+    .eq("status", "live")
+    .eq("visibility", "public")
+    .order("updated_at", { ascending: false })
+    .limit(100);
+
+  await assertCurrentLiveStageUser(currentUserId);
+
+  if (error) {
+    throw stageError("load public live Stages", error.message);
+  }
+
+  const rows = (data ?? []) as unknown as LiveStageRow[];
+  const members = await readCloudMembers(
+    rows.map((row) => row.id),
+    currentUserId,
+  );
+
+  await assertCurrentLiveStageUser(currentUserId);
+
+  return normalizeLiveStageRows(rows, members, currentUserId);
 }
 
 export async function readHostedLiveStages(): Promise<LiveStage[]> {
@@ -2207,90 +2256,72 @@ export function subscribeToLiveStage(
     "connecting",
   );
 
-  let active =
-    true;
+  const subscriber: CloudLiveStageSubscriber = { onChange, onStatus };
+  const existing = cloudLiveStageSubscriptions.get(stageId);
 
-  let channel:
-    ReturnType<
-      typeof supabase.channel
-    > | null =
-      null;
+  if (existing) {
+    existing.subscribers.add(subscriber);
+    onStatus?.(existing.status);
+  } else {
+    const subscription: CloudLiveStageSubscription = {
+      channel: null,
+      status: "connecting",
+      subscribers: new Set([subscriber]),
+    };
+    cloudLiveStageSubscriptions.set(stageId, subscription);
 
-  void supabase.realtime
-    .setAuth()
-    .then(() => {
-      if (!active) {
-        return;
-      }
+    const publishStatus = (status: LiveStageSubscriptionStatus): void => {
+      if (cloudLiveStageSubscriptions.get(stageId) !== subscription) return;
+      subscription.status = status;
+      subscription.subscribers.forEach((listener) => listener.onStatus?.(status));
+    };
 
-      channel =
-        supabase
-          .channel(
-            `live-stage:${stageId}`,
-            {
-              config: {
-                private:
-                  true,
-              },
-            },
-          )
-          .on(
-            "broadcast",
-            {
-              event:
-                "stage_changed",
-            },
-            () => {
-              onChange();
-            },
-          )
-          .subscribe(
-            (status) => {
-              if (
-                !active
-              ) {
-                return;
-              }
+    void supabase.realtime
+      .setAuth()
+      .then(() => {
+        if (
+          cloudLiveStageSubscriptions.get(stageId) !== subscription ||
+          subscription.subscribers.size === 0
+        ) {
+          return;
+        }
 
-              if (
-                status ===
-                "SUBSCRIBED"
-              ) {
-                onStatus?.(
-                  "connected",
-                );
-              } else if (
-                status ===
-                  "CHANNEL_ERROR" ||
-                status ===
-                  "TIMED_OUT" ||
-                status ===
-                  "CLOSED"
-              ) {
-                onStatus?.(
-                  "error",
-                );
-              }
-            },
-          );
-    })
-    .catch(() => {
-      if (active) {
-        onStatus?.(
-          "error",
-        );
-      }
-    });
+        subscription.channel = supabase
+          .channel(`live-stage:${stageId}`, { config: { private: true } })
+          .on("broadcast", { event: "stage_changed" }, () => {
+            subscription.subscribers.forEach((listener) => listener.onChange());
+          })
+          .subscribe((status) => {
+            if (status === "SUBSCRIBED") {
+              publishStatus("connected");
+            } else if (
+              status === "CHANNEL_ERROR" ||
+              status === "TIMED_OUT" ||
+              status === "CLOSED"
+            ) {
+              publishStatus("error");
+            }
+          });
+      })
+      .catch(() => publishStatus("error"));
+
+    return () => {
+      const current = cloudLiveStageSubscriptions.get(stageId);
+      if (current !== subscription) return;
+      current.subscribers.delete(subscriber);
+      if (current.subscribers.size > 0) return;
+      cloudLiveStageSubscriptions.delete(stageId);
+      if (current.channel) void supabase.removeChannel(current.channel);
+    };
+  }
 
   return () => {
-    active =
-      false;
-
-    if (channel) {
-      void supabase.removeChannel(
-        channel,
-      );
-    }
+    const current = cloudLiveStageSubscriptions.get(stageId);
+    if (!current) return;
+    current.subscribers.delete(subscriber);
+    if (current.subscribers.size > 0) return;
+    cloudLiveStageSubscriptions.delete(stageId);
+    if (current.channel) void supabase.removeChannel(current.channel);
   };
 }
 

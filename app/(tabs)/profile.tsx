@@ -11,7 +11,6 @@ import {
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -1460,6 +1459,33 @@ function ProfileScreenContent() {
               ) : null}
             </View>
 
+            {user && socialDataResolved ? (
+              <View style={styles.profileNetwork}>
+                <Text style={styles.profileNetworkTitle}>Network</Text>
+                <View style={styles.compactNetworkStats}>
+                  <Pressable
+                    accessibilityLabel="View following"
+                    accessibilityRole="button"
+                    onPress={() => router.push({ pathname: "/following", params: { profileId: user.id, mode: "following" } })}
+                    style={styles.compactNetworkStat}
+                  >
+                    <Text style={styles.connectionValue}>{connectionSummary?.followingCount ?? 0}</Text>
+                    <Text style={styles.connectionLabel}>Following</Text>
+                  </Pressable>
+                  <View style={styles.networkDivider} />
+                  <Pressable
+                    accessibilityLabel="View followers"
+                    accessibilityRole="button"
+                    onPress={() => router.push({ pathname: "/following", params: { profileId: user.id, mode: "followers" } })}
+                    style={styles.compactNetworkStat}
+                  >
+                    <Text style={styles.connectionValue}>{connectionSummary?.followerCount ?? 0}</Text>
+                    <Text style={styles.connectionLabel}>Followers</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
             {sceneDataResolved ? (
               <View
                 style={
@@ -1548,326 +1574,35 @@ function ProfileScreenContent() {
             accessibilityRole="button"
             accessibilityLabel="Open My Stages"
             onPress={() => router.push("/managed-stages")}
-            style={({ pressed }) => [styles.profileAction, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.profileQuickAction, pressed && styles.pressed]}
           >
-            <View style={styles.profileActionIconSurface}>
+            <View style={styles.profileQuickIcon}>
               <Ionicons color={canalDynamicColors.mint} name="radio-outline" size={22} />
             </View>
-            <Text style={styles.profileActionTitle}>My Stages</Text>
-            <Text numberOfLines={2} style={styles.profileActionCopy}>Host, resume, or close a live room.</Text>
+            <View style={styles.profileQuickCopy}>
+              <Text style={styles.profileActionTitle}>My Stages</Text>
+              <Text numberOfLines={1} style={styles.profileActionCopy}>Manage live rooms</Text>
+            </View>
+            <Ionicons color={canalDynamicColors.muted} name="chevron-forward" size={17} />
           </Pressable>
 
-          <Pressable
+          {socialDataResolved ? <Pressable
+            accessibilityHint="Opens exported playlists grouped by date."
+            accessibilityLabel="View exported playlists"
             accessibilityRole="button"
-            accessibilityLabel="Discover people"
-            onPress={() => router.push("/(tabs)/explore")}
-            style={({ pressed }) => [styles.profileAction, pressed && styles.pressed]}
+            onPress={() => router.push("/exported-playlists")}
+            style={({ pressed }) => [styles.profileQuickAction, pressed && styles.pressed]}
           >
-            <View style={styles.profileActionIconSurface}>
-              <Ionicons color={canalDynamicColors.mint} name="people-outline" size={22} />
+            <View style={styles.profileQuickIcon}>
+              <Ionicons color={canalDynamicColors.mint} name="musical-notes-outline" size={22} />
             </View>
-            <Text style={styles.profileActionTitle}>Find people</Text>
-            <Text numberOfLines={2} style={styles.profileActionCopy}>Follow creators and shared taste.</Text>
-          </Pressable>
+            <View style={styles.profileQuickCopy}>
+              <Text style={styles.profileActionTitle}>Playlists</Text>
+              <Text numberOfLines={1} style={styles.profileActionCopy}>{playlistExports.length} exported</Text>
+            </View>
+            <Ionicons color={canalDynamicColors.muted} name="chevron-forward" size={17} />
+          </Pressable> : null}
         </View>
-
-        {user &&
-        socialDataResolved ? (
-          <View
-            style={
-              styles.connectionCard
-            }
-          >
-            <View
-              style={
-                styles.connectionHeader
-              }
-            >
-              <View>
-                <Text
-                  selectable
-                  style={
-                    styles.connectionTitle
-                  }
-                >
-                  Your network
-                </Text>
-
-                <Text
-                  selectable
-                  style={
-                    styles.connectionSubtitle
-                  }
-                >
-                  People and creators you connect with.
-                </Text>
-              </View>
-
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push(
-                    "/(tabs)/explore",
-                  )
-                }
-              >
-                <Text
-                  style={
-                    styles.discoverText
-                  }
-                >
-                  Discover
-                </Text>
-              </Pressable>
-            </View>
-
-            <View
-              style={
-                styles.connectionStats
-              }
-            >
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push({
-                    pathname:
-                      "/following",
-                    params: {
-                      profileId:
-                        user.id,
-                      mode:
-                        "following",
-                    },
-                  })
-                }
-                style={
-                  styles.connectionStat
-                }
-              >
-                <Text
-                  style={
-                    styles.connectionValue
-                  }
-                >
-                  {connectionSummary
-                    ?.followingCount ??
-                    0}
-                </Text>
-
-                <Text
-                  style={
-                    styles.connectionLabel
-                  }
-                >
-                  Following
-                </Text>
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push({
-                    pathname:
-                      "/following",
-                    params: {
-                      profileId:
-                        user.id,
-                      mode:
-                        "followers",
-                    },
-                  })
-                }
-                style={
-                  styles.connectionStat
-                }
-              >
-                <Text
-                  style={
-                    styles.connectionValue
-                  }
-                >
-                  {connectionSummary
-                    ?.followerCount ??
-                    0}
-                </Text>
-
-                <Text
-                  style={
-                    styles.connectionLabel
-                  }
-                >
-                  Followers
-                </Text>
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push(
-                    "/(tabs)/activity",
-                  )
-                }
-                style={
-                  styles.connectionStat
-                }
-              >
-                <Ionicons color={canalDynamicColors.text} name="notifications-outline" size={19} />
-
-                <Text
-                  style={
-                    styles.connectionLabel
-                  }
-                >
-                  Activity
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
-
-        {socialDataResolved ? (
-          <View
-            style={
-              styles.playlistCard
-            }
-          >
-            <View
-              style={
-                styles.playlistHeader
-              }
-            >
-              <View>
-                <Text
-                  selectable
-                  style={
-                    styles.playlistTitle
-                  }
-                >
-                  Spotify playlists
-                </Text>
-
-                <Text
-                  selectable
-                  style={
-                    styles.playlistSubtitle
-                  }
-                >
-                  Created from your Canal Scenes.
-                </Text>
-              </View>
-
-              <Text
-                style={
-                  styles.playlistCount
-                }
-              >
-                {
-                  playlistExports.length
-                }
-              </Text>
-            </View>
-
-            {playlistExports.length >
-            0 ? (
-              <View
-                style={
-                  styles.playlistList
-                }
-              >
-                {playlistExports.map(
-                  (
-                    playlist,
-                  ) => (
-                    <Pressable
-                      key={
-                        playlist.id
-                      }
-                      accessibilityRole={
-                        playlist
-                          .spotifyPlaylistUrl
-                          ? "link"
-                          : "button"
-                      }
-                      disabled={
-                        !playlist
-                          .spotifyPlaylistUrl
-                      }
-                      onPress={() => {
-                        if (
-                          playlist
-                            .spotifyPlaylistUrl
-                        ) {
-                          void Linking.openURL(
-                            playlist
-                              .spotifyPlaylistUrl,
-                          );
-                        }
-                      }}
-                      style={
-                        styles.playlistRow
-                      }
-                    >
-                      <View
-                        style={
-                          styles.playlistIcon
-                        }
-                      >
-                        <Ionicons color={canalDynamicColors.text} name="musical-note" size={20} />
-                      </View>
-
-                      <View
-                        style={
-                          styles.playlistCopy
-                        }
-                      >
-                        <Text
-                          numberOfLines={
-                            1
-                          }
-                          style={
-                            styles.playlistName
-                          }
-                        >
-                          {
-                            playlist.sceneName
-                          }
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.playlistMeta
-                          }
-                        >
-                          {
-                            playlist.trackCount
-                          }{" "}
-                          tracks · Spotify
-                        </Text>
-                      </View>
-
-                      <Text
-                        style={
-                          styles.playlistArrow
-                        }
-                      >
-                        ›
-                      </Text>
-                    </Pressable>
-                  ),
-                )}
-              </View>
-            ) : (
-              <Text
-                selectable
-                style={
-                  styles.playlistEmpty
-                }
-              >
-                Create a Spotify playlist from any Scene and it will appear here.
-              </Text>
-            )}
-          </View>
-        ) : null}
 
         {message ? (
           <View
@@ -2857,7 +2592,34 @@ const styles =
 
     profileActions: {
       flexDirection: "row",
-      gap: 10,
+      gap: 8,
+      paddingHorizontal: 2,
+    },
+
+    profileQuickAction: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 64,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 6,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: "transparent",
+    },
+
+    profileQuickIcon: {
+      width: 36,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    profileQuickCopy: {
+      flex: 1,
+      minWidth: 0,
     },
 
     profileAction: {
@@ -2889,15 +2651,51 @@ const styles =
 
     profileActionTitle: {
       color: canalDynamicColors.text,
-      fontSize: 15,
+      fontSize: 13,
       fontWeight: "900",
     },
 
     profileActionCopy: {
       color: canalDynamicColors.muted,
-      fontSize: 10,
+      fontSize: 9,
       lineHeight: 14,
-      marginTop: 4,
+      marginTop: 2,
+    },
+
+    profileNetwork: {
+      marginTop: 10,
+      paddingTop: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: canalDynamicColors.line,
+      gap: 5,
+    },
+
+    profileNetworkTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+    },
+
+    compactNetworkStats: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "stretch",
+      backgroundColor: "transparent",
+    },
+
+    compactNetworkStat: {
+      flex: 1,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    networkDivider: {
+      width: StyleSheet.hairlineWidth,
+      marginVertical: 10,
+      backgroundColor: canalDynamicColors.line,
     },
 
     connectionCard: {
@@ -2985,6 +2783,32 @@ const styles =
       backgroundColor: canalDynamicColors.surface,
       padding: 17,
       gap: 14,
+    },
+
+    playlistButton: {
+      minHeight: 72,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      borderRadius: 19,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.surface,
+    },
+
+    playlistButtonIcon: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    playlistButtonCopy: {
+      flex: 1,
+      minWidth: 0,
     },
 
     playlistHeader: {

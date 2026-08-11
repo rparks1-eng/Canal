@@ -59,11 +59,14 @@ import {
 import {
   useNotificationCenter,
 } from "../providers/notification-center-provider";
+import { useAuth } from "../providers/auth-provider";
+import { readAccountCanalSettings } from "../lib/app-settings";
 
 type IoniconName =
   keyof typeof Ionicons.glyphMap;
 
 export default function ActivityScreen() {
+  const { user } = useAuth();
   const {
     clearUnreadCount,
   } = useNotificationCenter();
@@ -101,11 +104,21 @@ export default function ActivityScreen() {
           null,
         );
 
-        const storedActivity =
-          await readActivity();
+        const storedActivity = await readActivity();
+        const settings = user ? await readAccountCanalSettings(user.id) : null;
+        const visibleActivity = settings && !settings.activityNotifications
+          ? []
+          : storedActivity.filter((item) => {
+              if (!settings) return true;
+              if (item.stageInviteId && !settings.stageInviteNotifications) return false;
+              if (item.type === "collaboration" && !settings.collaborationNotifications) return false;
+              if (["follow", "unfollow", "share", "snapshot"].includes(item.type) && !settings.socialNotifications) return false;
+              if (item.type === "system" && item.stageId && !settings.stageReminderNotifications) return false;
+              return true;
+            });
 
         setActivity(
-          storedActivity,
+          visibleActivity,
         );
 
         await markAllActivityRead();
@@ -132,6 +145,7 @@ export default function ActivityScreen() {
     }, [
       clearUnreadCount,
       connectivityStatus,
+      user,
     ]);
 
   useFocusEffect(
@@ -405,6 +419,25 @@ export default function ActivityScreen() {
             your signed-in devices.
           </Text>
         </View>
+
+        <Pressable
+          accessibilityHint="Review Scene invitations, shared edits, and revision conflicts."
+          accessibilityLabel="Open Scene collaboration"
+          accessibilityRole="button"
+          onPress={() => router.push("/scene-collaboration" as never)}
+          style={({ pressed }) => [styles.collaborationEntry, pressed && styles.pressed]}
+        >
+          <View style={styles.collaborationIcon}>
+            <Ionicons color={canalDynamicColors.mint} name="people-outline" size={22} />
+          </View>
+          <View style={styles.collaborationCopy}>
+            <Text style={styles.collaborationTitle}>Scene collaboration</Text>
+            <Text style={styles.collaborationText}>
+              Invitations, shared edits, and revision conflicts
+            </Text>
+          </View>
+          <Ionicons color={canalDynamicColors.muted} name="chevron-forward" size={18} />
+        </Pressable>
 
         {loadIssue ? (
           <RecoveryNotice
@@ -827,6 +860,44 @@ const styles = StyleSheet.create({
     color: canalDynamicColors.muted,
     fontSize: 15,
     lineHeight: 22,
+  },
+
+  collaborationEntry: {
+    minHeight: 72,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: canalDynamicColors.line,
+    backgroundColor: canalDynamicColors.surface,
+  },
+
+  collaborationIcon: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  collaborationCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  collaborationTitle: {
+    color: canalDynamicColors.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  collaborationText: {
+    marginTop: 3,
+    color: canalDynamicColors.muted,
+    fontSize: 11,
+    lineHeight: 16,
   },
 
   pendingText: {

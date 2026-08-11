@@ -12,7 +12,7 @@ const mockAddFeedback: jest.Mock = jest.fn(async () => {});
 const mockSaveFeedback: jest.Mock = jest.fn(async () => {});
 const mockSaveCollaborative: jest.Mock = jest.fn();
 const mockExport: jest.Mock = jest.fn(async () => ({ exportedTrackCount: 1, playlistUrl: "https://open.spotify.com/playlist/p" }));
-const mockSavePublic: jest.Mock = jest.fn(async () => ({}));
+const mockSavePublic: jest.Mock = jest.fn(async () => ({ ...scene, id: "saved-scene-a" }));
 const mockShare: jest.Mock = jest.fn(async () => ({ action: "sharedAction" }));
 const mockWritePlayer: jest.Mock = jest.fn(async () => {});
 const mockRecommendationFeedback: jest.Mock = jest.fn(async () => [{ outcome: "cloud_synced" }]);
@@ -302,6 +302,7 @@ describe("Living Editorial Scene playback interactions", () => {
   it("renders public Scene save/share/provider and offline disabled state", async () => {
     mockParams = { ownerId: "creator-a", sceneId: "scene-a" };
     const renderer = await render(React.createElement(PublicSceneScreen));
+    expect((jest.requireMock("../lib/spotify-scene-artwork") as { addSpotifyArtworkToStoredScene: jest.Mock }).addSpotifyArtworkToStoredScene).toHaveBeenCalledWith(scene);
     const save = renderer.root.findByProps({ accessibilityLabel: "Save Private Copy" });
     await act(async () => { save.props.onPress(); await new Promise((resolve) => setImmediate(resolve)); });
     expect(mockSavePublic).toHaveBeenCalledTimes(1);
@@ -312,6 +313,9 @@ describe("Living Editorial Scene playback interactions", () => {
     const provider = renderer.root.findByProps({ accessibilityLabel: "Export Public Scene to Spotify" });
     await act(async () => { provider.props.onPress(); await new Promise((resolve) => setImmediate(resolve)); });
     expect(mockExport).toHaveBeenCalled();
+    const play = renderer.root.findByProps({ accessibilityLabel: "Play Quiet Current" });
+    await act(async () => { play.props.onPress(); await new Promise((resolve) => setImmediate(resolve)); });
+    expect(mockPush).toHaveBeenCalledWith({ pathname: "/now-playing", params: { sceneId: "saved-scene-a" } });
     const back = renderer.root.findByProps({ accessibilityLabel: "Back from Public Scene" });
     await act(async () => back.props.onPress());
     expect(mockBack).toHaveBeenCalled();

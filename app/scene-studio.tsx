@@ -13,7 +13,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -115,6 +114,7 @@ import {
 import {
   readScenes,
 } from "../lib/scenes";
+import type { StoredScene } from "../lib/scenes";
 
 import {
   generateCreativeSceneName,
@@ -146,6 +146,9 @@ import {
   FadeOut,
   useReducedMotion,
 } from "react-native-reanimated";
+import { getRuntimeCanalSettings } from "../lib/app-settings";
+import { buildSceneReshootDraft } from "../lib/scene-reshoot";
+import { loadPublicScene } from "../lib/social";
 
 type StudioStep = "moment" | "sound" | "flow" | "review";
 
@@ -155,7 +158,24 @@ type StudioStep = "moment" | "sound" | "flow" | "review";
 const STUDIO_PALETTE_SEQUENCE = [0, 6, 5, 4, 9, 3, 2, 8, 7, 1] as const;
 
 function freshDraft(): SceneStudioDraft {
-  return createSceneStudioDraft();
+  const draft = createSceneStudioDraft();
+  const settings = getRuntimeCanalSettings();
+  return {
+    ...draft,
+    allowExplicit: settings.allowExplicitDefault,
+    smoothTransitions: settings.smoothTransitionsDefault,
+    avoidRecentSceneTracks: settings.avoidRecentDefault,
+  };
+}
+
+function sceneMoodSeed(value: unknown): SceneMood | undefined {
+  if (typeof value !== "string" || value.length > 40) return undefined;
+  const normalized = value.trim().toLowerCase();
+  return SCENE_MOOD_OPTIONS.find((option) => option.value === normalized)?.value;
+}
+
+function sceneDirectionSeed(value: unknown): string {
+  return typeof value === "string" ? value.trim().slice(0, 300) : "";
 }
 
 function sameSpotifyAccountGuard(
@@ -254,30 +274,54 @@ function PreferenceRow(props: {
   onValueChange: (value: boolean) => void;
 }) {
   return (
-    <View style={styles.preferenceRow}>
-      <View style={styles.preferenceCopy}>
-        <Text style={styles.preferenceLabel}>{props.label}</Text>
-        <Text style={styles.helperText}>{props.helper}</Text>
+    <Pressable
+      accessibilityLabel={props.label}
+      accessibilityHint={props.helper}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: props.value, disabled: props.disabled === true }}
+      disabled={props.disabled}
+      onPress={() => props.onValueChange(!props.value)}
+      style={({ pressed }) => [styles.preferenceRow, props.value && styles.preferenceRowSelected, props.disabled && styles.disabled, pressed && styles.pressed]}
+    >
+      <View style={[styles.compactSwitch, props.value && styles.compactSwitchSelected]}>
+        <View style={[styles.compactSwitchKnob, props.value && styles.compactSwitchKnobSelected]} />
       </View>
-      <Switch
-        accessibilityLabel={props.label}
-        accessibilityState={{ disabled: props.disabled === true }}
-        disabled={props.disabled}
-        onValueChange={props.onValueChange}
-        trackColor={{ false: "#39413D", true: "#2E796B" }}
-        thumbColor={props.value ? "#72D8C4" : "#BBC2BE"}
-        value={props.value}
-      />
-    </View>
+      <Text numberOfLines={2} style={[styles.preferenceLabel, props.value && styles.preferenceLabelSelected]}>{props.label}</Text>
+    </Pressable>
+  );
+}
+
+function EnergyChoice(props: { label: string; selected: boolean; disabled?: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityLabel={`${props.label} energy`}
+      accessibilityRole="button"
+      accessibilityState={{ selected: props.selected, disabled: props.disabled === true }}
+      disabled={props.disabled}
+      onPress={props.onPress}
+      style={({ pressed }) => [styles.energyChoice, pressed && styles.pressed]}
+    >
+      <Text style={[styles.energyChoiceText, props.selected && styles.energyChoiceTextSelected]}>{props.label}</Text>
+      <View style={[styles.energyMarker, props.selected && styles.energyMarkerSelected]} />
+    </Pressable>
   );
 }
 
 export default function SceneStudioScreen() {
   const { setOverride } = use(CanalAtmosphereContext);
   const reduceMotion = useReducedMotion();
-  const params = useLocalSearchParams<{ mode?: string; reset?: string; stageId?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; reset?: string; stageId?: string; quickMood?: string; direct?: string; anchorTrackId?: string; reshootOwnerId?: string; reshootSceneId?: string; combineSceneIds?: string }>();
   const shouldResumePreview = params.mode === "edit";
   const resetToken = params.reset;
+  const quickMoodSeed = sceneMoodSeed(params.quickMood);
+  const directSeed = sceneDirectionSeed(params.direct);
+  const anchorTrackId = typeof params.anchorTrackId === "string" && /^[A-Za-z0-9]+$/u.test(params.anchorTrackId)
+    ? params.anchorTrackId
+    : undefined;
+  const reshootOwnerId = typeof params.reshootOwnerId === "string" && params.reshootOwnerId.length <= 64 ? params.reshootOwnerId : "";
+  const reshootSceneId = typeof params.reshootSceneId === "string" && params.reshootSceneId.length <= 160 ? params.reshootSceneId : "";
+  const combineSceneIds = typeof params.combineSceneIds === "string" ? params.combineSceneIds.split(",").filter((id) => /^[A-Za-z0-9-]{1,160}$/u.test(id)).slice(0, 4) : [];
+  const combineSceneKey = combineSceneIds.join(",");
   const {
     user,
     accountEpoch,
@@ -473,9 +517,24 @@ export default function SceneStudioScreen() {
         return;
       }
 
-      if (!shouldResumePreview) {
-        setDraft(freshDraft());
-        setActivityChosen(false);
+          if (!shouldResumePreview) {
+            let nextDraft = freshDraft();
+            if (reshootOwnerId && reshootSceneId) {
+              try {
+                const [publicSource, personalScenes] = await Promise.all([loadPublicScene(reshootOwnerId, reshootSceneId), readScenes()]);
+                if (!canCommit()) return;
+                nextDraft = buildSceneReshootDraft(publicSource.scene, combineSceneIds.map((id) => personalScenes.find((scene) => scene.id === id)).filter((scene): scene is StoredScene => Boolean(scene)));
+              } catch (error) {
+                if (!canCommit()) return;
+                setMessage(error instanceof Error ? error.message : "Canal could not prepare this Reshoot.");
+              }
+            }
+            setDraft({
+              ...nextDraft,
+              moods: quickMoodSeed ? [quickMoodSeed] : nextDraft.moods,
+              notes: directSeed || nextDraft.notes,
+            });
+            setActivityChosen(Boolean(reshootOwnerId && reshootSceneId));
         setMomentError(null);
         setStudioStep("moment");
         setLoadedScope(operationScope);
@@ -520,7 +579,12 @@ export default function SceneStudioScreen() {
     };
   }, [
     currentScope,
-    resetToken,
+        directSeed,
+        combineSceneKey,
+        quickMoodSeed,
+        resetToken,
+        reshootOwnerId,
+        reshootSceneId,
     scope,
     shouldResumePreview,
   ]);
@@ -653,6 +717,12 @@ export default function SceneStudioScreen() {
   };
 
   const moveToStudioStep = (nextStep: StudioStep): void => {
+    if (nextStep !== "moment" && !activityChosen) {
+      setStudioStep("moment");
+      setMomentError("Choose what you are doing before continuing.");
+      return;
+    }
+
     if (nextStep !== "moment" && draft.moods.length === 0) {
       setStudioStep("moment");
       setMomentError("Choose at least one mood before continuing.");
@@ -881,7 +951,8 @@ export default function SceneStudioScreen() {
               ...recentSceneTrackIds,
             ],
             deprioritizedTrackIds: learning.deprioritizedTrackIds,
-            preferredTrackIds: learning.preferredTrackIds,
+            preferredTrackIds: anchorTrackId ? [anchorTrackId, ...learning.preferredTrackIds] : learning.preferredTrackIds,
+            anchorTrackId,
             reasonBias: learning.reasonBias,
           },
         );
@@ -892,7 +963,8 @@ export default function SceneStudioScreen() {
           existingSceneNames,
           rejectedTrackIds: [...recentSceneTrackIds, ...learning.rejectedTrackIds],
           deprioritizedTrackIds: learning.deprioritizedTrackIds,
-          preferredTrackIds: learning.preferredTrackIds,
+          preferredTrackIds: anchorTrackId ? [anchorTrackId, ...learning.preferredTrackIds] : learning.preferredTrackIds,
+          anchorTrackId,
           reasonBias: learning.reasonBias,
         });
         preview.scene.visibility = "private";
@@ -969,11 +1041,11 @@ export default function SceneStudioScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.hero}>
+        {studioStep === "moment" ? <View style={styles.hero}>
           <Text style={styles.eyebrow}>LIVING GLASS STUDIO</Text>
           <Text accessibilityRole="header" style={styles.title}>Shape the moment.</Text>
           <Text style={styles.subtitle}>Start with the feeling. Canal keeps advanced controls close without making the first decision feel heavy.</Text>
-        </View>
+        </View> : null}
 
         <BlurView intensity={34} tint="dark" style={styles.stepBar}>
           {([
@@ -1007,10 +1079,7 @@ export default function SceneStudioScreen() {
           <Text accessibilityRole="header" style={styles.sectionTitle}>
             What are you doing?
           </Text>
-          <Text style={styles.helperText}>
-            Choose the activity that defines this moment.
-          </Text>
-          <View style={styles.wrap}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compactRail}>
             {SCENE_ACTIVITY_OPTIONS.map((option) => (
               <ChoiceChip
                 key={option.value}
@@ -1024,20 +1093,15 @@ export default function SceneStudioScreen() {
                 selected={activityChosen && visibleDraft.activity === option.value}
               />
             ))}
-          </View>
+          </ScrollView>
         </BlurView>
 
         <BlurView intensity={46} tint="dark" style={styles.card}>
           <Text accessibilityRole="header" style={styles.sectionTitle}>
             How should it feel?
           </Text>
-          <Text style={styles.helperText}>
-            Choose one to five moods from a richer emotional palette.
-          </Text>
-          <Text accessibilityLiveRegion="polite" style={styles.moodCount}>
-            {visibleDraft.moods.length}/5 selected
-          </Text>
-          <View style={styles.moodConstellation}>
+          <View style={styles.compactSectionHeader}><Text style={styles.helperText}>Choose up to five.</Text><Text accessibilityLiveRegion="polite" style={styles.moodCount}>{visibleDraft.moods.length}/5</Text></View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compactRail}>
             {SCENE_MOOD_OPTIONS.map((option, index) => (
               <MoodOrb
                 key={option.value}
@@ -1048,19 +1112,13 @@ export default function SceneStudioScreen() {
                 selected={visibleDraft.moods.includes(option.value)}
               />
             ))}
-          </View>
+          </ScrollView>
           {momentError ? (
             <Text accessibilityLiveRegion="assertive" style={styles.validationText}>
               {momentError}
             </Text>
           ) : null}
         </BlurView>
-        <View style={styles.inlineNavigation}>
-          <Text style={styles.inlineHint}>Your selections save as you go.</Text>
-          <Pressable accessibilityRole="button" onPress={() => moveToStudioStep("sound")} style={styles.inlineButton}>
-            <Text style={styles.inlineButtonText}>Continue to sound →</Text>
-          </Pressable>
-        </View>
           </Animated.View>
         ) : null}
 
@@ -1070,13 +1128,10 @@ export default function SceneStudioScreen() {
           <Text accessibilityRole="header" style={styles.sectionTitle}>
             Genres
           </Text>
-          <Text style={styles.helperText}>
-            Search the full genre catalog. Suggestions narrow as you type, and up to five selections guide automatic track selection.
-          </Text>
           {visibleDraft.preferredGenres.length > 0 ? (
             <View style={styles.selectedGenreSection}>
               <Text style={styles.selectedGenreLabel}>Selected</Text>
-              <View style={styles.wrap}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compactRail}>
                 {visibleDraft.preferredGenres.map((genre) => (
                   <ChoiceChip
                     key={genre}
@@ -1086,38 +1141,28 @@ export default function SceneStudioScreen() {
                     selected
                   />
                 ))}
-              </View>
+              </ScrollView>
             </View>
           ) : null}
           <TextInput accessibilityLabel="Search genres" autoCapitalize="none" autoCorrect={false} editable={scopeReady} onChangeText={setGenreQuery} placeholder="Search genres, like dream pop or neo-soul" placeholderTextColor={canalDynamicColors.muted} returnKeyType="search" style={[styles.textInput, styles.genreSearchInput]} value={genreQuery} />
           <View accessibilityLabel={genreQuery.trim() ? "Genre search suggestions" : "Popular genre suggestions"} accessibilityLiveRegion="polite" style={styles.genreSuggestions}>
             <Text style={styles.genreSuggestionLabel}>{genreQuery.trim() ? `${genreSuggestions.length} suggestions` : "Popular genres"}</Text>
-            <View style={styles.wrap}>{genreSuggestions.map((genre) => <ChoiceChip key={genre} label={genre} onPress={() => { toggleGenre(genre); setGenreQuery(""); }} disabled={!scopeReady} selected={false} />)}</View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compactRail}>{genreSuggestions.map((genre) => <ChoiceChip key={genre} label={genre} onPress={() => { toggleGenre(genre); setGenreQuery(""); }} disabled={!scopeReady} selected={false} />)}</ScrollView>
             {genreQuery.trim() && genreSuggestions.length === 0 ? <Text style={styles.genreEmptyText}>No supported genre matches yet. Try a broader spelling.</Text> : null}
           </View>
         </BlurView>
-        <BlurView intensity={46} tint="dark" style={styles.card}>
-          <Text accessibilityRole="header" style={styles.sectionTitle}>Energy</Text>
-          <Text style={styles.helperText}>Set the energy you want the sequence to hold.</Text>
-          <View style={styles.wrap}>{SCENE_ENERGY_OPTIONS.map((option) => <ChoiceChip key={option.value} label={option.label} onPress={() => updateDraft("energy", option.value as SceneEnergy)} disabled={!scopeReady} selected={visibleDraft.energy === option.value} />)}</View>
-        </BlurView>
-        <View style={styles.sliderGrid}>
-          <BlurView intensity={46} tint="dark" style={[styles.card, styles.sliderCard]}>
+        <BlurView intensity={38} tint="dark" style={styles.soundTuningCard}>
+          <View style={styles.energyCard}>
+            <Text accessibilityRole="header" style={styles.sectionTitle}>Energy</Text>
+            <View style={styles.energyScale}><View style={styles.energyLine} />{SCENE_ENERGY_OPTIONS.map((option) => <EnergyChoice key={option.value} label={option.label} onPress={() => updateDraft("energy", option.value as SceneEnergy)} disabled={!scopeReady} selected={visibleDraft.energy === option.value} />)}</View>
+          </View>
+          <View style={styles.soundTuningDivider} />
+          <View style={styles.sliderCard}>
             <Text accessibilityRole="header" style={styles.sectionTitle}>Familiarity</Text>
-            <Text style={styles.helperText}>Move the generated playlist from familiar favorites toward less obvious discoveries.</Text>
-            <View style={styles.familiarityLabels}><Text style={styles.familiarityLabel}>Familiar</Text><Text style={styles.familiarityValue}>{visibleDraft.familiarity}</Text><Text style={styles.familiarityLabel}>Discover / new</Text></View>
+            <View style={styles.familiarityLabels}><Text style={styles.familiarityLabel}>Known</Text><Text style={styles.familiarityValue}>{visibleDraft.familiarity}</Text><Text style={styles.familiarityLabel}>New</Text></View>
             <Slider accessibilityLabel="Scene familiarity" accessibilityHint="Adjusts from familiar music to new discoveries" disabled={!scopeReady} maximumTrackTintColor="#39413D" maximumValue={100} minimumTrackTintColor="#50CDB6" minimumValue={0} onValueChange={updateFamiliarityLevel} step={1} thumbTintColor="#72D8C4" value={getSceneFamiliarityLevel(visibleDraft)} />
-          </BlurView>
-          <BlurView intensity={46} tint="dark" style={[styles.card, styles.sliderCard]}>
-            <Text accessibilityRole="header" style={styles.sectionTitle}>Length</Text>
-            <View style={styles.familiarityLabels}><Text style={styles.familiarityLabel}>15 min</Text><Text style={styles.familiarityValue}>{visibleDraft.durationMinutes} min</Text><Text style={styles.familiarityLabel}>3 hr</Text></View>
-            <Slider accessibilityLabel="Scene length" accessibilityHint="Adjusts the target playlist length from fifteen minutes to three hours" disabled={!scopeReady} maximumTrackTintColor="#39413D" maximumValue={180} minimumTrackTintColor="#50CDB6" minimumValue={15} onValueChange={(durationMinutes) => updateDraft("durationMinutes", durationMinutes)} step={5} thumbTintColor="#72D8C4" value={visibleDraft.durationMinutes} />
-          </BlurView>
-        </View>
-        <View style={styles.inlineNavigation}>
-          <Pressable accessibilityRole="button" onPress={() => setStudioStep("moment")} style={styles.inlineButton}><Text style={styles.inlineButtonText}>← Moment</Text></Pressable>
-          <Pressable accessibilityRole="button" onPress={() => moveToStudioStep("flow")} style={styles.inlineButton}><Text style={styles.inlineButtonText}>Continue to flow →</Text></Pressable>
-        </View>
+          </View>
+        </BlurView>
           </Animated.View>
         ) : null}
 
@@ -1153,10 +1198,7 @@ export default function SceneStudioScreen() {
           <Text accessibilityRole="header" style={styles.sectionTitle}>
             Scene arc
           </Text>
-          <Text style={styles.helperText}>
-            Choose how the energy should move from the first track to the last.
-          </Text>
-          <View style={styles.wrap}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compactRail}>
             {SCENE_ARC_OPTIONS.map((option) => (
               <ChoiceChip
                 key={option.value}
@@ -1166,32 +1208,25 @@ export default function SceneStudioScreen() {
                 selected={visibleDraft.arc === option.value}
               />
             ))}
-          </View>
+          </ScrollView>
         </BlurView>
 
         <BlurView intensity={46} tint="dark" style={styles.card}>
           <Text accessibilityRole="header" style={styles.sectionTitle}>
             Preferences
           </Text>
-          <View style={styles.policyRow}>
-            <View style={styles.preferenceCopy}>
-              <Text style={styles.preferenceLabel}>Recent listening</Text>
-              <Text style={styles.helperText}>
-                Recently played tracks are considered alongside saved tracks and playlist tracks.
-              </Text>
-            </View>
-          </View>
+          <View style={styles.preferencesGrid}>
           <PreferenceRow
             disabled={!scopeReady}
             helper="When off, explicit Spotify results remain visible but cannot be added."
-            label="Allow explicit tracks"
+            label="Explicit tracks"
             onValueChange={(allowExplicit) => updateDraft("allowExplicit", allowExplicit)}
             value={visibleDraft.allowExplicit}
           />
           <PreferenceRow
             disabled={!scopeReady}
             helper="When on, tracks with adjacent or unselected genre families stay out of the generated Scene."
-            label="Keep recommendations inside selected genres"
+            label="Strict genres"
             onValueChange={(strictGenres) =>
               updateDraft("allowAdjacentGenres", !strictGenres)
             }
@@ -1200,7 +1235,7 @@ export default function SceneStudioScreen() {
           <PreferenceRow
             disabled={!scopeReady}
             helper="Filters tracks used in your twelve most recent saved Scenes before generation."
-            label="Avoid songs used in recent Scenes"
+            label="Fresh tracks"
             onValueChange={(avoidRecentSceneTracks) =>
               updateDraft("avoidRecentSceneTracks", avoidRecentSceneTracks)
             }
@@ -1209,23 +1244,20 @@ export default function SceneStudioScreen() {
           <PreferenceRow
             disabled={!scopeReady}
             helper="Orders the playlist around the selected arc using estimated energy changes."
-            label="Favor smooth energy transitions"
+            label="Smooth arc"
             onValueChange={(smoothTransitions) =>
               updateDraft("smoothTransitions", smoothTransitions)
             }
             value={visibleDraft.smoothTransitions !== false}
           />
+          </View>
         </BlurView>
 
         <BlurView intensity={46} tint="dark" style={styles.card}>
           <View style={styles.sectionHeaderRow}><Text accessibilityRole="header" style={styles.sectionTitle}>Direct Canal</Text><Text style={styles.sectionMeta}>Refines ranking</Text></View>
-          <Text style={styles.helperText}>Describe what belongs—or what should stay out. Canal matches these words against track, artist, album, and genre metadata when ranking the playlist.</Text>
+          <Text style={styles.helperText}>Describe what belongs—or what should stay out.</Text>
           <TextInput accessibilityLabel="Scene notes" editable={scopeReady} maxLength={300} multiline onChangeText={(notes) => updateDraft("notes", notes)} placeholder="Warm guitars, no stadium rock, leave room to think…" placeholderTextColor={canalDynamicColors.muted} style={[styles.textInput, styles.notesInput]} value={visibleDraft.notes} />
         </BlurView>
-        <View style={styles.inlineNavigation}>
-          <Pressable accessibilityRole="button" onPress={() => setStudioStep("sound")} style={styles.inlineButton}><Text style={styles.inlineButtonText}>← Sound</Text></Pressable>
-          <Pressable accessibilityRole="button" onPress={() => moveToStudioStep("review")} style={styles.inlineButton}><Text style={styles.inlineButtonText}>Review Scene →</Text></Pressable>
-        </View>
           </Animated.View>
         ) : null}
 
@@ -1276,12 +1308,6 @@ export default function SceneStudioScreen() {
               <View style={styles.sourceCopy}><Text style={styles.sourceTitle}>{spotifyConnection === "connected" ? "Spotify library connected" : spotifyConnection === "loading" ? "Checking Spotify…" : "Spotify connection needed"}</Text><Text style={styles.sourceText}>{spotifyConnection === "connected" ? "Canal will build an editable preview. Nothing saves until you choose Save." : "Connect Spotify to generate this Scene. Your choices remain saved."}</Text></View>
               {spotifyConnection !== "connected" && spotifyConnection !== "loading" ? <Pressable accessibilityLabel="Open Music Services" onPress={() => router.push("/music-services")} style={styles.sourceAction}><Text style={styles.sourceActionText}>Fix</Text></Pressable> : null}
             </BlurView>
-            <BlurView intensity={46} tint="dark" style={styles.card}>
-              <View style={styles.sectionHeaderRow}><Text accessibilityRole="header" style={styles.sectionTitle}>What happens next</Text><Text style={styles.sectionMeta}>Editable first</Text></View>
-              <PreferenceRow disabled helper="Remove, reorder, swap, or regenerate before saving" label="Generate private preview" onValueChange={() => undefined} value />
-              <PreferenceRow helper="Off · preview the list first" label="Start playback automatically" onValueChange={() => undefined} value={false} />
-            </BlurView>
-            <View style={styles.inlineNavigation}><Pressable accessibilityRole="button" onPress={() => setStudioStep("flow")} style={styles.inlineButton}><Text style={styles.inlineButtonText}>← Flow</Text></Pressable><Text style={styles.inlineHint}>All required choices complete</Text></View>
           </Animated.View>
         ) : null}
 
@@ -1313,20 +1339,20 @@ export default function SceneStudioScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea:{flex:1,backgroundColor:"transparent"}, content:{gap:14,paddingHorizontal:18,paddingTop:8,paddingBottom:250},
+  safeArea:{flex:1,backgroundColor:"transparent"}, content:{gap:9,paddingHorizontal:16,paddingTop:4,paddingBottom:220},
   topBar:{alignItems:"center",flexDirection:"row",justifyContent:"space-between"}, topBarTitle:{color:"#F7F4EC",fontSize:16,fontWeight:"800"},
   headerIcon:{alignItems:"center",justifyContent:"center",minHeight:48,minWidth:48}, headerIconText:{color: canalDynamicColors.text,fontSize:35,lineHeight:38}, closeIconText:{color: canalDynamicColors.text,fontSize:25},
-  hero:{gap:6,paddingVertical:10}, eyebrow:{color: canalDynamicColors.mint,fontSize:11,fontWeight:"900",letterSpacing:1.4}, title:{color:"#FFFFFF",fontFamily:"Georgia",fontSize:38,fontWeight:"700"}, subtitle:{color:"rgba(255,255,255,.78)",fontSize:15,lineHeight:22},
-  stepBar:{borderColor:"rgba(255,255,255,.17)",borderRadius:20,borderWidth:1,flexDirection:"row",gap:5,overflow:"hidden",padding:5}, stepButton:{alignItems:"center",borderRadius:15,flex:1,justifyContent:"center",minHeight:48,paddingHorizontal:3}, stepButtonSelected:{backgroundColor:"rgba(228,255,248,.9)"}, stepButtonText:{color:"rgba(255,255,255,.58)",fontSize:10,fontWeight:"600"}, stepButtonTextSelected:{color:"#164054"}, stepContent:{gap:10},
-  card:{backgroundColor:"rgba(255,255,255,.08)",borderColor:"rgba(255,255,255,.18)",borderRadius:26,borderWidth:1,gap:12,overflow:"hidden",padding:18}, sectionHeaderRow:{alignItems:"flex-start",flexDirection:"row",gap:12},sectionHeaderCopy:{flex:1,gap:6},sectionTitle:{color:"#FFFFFF",fontSize:19,fontWeight:"800"},sectionMeta:{color: canalDynamicColors.mint,fontSize:11,fontWeight:"800"},helperText:{color:"rgba(255,255,255,.7)",fontSize:13,lineHeight:19},
-  wrap:{flexDirection:"row",flexWrap:"wrap",gap:8},chip:{alignItems:"center",backgroundColor:"rgba(255,255,255,.07)",borderColor:"rgba(255,255,255,.18)",borderRadius:999,borderWidth:1,justifyContent:"center",minHeight:48,paddingHorizontal:15},chipSelected:{backgroundColor:"rgba(114,216,196,.9)",borderColor:"#A8F3E3"},chipText:{color:"rgba(255,255,255,.8)",fontSize:13,fontWeight:"700"},chipTextSelected:{color:"#103C46"},
-  moodCount:{color:"rgba(255,255,255,.66)",fontSize:12,fontVariant:["tabular-nums"],fontWeight:"700"},moodConstellation:{flexDirection:"row",flexWrap:"wrap",gap:9},moodOrb:{alignItems:"center",borderRadius:999,justifyContent:"center",minHeight:52,minWidth:82,paddingHorizontal:14},moodOrbIdle:{backgroundColor:"rgba(255,255,255,.07)",borderColor:"rgba(255,255,255,.17)",borderWidth:1},moodOrbSelected:{backgroundColor:"rgba(114,216,196,.92)"},moodOrbPressed:{opacity:.72},moodOrbText:{color:"rgba(255,255,255,.82)",fontSize:13,fontWeight:"700"},moodOrbTextSelected:{color:"#103C46"},
-  textInput:{backgroundColor:"rgba(8,29,50,.26)",borderColor:"rgba(255,255,255,.17)",borderRadius:17,borderWidth:1,color: canalDynamicColors.text,fontSize:15,minHeight:50,paddingHorizontal:14,paddingVertical:12},sceneNameInput:{fontFamily:"Georgia",fontSize:18},notesInput:{minHeight:100,textAlignVertical:"top"},genreSearchInput:{marginTop:2},genreSuggestions:{gap:8},genreSuggestionLabel:{color: canalDynamicColors.muted,fontSize:11,fontWeight:"800"},genreEmptyText:{color: canalDynamicColors.muted,fontSize:13},selectedGenreSection:{gap:8},selectedGenreLabel:{color: canalDynamicColors.mint,fontSize:11,fontWeight:"800"},
-  sliderGrid:{gap:10},sliderCard:{flex:1},familiarityLabels:{alignItems:"center",flexDirection:"row",justifyContent:"space-between"},familiarityLabel:{color:"rgba(255,255,255,.62)",fontSize:11,fontWeight:"700"},familiarityValue:{color:"#FFFFFF",fontSize:14,fontWeight:"800"},
-  preferenceRow:{alignItems:"center",borderTopColor:"rgba(255,255,255,.1)",borderTopWidth:1,flexDirection:"row",gap:12,minHeight:64,paddingTop:10},preferenceCopy:{flex:1},preferenceLabel:{color:"#FFFFFF",fontSize:14,fontWeight:"800"},policyRow:{paddingBottom:4},
+  hero:{gap:3,paddingVertical:3}, eyebrow:{color: canalDynamicColors.mint,fontSize:9,fontWeight:"900",letterSpacing:1.2}, title:{color:"#FFFFFF",fontFamily:"Georgia",fontSize:28,fontWeight:"700"}, subtitle:{color:"rgba(255,255,255,.72)",fontSize:12,lineHeight:16},
+  stepBar:{borderColor:"rgba(255,255,255,.17)",borderRadius:17,borderWidth:1,flexDirection:"row",gap:3,overflow:"hidden",padding:3}, stepButton:{alignItems:"center",borderRadius:13,flex:1,justifyContent:"center",minHeight:48,paddingHorizontal:2}, stepButtonSelected:{backgroundColor:"rgba(228,255,248,.9)"}, stepButtonText:{color:"rgba(255,255,255,.58)",fontSize:9,fontWeight:"600"}, stepButtonTextSelected:{color:"#164054"}, stepContent:{gap:7},
+  card:{backgroundColor:"rgba(255,255,255,.07)",borderColor:"rgba(255,255,255,.14)",borderRadius:20,borderWidth:1,gap:7,overflow:"hidden",padding:12}, sectionHeaderRow:{alignItems:"flex-start",flexDirection:"row",gap:10},sectionHeaderCopy:{flex:1,gap:4},sectionTitle:{color:"#FFFFFF",fontSize:16,fontWeight:"800"},sectionMeta:{color: canalDynamicColors.mint,fontSize:10,fontWeight:"800"},helperText:{color:"rgba(255,255,255,.68)",fontSize:11,lineHeight:15},
+  wrap:{flexDirection:"row",flexWrap:"wrap",gap:6},compactRail:{alignItems:"center",gap:6,paddingRight:16},compactSectionHeader:{alignItems:"center",flexDirection:"row",justifyContent:"space-between"},chip:{alignItems:"center",backgroundColor:"rgba(255,255,255,.06)",borderColor:"rgba(255,255,255,.15)",borderRadius:999,borderWidth:1,justifyContent:"center",minHeight:48,paddingHorizontal:12},chipSelected:{backgroundColor:"rgba(114,216,196,.9)",borderColor:"#A8F3E3"},chipText:{color:"rgba(255,255,255,.8)",fontSize:12,fontWeight:"700"},chipTextSelected:{color:"#103C46"},
+  moodCount:{color:"rgba(255,255,255,.66)",fontSize:11,fontVariant:["tabular-nums"],fontWeight:"700"},moodConstellation:{flexDirection:"row",flexWrap:"wrap",gap:6},moodOrb:{alignItems:"center",borderRadius:999,justifyContent:"center",minHeight:48,minWidth:72,paddingHorizontal:12},moodOrbIdle:{backgroundColor:"rgba(255,255,255,.06)",borderColor:"rgba(255,255,255,.15)",borderWidth:1},moodOrbSelected:{backgroundColor:"rgba(114,216,196,.92)"},moodOrbPressed:{opacity:.72},moodOrbText:{color:"rgba(255,255,255,.82)",fontSize:12,fontWeight:"700"},moodOrbTextSelected:{color:"#103C46"},
+  textInput:{backgroundColor:"rgba(8,29,50,.26)",borderColor:"rgba(255,255,255,.17)",borderRadius:17,borderWidth:1,color: canalDynamicColors.text,fontSize:14,minHeight:48,paddingHorizontal:12,paddingVertical:9},sceneNameInput:{fontFamily:"Georgia",fontSize:17},notesInput:{minHeight:66,textAlignVertical:"top"},genreSearchInput:{marginTop:0},genreSuggestions:{gap:5},genreSuggestionLabel:{color: canalDynamicColors.muted,fontSize:10,fontWeight:"800"},genreEmptyText:{color: canalDynamicColors.muted,fontSize:12},selectedGenreSection:{gap:5},selectedGenreLabel:{color: canalDynamicColors.mint,fontSize:10,fontWeight:"800"},
+  sliderGrid:{gap:7},soundTuningCard:{alignItems:"stretch",backgroundColor:"rgba(255,255,255,.055)",borderRadius:20,flexDirection:"row",overflow:"hidden",paddingHorizontal:12,paddingVertical:10},energyCard:{flex:4,gap:3},sliderCard:{flex:6,gap:3},soundTuningDivider:{backgroundColor:"rgba(255,255,255,.1)",marginHorizontal:10,width:StyleSheet.hairlineWidth},energyScale:{flexDirection:"row",position:"relative"},energyLine:{backgroundColor:"rgba(255,255,255,.18)",height:1,left:16,position:"absolute",right:16,top:35},energyChoice:{alignItems:"center",flex:1,justifyContent:"space-between",minHeight:48,paddingTop:7},energyChoiceText:{color:"rgba(255,255,255,.54)",fontSize:9,fontWeight:"700"},energyChoiceTextSelected:{color:"#DFFFF7",fontWeight:"900"},energyMarker:{backgroundColor:"rgba(255,255,255,.28)",borderRadius:3,height:5,width:5},energyMarkerSelected:{backgroundColor:"#72D8C4",height:8,width:8},familiarityLabels:{alignItems:"center",flexDirection:"row",justifyContent:"space-between"},familiarityLabel:{color:"rgba(255,255,255,.55)",fontSize:9,fontWeight:"700"},familiarityValue:{color:"#DFFFF7",fontSize:11,fontWeight:"800"},
+  preferencesGrid:{flexDirection:"row",gap:4},preferenceRow:{alignItems:"center",borderRadius:12,flex:1,gap:5,justifyContent:"center",minHeight:66,paddingHorizontal:3,paddingVertical:6},preferenceRowSelected:{backgroundColor:"rgba(114,216,196,.08)"},compactSwitch:{backgroundColor:"rgba(255,255,255,.16)",borderRadius:8,height:16,padding:2,width:28},compactSwitchSelected:{backgroundColor:"rgba(114,216,196,.72)"},compactSwitchKnob:{backgroundColor:"rgba(255,255,255,.76)",borderRadius:6,height:12,width:12},compactSwitchKnobSelected:{alignSelf:"flex-end",backgroundColor:"#F5FFFC"},preferenceLabel:{color:"rgba(255,255,255,.62)",fontSize:9,fontWeight:"700",lineHeight:11,textAlign:"center"},preferenceLabelSelected:{color:"#FFFFFF"},policyRow:{paddingBottom:2},
   inlineNavigation:{alignItems:"center",flexDirection:"row",justifyContent:"space-between",gap:10},inlineButton:{alignItems:"center",justifyContent:"center",minHeight:48,paddingHorizontal:8},inlineButtonText:{color:"#C7FFF2",fontSize:14,fontWeight:"800"},inlineHint:{color:"rgba(255,255,255,.58)",fontSize:11,flex:1},
   reviewHero:{alignItems:"center",gap:8,paddingVertical:18},reviewEyebrow:{color: canalDynamicColors.mint,fontSize:10,fontWeight:"900",letterSpacing:1.5},reviewName:{color:"#FFFFFF",fontFamily:"Georgia",fontSize:30,fontWeight:"700",textAlign:"center"},reviewSubtitle:{color:"rgba(255,255,255,.7)",fontSize:13,textAlign:"center"},miniWave:{alignItems:"center",flexDirection:"row",gap:5,height:48},waveBar:{backgroundColor:"#72D8C4",borderRadius:4,width:5},summaryGrid:{flexDirection:"row",flexWrap:"wrap",gap:8},summaryCard:{backgroundColor:"rgba(255,255,255,.07)",borderRadius:17,gap:4,minHeight:74,padding:12,width:"48%"},summaryLabel:{color:"rgba(255,255,255,.55)",fontSize:10,fontWeight:"800"},summaryValue:{color:"#FFFFFF",fontSize:13,fontWeight:"800"},
   sourceCard:{alignItems:"center",backgroundColor:"rgba(255,255,255,.09)",borderColor:"rgba(255,255,255,.18)",borderRadius:22,borderWidth:1,flexDirection:"row",gap:12,padding:15},sourceDot:{alignItems:"center",backgroundColor:"#1DB954",borderRadius:18,height:36,justifyContent:"center",width:36},sourceDotInactive:{backgroundColor:"rgba(255,255,255,.14)"},sourceDotText:{color:"#FFFFFF",fontSize:15,fontWeight:"900"},sourceCopy:{flex:1},sourceTitle:{color:"#FFFFFF",fontSize:14,fontWeight:"800"},sourceText:{color:"rgba(255,255,255,.65)",fontSize:12,lineHeight:17},sourceAction:{alignItems:"center",justifyContent:"center",minHeight:48,minWidth:48},sourceActionText:{color: canalDynamicColors.mint,fontWeight:"900"},
-  actionDock:{alignItems:"center",backgroundColor:"transparent",bottom:112,flexDirection:"row",left:0,paddingHorizontal:42,position:"absolute",right:0},dockContinue:{alignItems:"center",backgroundColor:"#DFFFF7",borderRadius:16,flex:1,justifyContent:"center",minHeight:48,paddingHorizontal:16},dockContinueText:{color:"#153F50",fontSize:14,fontWeight:"900"},
+  actionDock:{alignItems:"center",backgroundColor:"transparent",bottom:146,flexDirection:"row",left:0,paddingHorizontal:42,position:"absolute",right:0},dockContinue:{alignItems:"center",backgroundColor:"#DFFFF7",borderRadius:16,flex:1,justifyContent:"center",minHeight:48,paddingHorizontal:16},dockContinueText:{color:"#153F50",fontSize:14,fontWeight:"900"},
   suggestNameButton:{alignItems:"center",justifyContent:"center",minHeight:48,paddingHorizontal:8},suggestNameText:{color: canalDynamicColors.mint,fontSize:13,fontWeight:"900"},statusText:{color:"#FFFFFF",fontSize:13,lineHeight:19},validationText:{color:"#FFD1C7",fontSize:13,fontWeight:"800"},disabled:{opacity:.45},pressed:{opacity:.72},
 });

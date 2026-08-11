@@ -2,16 +2,24 @@ import { canalDynamicColors } from "../../theme/canal-dynamic-colors";
 
 import {
   useCallback,
+  useEffect,
+  useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
   Pressable,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
+
+import { Image } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   router,
@@ -25,6 +33,11 @@ import {
 import {
   StatusBar,
 } from "expo-status-bar";
+
+import Animated, {
+  FadeInRight,
+  FadeOutRight,
+} from "react-native-reanimated";
 
 import {
   CanalHeaderActions,
@@ -65,6 +78,18 @@ import type {
   SpotifyLibrarySnapshot,
 } from "../../lib/spotify-library";
 
+import type { SpotifyTrack } from "../../lib/spotify-api";
+import { addSpotifyArtworkToTracks } from "../../lib/spotify-scene-artwork";
+import { classifyCanalSongDna } from "../../lib/song-dna";
+import { readTemporarilyDislikedTrackIds, setSongDisliked, setSongLiked } from "../../lib/song-preferences";
+import {
+  normalizeSongSceneActionInput,
+  songSceneActionParams,
+} from "../../lib/song-scene-actions";
+import { captureSceneStudioScope } from "../../lib/scene-studio-scope";
+import { useAuth } from "../../providers/auth-provider";
+import { readAccountCanalSettings } from "../../lib/app-settings";
+
 import {
   rankSceneRecommendations,
 } from "../../lib/scene-recommendations";
@@ -91,6 +116,31 @@ import {
   useConnectivity,
 } from "../../providers/connectivity-provider";
 
+const QUICK_MOODS = [
+  { label: "Focused", value: "focused" },
+  { label: "Energized", value: "energized" },
+  { label: "Calm", value: "calm" },
+  { label: "Social", value: "social" },
+] as const;
+
+function momentLabel(date = new Date()): string {
+  const day = date.toLocaleDateString(undefined, { weekday: "long" });
+  const hour = date.getHours();
+  const period = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+  return `${day} ${period}`.toUpperCase();
+}
+
+function trackArtwork(track?: SpotifyTrack): string | undefined {
+  return track?.album?.images?.[0]?.url ?? track?.album?.imageUrl;
+}
+
+function isUsableOrbitTrack(track: SpotifyTrack): boolean {
+  return /^[A-Za-z0-9]+$/u.test(track.id) &&
+    track.uri === `spotify:track:${track.id}` &&
+    track.name.trim().length > 0 &&
+    track.artists.some((artist) => artist.name.trim().length > 0);
+}
+
 function SceneCard(props: {
   scene: StoredScene;
   compact?: boolean;
@@ -100,6 +150,7 @@ function SceneCard(props: {
 
   return (
     <Pressable
+      accessibilityLabel={`Open ${props.scene.name}`}
       accessibilityRole="button"
       onPress={() =>
         router.push({
@@ -120,8 +171,9 @@ function SceneCard(props: {
         {
           backgroundColor:
             presentation.colors[2],
-          borderColor:
-            `${presentation.accent}40`,
+          ...(props.compact ? null : {
+            borderColor: `${presentation.accent}40`,
+          }),
         },
 
         pressed &&
@@ -137,13 +189,7 @@ function SceneCard(props: {
       />
 
       {props.scene.favorite ? (
-        <Text
-          style={
-            styles.favoriteMark
-          }
-        >
-          ★
-        </Text>
+        <Ionicons color={canalDynamicColors.gold} name="star" size={15} style={styles.favoriteMark} />
       ) : null}
     </Pressable>
   );
@@ -189,6 +235,26 @@ function EmptyScenes() {
 }
 
 export default function HomeScreen() {
+  const { accountEpoch, sessionGeneration, user } = useAuth();
+  const scope = useMemo(() => captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration }), [accountEpoch, sessionGeneration, user?.id]);
+  const currentScopeRef = useRef(scope);
+  currentScopeRef.current = scope;
+  const directionInputRef = useRef<TextInput>(null);
+  const [quickMood, setQuickMood] = useState<(typeof QUICK_MOODS)[number]["value"]>("focused");
+  const [directRequest, setDirectRequest] = useState("");
+  const [orbitArtworkTracks, setOrbitArtworkTracks] = useState<SpotifyTrack[]>([]);
+  const [openOrbitActions, setOpenOrbitActions] = useState("");
+  const [orbitOffset, setOrbitOffset] = useState(0);
+  const [temporarilyDisliked, setTemporarilyDisliked] = useState<string[]>([]);
+  const [smartSpotifySync, setSmartSpotifySync] = useState(true);
+  useEffect(() => {
+    let active = true;
+    if (!user?.id) return () => { active = false; };
+    void readAccountCanalSettings(user.id).then((settings) => {
+      if (active) setSmartSpotifySync(settings.smartSpotifySync);
+    });
+    return () => { active = false; };
+  }, [user?.id]);
   const {
     refresh:
       refreshConnectivity,
@@ -340,9 +406,11 @@ export default function HomeScreen() {
       ],
     );
 
-  useReconnectReload(
-    refreshRecommendations,
-  );
+  const refreshRecommendationsOnReconnect = useCallback(async () => {
+    if (smartSpotifySync) await refreshRecommendations();
+  }, [refreshRecommendations, smartSpotifySync]);
+
+  useReconnectReload(refreshRecommendationsOnReconnect);
 
   const recoverRecommendations =
     async (): Promise<void> => {
@@ -376,6 +444,120 @@ export default function HomeScreen() {
     )
       .slice(0, 3);
 
+  const continueScene = history[0]
+    ? scenes.find((scene) => scene.id === history[0].sceneId)
+    : undefined;
+  const continueTrack = continueScene?.tracks.find((track) => Boolean(track.imageUrl)) ?? continueScene?.tracks[0];
+  const orbitCandidates = useMemo(() => {
+    if (!spotifySnapshot) return [];
+    const combined = [
+      ...spotifySnapshot.discoveryTracks,
+      ...spotifySnapshot.recentTracks,
+      ...spotifySnapshot.savedTracks,
+      ...spotifySnapshot.playlistTracks,
+    ];
+    const seen = new Set<string>();
+    return combined.filter((track) => {
+      if (!isUsableOrbitTrack(track) || seen.has(track.id)) return false;
+      seen.add(track.id);
+      return !continueScene?.tracks.some((item) => item.id === track.id);
+    });
+  }, [continueScene?.tracks, spotifySnapshot]);
+  const orbitTracks = useMemo(() => {
+    const disliked = new Set(temporarilyDisliked);
+    const available = orbitCandidates.filter((track) => !disliked.has(track.id));
+    if (!available.length) return [];
+    const start = orbitOffset % available.length;
+    return [...available.slice(start), ...available.slice(0, start)].slice(0, 3);
+  }, [orbitCandidates, orbitOffset, temporarilyDisliked]);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    if (!scope) { setTemporarilyDisliked([]); return () => { active = false; }; }
+    void readTemporarilyDislikedTrackIds(scope, () => currentScopeRef.current).then((ids) => {
+      if (active) setTemporarilyDisliked(ids);
+    });
+    return () => { active = false; };
+  }, [scope]));
+
+  useEffect(() => {
+    let active = true;
+    setOrbitArtworkTracks(orbitTracks.filter((track) => Boolean(trackArtwork(track))));
+    void addSpotifyArtworkToTracks(orbitTracks).then((tracks) => {
+      if (active) setOrbitArtworkTracks(tracks.filter((track) => Boolean(trackArtwork(track))));
+    });
+    return () => { active = false; };
+  }, [orbitTracks]);
+
+  const openQuickScene = useCallback((track?: SpotifyTrack) => {
+    const trackDirection = track
+      ? `Include music like ${track.name} by ${track.artists[0]?.name ?? "this artist"}.`
+      : directRequest.trim();
+    router.push({
+      pathname: "/scene-studio",
+      params: {
+        reset: String(Date.now()),
+        quickMood,
+        direct: trackDirection || undefined,
+        anchorTrackId: track?.id,
+      },
+    } as never);
+  }, [directRequest, quickMood]);
+
+  const orbitSongParams = useCallback((track: SpotifyTrack) => {
+    const song = normalizeSongSceneActionInput({
+      trackId: track.id,
+      title: track.name,
+      artist: track.artists[0]?.name ?? "Unknown artist",
+      artworkUrl: trackArtwork(track),
+      spotifyUrl: `https://open.spotify.com/track/${track.id}`,
+    });
+    return song ? {
+      ...songSceneActionParams(song),
+      genreHints: (spotifySnapshot?.trackGenres[track.id] ?? []).slice(0, 4).join("|"),
+    } : null;
+  }, [spotifySnapshot?.trackGenres]);
+
+  const openOrbitContext = useCallback((track: SpotifyTrack) => {
+    const params = orbitSongParams(track);
+    if (!params) return;
+    setOpenOrbitActions("");
+    router.push({ pathname: "/song-context", params } as never);
+  }, [orbitSongParams]);
+
+  const openAddToScene = useCallback((track: SpotifyTrack) => {
+    const params = orbitSongParams(track);
+    if (!params) return;
+    setOpenOrbitActions("");
+    router.push({ pathname: "/add-song-to-scene", params } as never);
+  }, [orbitSongParams]);
+
+  const updateOrbitPreference = useCallback(async (track: SpotifyTrack, preference: "like" | "dislike"): Promise<void> => {
+    const operationScope = scope;
+    const song = normalizeSongSceneActionInput({
+      trackId: track.id,
+      title: track.name,
+      artist: track.artists[0]?.name ?? "Unknown artist",
+      artworkUrl: trackArtwork(track),
+      spotifyUrl: `https://open.spotify.com/track/${track.id}`,
+    });
+    if (!operationScope || !song) return;
+    const dna = classifyCanalSongDna({ genreHints: spotifySnapshot?.trackGenres[track.id] ?? [], title: track.name, artist: song.artist });
+    setOpenOrbitActions("");
+    try {
+      if (preference === "like") {
+        await setSongLiked(song, dna, true, operationScope, () => currentScopeRef.current);
+        setTemporarilyDisliked((current) => current.filter((id) => id !== track.id));
+      } else {
+        await setSongDisliked(song, dna, true, operationScope, () => currentScopeRef.current);
+        setTemporarilyDisliked((current) => current.includes(track.id) ? current : [...current, track.id]);
+      }
+      setRecommendationWarning(preference === "like" ? "Canal will use this song’s DNA in future Scenes." : "Song replaced and temporarily deprioritized.");
+    } catch {
+      setRecommendationWarning("Canal could not save that song preference. Try again.");
+    }
+  }, [scope, spotifySnapshot?.trackGenres]);
+
   return (
     <SafeAreaView
       style={styles.safeArea}
@@ -390,6 +572,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={
           false
         }
+        onScrollBeginDrag={() => setOpenOrbitActions("")}
       >
         <View style={styles.header}>
           <View style={styles.headerCopy}>
@@ -398,7 +581,7 @@ export default function HomeScreen() {
                 styles.eyebrow
               }
             >
-              CANAL
+              {momentLabel()}
             </Text>
 
             <Text
@@ -422,6 +605,23 @@ export default function HomeScreen() {
           <CanalHeaderActions showSettings={false} />
         </View>
 
+        <View style={styles.liveStrip}>
+          <View style={styles.liveIcon}>
+            <Ionicons color={canalDynamicColors.mint} name="radio-outline" size={23} />
+          </View>
+          <View style={styles.liveCopy}>
+            <Text style={styles.liveEyebrow}>CANAL LIVE</Text>
+            <Text style={styles.liveTitle}>Make the room part of the music.</Text>
+            <Text style={styles.liveText}>Blend Scenes and listen together.</Text>
+          </View>
+          <Pressable accessibilityLabel="Start a collaborative Stage" accessibilityRole="button" onPress={() => router.push("/create-stage")} style={({ pressed }) => [styles.liveAction, pressed && styles.pressed]}>
+            <Ionicons color={canalDynamicColors.text} name="add" size={23} />
+          </Pressable>
+          <Pressable accessibilityLabel="Join a Stage with a code" accessibilityRole="button" onPress={() => router.push("/join-stage")} style={({ pressed }) => [styles.liveAction, pressed && styles.pressed]}>
+            <Ionicons color={canalDynamicColors.text} name="enter-outline" size={22} />
+          </Pressable>
+        </View>
+
         {history[0] ? (
           <Pressable
             accessibilityRole="button"
@@ -440,6 +640,15 @@ export default function HomeScreen() {
               pressed && styles.pressed,
             ]}
           >
+            {continueTrack?.imageUrl ? (
+              <Image
+                accessibilityLabel={`${continueTrack.title} artwork`}
+                contentFit="cover"
+                source={{ uri: continueTrack.imageUrl }}
+                style={styles.continueArtwork}
+                transition={180}
+              />
+            ) : null}
             <View style={styles.continueCopy}>
               <Text style={styles.continueEyebrow}>
                 CONTINUE LISTENING
@@ -447,91 +656,86 @@ export default function HomeScreen() {
               <Text numberOfLines={1} style={styles.continueTitle}>
                 {history[0].sceneName}
               </Text>
+              {continueTrack ? (
+                <Text numberOfLines={1} style={styles.continueMeta}>
+                  {continueTrack.title} · {continueTrack.artist}
+                </Text>
+              ) : null}
             </View>
             <View style={styles.continuePlay}>
-              <Text style={styles.continuePlayText}>▶</Text>
+              <Ionicons color={canalDynamicColors.text} name="play" size={17} />
             </View>
           </Pressable>
         ) : null}
 
-        <View style={styles.stageStrip}>
-          <View style={styles.stageStripCopy}>
-            <Text style={styles.stageStripEyebrow}>STAGE</Text>
-            <Text style={styles.stageStripTitle}>Make the room part of the music.</Text>
-            <Text style={styles.stageStripText}>Blend Scenes with friends and listen together live.</Text>
-          </View>
-          <View style={styles.stageStripActions}>
+        <View style={styles.momentCard}>
+          <View style={styles.momentHeader}>
+            <View>
+              <Text style={styles.momentEyebrow}>SET THE MOMENT</Text>
+              <Text style={styles.momentTitle}>How should it feel?</Text>
+            </View>
             <Pressable
-              accessibilityLabel="Start a collaborative Stage"
+              accessibilityLabel="Open full Scene controls"
               accessibilityRole="button"
-              onPress={() => router.push("/create-stage")}
-              style={({ pressed }) => [styles.stagePrimary, pressed && styles.pressed]}
+              onPress={() => router.push({ pathname: "/scene-studio", params: { mode: "new", reset: String(Date.now()) } } as never)}
+              style={({ pressed }) => [styles.fullControls, pressed && styles.pressed]}
             >
-              <Text style={styles.stagePrimaryText}>Go Live</Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Join a Stage with a code"
-              accessibilityRole="button"
-              onPress={() => router.push("/join-stage")}
-              style={({ pressed }) => [styles.stageJoin, pressed && styles.pressed]}
-            >
-              <Text style={styles.stageJoinText}>Join code</Text>
+              <Text style={styles.fullControlsText}>Full controls</Text>
+              <Ionicons color={canalDynamicColors.text} name="chevron-forward" size={15} />
             </Pressable>
           </View>
-        </View>
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={() =>
-            router.push(
-              "/scene-studio",
-            )
-          }
-          style={({ pressed }) => [
-            styles.hero,
-
-            pressed &&
-              styles.pressed,
-          ]}
-        >
-          <View style={styles.heroOrb}>
-            <Text
-              style={
-                styles.heroOrbText
-              }
-            >
-              +
-            </Text>
+          <View accessibilityLabel="Quick mood" accessibilityRole="radiogroup" style={styles.quickMoods}>
+            {QUICK_MOODS.map((mood) => {
+              const selected = quickMood === mood.value;
+              return (
+                <Pressable
+                  accessibilityLabel={`Choose ${mood.label} mood`}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  key={mood.value}
+                  onPress={() => setQuickMood(mood.value)}
+                  style={({ pressed }) => [styles.quickMood, selected && styles.quickMoodSelected, pressed && styles.pressed]}
+                >
+                  <Text style={[styles.quickMoodText, selected && styles.quickMoodTextSelected]}>{mood.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
 
-          <View style={styles.heroText}>
-            <Text
-              style={
-                styles.heroTitle
-              }
+          <View style={styles.directionField}>
+            <Ionicons color={canalDynamicColors.muted} name="sparkles-outline" size={18} />
+            <TextInput
+              accessibilityLabel="Direct Canal"
+              maxLength={300}
+              onChangeText={setDirectRequest}
+              placeholder="Direct Canal — instrumental, no repeats…"
+              placeholderTextColor={canalDynamicColors.muted}
+              ref={directionInputRef}
+              returnKeyType="done"
+              style={styles.directionInput}
+              value={directRequest}
+            />
+            <Pressable
+              accessibilityLabel="Edit Scene direction"
+              accessibilityRole="button"
+              onPress={() => directionInputRef.current?.focus()}
+              style={({ pressed }) => [styles.directionAction, pressed && styles.pressed]}
             >
-              Set the Scene
-            </Text>
-
-            <Text
-              style={
-                styles.heroDescription
-              }
-            >
-              Choose the activity, mood,
-              energy, and duration. Canal
-              builds the sequence.
-            </Text>
+              <Ionicons color={canalDynamicColors.text} name="create-outline" size={18} />
+            </Pressable>
           </View>
 
-          <Text
-            style={
-              styles.heroArrow
-            }
+          <Pressable
+            accessibilityLabel="Create a Scene"
+            accessibilityRole="button"
+            onPress={() => openQuickScene()}
+            style={({ pressed }) => [styles.generateButton, pressed && styles.pressed]}
           >
-            ›
-          </Text>
-        </Pressable>
+            <Ionicons color={canalDynamicColors.onAccent} name="pulse" size={19} />
+            <Text style={styles.generateButtonText}>Generate a {QUICK_MOODS.find((item) => item.value === quickMood)?.label} Scene</Text>
+          </Pressable>
+        </View>
 
         {recommendationIssue?.action ===
         "reconnect-spotify" ? (
@@ -693,6 +897,68 @@ export default function HomeScreen() {
               </Text>
             ) : null}
 
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionCopy}>
+                <Text style={styles.sectionTitle}>New to your orbit</Text>
+                <Text style={styles.sectionSubtitle}>Cached music worth bringing into a Scene.</Text>
+              </View>
+              <Pressable accessibilityLabel="Refresh New to your orbit" accessibilityHint="Shows a different set of cached songs without requesting Spotify again" accessibilityRole="button" disabled={orbitCandidates.length <= 3} onPress={() => { setOpenOrbitActions(""); setOrbitOffset((current) => current + 3); }} style={({ pressed }) => [styles.orbitRefresh, pressed && styles.pressed, orbitCandidates.length <= 3 && styles.disabled]}>
+                <Ionicons color={canalDynamicColors.text} name="refresh-outline" size={20} />
+              </Pressable>
+            </View>
+
+            {orbitArtworkTracks.length > 0 ? (
+              <View style={styles.orbitList}>
+                {orbitArtworkTracks.map((track) => (
+                  <View key={track.id} style={styles.orbitRowWrapper}>
+                    <Pressable
+                      accessibilityLabel={`View context for ${track.name}`}
+                      accessibilityRole="button"
+                      onPress={() => openOrbitContext(track)}
+                      style={({ pressed }) => [styles.orbitRow, pressed && styles.pressed]}
+                    >
+                      {trackArtwork(track) ? <Image accessibilityLabel={`${track.name} artwork`} contentFit="cover" source={{ uri: trackArtwork(track) }} style={styles.orbitArtwork} transition={180} /> : null}
+                      <View style={styles.orbitCopy}>
+                        <Text numberOfLines={1} style={styles.orbitTitle}>{track.name}</Text>
+                        <Text numberOfLines={1} style={styles.orbitArtist}>{track.artists.map((artist) => artist.name).join(", ")}</Text>
+                      </View>
+                      <View style={styles.orbitManageSpace} />
+                    </Pressable>
+                    <Pressable
+                      accessibilityLabel={`${openOrbitActions === track.id ? "Close" : "Manage"} ${track.name} actions`}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: openOrbitActions === track.id }}
+                      onPress={() => setOpenOrbitActions((current) => current === track.id ? "" : track.id)}
+                      style={({ pressed }) => [styles.orbitManageButton, pressed && styles.pressed]}
+                    >
+                      <Ionicons color={canalDynamicColors.text} name="ellipsis-horizontal" size={20} />
+                    </Pressable>
+                    {openOrbitActions === track.id ? (
+                      <Animated.View entering={FadeInRight.duration(170)} exiting={FadeOutRight.duration(130)} style={styles.orbitActionLedge}>
+                        <View accessibilityLabel={`${track.name} actions`} accessibilityRole="menu" style={styles.orbitActionLedgeInner}>
+                          <Pressable accessibilityLabel={`Open ${track.name} in Spotify`} accessibilityRole="button" onPress={() => { setOpenOrbitActions(""); void Linking.openURL(`https://open.spotify.com/track/${track.id}`); }} style={({ pressed }) => [styles.orbitAction, pressed && styles.orbitActionPressed]}>
+                            <Ionicons color="#1DB954" name="open-outline" size={18} />
+                          </Pressable>
+                          <Pressable accessibilityLabel={`Like ${track.name}`} accessibilityRole="button" onPress={() => { void updateOrbitPreference(track, "like"); }} style={({ pressed }) => [styles.orbitAction, pressed && styles.orbitActionPressed]}>
+                            <Ionicons color={canalDynamicColors.mint} name="heart-outline" size={18} />
+                          </Pressable>
+                          <Pressable accessibilityLabel={`Dislike ${track.name}`} accessibilityHint="Temporarily replaces and deprioritizes this song" accessibilityRole="button" onPress={() => { void updateOrbitPreference(track, "dislike"); }} style={({ pressed }) => [styles.orbitAction, pressed && styles.orbitActionPressed]}>
+                            <Ionicons color={canalDynamicColors.danger} name="remove-circle-outline" size={18} />
+                          </Pressable>
+                          <Pressable accessibilityLabel={`Add ${track.name} to a Scene`} accessibilityRole="button" onPress={() => openAddToScene(track)} style={({ pressed }) => [styles.orbitAction, pressed && styles.orbitActionPressed]}>
+                            <Ionicons color={canalDynamicColors.text} name="add-circle-outline" size={19} />
+                          </Pressable>
+                          <Pressable accessibilityLabel={`Create a Scene from ${track.name}`} accessibilityRole="button" onPress={() => { setOpenOrbitActions(""); openQuickScene(track); }} style={({ pressed }) => [styles.orbitAction, pressed && styles.orbitActionPressed]}>
+                            <Ionicons color={canalDynamicColors.text} name="sparkles-outline" size={18} />
+                          </Pressable>
+                        </View>
+                      </Animated.View>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ) : <Text style={styles.orbitEmpty}>Sync Spotify to bring real tracks and artwork into this section.</Text>}
+
             <View
               style={
                 styles.sectionHeader
@@ -717,88 +983,26 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {(recentScenes.length > 0
-              ? recentScenes
-              : scenes.slice(0, 4)
-            ).map((scene) => (
-              <SceneCard
-                key={scene.id}
-                scene={scene}
-              />
-            ))}
+            <ScrollView
+              accessibilityLabel="Recent Scenes"
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalScenes}
+            >
+              {(recentScenes.length > 0
+                ? recentScenes
+                : scenes.slice(0, 4)
+              ).map((scene) => (
+                <SceneCard
+                  compact
+                  key={scene.id}
+                  scene={scene}
+                />
+              ))}
+            </ScrollView>
           </>
         )}
 
-        <View style={styles.statsCard}>
-          <Text style={styles.statsTitle}>
-            Your Canal so far
-          </Text>
-
-          <View style={styles.statsRow}>
-            <View style={styles.stat}>
-              <Text
-                style={
-                  styles.statValue
-                }
-              >
-                {scenes.length}
-              </Text>
-
-              <Text
-                style={
-                  styles.statLabel
-                }
-              >
-                Scenes
-              </Text>
-            </View>
-
-            <View style={styles.stat}>
-              <Text
-                style={
-                  styles.statValue
-                }
-              >
-                {history.length}
-              </Text>
-
-              <Text
-                style={
-                  styles.statLabel
-                }
-              >
-                Sessions
-              </Text>
-            </View>
-
-            <View style={styles.stat}>
-              <Text
-                style={
-                  styles.statValue
-                }
-              >
-                {scenes.reduce(
-                  (
-                    total,
-                    scene,
-                  ) =>
-                    total +
-                    (scene.playCount ??
-                      0),
-                  0,
-                )}
-              </Text>
-
-              <Text
-                style={
-                  styles.statLabel
-                }
-              >
-                Plays
-              </Text>
-            </View>
-          </View>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -842,8 +1046,9 @@ const styles =
 
     title: {
       color: canalDynamicColors.text,
-      fontSize: 38,
-      lineHeight: 41,
+      fontFamily: "Georgia",
+      fontSize: 35,
+      lineHeight: 39,
       fontWeight: "500",
       letterSpacing: -1.1,
       marginTop: 4,
@@ -904,6 +1109,12 @@ const styles =
       minWidth: 0,
     },
 
+    continueArtwork: {
+      width: 54,
+      height: 54,
+      borderRadius: 14,
+    },
+
     continueEyebrow: {
       color: canalDynamicColors.mint,
       fontSize: 8,
@@ -919,6 +1130,12 @@ const styles =
       marginTop: 3,
     },
 
+    continueMeta: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      marginTop: 2,
+    },
+
     continuePlay: {
       width: 44,
       height: 44,
@@ -931,6 +1148,283 @@ const styles =
     continuePlayText: {
       color: canalDynamicColors.text,
       fontSize: 15,
+    },
+
+    momentCard: {
+      borderRadius: 27,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.surface,
+      padding: 18,
+      marginBottom: 26,
+      boxShadow: "0 18px 46px rgba(2, 24, 43, 0.16)",
+      gap: 15,
+    },
+
+    momentHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+
+    momentEyebrow: {
+      color: canalDynamicColors.mint,
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+
+    momentTitle: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 22,
+      marginTop: 3,
+    },
+
+    fullControls: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingLeft: 12,
+      gap: 2,
+    },
+
+    fullControlsText: {
+      color: canalDynamicColors.text,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+
+    quickMoods: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+
+    quickMood: {
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 15,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.elevated,
+    },
+
+    quickMoodSelected: {
+      borderColor: canalDynamicColors.mint,
+      backgroundColor: canalDynamicColors.elevated,
+    },
+
+    quickMoodText: {
+      color: canalDynamicColors.muted,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+
+    quickMoodTextSelected: {
+      color: canalDynamicColors.text,
+    },
+
+    directionField: {
+      minHeight: 54,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      paddingLeft: 14,
+      borderRadius: 18,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.elevated,
+    },
+
+    directionInput: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 48,
+      color: canalDynamicColors.text,
+      fontSize: 13,
+    },
+
+    directionAction: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    generateButton: {
+      minHeight: 52,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 9,
+      borderRadius: 18,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.mint,
+    },
+
+    generateButtonText: {
+      color: canalDynamicColors.onAccent,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    liveStrip: {
+      minHeight: 78,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 11,
+      borderTopWidth: 1,
+      borderBottomWidth: 1,
+      borderColor: canalDynamicColors.line,
+      marginBottom: 25,
+    },
+
+    liveIcon: {
+      width: 40,
+      alignItems: "center",
+    },
+
+    liveCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    liveEyebrow: {
+      color: canalDynamicColors.mint,
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+
+    liveTitle: {
+      color: canalDynamicColors.text,
+      fontFamily: "Georgia",
+      fontSize: 15,
+      marginTop: 2,
+    },
+
+    liveText: {
+      color: canalDynamicColors.muted,
+      fontSize: 10,
+      marginTop: 2,
+    },
+
+    liveAction: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    orbitList: {
+      gap: 9,
+      marginBottom: 26,
+    },
+
+    orbitRefresh: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    orbitRowWrapper: {
+      position: "relative",
+      zIndex: 1,
+    },
+
+    orbitRow: {
+      minHeight: 62,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      borderRadius: 18,
+      borderCurve: "continuous",
+      backgroundColor: canalDynamicColors.surface,
+      padding: 7,
+    },
+
+    orbitManageSpace: {
+      width: 48,
+      height: 48,
+    },
+
+    orbitManageButton: {
+      position: "absolute",
+      right: 7,
+      top: 7,
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 4,
+    },
+
+    orbitActionLedge: {
+      position: "absolute",
+      right: 55,
+      top: 7,
+      zIndex: 5,
+    },
+
+    orbitActionLedgeInner: {
+      minHeight: 48,
+      flexDirection: "row",
+      overflow: "hidden",
+      borderRadius: 16,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderColor: canalDynamicColors.line,
+      backgroundColor: canalDynamicColors.surface,
+      boxShadow: "0 8px 24px rgba(2, 30, 45, 0.2)",
+    },
+
+    orbitArtwork: {
+      width: 48,
+      height: 48,
+      borderRadius: 11,
+    },
+
+    orbitCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    orbitTitle: {
+      color: canalDynamicColors.text,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    orbitArtist: {
+      color: canalDynamicColors.muted,
+      fontSize: 11,
+      marginTop: 2,
+    },
+
+    orbitAction: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    orbitActionPressed: {
+      backgroundColor: canalDynamicColors.elevated,
+    },
+
+    orbitEmpty: {
+      color: canalDynamicColors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginBottom: 24,
     },
 
     stageStripCopy: {
@@ -1105,8 +1599,9 @@ const styles =
 
     sectionTitle: {
       color: canalDynamicColors.text,
-      fontSize: 20,
-      fontWeight: "900",
+      fontFamily: "Georgia",
+      fontSize: 22,
+      fontWeight: "500",
     },
 
     sectionSubtitle: {
@@ -1196,15 +1691,12 @@ const styles =
     },
 
     compactSceneCard: {
-      width: 215,
-      minHeight: 190,
-      backgroundColor: canalDynamicColors.surface,
+      width: 184,
+      minHeight: 168,
       borderRadius: 22,
       borderCurve: "continuous",
-      borderWidth: 1,
       overflow: "hidden",
       padding: 17,
-      boxShadow: "0 16px 36px rgba(3, 18, 39, 0.22)",
     },
 
     sceneCard: {

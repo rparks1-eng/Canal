@@ -1109,6 +1109,7 @@ export default function ScenePreviewScreen() {
                         })
                       }
                     />
+                    <View style={styles.trackFeedbackActions}>
                     <Pressable
                       ref={(node) => {
                         swapButtonRefs.current.set(signal.track.id, node);
@@ -1140,6 +1141,29 @@ export default function ScenePreviewScreen() {
                       />
                       <Text style={styles.mismatchButtonText}>Swap</Text>
                     </Pressable>
+                    <Pressable
+                      accessibilityLabel={`Dislike ${signal.track.name}`}
+                      accessibilityHint="Marks this song as a mismatch for this Scene and opens optional reasons before replacing it"
+                      accessibilityRole="button"
+                      accessibilityState={{ busy: generationBusy, disabled: controlsBusy }}
+                      disabled={controlsBusy}
+                      onPress={() => {
+                        setPendingMismatch({
+                          trackId: signal.track.id,
+                          trackName: signal.track.name,
+                          artistIds: (signal.track.artists ?? []).map((artist) => artist.id).filter((artistId): artistId is string => Boolean(artistId)),
+                          genres: [...signal.genres],
+                          explicit: signal.track.explicit === true,
+                        });
+                        setMismatchReasons([]);
+                        setEditorStatus(`Optionally tell Canal why ${signal.track.name} does not fit.`);
+                      }}
+                      style={styles.mismatchButton}
+                    >
+                      <Ionicons color={canalDynamicColors.danger} name="remove-circle-outline" size={14} />
+                      <Text style={[styles.mismatchButtonText, styles.dislikeButtonText]}>Dislike</Text>
+                    </Pressable>
+                    </View>
                   </View>
                   <View style={styles.compactControls}>
                     <View style={styles.arrowStack}>
@@ -1495,6 +1519,14 @@ const styles = StyleSheet.create({
     gap: 4,
     justifyContent: "center",
     minHeight: 48,
+  },
+  trackFeedbackActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  dislikeButtonText: {
+    color: canalDynamicColors.danger,
   },
   mismatchButtonText: {
     color: canalDynamicColors.mint,

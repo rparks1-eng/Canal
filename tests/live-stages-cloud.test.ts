@@ -732,6 +732,36 @@ describe(
     );
 
     it(
+      "shares one private channel across overlapping Stage subscribers",
+      async () => {
+        const firstChange = jest.fn();
+        const secondChange = jest.fn();
+
+        const cleanupFirst = subscribeToLiveStage("stage-shared", firstChange);
+        await flushPromises();
+        const cleanupSecond = subscribeToLiveStage("stage-shared", secondChange);
+
+        expect(mockRealtimeSetAuth).toHaveBeenCalledTimes(1);
+        expect(mockChannelFactory).toHaveBeenCalledTimes(1);
+
+        emitBroadcast();
+        expect(firstChange).toHaveBeenCalledTimes(1);
+        expect(secondChange).toHaveBeenCalledTimes(1);
+
+        cleanupFirst();
+        expect(mockRemoveChannel).not.toHaveBeenCalled();
+
+        emitBroadcast();
+        expect(firstChange).toHaveBeenCalledTimes(1);
+        expect(secondChange).toHaveBeenCalledTimes(2);
+
+        cleanupSecond();
+        expect(mockRemoveChannel).toHaveBeenCalledTimes(1);
+        expect(mockRemoveChannel).toHaveBeenCalledWith(mockChannel);
+      },
+    );
+
+    it(
       "lets the database generate Stage codes and retries a unique collision",
       async () => {
         const row =

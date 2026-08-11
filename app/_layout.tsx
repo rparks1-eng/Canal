@@ -76,6 +76,7 @@ import {
 import {
   publicDestinationFromRoute,
 } from "../lib/public-linking";
+import { readCanalSettings } from "../lib/app-settings";
 
 type OnboardingState =
   | "checking"
@@ -91,21 +92,24 @@ function CanalNavigator() {
   useEffect(() => {
     let active = true;
 
-    void AccessibilityInfo.isReduceMotionEnabled()
-      .then((enabled) => {
+    void Promise.all([AccessibilityInfo.isReduceMotionEnabled(), readCanalSettings()])
+      .then(([enabled, settings]) => {
         if (active) {
-          setReducedMotion(enabled);
+          setReducedMotion(settings.followReduceMotion ? enabled : false);
         }
       })
       .catch(() => {
         // Fail closed: motion remains disabled when the preference is unavailable.
       });
 
-    const subscription =
-      AccessibilityInfo.addEventListener(
-        "reduceMotionChanged",
-        setReducedMotion,
-      );
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      (enabled) => {
+        void readCanalSettings().then((settings) => {
+          if (active) setReducedMotion(settings.followReduceMotion ? enabled : false);
+        });
+      },
+    );
 
     return () => {
       active = false;
@@ -638,6 +642,10 @@ function CanalNavigator() {
       />
 
       <Stack.Screen
+        name="exported-playlists"
+      />
+
+      <Stack.Screen
         name="appearance"
       />
 
@@ -655,6 +663,10 @@ function CanalNavigator() {
 
       <Stack.Screen
         name="scene-studio"
+      />
+
+      <Stack.Screen
+        name="add-song-to-scene"
       />
 
       <Stack.Screen

@@ -60,6 +60,16 @@ type ProfileRow = {
   avatar_url: string | null;
 };
 
+type SnapshotSocialSubscription = {
+  channel: ReturnType<typeof supabase.channel>;
+  listeners: Set<() => void>;
+};
+
+const snapshotSocialSubscriptions = new Map<
+  string,
+  SnapshotSocialSubscription
+>();
+
 export async function loadSnapshotSocial(
   snapshotId: string,
   expectedUserId: string,
@@ -275,27 +285,45 @@ export function subscribeSnapshotSocial(
 ): () => void {
   if (!isSupabaseConfigured) return () => undefined;
   const safeSnapshotId = requireSnapshotId(snapshotId);
-  const channel = supabase
-    .channel(`snapshot-social:${safeSnapshotId}`)
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "snapshot_likes", filter: `snapshot_id=eq.${safeSnapshotId}` },
-      onChange,
-    )
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "snapshot_comments", filter: `snapshot_id=eq.${safeSnapshotId}` },
-      onChange,
-    )
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "snapshot_comment_likes", filter: `snapshot_id=eq.${safeSnapshotId}` },
-      onChange,
-    )
-    .subscribe();
+  let subscription = snapshotSocialSubscriptions.get(safeSnapshotId);
+
+  if (!subscription) {
+    const listeners = new Set<() => void>();
+    const notify = (): void => {
+      listeners.forEach((listener) => listener());
+    };
+    const channel = supabase
+      .channel(`snapshot-social:${safeSnapshotId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "snapshot_likes", filter: `snapshot_id=eq.${safeSnapshotId}` },
+        notify,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "snapshot_comments", filter: `snapshot_id=eq.${safeSnapshotId}` },
+        notify,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "snapshot_comment_likes", filter: `snapshot_id=eq.${safeSnapshotId}` },
+        notify,
+      )
+      .subscribe();
+
+    subscription = { channel, listeners };
+    snapshotSocialSubscriptions.set(safeSnapshotId, subscription);
+  }
+
+  subscription.listeners.add(onChange);
 
   return () => {
-    void supabase.removeChannel(channel);
+    const current = snapshotSocialSubscriptions.get(safeSnapshotId);
+    if (!current) return;
+    current.listeners.delete(onChange);
+    if (current.listeners.size > 0) return;
+    snapshotSocialSubscriptions.delete(safeSnapshotId);
+    void supabase.removeChannel(current.channel);
   };
 }
 
