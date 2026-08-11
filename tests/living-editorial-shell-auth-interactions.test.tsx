@@ -48,8 +48,13 @@ let mockAuthState: Record<string, any> = {
 
 let mockSegments = ["login"];
 let mockConnectState: Record<string, any>;
+let mockSocialProviderAvailability = {
+  apple: true,
+  google: true,
+};
 
 const mockSignInWithEmail = jest.fn();
+const mockSignUpWithEmail = jest.fn();
 const mockRequestPasswordReset = jest.fn(async () => {});
 const mockCompletePasswordRecoveryFromLink = jest.fn(async (_url: string) => {});
 const mockUpdateCanalPassword = jest.fn(async (_password: string) => {});
@@ -90,6 +95,7 @@ jest.mock("expo-router", () => {
     useGlobalSearchParams: () => ({}),
     useFocusEffect: jest.fn(),
     useLocalSearchParams: () => ({}),
+    usePathname: () => `/${mockSegments.join("/")}`,
     useSegments: () => mockSegments,
   };
 });
@@ -167,7 +173,7 @@ jest.mock("../lib/canal-auth", () => ({
   completeSupabaseAuthUrl: (url: string) => mockCompleteSupabaseAuthUrl(url),
   signInWithEmail: (email: string, password: string) => mockSignInWithEmail(email, password),
   signInWithSocial: jest.fn(),
-  signUpWithEmail: jest.fn(),
+  signUpWithEmail: (input: Record<string, string>) => mockSignUpWithEmail(input),
   requestPasswordReset: () => mockRequestPasswordReset(),
   completePasswordRecoveryFromLink: (url: string) => mockCompletePasswordRecoveryFromLink(url),
   isPasswordRecoveryUrl: jest.fn(() => true),
@@ -175,10 +181,8 @@ jest.mock("../lib/canal-auth", () => ({
 }));
 
 jest.mock("../lib/social-auth-providers", () => ({
-  readCanalSocialAuthProviderAvailability: jest.fn(async () => ({
-    google: true,
-    apple: true,
-  })),
+  readCanalSocialAuthProviderAvailability: jest.fn(async () =>
+    mockSocialProviderAvailability),
 }));
 
 jest.mock("../lib/supabase", () => ({
@@ -266,6 +270,10 @@ describe("Living Editorial shell and auth rendered interactions", () => {
     jest.clearAllMocks();
     mockRouter.canGoBack.mockReturnValue(true);
     mockSegments = ["login"];
+    mockSocialProviderAvailability = {
+      apple: true,
+      google: true,
+    };
     mockAuthState = {
       accountEpoch: 1,
       configured: true,
@@ -343,6 +351,42 @@ describe("Living Editorial shell and auth rendered interactions", () => {
     await act(async () => {
       resolveSignIn({ user: mockAuthState.user });
       await Promise.resolve();
+    });
+  });
+
+  it("creates an email account when social providers are unavailable", async () => {
+    mockSocialProviderAvailability = {
+      apple: false,
+      google: false,
+    };
+    mockSignUpWithEmail.mockResolvedValue({
+      needsEmailConfirmation: true,
+      session: null,
+    });
+
+    const renderer = await render(<LoginScreen />);
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Create account mode" }).props.onPress();
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Display name" }).props.onChangeText("Canal Tester");
+      renderer.root.findByProps({ accessibilityLabel: "Handle" }).props.onChangeText("canal_tester");
+      renderer.root.findByProps({ accessibilityLabel: "Email" }).props.onChangeText("tester@example.test");
+      renderer.root.findByProps({ accessibilityLabel: "Password" }).props.onChangeText("test-password");
+    });
+
+    const createAccount = renderer.root.findByProps({ accessibilityLabel: "Create Canal Account" });
+    expect(createAccount.props.disabled).toBe(false);
+    expect(renderer.root.findByProps({ accessibilityLabel: "Continue with Google" }).props.disabled).toBe(true);
+    expect(renderer.root.findByProps({ accessibilityLabel: "Continue with Apple" }).props.disabled).toBe(true);
+
+    await act(async () => createAccount.props.onPress());
+
+    expect(mockSignUpWithEmail).toHaveBeenCalledWith({
+      displayName: "Canal Tester",
+      email: "tester@example.test",
+      handle: "canal_tester",
+      password: "test-password",
     });
   });
 

@@ -30,4 +30,24 @@ describe("web account actions", () => {
     expect(auth).toContain("skipBrowserRedirect:");
     expect(auth).toContain("openAuthSessionAsync(");
   });
+
+  it("keeps email sign-in and account creation independent from social-provider availability", () => {
+    const login = read("app/login.tsx");
+    const primaryDisabledIndex = login.indexOf(
+      "disabled={emailSubmissionDisabled}",
+    );
+    const primaryButtonContract = login.slice(
+      Math.max(0, primaryDisabledIndex - 500),
+      primaryDisabledIndex + 100,
+    );
+
+    expect(login).toContain("const emailSubmissionDisabled =");
+    expect(primaryDisabledIndex).toBeGreaterThan(0);
+    expect(login).toContain("if (!emailSubmissionDisabled)");
+    expect(primaryButtonContract).not.toContain("socialProviders");
+    expect(login).toContain('accessibilityLabel="Display name"');
+    expect(login).toContain('accessibilityLabel="Handle"');
+    expect(login).toContain('accessibilityLabel="Email"');
+    expect(login).toContain('accessibilityLabel="Password"');
+  });
 });

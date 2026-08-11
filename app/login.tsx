@@ -346,6 +346,10 @@ export default function LoginScreen() {
       }
     };
 
+  const emailSubmissionDisabled =
+    loading ||
+    !configured;
+
   return (
     <SafeAreaView
       style={
@@ -524,6 +528,7 @@ export default function LoginScreen() {
               </Text>
 
               <TextInput
+                accessibilityLabel="Display name"
                 value={
                   displayName
                 }
@@ -548,6 +553,7 @@ export default function LoginScreen() {
               </Text>
 
               <TextInput
+                accessibilityLabel="Handle"
                 value={
                   handle
                 }
@@ -577,6 +583,7 @@ export default function LoginScreen() {
           </Text>
 
           <TextInput
+            accessibilityLabel="Email"
             value={
               email
             }
@@ -605,6 +612,7 @@ export default function LoginScreen() {
           </Text>
 
           <TextInput
+            accessibilityLabel="Password"
             value={
               password
             }
@@ -620,6 +628,12 @@ export default function LoginScreen() {
                 ? "password"
                 : "newPassword"
             }
+            returnKeyType="go"
+            onSubmitEditing={() => {
+              if (!emailSubmissionDisabled) {
+                void submitEmail();
+              }
+            }}
             style={
               styles.input
             }
@@ -658,16 +672,9 @@ export default function LoginScreen() {
             accessibilityRole="button"
             accessibilityState={{
               busy: loading,
-              disabled:
-                loading ||
-                !configured ||
-                socialProviders?.google !== true,
+              disabled: emailSubmissionDisabled,
             }}
-            disabled={
-              loading ||
-              !configured ||
-              socialProviders?.google !== true
-            }
+            disabled={emailSubmissionDisabled}
             onPress={() =>
               void submitEmail()
             }
@@ -676,8 +683,7 @@ export default function LoginScreen() {
             }) => [
               styles.primaryButton,
 
-              (loading ||
-                !configured) &&
+              emailSubmissionDisabled &&
                 styles.disabled,
 
               pressed &&
