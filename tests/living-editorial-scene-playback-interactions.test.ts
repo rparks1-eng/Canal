@@ -19,6 +19,7 @@ const mockRecommendationFeedback: jest.Mock = jest.fn(async () => [{ outcome: "c
 const mockSaveSoundscape: jest.Mock = jest.fn();
 const mockNativeShare: jest.Mock = jest.fn(async () => ({ action: "sharedAction" }));
 const mockWriteScenes: jest.Mock = jest.fn(async () => {});
+const mockCanalAlert: jest.Mock = jest.fn();
 let mockParams: Record<string, string> = { sceneId: "scene-a" };
 let mockAuth: any = { user: { id: "owner-a" }, accountEpoch: 1, sessionGeneration: "session-1" };
 let mockConnectivity = "online";
@@ -112,6 +113,11 @@ jest.mock("../lib/scene-recommendation-feedback", () => ({
   recordStoredSceneRecommendationFeedback: jest.fn(async () => []),
 }));
 jest.mock("../lib/canal-share", () => ({ shareSoundscape: (...args: unknown[]) => mockShare(...args) }));
+jest.mock("../lib/canal-alert", () => ({
+  CanalAlert: {
+    alert: (...args: unknown[]) => mockCanalAlert(...args),
+  },
+}));
 jest.mock("../lib/snapshots", () => ({ readSnapshots: jest.fn(async () => []), Snapshot: {} }));
 jest.mock("../lib/soundscape", () => ({
   normalizeUsername: (value: string) => value.trim().toLowerCase(),
@@ -302,9 +308,15 @@ describe("Living Editorial Scene playback interactions", () => {
     const start = renderer.root.findAll((node: any) => node.props.accessibilityRole === "button" && node.findAll?.((child: any) => child.props.children === "Start Scene").length)[0];
     await act(async () => start.props.onPress());
     expect(mockPush).toHaveBeenCalledWith({ pathname: "/now-playing", params: { sceneId: "scene-a" } });
-    const exportButton = renderer.root.findByProps({ accessibilityLabel: "Export Scene to Spotify" });
-    await act(async () => exportButton.props.onPress());
+    const exportButton = renderer.root.findByProps({ accessibilityLabel: "Export Scene playlist" });
+    await act(async () => {
+      exportButton.props.onPress();
+      const actions = mockCanalAlert.mock.calls.at(-1)?.[2];
+      actions[0].onPress();
+      await new Promise((resolve) => setImmediate(resolve));
+    });
     expect(mockExport).toHaveBeenCalledTimes(1);
+    expect(mockExport.mock.calls[0]?.[1]).toMatchObject({ providerId: "spotify" });
     const back = renderer.root.findAll((node: any) => node.props.accessibilityRole === "button")[0];
     await act(async () => back.props.onPress());
     expect(mockBack).toHaveBeenCalled();
@@ -314,11 +326,18 @@ describe("Living Editorial Scene playback interactions", () => {
     mockRecoveryIssue = { action: "retry", message: "Try again", title: "Export interrupted" };
     mockExport.mockRejectedValueOnce(new Error("offline"));
     const renderer = await render(React.createElement(SceneDetailScreen));
-    const exportButton = renderer.root.findByProps({ accessibilityLabel: "Export Scene to Spotify" });
-    await act(async () => { exportButton.props.onPress(); await new Promise((resolve) => setImmediate(resolve)); });
+    const exportButton = renderer.root.findByProps({ accessibilityLabel: "Export Scene playlist" });
+    await act(async () => {
+      exportButton.props.onPress();
+      const actions = mockCanalAlert.mock.calls.at(-1)?.[2];
+      actions[1].onPress();
+      await new Promise((resolve) => setImmediate(resolve));
+    });
     const recovery = renderer.root.findByType("RecoveryNotice");
     await act(async () => { recovery.props.onAction(); await new Promise((resolve) => setImmediate(resolve)); });
     expect(mockExport).toHaveBeenCalledTimes(2);
+    expect(mockExport.mock.calls[0]?.[1]).toMatchObject({ providerId: "apple-music" });
+    expect(mockExport.mock.calls[1]?.[1]).toMatchObject({ providerId: "apple-music" });
   });
 
   it("renders public Scene save/share/provider and offline disabled state", async () => {
@@ -332,9 +351,15 @@ describe("Living Editorial Scene playback interactions", () => {
     await act(async () => { share.props.onPress(); await new Promise((resolve) => setImmediate(resolve)); });
     expect(share.props.accessibilityHint).toContain("sharing options");
     expect(mockNativeShare).toHaveBeenCalledWith({ title: "Quiet Current", message: "share text", url: expect.any(String) });
-    const provider = renderer.root.findByProps({ accessibilityLabel: "Export Public Scene to Spotify" });
-    await act(async () => { provider.props.onPress(); await new Promise((resolve) => setImmediate(resolve)); });
+    const provider = renderer.root.findByProps({ accessibilityLabel: "Export Public Scene playlist" });
+    await act(async () => {
+      provider.props.onPress();
+      const actions = mockCanalAlert.mock.calls.at(-1)?.[2];
+      actions[1].onPress();
+      await new Promise((resolve) => setImmediate(resolve));
+    });
     expect(mockExport).toHaveBeenCalled();
+    expect(mockExport.mock.calls.at(-1)?.[1]).toMatchObject({ providerId: "apple-music" });
     const play = renderer.root.findByProps({ accessibilityLabel: "Play Quiet Current" });
     await act(async () => { play.props.onPress(); await new Promise((resolve) => setImmediate(resolve)); });
     expect(mockPush).toHaveBeenCalledWith({ pathname: "/now-playing", params: { sceneId: "saved-scene-a" } });

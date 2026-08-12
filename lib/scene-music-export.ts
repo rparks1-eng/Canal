@@ -131,5 +131,10 @@ function musicReferenceFromLegacySceneTrack(
     providerId,
     itemId:
       track.id,
+    name:
+      track.title,
+    artistNames: [
+      track.artist,
+    ],
   };
 }

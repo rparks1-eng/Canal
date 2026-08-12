@@ -103,6 +103,19 @@ import {
 } from "../lib/spotify-library";
 
 import {
+  connectAppleMusic,
+  disconnectAppleMusic,
+  isAppleMusicNativeAvailable,
+  readAppleMusicLibrarySnapshot,
+  readAppleMusicStatus,
+  syncAppleMusicLibrary,
+} from "../lib/apple-music";
+
+import type {
+  MusicLibrarySnapshot,
+} from "../lib/music-provider-model";
+
+import {
   useReconnectReload,
 } from "../hooks/use-reconnect-reload";
 
@@ -233,6 +246,23 @@ export default function MusicServicesScreen() {
       null,
     );
 
+  const [
+    appleMusicSnapshot,
+    setAppleMusicSnapshot,
+  ] = useState<MusicLibrarySnapshot | null>(null);
+  const [
+    appleMusicLoading,
+    setAppleMusicLoading,
+  ] = useState(true);
+  const [
+    appleMusicBusy,
+    setAppleMusicBusy,
+  ] = useState<"connect" | "sync" | "disconnect" | null>(null);
+  const [
+    appleMusicMessage,
+    setAppleMusicMessage,
+  ] = useState("");
+
   const accountIdentity =
     `${user?.id ?? "signed-out"}:${accountEpoch}`;
 
@@ -243,6 +273,39 @@ export default function MusicServicesScreen() {
 
   accountIdentityRef.current =
     accountIdentity;
+
+  const appleMusicAvailable =
+    isAppleMusicNativeAvailable();
+
+  useEffect(() => {
+    let active = true;
+    setAppleMusicLoading(true);
+
+    Promise.all([
+      readAppleMusicStatus(),
+      readAppleMusicLibrarySnapshot().catch(() => null),
+    ])
+      .then(([status, snapshot]) => {
+        if (!active) {
+          return;
+        }
+
+        setAppleMusicSnapshot(
+          status.authorizationStatus === "authorized"
+            ? snapshot
+            : null,
+        );
+      })
+      .finally(() => {
+        if (active) {
+          setAppleMusicLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [accountIdentity]);
 
   const connectionLoadEpoch =
     useRef(0);
@@ -2848,6 +2911,45 @@ export default function MusicServicesScreen() {
       }
     };
 
+  const runAppleMusicAction =
+    async (
+      action: "connect" | "sync" | "disconnect",
+    ): Promise<void> => {
+      if (appleMusicBusy) {
+        return;
+      }
+
+      setAppleMusicBusy(action);
+      setAppleMusicMessage("");
+
+      try {
+        if (action === "disconnect") {
+          await disconnectAppleMusic();
+          setAppleMusicSnapshot(null);
+          setAppleMusicMessage(
+            "Apple Music is disconnected from this Canal account. System permission can be revoked separately in iPhone Settings.",
+          );
+        } else {
+          const snapshot =
+            action === "connect"
+              ? await connectAppleMusic()
+              : await syncAppleMusicLibrary();
+          setAppleMusicSnapshot(snapshot);
+          setAppleMusicMessage(
+            `Apple Music ${action === "connect" ? "connected" : "synced"} · ${snapshot.savedTracks.length} saved songs ready.`,
+          );
+        }
+      } catch (error) {
+        setAppleMusicMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not update Apple Music.",
+        );
+      } finally {
+        setAppleMusicBusy(null);
+      }
+    };
+
   return (
     <SafeAreaView
       style={styles.safeArea}
@@ -2918,6 +3020,113 @@ export default function MusicServicesScreen() {
           false
         }
       >
+        <View style={styles.appleMusicCard}>
+          <View style={styles.appleMusicMark}>
+            <Text style={styles.appleMusicMarkText}>♪</Text>
+          </View>
+
+          <View style={styles.serviceText}>
+            <Text style={styles.serviceName}>Apple Music</Text>
+            <Text style={styles.serviceStatus}>
+              {appleMusicLoading
+                ? "Checking connection"
+                : appleMusicSnapshot
+                  ? `${appleMusicSnapshot.savedTracks.length} saved songs ready`
+                  : appleMusicAvailable
+                    ? "Not connected"
+                    : "Available in the current Canal iOS build"}
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.statusDot,
+              appleMusicSnapshot && styles.appleMusicStatusDotConnected,
+            ]}
+          />
+        </View>
+
+        <View style={styles.appleMusicActions}>
+          <Pressable
+            accessibilityLabel={appleMusicSnapshot ? "Sync Apple Music Library" : "Connect Apple Music"}
+            accessibilityRole="button"
+            accessibilityState={{
+              busy: appleMusicBusy !== null || appleMusicLoading,
+              disabled:
+                !appleMusicAvailable ||
+                appleMusicBusy !== null ||
+                appleMusicLoading,
+            }}
+            disabled={
+              !appleMusicAvailable ||
+              appleMusicBusy !== null ||
+              appleMusicLoading
+            }
+            onPress={() => {
+              void runAppleMusicAction(appleMusicSnapshot ? "sync" : "connect");
+            }}
+            style={({ pressed }) => [
+              styles.appleMusicPrimaryButton,
+              (!appleMusicAvailable || appleMusicBusy !== null || appleMusicLoading) && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            {appleMusicBusy === "connect" || appleMusicBusy === "sync" || appleMusicLoading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.appleMusicPrimaryButtonText}>
+                {appleMusicSnapshot
+                  ? "Sync Apple Music Library"
+                  : appleMusicAvailable
+                    ? "Connect Apple Music"
+                    : "Apple Music requires the iOS app"}
+              </Text>
+            )}
+          </Pressable>
+
+          {appleMusicSnapshot ? (
+            <Pressable
+              accessibilityLabel="Disconnect Apple Music"
+              accessibilityRole="button"
+              accessibilityState={{
+                busy: appleMusicBusy === "disconnect",
+                disabled: appleMusicBusy !== null,
+              }}
+              disabled={appleMusicBusy !== null}
+              onPress={() => {
+                CanalAlert.alert(
+                  "Disconnect Apple Music?",
+                  "Canal will remove this account's Apple Music cache from this device. Your Apple Music library is not changed.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Disconnect",
+                      style: "destructive",
+                      onPress: () => {
+                        void runAppleMusicAction("disconnect");
+                      },
+                    },
+                  ],
+                );
+              }}
+              style={({ pressed }) => [
+                styles.appleMusicSecondaryButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.appleMusicSecondaryButtonText}>
+                Disconnect Apple Music
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {appleMusicMessage ? (
+          <View accessibilityLiveRegion="polite" style={styles.infoBox}>
+            <Text style={styles.infoText}>{appleMusicMessage}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.spotifyCard}>
           <View
             style={
@@ -3425,6 +3634,65 @@ const styles =
       backgroundColor: canalDynamicColors.surface,
       borderRadius: 22,
       padding: 17,
+    },
+
+    appleMusicCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: canalDynamicColors.surface,
+      borderRadius: 22,
+      padding: 17,
+    },
+
+    appleMusicMark: {
+      width: 53,
+      height: 53,
+      borderRadius: 27,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#FA2D55",
+      marginRight: 13,
+    },
+
+    appleMusicMarkText: {
+      color: "#FFFFFF",
+      fontSize: 27,
+      fontWeight: "900",
+    },
+
+    appleMusicStatusDotConnected: {
+      backgroundColor: "#FA2D55",
+    },
+
+    appleMusicActions: {
+      gap: 10,
+    },
+
+    appleMusicPrimaryButton: {
+      minHeight: 53,
+      borderRadius: 17,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#FA2D55",
+      paddingHorizontal: 17,
+    },
+
+    appleMusicPrimaryButtonText: {
+      color: "#FFFFFF",
+      fontSize: 15,
+      fontWeight: "900",
+    },
+
+    appleMusicSecondaryButton: {
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    appleMusicSecondaryButtonText: {
+      color: canalDynamicColors.muted,
+      fontSize: 14,
+      fontWeight: "700",
     },
 
     spotifyMark: {

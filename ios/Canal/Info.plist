@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
+    <key>CFBundleAllowMixedLocalizations</key>
+    <true/>
     <key>CADisableMinimumFrameDurationOnPhone</key>
     <true/>
     <key>CFBundleDevelopmentRegion</key>
@@ -56,6 +58,8 @@
     <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
     <key>NSCameraUsageDescription</key>
     <string>Allow Canal to take photos and videos for Snapshots.</string>
+    <key>NSAppleMusicUsageDescription</key>
+    <string>Allow Canal to search your Apple Music library, shape Scenes from your music, and export Scenes as playlists.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Allow Canal to record audio with Snapshot videos.</string>
     <key>NSPhotoLibraryUsageDescription</key>

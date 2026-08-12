@@ -106,7 +106,7 @@ describe(
         expect(
           ONBOARDING_SOURCE,
         ).toMatch(
-          /"Continue without Spotify"[\s\S]*setSpotifyConnectSkipped/u,
+          /"Continue without music"[\s\S]*setSpotifyConnectSkipped/u,
         );
         expect(
           ONBOARDING_SOURCE,
@@ -116,7 +116,7 @@ describe(
         expect(
           CONNECT_MUSIC_SOURCE,
         ).toMatch(
-          /pathname:[\s\S]*"\/onboarding"[\s\S]*step:[\s\S]*"shape"[\s\S]*spotify:[\s\S]*profile[\s\S]*"connected"[\s\S]*"skipped"/u,
+          /pathname:[\s\S]*"\/onboarding"[\s\S]*step:[\s\S]*"shape"[\s\S]*spotify:[\s\S]*anyMusicConnected[\s\S]*"connected"[\s\S]*"skipped"/u,
         );
       },
     );

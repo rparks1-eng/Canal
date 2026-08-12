@@ -30,7 +30,7 @@ describe("Scene detail action hierarchy", () => {
 
     const collaborate = row.indexOf('accessibilityLabel="Manage Scene collaboration"');
     const snapshot = row.indexOf('accessibilityLabel="Create Snapshot"');
-    const exportPlaylist = row.indexOf('"Export Scene to Spotify"');
+    const exportPlaylist = row.indexOf('"Export Scene playlist"');
 
     expect(collaborate).toBeGreaterThan(-1);
     expect(snapshot).toBeGreaterThan(collaborate);

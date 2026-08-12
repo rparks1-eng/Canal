@@ -83,6 +83,10 @@ import {
 } from "../lib/spotify-auth";
 
 import {
+  readAppleMusicLibrarySnapshot,
+} from "../lib/apple-music";
+
+import {
   useAuth,
 } from "../providers/auth-provider";
 
@@ -184,6 +188,7 @@ export default function OnboardingScreen() {
     useLocalSearchParams<{
       step?: string;
       spotify?: string;
+      music?: string;
     }>();
   const {
     width,
@@ -220,6 +225,13 @@ export default function OnboardingScreen() {
     setStoredSpotifyConnected,
   ] = useState(
     params.spotify ===
+      "connected",
+  );
+  const [
+    storedAppleMusicConnected,
+    setStoredAppleMusicConnected,
+  ] = useState(
+    params.music ===
       "connected",
   );
   const [
@@ -294,6 +306,10 @@ export default function OnboardingScreen() {
       storedSpotifyConnected
     ) &&
     !spotifyConnectSkipped;
+  const musicConnected =
+    spotifyConnected ||
+    storedAppleMusicConnected ||
+    params.music === "connected";
   const sceneName =
     useMemo(
       () =>
@@ -361,6 +377,21 @@ export default function OnboardingScreen() {
          */
       });
 
+    readAppleMusicLibrarySnapshot()
+      .then((snapshot) => {
+        if (active) {
+          setStoredAppleMusicConnected(Boolean(snapshot));
+          if (snapshot) {
+            setSpotifyConnectSkipped(false);
+          }
+        }
+      })
+      .catch(() => {
+        if (active && params.music !== "connected") {
+          setStoredAppleMusicConnected(false);
+        }
+      });
+
     setFinishing(
       false,
     );
@@ -371,6 +402,7 @@ export default function OnboardingScreen() {
     };
   }, [
     params.spotify,
+    params.music,
     user?.id,
   ]);
 
@@ -694,7 +726,7 @@ export default function OnboardingScreen() {
             0 ? (
               <MusicStep
                 connected={
-                  spotifyConnected
+                  musicConnected
                 }
                 colors={
                   colors
@@ -792,7 +824,7 @@ export default function OnboardingScreen() {
                   palette
                 }
                 spotifyConnected={
-                  spotifyConnected
+                  musicConnected
                 }
                 validationMessage={
                   validationMessage
@@ -934,13 +966,13 @@ export default function OnboardingScreen() {
               0 ? (
                 <OnboardingButton
                   label={
-                    spotifyConnected
+                    musicConnected
                       ? "Continue"
-                      : "Continue without Spotify"
+                      : "Continue without music"
                   }
                   onPress={() => {
                     setSpotifyConnectSkipped(
-                      !spotifyConnected,
+                      !musicConnected,
                     );
                     goToStep(
                       1,
@@ -1072,7 +1104,7 @@ function MusicStep(
         colors={
           props.colors
         }
-        description="Canal keeps a bounded, account-scoped library cache so recommendations load quickly without repeatedly asking Spotify for the same music."
+        description="Canal keeps bounded, account-scoped music caches so recommendations load quickly without repeatedly asking your provider for the same songs."
         eyebrow="BRING YOUR LISTENING HISTORY"
         title="Connect music without giving up control."
       />
@@ -1114,8 +1146,8 @@ function MusicStep(
         <Pressable
           accessibilityLabel={
             props.connected
-              ? "Spotify connected"
-              : "Connect Spotify"
+              ? "Music service connected"
+              : "Connect a music service"
           }
           accessibilityRole="button"
           accessibilityState={{
@@ -1158,7 +1190,7 @@ function MusicStep(
                 },
               ]}
             >
-              Spotify
+              Spotify or Apple Music
             </Text>
             <Text
               selectable
@@ -1170,7 +1202,7 @@ function MusicStep(
                 },
               ]}
             >
-              Top tracks, saved music, recent listening, playlist metadata
+              Catalog search, saved music, library signals, and playlist export
             </Text>
           </View>
           <Text
@@ -1198,7 +1230,7 @@ function MusicStep(
               props.colors
             }
             icon="shield-checkmark-outline"
-            text="Your Spotify password never enters Canal."
+            text="Your provider password never enters Canal."
           />
           <TrustLine
             colors={
@@ -1413,7 +1445,7 @@ function TasteStep(
             ]}
           >
             {props.spotifyConnected
-              ? "Spotify connected · starting with your strongest signals"
+              ? "Music connected · starting with your strongest signals"
               : "Starting with Canal’s catalog · connect your library anytime"}
           </Text>
         </View>

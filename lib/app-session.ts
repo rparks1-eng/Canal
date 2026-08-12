@@ -32,6 +32,10 @@ import {
 } from "./scene-studio-lifecycle";
 
 import {
+  clearAppleMusicCacheForAccountGuard,
+} from "./apple-music";
+
+import {
   captureSpotifyCanalAccountGuard,
   clearSpotifySession,
   readSpotifyConnectionStateForAccount,
@@ -712,6 +716,15 @@ export async function logoutAllMusicPlatforms(): Promise<
           spotifyGuard,
           cleanupRecord,
         );
+
+      await assertCurrent();
+
+      await clearAppleMusicCacheForAccountGuard(
+        guard,
+        {
+          assertCurrent,
+        },
+      );
 
       await assertCurrent();
 

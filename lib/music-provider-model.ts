@@ -19,6 +19,8 @@ export type MusicItemReference = {
   itemId: string;
   uri?: string;
   webUrl?: string;
+  name?: string;
+  artistNames?: readonly string[];
 };
 
 export type MusicArtistSummary = {

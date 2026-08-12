@@ -79,6 +79,10 @@ import {
   exportSceneToMusicProvider,
 } from "../../lib/scene-music-export";
 
+import type {
+  MusicProviderId,
+} from "../../lib/music-provider-model";
+
 import {
   addSpotifyArtworkToStoredScene,
 } from "../../lib/spotify-scene-artwork";
@@ -579,7 +583,10 @@ function SceneDetailContent() {
       });
     };
 
-  const exportToSpotify =
+  const lastExportProvider =
+    useRef<MusicProviderId>("spotify");
+
+  const exportToMusicProvider =
     async (
       confirmedConnectivityStatus =
         connectivityStatus,
@@ -587,6 +594,8 @@ function SceneDetailContent() {
         | "initial"
         | "retry" =
           "initial",
+      providerId: MusicProviderId =
+        "spotify",
     ): Promise<void> => {
       if (
         !scene ||
@@ -614,6 +623,8 @@ function SceneDetailContent() {
 
       exportInFlight.current =
         true;
+      lastExportProvider.current =
+        providerId;
 
       setExporting(true);
       setMessage("");
@@ -622,6 +633,16 @@ function SceneDetailContent() {
       );
 
       try {
+        const providerName =
+          providerId === "spotify"
+            ? "Spotify"
+            : "Apple Music";
+
+        const providerArticle =
+          providerId === "spotify"
+            ? "a"
+            : "an";
+
         const exportAccount =
           await captureScenePlaylistExportAccount();
 
@@ -630,7 +651,7 @@ function SceneDetailContent() {
             scene,
             {
               providerId:
-                "spotify",
+                providerId,
               description:
                 `A private Scene created in Canal for ${scene.activity.toLowerCase()}.`,
             },
@@ -682,7 +703,7 @@ function SceneDetailContent() {
           historyError
         ) {
           console.warn(
-            "Canal created the Spotify playlist but could not save its profile history:",
+            `Canal created the ${providerName} playlist but could not save its profile history:`,
             historyError,
           );
 
@@ -691,7 +712,7 @@ function SceneDetailContent() {
         }
 
         setMessage(
-          `Created a Spotify playlist with ${exportResult.exportedTrackCount} tracks.${historyMessage}`,
+          `Created ${providerArticle} ${providerName} playlist with ${exportResult.exportedTrackCount} tracks.${historyMessage}`,
         );
 
         setExportErrorCause(
@@ -707,7 +728,7 @@ function SceneDetailContent() {
             await openTrack(url);
           } catch {
             setMessage(
-              `Created a Spotify playlist with ${exportResult.exportedTrackCount} tracks. Open Spotify to find it.`,
+              `Created ${providerArticle} ${providerName} playlist with ${exportResult.exportedTrackCount} tracks. Open ${providerName} to find it.`,
             );
           }
         }
@@ -799,9 +820,10 @@ function SceneDetailContent() {
             "offline" &&
           shouldRetryExport
         ) {
-          await exportToSpotify(
+          await exportToMusicProvider(
             nextStatus,
             "retry",
+            lastExportProvider.current,
           );
         }
       } finally {
@@ -1269,8 +1291,8 @@ function SceneDetailContent() {
           <Pressable
             accessibilityLabel={
               exporting
-                ? "Exporting Scene to Spotify"
-                : "Export Scene to Spotify"
+                ? "Exporting Scene playlist"
+                : "Export Scene playlist"
             }
             accessibilityRole="button"
             accessibilityState={{
@@ -1289,9 +1311,38 @@ function SceneDetailContent() {
               connectivityStatus ===
                 "offline"
             }
-            onPress={() =>
-              void exportToSpotify()
-            }
+            onPress={() => {
+              CanalAlert.alert(
+                "Export Scene playlist",
+                "Choose where Canal should create this playlist.",
+                [
+                  {
+                    text: "Spotify",
+                    onPress: () => {
+                      void exportToMusicProvider(
+                        connectivityStatus,
+                        "initial",
+                        "spotify",
+                      );
+                    },
+                  },
+                  {
+                    text: "Apple Music",
+                    onPress: () => {
+                      void exportToMusicProvider(
+                        connectivityStatus,
+                        "initial",
+                        "apple-music",
+                      );
+                    },
+                  },
+                  {
+                    text: "Cancel",
+                    style: "cancel",
+                  },
+                ],
+              );
+            }}
             style={({ pressed }) => [
               styles.actionButton,
               (

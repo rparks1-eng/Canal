@@ -81,6 +81,14 @@ import {
   exportSceneToMusicProvider,
 } from "../lib/scene-music-export";
 
+import type {
+  MusicProviderId,
+} from "../lib/music-provider-model";
+
+import {
+  CanalAlert,
+} from "../lib/canal-alert";
+
 import {
   useConnectivity,
 } from "../providers/connectivity-provider";
@@ -452,10 +460,15 @@ export default function PublicSceneScreen() {
       }
     };
 
-  const exportToSpotify =
+  const lastExportProvider =
+    useRef<MusicProviderId>("spotify");
+
+  const exportToMusicProvider =
     async (
       confirmedConnectivityStatus =
         connectivityStatus,
+      providerId: MusicProviderId =
+        "spotify",
     ): Promise<void> => {
       if (
         !item ||
@@ -489,6 +502,8 @@ export default function PublicSceneScreen() {
 
       exportInFlight.current =
         true;
+      lastExportProvider.current =
+        providerId;
 
       setExporting(
         true,
@@ -512,7 +527,7 @@ export default function PublicSceneScreen() {
             item.scene,
             {
               providerId:
-                "spotify",
+                providerId,
               description:
                 `A public Canal Scene by ${item.creator.displayName} ${item.creator.handle}.`,
             },
@@ -557,7 +572,7 @@ export default function PublicSceneScreen() {
           historyError
         ) {
           console.warn(
-            "Canal created the Spotify playlist but could not save its profile history:",
+            `Canal created the ${providerId === "spotify" ? "Spotify" : "Apple Music"} playlist but could not save its profile history:`,
             historyError,
           );
 
@@ -566,7 +581,7 @@ export default function PublicSceneScreen() {
         }
 
         setMessage(
-          `Exported ${result.exportedTrackCount} track${result.exportedTrackCount === 1 ? "" : "s"} to your Spotify. ${
+          `Exported ${result.exportedTrackCount} track${result.exportedTrackCount === 1 ? "" : "s"} to ${providerId === "spotify" ? "Spotify" : "Apple Music"}. ${
             result.skippedTrackCount > 0
               ? `${result.skippedTrackCount} unmatched track${result.skippedTrackCount === 1 ? " was" : "s were"} skipped.`
               : ""
@@ -588,7 +603,7 @@ export default function PublicSceneScreen() {
           () =>
             error ??
             new Error(
-              "Canal could not export this Scene to Spotify.",
+              "Canal could not export this Scene playlist.",
             ),
         );
       } finally {
@@ -665,8 +680,9 @@ export default function PublicSceneScreen() {
             "offline" &&
           shouldRetryExport
         ) {
-          await exportToSpotify(
+          await exportToMusicProvider(
             nextStatus,
+            lastExportProvider.current,
           );
         }
       } finally {
@@ -843,7 +859,30 @@ export default function PublicSceneScreen() {
                 </View>
                 <View style={styles.secondaryActions}>
                   <PublicAction accessibilityLabel={item.isMine ? "Your Scene" : item.savedByMe ? "Saved private copy" : "Save Private Copy"} busy={saving} disabled={item.isMine || item.savedByMe || saving} icon={item.savedByMe ? "checkmark" : "bookmark-outline"} label={item.isMine ? "Yours" : item.savedByMe ? "Saved" : "Save"} onPress={() => void save()} />
-                  <PublicAction accessibilityLabel="Export Public Scene to Spotify" busy={exporting || checkingConnection} disabled={exporting || checkingConnection || connectivityStatus === "offline"} icon="musical-notes-outline" label="Spotify" onPress={() => void exportToSpotify()} />
+                  <PublicAction
+                    accessibilityLabel="Export Public Scene playlist"
+                    busy={exporting || checkingConnection}
+                    disabled={exporting || checkingConnection || connectivityStatus === "offline"}
+                    icon="musical-notes-outline"
+                    label="Export"
+                    onPress={() => {
+                      CanalAlert.alert(
+                        "Export Scene playlist",
+                        "Choose where Canal should create this playlist.",
+                        [
+                          {
+                            text: "Spotify",
+                            onPress: () => void exportToMusicProvider(connectivityStatus, "spotify"),
+                          },
+                          {
+                            text: "Apple Music",
+                            onPress: () => void exportToMusicProvider(connectivityStatus, "apple-music"),
+                          },
+                          { text: "Cancel", style: "cancel" },
+                        ],
+                      );
+                    }}
+                  />
                   <PublicAction accessibilityHint="Opens your system sharing options." accessibilityLabel={`Share ${item.scene.name}`} busy={sharing} disabled={sharing} icon="share-outline" label="Share" onPress={() => void share()} />
                 </View>
               </View>

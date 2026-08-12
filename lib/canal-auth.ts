@@ -1,4 +1,10 @@
 import * as WebBrowser from "expo-web-browser";
+import * as AppleAuthentication from "expo-apple-authentication";
+import * as Crypto from "expo-crypto";
+
+import {
+  Platform,
+} from "react-native";
 
 import type {
   Session,
@@ -1061,6 +1067,13 @@ export async function signInWithSocial(
 ): Promise<Session> {
   requireSupabaseConfiguration();
 
+  if (
+    provider === "apple" &&
+    Platform.OS === "ios"
+  ) {
+    return signInWithNativeApple();
+  }
+
   const callbackUrl =
     getAuthCallbackUrl();
 
@@ -1111,6 +1124,131 @@ export async function signInWithSocial(
   return completeSupabaseAuthUrl(
     result.url,
   );
+}
+
+async function signInWithNativeApple(): Promise<Session> {
+  const available =
+    await AppleAuthentication.isAvailableAsync();
+
+  if (!available) {
+    throw new Error(
+      "Sign in with Apple is unavailable on this device.",
+    );
+  }
+
+  const rawNonce =
+    Crypto.randomUUID();
+  const hashedNonce =
+    await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      rawNonce,
+    );
+
+  let credential:
+    AppleAuthentication.AppleAuthenticationCredential;
+
+  try {
+    credential =
+      await AppleAuthentication.signInAsync({
+        nonce: hashedNonce,
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "ERR_REQUEST_CANCELED"
+    ) {
+      throw new Error(
+        "Apple sign-in was cancelled.",
+      );
+    }
+
+    throw error;
+  }
+
+  if (!credential.identityToken) {
+    throw new Error(
+      "Apple did not return a usable identity token.",
+    );
+  }
+
+  const {
+    data,
+    error,
+  } =
+    await queueCanalSessionMutation(
+      () =>
+        supabase.auth.signInWithIdToken({
+          provider: "apple",
+          token:
+            credential.identityToken!,
+          nonce:
+            rawNonce,
+        }),
+    );
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data.session) {
+    throw new Error(
+      "Canal could not create an Apple session.",
+    );
+  }
+
+  const givenName =
+    credential.fullName?.givenName?.trim() ?? "";
+  const familyName =
+    credential.fullName?.familyName?.trim() ?? "";
+  const fullName =
+    [
+      givenName,
+      familyName,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+  if (fullName) {
+    const {
+      error:
+        updateError,
+    } =
+      await queueCanalSessionMutation(
+        () =>
+          supabase.auth.updateUser({
+            data: {
+              full_name:
+                fullName,
+              ...(givenName
+                ? {
+                    given_name:
+                      givenName,
+                  }
+                : {}),
+              ...(familyName
+                ? {
+                    family_name:
+                      familyName,
+                  }
+                : {}),
+            },
+          }),
+      );
+
+    if (updateError) {
+      console.warn(
+        "Canal signed in with Apple but could not retain the one-time Apple name:",
+        updateError,
+      );
+    }
+  }
+
+  return data.session;
 }
 
 export async function requestPasswordReset(

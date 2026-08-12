@@ -36,6 +36,18 @@ import {
 } from "../lib/onboarding";
 
 import {
+  connectAppleMusic,
+  disconnectAppleMusic,
+  isAppleMusicNativeAvailable,
+  readAppleMusicLibrarySnapshot,
+  readAppleMusicStatus,
+} from "../lib/apple-music";
+
+import type {
+  MusicLibrarySnapshot,
+} from "../lib/music-provider-model";
+
+import {
   useAuth,
 } from "../providers/auth-provider";
 
@@ -90,6 +102,92 @@ export default function ConnectMusicScreen() {
 
   const spotifyImage =
     profile?.images?.[0]?.url;
+
+  const [
+    appleMusicSnapshot,
+    setAppleMusicSnapshot,
+  ] = useState<MusicLibrarySnapshot | null>(null);
+  const [
+    appleMusicLoading,
+    setAppleMusicLoading,
+  ] = useState(true);
+  const [
+    appleMusicBusy,
+    setAppleMusicBusy,
+  ] = useState(false);
+  const [
+    appleMusicMessage,
+    setAppleMusicMessage,
+  ] = useState("");
+
+  const appleMusicAvailable =
+    isAppleMusicNativeAvailable();
+  const anyMusicConnected =
+    Boolean(profile || appleMusicSnapshot);
+
+  useEffect(() => {
+    let active = true;
+    setAppleMusicLoading(true);
+
+    Promise.all([
+      readAppleMusicStatus(),
+      readAppleMusicLibrarySnapshot().catch(() => null),
+    ])
+      .then(([status, snapshot]) => {
+        if (!active) {
+          return;
+        }
+
+        setAppleMusicSnapshot(
+          status.authorizationStatus === "authorized"
+            ? snapshot
+            : null,
+        );
+      })
+      .finally(() => {
+        if (active) {
+          setAppleMusicLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [accountIdentity]);
+
+  async function toggleAppleMusic(): Promise<void> {
+    if (appleMusicBusy) {
+      return;
+    }
+
+    setAppleMusicBusy(true);
+    setAppleMusicMessage("");
+
+    try {
+      if (appleMusicSnapshot) {
+        await disconnectAppleMusic();
+        setAppleMusicSnapshot(null);
+        setAppleMusicMessage(
+          "Apple Music is disconnected from this Canal account. You can also revoke Media & Apple Music access in iPhone Settings.",
+        );
+      } else {
+        const snapshot =
+          await connectAppleMusic();
+        setAppleMusicSnapshot(snapshot);
+        setAppleMusicMessage(
+          `Apple Music connected · ${snapshot.savedTracks.length} saved songs ready.`,
+        );
+      }
+    } catch (error) {
+      setAppleMusicMessage(
+        error instanceof Error
+          ? error.message
+          : "Canal could not connect Apple Music.",
+      );
+    } finally {
+      setAppleMusicBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (
@@ -184,7 +282,11 @@ export default function ConnectMusicScreen() {
           step:
             "shape",
           spotify:
-            profile
+            anyMusicConnected
+              ? "connected"
+              : "skipped",
+          music:
+            anyMusicConnected
               ? "connected"
               : "skipped",
         },
@@ -233,11 +335,91 @@ export default function ConnectMusicScreen() {
             <Text
               style={styles.description}
             >
-              Connect Spotify so Canal can
-              search artists, personalize
-              Scenes, and export the music
-              you create.
+              Choose Spotify, Apple Music,
+              or both. Canal keeps each
+              library scoped to your Canal
+              account.
             </Text>
+          </View>
+
+          <View style={styles.appleMusicCard}>
+            <View style={styles.appleMusicHeader}>
+              <View style={styles.appleMusicMark}>
+                <Text style={styles.appleMusicMarkText}>♪</Text>
+              </View>
+              <View style={styles.headerCopy}>
+                <Text style={styles.appleMusicEyebrow}>
+                  APPLE MUSIC
+                </Text>
+                <Text style={styles.connectedHeading}>
+                  {appleMusicSnapshot
+                    ? "Your library is ready."
+                    : "Connect your Apple Music library."}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.connectCardText}>
+              Search Apple Music, shape Scenes from saved songs, and export Scenes as playlists with MusicKit.
+            </Text>
+
+            {appleMusicMessage ? (
+              <Text
+                accessibilityLiveRegion="polite"
+                style={styles.appleMusicMessage}
+              >
+                {appleMusicMessage}
+              </Text>
+            ) : null}
+
+            <Pressable
+              accessibilityLabel={
+                appleMusicSnapshot
+                  ? "Disconnect Apple Music"
+                  : "Connect Apple Music"
+              }
+              accessibilityHint={
+                appleMusicAvailable
+                  ? "Uses Apple's MusicKit permission sheet"
+                  : "Install the current Canal iPhone or iPad build to use Apple Music"
+              }
+              accessibilityRole="button"
+              accessibilityState={{
+                busy: appleMusicBusy || appleMusicLoading,
+                disabled:
+                  !appleMusicAvailable ||
+                  appleMusicBusy ||
+                  appleMusicLoading,
+              }}
+              disabled={
+                !appleMusicAvailable ||
+                appleMusicBusy ||
+                appleMusicLoading
+              }
+              onPress={() => {
+                void toggleAppleMusic();
+              }}
+              style={({ pressed }) => [
+                styles.appleMusicButton,
+                (!appleMusicAvailable ||
+                  appleMusicBusy ||
+                  appleMusicLoading) &&
+                  styles.disabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              {appleMusicBusy || appleMusicLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.appleMusicButtonText}>
+                  {appleMusicSnapshot
+                    ? "Disconnect Apple Music"
+                    : appleMusicAvailable
+                      ? "Connect Apple Music"
+                      : "Available in the Canal iOS app"}
+                </Text>
+              )}
+            </Pressable>
           </View>
 
           {message ? (
@@ -527,17 +709,17 @@ export default function ConnectMusicScreen() {
                 styles.explanationTitle
               }
             >
-              What Spotify enables
+              What music connections enable
             </Text>
 
             <Benefit
               number="01"
-              text="Search real Spotify artists while creating Scenes."
+              text="Search real catalog tracks while creating Scenes."
             />
 
             <Benefit
               number="02"
-              text="Export Scene tracks into Spotify playlists."
+              text="Export Scene tracks into playlists on your chosen service."
             />
 
             <Benefit
@@ -565,17 +747,17 @@ export default function ConnectMusicScreen() {
               }
             >
               {onboardingFlow
-                ? profile
+                ? anyMusicConnected
                   ? "Continue: Shape"
-                  : "Continue without Spotify"
+                  : "Continue without music"
                 : "Continue to Canal"}
             </Text>
           </Pressable>
 
           <Text style={styles.footerText}>
             {onboardingFlow
-              ? "You can connect or change Spotify later from You → Music Services."
-              : "You can manage Spotify later from You → Music Services."}
+              ? "You can connect or change music services later from You → Music Services."
+              : "You can manage music services later from You → Music Services."}
           </Text>
         </View>
       </View>
@@ -883,6 +1065,63 @@ const styles = StyleSheet.create({
   spotifyButtonText: {
     color: "#191A18",
     fontSize: 16,
+    fontWeight: "800",
+  },
+
+  appleMusicCard: {
+    gap: 14,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: canalDynamicColors.line,
+    borderRadius: 24,
+    backgroundColor: canalDynamicColors.surface,
+  },
+
+  appleMusicHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  appleMusicMark: {
+    width: 54,
+    height: 54,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 13,
+    borderRadius: 27,
+    backgroundColor: "#FA2D55",
+  },
+
+  appleMusicMarkText: {
+    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "800",
+  },
+
+  appleMusicEyebrow: {
+    color: "#FA2D55",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+
+  appleMusicMessage: {
+    color: canalDynamicColors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  appleMusicButton: {
+    minHeight: 55,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 17,
+    backgroundColor: "#FA2D55",
+  },
+
+  appleMusicButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
     fontWeight: "800",
   },
 
