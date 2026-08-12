@@ -27,6 +27,7 @@ unset BUNDLE_BIN_PATH BUNDLE_GEMFILE RUBYLIB RUBYOPT
 export COCOAPODS_NO_BUNDLER=1
 export GEM_HOME="$gem_home"
 export GEM_PATH="$gem_path"
+export LANG=en_US.UTF-8
 exec "$ruby_binary" "$pod_source" "\$@"
 EOF
 chmod 755 "$pod_target"
@@ -36,4 +37,4 @@ if [[ "$resolved_pod" != "$pod_target" ]]; then
   exit 1
 fi
 pod --version
-env -i PATH="$(dirname "$pod_target")" "$pod_target" --version
+env -i PATH="$(dirname "$pod_target"):/usr/bin:/bin" "$pod_target" --version
