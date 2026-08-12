@@ -21,6 +21,9 @@
         "applinks:canal.app",
         "applinks:canal.expo.app"
       ],
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Canal to take photos and videos for Snapshots.",
         "NSMicrophoneUsageDescription": "Allow Canal to record audio with Snapshot videos.",
