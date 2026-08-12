@@ -20,6 +20,7 @@ sudo mkdir -p /usr/local/bin
 sudo tee /usr/local/bin/pod >/dev/null <<EOF
 #!/usr/bin/env bash
 unset BUNDLE_BIN_PATH BUNDLE_GEMFILE RUBYLIB RUBYOPT
+export COCOAPODS_NO_BUNDLER=1
 exec "$ruby_binary" "$pod_source" "\$@"
 EOF
 sudo chmod 755 /usr/local/bin/pod
