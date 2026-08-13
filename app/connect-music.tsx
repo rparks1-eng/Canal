@@ -39,9 +39,14 @@ import {
   connectAppleMusic,
   disconnectAppleMusic,
   isAppleMusicNativeAvailable,
+  openAppleMusicAccountSetup,
   readAppleMusicLibrarySnapshot,
   readAppleMusicStatus,
 } from "../lib/apple-music";
+
+import {
+  isAppleMusicAccountSetupRequiredError,
+} from "../lib/apple-music-errors";
 
 import type {
   MusicLibrarySnapshot,
@@ -119,6 +124,10 @@ export default function ConnectMusicScreen() {
     appleMusicMessage,
     setAppleMusicMessage,
   ] = useState("");
+  const [
+    appleMusicNeedsAccountSetup,
+    setAppleMusicNeedsAccountSetup,
+  ] = useState(false);
 
   const appleMusicAvailable =
     isAppleMusicNativeAvailable();
@@ -128,6 +137,8 @@ export default function ConnectMusicScreen() {
   useEffect(() => {
     let active = true;
     setAppleMusicLoading(true);
+    setAppleMusicMessage("");
+    setAppleMusicNeedsAccountSetup(false);
 
     Promise.all([
       readAppleMusicStatus(),
@@ -142,6 +153,20 @@ export default function ConnectMusicScreen() {
           status.authorizationStatus === "authorized"
             ? snapshot
             : null,
+        );
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+
+        const needsAccountSetup =
+          isAppleMusicAccountSetupRequiredError(error);
+        setAppleMusicNeedsAccountSetup(needsAccountSetup);
+        setAppleMusicMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not check Apple Music.",
         );
       })
       .finally(() => {
@@ -162,6 +187,7 @@ export default function ConnectMusicScreen() {
 
     setAppleMusicBusy(true);
     setAppleMusicMessage("");
+    setAppleMusicNeedsAccountSetup(false);
 
     try {
       if (appleMusicSnapshot) {
@@ -170,6 +196,7 @@ export default function ConnectMusicScreen() {
         setAppleMusicMessage(
           "Apple Music is disconnected from this Canal account. You can also revoke Media & Apple Music access in iPhone Settings.",
         );
+        setAppleMusicNeedsAccountSetup(false);
       } else {
         const snapshot =
           await connectAppleMusic();
@@ -179,11 +206,14 @@ export default function ConnectMusicScreen() {
         );
       }
     } catch (error) {
+      const needsAccountSetup =
+        isAppleMusicAccountSetupRequiredError(error);
       setAppleMusicMessage(
         error instanceof Error
           ? error.message
           : "Canal could not connect Apple Music.",
       );
+      setAppleMusicNeedsAccountSetup(needsAccountSetup);
     } finally {
       setAppleMusicBusy(false);
     }
@@ -364,12 +394,28 @@ export default function ConnectMusicScreen() {
             </Text>
 
             {appleMusicMessage ? (
-              <Text
-                accessibilityLiveRegion="polite"
-                style={styles.appleMusicMessage}
-              >
-                {appleMusicMessage}
-              </Text>
+              <View accessibilityLiveRegion="polite">
+                <Text style={styles.appleMusicMessage}>
+                  {appleMusicMessage}
+                </Text>
+                {appleMusicNeedsAccountSetup ? (
+                  <Pressable
+                    accessibilityLabel="Open Apple Music to finish account setup"
+                    accessibilityRole="button"
+                    onPress={() => {
+                      void openAppleMusicAccountSetup();
+                    }}
+                    style={({ pressed }) => [
+                      styles.appleMusicButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.appleMusicButtonText}>
+                      Open Apple Music
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : null}
 
             <Pressable

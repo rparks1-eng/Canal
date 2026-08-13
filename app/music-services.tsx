@@ -106,10 +106,15 @@ import {
   connectAppleMusic,
   disconnectAppleMusic,
   isAppleMusicNativeAvailable,
+  openAppleMusicAccountSetup,
   readAppleMusicLibrarySnapshot,
   readAppleMusicStatus,
   syncAppleMusicLibrary,
 } from "../lib/apple-music";
+
+import {
+  isAppleMusicAccountSetupRequiredError,
+} from "../lib/apple-music-errors";
 
 import type {
   MusicLibrarySnapshot,
@@ -262,6 +267,10 @@ export default function MusicServicesScreen() {
     appleMusicMessage,
     setAppleMusicMessage,
   ] = useState("");
+  const [
+    appleMusicNeedsAccountSetup,
+    setAppleMusicNeedsAccountSetup,
+  ] = useState(false);
 
   const accountIdentity =
     `${user?.id ?? "signed-out"}:${accountEpoch}`;
@@ -280,6 +289,8 @@ export default function MusicServicesScreen() {
   useEffect(() => {
     let active = true;
     setAppleMusicLoading(true);
+    setAppleMusicMessage("");
+    setAppleMusicNeedsAccountSetup(false);
 
     Promise.all([
       readAppleMusicStatus(),
@@ -294,6 +305,20 @@ export default function MusicServicesScreen() {
           status.authorizationStatus === "authorized"
             ? snapshot
             : null,
+        );
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+
+        const needsAccountSetup =
+          isAppleMusicAccountSetupRequiredError(error);
+        setAppleMusicNeedsAccountSetup(needsAccountSetup);
+        setAppleMusicMessage(
+          error instanceof Error
+            ? error.message
+            : "Canal could not check Apple Music.",
         );
       })
       .finally(() => {
@@ -2921,6 +2946,7 @@ export default function MusicServicesScreen() {
 
       setAppleMusicBusy(action);
       setAppleMusicMessage("");
+      setAppleMusicNeedsAccountSetup(false);
 
       try {
         if (action === "disconnect") {
@@ -2929,6 +2955,7 @@ export default function MusicServicesScreen() {
           setAppleMusicMessage(
             "Apple Music is disconnected from this Canal account. System permission can be revoked separately in iPhone Settings.",
           );
+          setAppleMusicNeedsAccountSetup(false);
         } else {
           const snapshot =
             action === "connect"
@@ -2940,11 +2967,14 @@ export default function MusicServicesScreen() {
           );
         }
       } catch (error) {
+        const needsAccountSetup =
+          isAppleMusicAccountSetupRequiredError(error);
         setAppleMusicMessage(
           error instanceof Error
             ? error.message
             : "Canal could not update Apple Music.",
         );
+        setAppleMusicNeedsAccountSetup(needsAccountSetup);
       } finally {
         setAppleMusicBusy(null);
       }
@@ -3124,6 +3154,23 @@ export default function MusicServicesScreen() {
         {appleMusicMessage ? (
           <View accessibilityLiveRegion="polite" style={styles.infoBox}>
             <Text style={styles.infoText}>{appleMusicMessage}</Text>
+            {appleMusicNeedsAccountSetup ? (
+              <Pressable
+                accessibilityLabel="Open Apple Music to finish account setup"
+                accessibilityRole="button"
+                onPress={() => {
+                  void openAppleMusicAccountSetup();
+                }}
+                style={({ pressed }) => [
+                  styles.appleMusicPrimaryButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.appleMusicPrimaryButtonText}>
+                  Open Apple Music
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 

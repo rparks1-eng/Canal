@@ -1,4 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  Linking,
+} from "react-native";
 
 import {
   CanalAppleMusic,
@@ -28,6 +31,10 @@ import type {
 import {
   STORAGE_KEYS,
 } from "./storage-keys";
+
+import {
+  normalizeAppleMusicConnectionError,
+} from "./apple-music-errors";
 
 const APPLE_MUSIC_LIBRARY_VERSION = 1;
 const APPLE_MUSIC_LIBRARY_SONG_LIMIT = 200;
@@ -73,43 +80,63 @@ export async function readAppleMusicStatus(): Promise<CanalAppleMusicStatus> {
     };
   }
 
-  return CanalAppleMusic.getStatus();
+  try {
+    return await CanalAppleMusic.getStatus();
+  } catch (error) {
+    throw normalizeAppleMusicConnectionError(error);
+  }
+}
+
+export async function openAppleMusicAccountSetup(): Promise<void> {
+  try {
+    await Linking.openURL("music://");
+  } catch {
+    await Linking.openURL("https://music.apple.com/");
+  }
 }
 
 export async function connectAppleMusic(): Promise<MusicLibrarySnapshot> {
-  const guard =
-    await captureCanalAccountSessionGuard();
-  const status =
-    await CanalAppleMusic.requestAuthorization();
+  try {
+    const guard =
+      await captureCanalAccountSessionGuard();
+    const status =
+      await CanalAppleMusic.requestAuthorization();
 
-  await assertCanalAccountSessionGuardCurrent(guard);
+    await assertCanalAccountSessionGuardCurrent(guard);
 
-  if (status.authorizationStatus !== "authorized") {
-    throw new Error(
-      status.authorizationStatus === "denied"
-        ? "Apple Music access is off. Enable Media & Apple Music for Canal in iPhone Settings."
-        : "Apple Music authorization was not completed.",
-    );
+    if (status.authorizationStatus !== "authorized") {
+      throw new Error(
+        status.authorizationStatus === "denied"
+          ? "Apple Music access is off. Enable Media & Apple Music for Canal in iPhone Settings."
+          : "Apple Music authorization was not completed.",
+      );
+    }
+
+    return await syncAppleMusicLibraryForGuard(guard);
+  } catch (error) {
+    throw normalizeAppleMusicConnectionError(error);
   }
-
-  return syncAppleMusicLibraryForGuard(guard);
 }
 
 export async function syncAppleMusicLibrary(): Promise<MusicLibrarySnapshot> {
-  const guard =
-    await captureCanalAccountSessionGuard();
-  const status =
-    await CanalAppleMusic.getStatus();
+  try {
+    const guard =
+      await captureCanalAccountSessionGuard();
+    const status =
+      await CanalAppleMusic.getStatus();
 
-  await assertCanalAccountSessionGuardCurrent(guard);
+    await assertCanalAccountSessionGuardCurrent(guard);
 
-  if (status.authorizationStatus !== "authorized") {
-    throw new Error(
-      "Connect Apple Music before syncing its library.",
-    );
+    if (status.authorizationStatus !== "authorized") {
+      throw new Error(
+        "Connect Apple Music before syncing its library.",
+      );
+    }
+
+    return await syncAppleMusicLibraryForGuard(guard);
+  } catch (error) {
+    throw normalizeAppleMusicConnectionError(error);
   }
-
-  return syncAppleMusicLibraryForGuard(guard);
 }
 
 async function syncAppleMusicLibraryForGuard(
