@@ -2,6 +2,11 @@ export type MusicProviderId =
   | "spotify"
   | "apple-music";
 
+export type MusicProviderGenreEvidence = Readonly<{
+  provider: MusicProviderId;
+  genres: readonly string[];
+}>;
+
 export type MusicProviderCapability =
   | "catalog-search"
   | "library-sync"
@@ -41,6 +46,27 @@ export type MusicCatalogTrack = {
     name?: string;
     imageUrl?: string;
   };
+  genres?: readonly string[];
+  isrc?: string;
+  libraryAddedAt?: string;
+  lastPlayedAt?: string;
+  playCount?: number;
+  isFavorite?: boolean;
+};
+
+export type MusicLibraryAlbum = {
+  reference: {
+    providerId: MusicProviderId;
+    albumId: string;
+    webUrl?: string;
+  };
+  name: string;
+  artistName: string;
+  artworkUrl?: string;
+  genres: readonly string[];
+  trackCount: number;
+  releaseDate?: string;
+  isFavorite?: boolean;
 };
 
 export type MusicLibraryArtist = {
@@ -52,6 +78,7 @@ export type MusicLibraryArtist = {
   genres:
     readonly string[];
   imageUrl?: string;
+  isFavorite?: boolean;
 };
 
 export type MusicLibraryPlaylist = {
@@ -87,6 +114,7 @@ export type MusicLibrarySnapshot = {
     readonly MusicCatalogTrack[];
   playlists:
     readonly MusicLibraryPlaylist[];
+  albums?: readonly MusicLibraryAlbum[];
   topGenres:
     readonly {
       name: string;

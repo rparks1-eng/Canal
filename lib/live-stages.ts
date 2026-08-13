@@ -9,6 +9,8 @@ import {
   supabase,
 } from "./supabase";
 import { STORAGE_KEYS } from "./storage-keys";
+import type { MusicProviderGenreEvidence } from "./music-provider-model";
+import { normalizeSceneTrackGenreEvidence } from "./scenes";
 
 export type LiveStageStatus =
   | "live"
@@ -48,6 +50,10 @@ export type LiveStageTrack = {
   spotifyUrl?: string;
   durationMs?: number;
   imageUrl?: string;
+  providerId?: "spotify" | "apple-music";
+  providerTrackId?: string;
+  providerUrl?: string;
+  genreEvidence?: readonly MusicProviderGenreEvidence[];
 };
 
 export type LiveStageParticipant = {
@@ -269,6 +275,18 @@ const MAX_TRACK_IMAGE_URL_CHARACTERS =
 
 const MAX_TRACK_IMAGE_URL_BYTES =
   2048;
+
+const MAX_PROVIDER_TRACK_ID_CHARACTERS =
+  256;
+
+const MAX_PROVIDER_TRACK_ID_BYTES =
+  512;
+
+const MAX_PROVIDER_URL_CHARACTERS =
+  2048;
+
+const MAX_PROVIDER_URL_BYTES =
+  4096;
 
 const MAX_TRACK_DURATION_MS =
   86_400_000;
@@ -2393,6 +2411,28 @@ export function getLiveStageTrackSpotifyUrl(
   );
 }
 
+export function getLiveStageTrackProviderUrl(
+  track:
+    | LiveStageTrack
+    | null
+    | undefined,
+): string | null {
+  if (track?.providerId === "apple-music") {
+    return normalizeProviderUrl(
+      "apple-music",
+      track.providerUrl,
+    );
+  }
+
+  return (
+    getLiveStageTrackSpotifyUrl(track) ??
+    normalizeProviderUrl(
+      "spotify",
+      track?.providerUrl,
+    )
+  );
+}
+
 export function getLiveStageTrackImageUrl(
   track:
     | LiveStageTrack
@@ -3959,6 +3999,31 @@ function normalizeTracks(
           record.imageUrl ??
           record.image_url,
         );
+      const providerId =
+        normalizeProviderId(
+          record.providerId ??
+          record.provider_id,
+        );
+      const providerTrackId =
+        boundedText(
+          record.providerTrackId ??
+          record.provider_track_id,
+          MAX_PROVIDER_TRACK_ID_CHARACTERS,
+          MAX_PROVIDER_TRACK_ID_BYTES,
+        );
+      const providerUrl =
+        providerId
+          ? normalizeProviderUrl(
+              providerId,
+              record.providerUrl ??
+              record.provider_url,
+            )
+          : null;
+      const genreEvidence =
+        normalizeSceneTrackGenreEvidence(
+          record.genreEvidence ??
+          record.genre_evidence,
+        );
 
       if (spotifyLinks) {
         track.spotifyUri =
@@ -3975,6 +4040,26 @@ function normalizeTracks(
       if (imageUrl) {
         track.imageUrl =
           imageUrl;
+      }
+
+      if (providerId) {
+        track.providerId =
+          providerId;
+      }
+
+      if (providerTrackId) {
+        track.providerTrackId =
+          providerTrackId;
+      }
+
+      if (providerUrl) {
+        track.providerUrl =
+          providerUrl;
+      }
+
+      if (genreEvidence) {
+        track.genreEvidence =
+          genreEvidence;
       }
 
       return track;
@@ -4026,6 +4111,39 @@ function serializeTrack(
   if (track.imageUrl) {
     serialized.imageUrl =
       track.imageUrl;
+  }
+
+  if (track.providerId) {
+    serialized.providerId =
+      track.providerId;
+  }
+
+  if (track.providerTrackId) {
+    serialized.providerTrackId =
+      track.providerTrackId;
+  }
+
+  const providerUrl =
+    track.providerId
+      ? normalizeProviderUrl(
+          track.providerId,
+          track.providerUrl,
+        )
+      : null;
+
+  if (providerUrl) {
+    serialized.providerUrl =
+      providerUrl;
+  }
+
+  const genreEvidence =
+    normalizeSceneTrackGenreEvidence(
+      track.genreEvidence,
+    );
+
+  if (genreEvidence) {
+    serialized.genreEvidence =
+      genreEvidence;
   }
 
   return serialized;
@@ -4303,41 +4421,62 @@ function normalizeTrackImageUrl(
     return "";
   }
 
-  if (
-    imageUrl.includes("?") ||
-    imageUrl.includes("#")
-  ) {
-    return "";
-  }
-
   try {
-    const urlMatch =
-      imageUrl.match(
-        SPOTIFY_IMAGE_URL_PATTERN,
-      );
     const parsed =
       new URL(imageUrl);
 
+    const spotifyUrlMatch =
+      imageUrl.match(
+        SPOTIFY_IMAGE_URL_PATTERN,
+      );
+    const isAppleArtwork =
+      parsed.hostname.toLowerCase() ===
+        "mzstatic.com" ||
+      parsed.hostname.toLowerCase().endsWith(
+        ".mzstatic.com",
+      );
+    const isGeniusArtwork =
+      parsed.hostname.toLowerCase() ===
+        "images.genius.com" ||
+      parsed.hostname.toLowerCase() ===
+        "t2.genius.com";
+
     if (
-      !urlMatch ||
-      !urlMatch[1]?.startsWith(
-        "/image/",
-      ) ||
       parsed.protocol.toLowerCase() !==
         "https:" ||
-      parsed.hostname.toLowerCase() !==
-        "i.scdn.co" ||
       parsed.port ||
       parsed.username ||
       parsed.password ||
-      parsed.search ||
-      parsed.hash
+      parsed.hash ||
+      (
+        !spotifyUrlMatch &&
+        !isAppleArtwork &&
+        !isGeniusArtwork
+      ) ||
+      (
+        spotifyUrlMatch &&
+        (
+          parsed.search ||
+          !spotifyUrlMatch[1]?.startsWith(
+            "/image/",
+          )
+        )
+      )
+      ||
+      (
+        isGeniusArtwork &&
+        (
+          Boolean(parsed.search) ||
+          parsed.pathname.length < 2
+        )
+      )
     ) {
       return "";
     }
 
-    const canonical =
-      `https://i.scdn.co${urlMatch[1]}`;
+    const canonical = spotifyUrlMatch
+      ? `https://i.scdn.co${spotifyUrlMatch[1]}`
+      : parsed.toString();
 
     return boundedText(
       canonical,
@@ -4346,6 +4485,67 @@ function normalizeTrackImageUrl(
     );
   } catch {
     return "";
+  }
+}
+
+function normalizeProviderId(
+  value: unknown,
+): LiveStageTrack["providerId"] {
+  return value === "spotify" ||
+    value === "apple-music"
+    ? value
+    : undefined;
+}
+
+function normalizeProviderUrl(
+  providerId: NonNullable<LiveStageTrack["providerId"]>,
+  value: unknown,
+): string | null {
+  const providerUrl =
+    boundedText(
+      value,
+      MAX_PROVIDER_URL_CHARACTERS,
+      MAX_PROVIDER_URL_BYTES,
+    );
+
+  if (!providerUrl) {
+    return null;
+  }
+
+  if (providerId === "spotify") {
+    return normalizeSpotifyTrackLinks(
+      undefined,
+      providerUrl,
+    )?.spotifyUrl ?? null;
+  }
+
+  try {
+    const parsed =
+      new URL(providerUrl);
+    const host =
+      parsed.hostname.toLowerCase();
+
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.port ||
+      parsed.username ||
+      parsed.password ||
+      parsed.hash ||
+      (
+        host !== "music.apple.com" &&
+        host !== "geo.music.apple.com"
+      )
+    ) {
+      return null;
+    }
+
+    return boundedText(
+      parsed.toString(),
+      MAX_PROVIDER_URL_CHARACTERS,
+      MAX_PROVIDER_URL_BYTES,
+    ) || null;
+  } catch {
+    return null;
   }
 }
 

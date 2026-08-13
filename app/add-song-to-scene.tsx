@@ -36,6 +36,9 @@ export default function AddSongToSceneScreen(): React.JSX.Element {
     artistName?: string;
     artworkUrl?: string;
     spotifyUrl?: string;
+    providerId?: string;
+    providerTrackId?: string;
+    providerUrl?: string;
   }>();
   const song = useMemo(() => normalizeSongSceneActionInput({
     trackId: params.trackId,
@@ -43,7 +46,10 @@ export default function AddSongToSceneScreen(): React.JSX.Element {
     artist: params.artistName,
     artworkUrl: params.artworkUrl,
     spotifyUrl: params.spotifyUrl,
-  }), [params.artistName, params.artworkUrl, params.spotifyUrl, params.trackId, params.trackTitle]);
+    providerId: params.providerId === "apple-music" ? "apple-music" : params.providerId === "spotify" ? "spotify" : undefined,
+    providerTrackId: params.providerTrackId,
+    providerUrl: params.providerUrl,
+  }), [params.artistName, params.artworkUrl, params.providerId, params.providerTrackId, params.providerUrl, params.spotifyUrl, params.trackId, params.trackTitle]);
   const { accountEpoch, sessionGeneration, user } = useAuth();
   const scope = useMemo(() => captureSceneStudioScope({
     userId: user?.id,

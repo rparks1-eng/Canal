@@ -71,7 +71,6 @@ import type {
 
 import {
   getLatestSpotifyLibrarySnapshot,
-  syncSpotifyLibrary,
 } from "../../lib/spotify-library";
 
 import type {
@@ -79,8 +78,19 @@ import type {
 } from "../../lib/spotify-library";
 
 import type { SpotifyTrack } from "../../lib/spotify-api";
+import {
+  addCombinedCatalogDiscovery,
+  combineSceneMusicLibraries,
+  getCanalTrackProvider,
+  getCanalTrackProviderId,
+  getCanalTrackProviderUrl,
+  syncCombinedSceneMusicLibrary,
+} from "../../lib/combined-music-library";
+import { readAppleMusicLibrarySnapshot } from "../../lib/apple-music";
+import type { MusicProviderId } from "../../lib/music-provider-model";
 import { addSpotifyArtworkToTracks } from "../../lib/spotify-scene-artwork";
 import { classifyCanalSongDna } from "../../lib/song-dna";
+import { readProviderSongMetadata } from "../../lib/provider-song-metadata";
 import { readTemporarilyDislikedTrackIds, setSongDisliked, setSongLiked } from "../../lib/song-preferences";
 import {
   normalizeSongSceneActionInput,
@@ -135,8 +145,10 @@ function trackArtwork(track?: SpotifyTrack): string | undefined {
 }
 
 function isUsableOrbitTrack(track: SpotifyTrack): boolean {
-  return /^[A-Za-z0-9]+$/u.test(track.id) &&
-    track.uri === `spotify:track:${track.id}` &&
+  const providerId = getCanalTrackProvider(track);
+  const providerTrackId = getCanalTrackProviderId(track);
+  return /^[A-Za-z0-9._:-]+$/u.test(providerTrackId) &&
+    (providerId === "apple-music" || track.uri === `spotify:track:${providerTrackId}`) &&
     track.name.trim().length > 0 &&
     track.artists.some((artist) => artist.name.trim().length > 0);
 }
@@ -203,7 +215,7 @@ function EmptyScenes() {
       </Text>
 
       <Text style={styles.emptyText}>
-        Connect Spotify, import your taste,
+        Connect Apple Music or Spotify, import your library,
         and create a soundtrack for the
         moment you are in.
       </Text>
@@ -287,6 +299,8 @@ export default function HomeScreen() {
     useState<SpotifyLibrarySnapshot | null>(
       null,
     );
+  const [musicProviderIds, setMusicProviderIds] =
+    useState<readonly MusicProviderId[]>([]);
 
   const [
     recommendationWarning,
@@ -311,6 +325,9 @@ export default function HomeScreen() {
 
   const load =
     useCallback(() => {
+      let active = true;
+      const operationScope = scope;
+
       const run =
         async (): Promise<void> => {
           const [
@@ -318,13 +335,27 @@ export default function HomeScreen() {
             storedRecent,
             storedHistory,
             latestSpotify,
+            appleMusic,
           ] =
             await Promise.all([
               readScenes(),
               getRecentScenes(5),
               readListeningHistory(),
               getLatestSpotifyLibrarySnapshot(),
+              readAppleMusicLibrarySnapshot().catch(() => null),
             ]);
+          const combined = combineSceneMusicLibraries(latestSpotify.snapshot, appleMusic);
+
+          if (
+            !active ||
+            !operationScope ||
+            !currentScopeRef.current ||
+            operationScope.userId !== currentScopeRef.current.userId ||
+            operationScope.accountEpoch !== currentScopeRef.current.accountEpoch ||
+            operationScope.sessionGeneration !== currentScopeRef.current.sessionGeneration
+          ) {
+            return;
+          }
 
           setScenes(
             storedScenes,
@@ -339,39 +370,73 @@ export default function HomeScreen() {
           );
 
           setSpotifySnapshot(
-            latestSpotify.snapshot,
+            combined?.snapshot ?? null,
           );
+          setMusicProviderIds(combined?.providerIds ?? []);
 
           setRecommendationWarning(
-            latestSpotify.warning ??
-              null,
+            combined?.readyProviderIds.length ? null : latestSpotify.warning ?? null,
           );
 
           setRecommendationIssue(
-            latestSpotify.issue ??
-              null,
+            combined?.readyProviderIds.length ? null : latestSpotify.issue ?? null,
           );
+
+          if (combined?.readyProviderIds.length) {
+            void addCombinedCatalogDiscovery(combined).then((discovered) => {
+              if (
+                active &&
+                operationScope &&
+                currentScopeRef.current &&
+                operationScope.userId === currentScopeRef.current.userId &&
+                operationScope.accountEpoch === currentScopeRef.current.accountEpoch &&
+                operationScope.sessionGeneration === currentScopeRef.current.sessionGeneration
+              ) {
+                setSpotifySnapshot(discovered.snapshot);
+              }
+            }).catch(() => undefined);
+          }
         };
 
       void run();
-    }, []);
+
+      return () => {
+        active = false;
+      };
+    }, [scope]);
 
   useFocusEffect(load);
 
   const refreshRecommendations =
     useCallback(
       async (): Promise<void> => {
+        const operationScope = scope;
+        if (!operationScope) return;
+
         setRefreshingRecommendations(
           true,
         );
 
         try {
-          const snapshot =
-            await syncSpotifyLibrary();
+          const synced =
+            await syncCombinedSceneMusicLibrary(musicProviderIds);
+          const combined = synced?.readyProviderIds.length
+            ? await addCombinedCatalogDiscovery(synced).catch(() => synced)
+            : synced;
+
+          if (
+            !currentScopeRef.current ||
+            operationScope.userId !== currentScopeRef.current.userId ||
+            operationScope.accountEpoch !== currentScopeRef.current.accountEpoch ||
+            operationScope.sessionGeneration !== currentScopeRef.current.sessionGeneration
+          ) {
+            return;
+          }
 
           setSpotifySnapshot(
-            snapshot,
+            combined?.snapshot ?? null,
           );
+          setMusicProviderIds(combined?.providerIds ?? []);
 
           setRecommendationWarning(
             null,
@@ -381,28 +446,48 @@ export default function HomeScreen() {
             null,
           );
         } catch (error) {
+          if (
+            !currentScopeRef.current ||
+            operationScope.userId !== currentScopeRef.current.userId ||
+            operationScope.accountEpoch !== currentScopeRef.current.accountEpoch ||
+            operationScope.sessionGeneration !== currentScopeRef.current.sessionGeneration
+          ) {
+            return;
+          }
+
           setRecommendationIssue(
             classifyRecoveryIssue(
               error,
               {
                 service:
-                  "spotify",
+                  musicProviderIds.length === 1 && musicProviderIds[0] === "spotify"
+                    ? "spotify"
+                    : "canal",
                 connectivityStatus,
               },
             ),
           );
 
           setRecommendationWarning(
-            "Recommendations are using your last Spotify sync.",
+            "Recommendations are using your last available music-library sync.",
           );
         } finally {
-          setRefreshingRecommendations(
-            false,
-          );
+          if (
+            currentScopeRef.current &&
+            operationScope.userId === currentScopeRef.current.userId &&
+            operationScope.accountEpoch === currentScopeRef.current.accountEpoch &&
+            operationScope.sessionGeneration === currentScopeRef.current.sessionGeneration
+          ) {
+            setRefreshingRecommendations(
+              false,
+            );
+          }
         }
       },
       [
         connectivityStatus,
+        musicProviderIds,
+        scope,
       ],
     );
 
@@ -505,16 +590,22 @@ export default function HomeScreen() {
   }, [directRequest, quickMood]);
 
   const orbitSongParams = useCallback((track: SpotifyTrack) => {
+    const providerId = getCanalTrackProvider(track);
+    const providerUrl = getCanalTrackProviderUrl(track);
     const song = normalizeSongSceneActionInput({
       trackId: track.id,
       title: track.name,
       artist: track.artists[0]?.name ?? "Unknown artist",
       artworkUrl: trackArtwork(track),
-      spotifyUrl: `https://open.spotify.com/track/${track.id}`,
+      spotifyUrl: providerId === "spotify" ? providerUrl : undefined,
+      providerId,
+      providerTrackId: getCanalTrackProviderId(track),
+      providerUrl,
     });
     return song ? {
       ...songSceneActionParams(song),
       genreHints: (spotifySnapshot?.trackGenres[track.id] ?? []).slice(0, 4).join("|"),
+      genreSources: providerId,
     } : null;
   }, [spotifySnapshot?.trackGenres]);
 
@@ -534,17 +625,35 @@ export default function HomeScreen() {
 
   const updateOrbitPreference = useCallback(async (track: SpotifyTrack, preference: "like" | "dislike"): Promise<void> => {
     const operationScope = scope;
+    const providerId = getCanalTrackProvider(track);
+    const providerUrl = getCanalTrackProviderUrl(track);
     const song = normalizeSongSceneActionInput({
       trackId: track.id,
       title: track.name,
       artist: track.artists[0]?.name ?? "Unknown artist",
       artworkUrl: trackArtwork(track),
-      spotifyUrl: `https://open.spotify.com/track/${track.id}`,
+      spotifyUrl: providerId === "spotify" ? providerUrl : undefined,
+      providerId,
+      providerTrackId: getCanalTrackProviderId(track),
+      providerUrl,
     });
     if (!operationScope || !song) return;
-    const dna = classifyCanalSongDna({ genreHints: spotifySnapshot?.trackGenres[track.id] ?? [], title: track.name, artist: song.artist });
     setOpenOrbitActions("");
     try {
+      const providerMetadata = await readProviderSongMetadata({
+        trackId: track.id,
+        providerId,
+        providerTrackId: getCanalTrackProviderId(track),
+        title: track.name,
+        artist: song.artist,
+      }).catch(() => null);
+      const dna = classifyCanalSongDna({
+        genreEvidence: providerMetadata?.genreEvidence.length
+          ? providerMetadata.genreEvidence
+          : [{ provider: providerId, genres: spotifySnapshot?.trackGenres[track.id] ?? [] }],
+        title: track.name,
+        artist: song.artist,
+      });
       if (preference === "like") {
         await setSongLiked(song, dna, true, operationScope, () => currentScopeRef.current);
         setTemporarilyDisliked((current) => current.filter((id) => id !== track.id));
@@ -822,8 +931,8 @@ export default function HomeScreen() {
                     styles.sectionSubtitle
                   }
                 >
-                  Based on your latest Spotify
-                  taste, favorites, plays, and
+                  Based on your connected music
+                  libraries, favorites, plays, and
                   feedback.
                 </Text>
               </View>
@@ -900,9 +1009,9 @@ export default function HomeScreen() {
             <View style={styles.sectionHeader}>
               <View style={styles.sectionCopy}>
                 <Text style={styles.sectionTitle}>New to your orbit</Text>
-                <Text style={styles.sectionSubtitle}>Cached music worth bringing into a Scene.</Text>
+                <Text style={styles.sectionSubtitle}>Fresh catalog discoveries and library finds worth bringing into a Scene.</Text>
               </View>
-              <Pressable accessibilityLabel="Refresh New to your orbit" accessibilityHint="Shows a different set of cached songs without requesting Spotify again" accessibilityRole="button" disabled={orbitCandidates.length <= 3} onPress={() => { setOpenOrbitActions(""); setOrbitOffset((current) => current + 3); }} style={({ pressed }) => [styles.orbitRefresh, pressed && styles.pressed, orbitCandidates.length <= 3 && styles.disabled]}>
+              <Pressable accessibilityLabel="Refresh New to your orbit" accessibilityHint="Shows a different set of cached songs without requesting a music service again" accessibilityRole="button" disabled={orbitCandidates.length <= 3} onPress={() => { setOpenOrbitActions(""); setOrbitOffset((current) => current + 3); }} style={({ pressed }) => [styles.orbitRefresh, pressed && styles.pressed, orbitCandidates.length <= 3 && styles.disabled]}>
                 <Ionicons color={canalDynamicColors.text} name="refresh-outline" size={20} />
               </Pressable>
             </View>
@@ -936,8 +1045,8 @@ export default function HomeScreen() {
                     {openOrbitActions === track.id ? (
                       <Animated.View entering={FadeInRight.duration(170)} exiting={FadeOutRight.duration(130)} style={styles.orbitActionLedge}>
                         <View accessibilityLabel={`${track.name} actions`} accessibilityRole="menu" style={styles.orbitActionLedgeInner}>
-                          <Pressable accessibilityLabel={`Open ${track.name} in Spotify`} accessibilityRole="button" onPress={() => { setOpenOrbitActions(""); void Linking.openURL(`https://open.spotify.com/track/${track.id}`); }} style={({ pressed }) => [styles.orbitAction, pressed && styles.orbitActionPressed]}>
-                            <Ionicons color="#1DB954" name="open-outline" size={18} />
+                          <Pressable accessibilityLabel={`Open ${track.name} in ${getCanalTrackProvider(track) === "spotify" ? "Spotify" : "Apple Music"}`} accessibilityRole="button" disabled={!getCanalTrackProviderUrl(track)} onPress={() => { const url = getCanalTrackProviderUrl(track); setOpenOrbitActions(""); if (url) void Linking.openURL(url); }} style={({ pressed }) => [styles.orbitAction, pressed && styles.orbitActionPressed]}>
+                            <Ionicons color={getCanalTrackProvider(track) === "spotify" ? "#1DB954" : canalDynamicColors.text} name="open-outline" size={18} />
                           </Pressable>
                           <Pressable accessibilityLabel={`Like ${track.name}`} accessibilityRole="button" onPress={() => { void updateOrbitPreference(track, "like"); }} style={({ pressed }) => [styles.orbitAction, pressed && styles.orbitActionPressed]}>
                             <Ionicons color={canalDynamicColors.mint} name="heart-outline" size={18} />
@@ -957,7 +1066,7 @@ export default function HomeScreen() {
                   </View>
                 ))}
               </View>
-            ) : <Text style={styles.orbitEmpty}>Sync Spotify to bring real tracks and artwork into this section.</Text>}
+            ) : <Text style={styles.orbitEmpty}>Sync Spotify or Apple Music to bring real tracks and artwork into this section.</Text>}
 
             <View
               style={

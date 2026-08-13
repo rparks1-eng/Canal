@@ -176,6 +176,67 @@ jest.mock(
 );
 
 jest.mock(
+  "../lib/combined-music-library",
+  () => ({
+    getCanalTrackProvider: () => "spotify",
+    getCanalTrackProviderId: (track: { id: string }) => track.id,
+    getCanalTrackProviderUrl: (track: { external_urls?: { spotify?: string } }) =>
+      track.external_urls?.spotify,
+    readCombinedSceneMusicLibrary: async () => ({
+      snapshot: await mockReadSpotifyLibrarySnapshot(),
+      providerIds: ["spotify"],
+      readyProviderIds: ["spotify"],
+      genreCatalog: ["ambient"],
+    }),
+  }),
+);
+
+jest.mock(
+  "../lib/scene-genre-catalog",
+  () => ({
+    addUserSelectedGenreCatalogTracksFromProviders: async (
+      _draft: unknown,
+      snapshot: unknown,
+    ) => snapshot,
+  }),
+);
+
+jest.mock(
+  "../lib/scene-recommendation-feedback",
+  () => ({
+    readSceneRecommendationLearning: async () => ({
+      rejectedTrackIds: [],
+      deprioritizedTrackIds: [],
+      preferredTrackIds: [],
+      reasonBias: {
+        energyBias: 0,
+        familiarityBias: 0,
+        avoidArtistIds: [],
+        avoidGenres: [],
+        suppressExplicit: false,
+      },
+    }),
+  }),
+);
+
+jest.mock(
+  "../lib/scenes",
+  () => ({
+    normalizeSceneTrackGenreEvidence: (value: unknown) => value,
+    readScenes: async () => [],
+  }),
+);
+
+jest.mock(
+  "../lib/spotify-scene-artwork",
+  () => ({
+    addSpotifyArtworkToGeneratedScene: async (
+      preview: unknown,
+    ) => preview,
+  }),
+);
+
+jest.mock(
   "../lib/scene-studio-lifecycle",
   () => ({
     captureSceneStudioInvalidationGeneration:
@@ -272,7 +333,7 @@ async function openReview(
 }
 
 describe(
-  "provider-neutral Scene Studio activation path",
+  "connected-provider Scene Studio activation path",
   () => {
     beforeEach(() => {
       jest.clearAllMocks();
@@ -388,8 +449,12 @@ describe(
         });
 
         await act(async () => {
-          const activation = action.props.onPress();
-          await activation;
+          action.props.onPress();
+          for (let turn = 0; turn < 5; turn += 1) {
+            await new Promise((resolve) =>
+              setImmediate(resolve),
+            );
+          }
         });
 
         expect(
@@ -456,10 +521,13 @@ describe(
         await openReview(renderer);
 
         await act(async () => {
-          await renderer.root.findByProps({
+          renderer.root.findByProps({
             accessibilityLabel:
               "Update Scene Preview",
           }).props.onPress();
+          await new Promise((resolve) =>
+            setImmediate(resolve),
+          );
         });
 
         expect(

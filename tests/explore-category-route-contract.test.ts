@@ -33,7 +33,7 @@ describe("Explore category route", () => {
     expect(highlighted).toBeGreaterThan(-1);
     expect(popular).toBeGreaterThan(highlighted);
     expect(activities).toBeGreaterThan(popular);
-    expect(exploreSource).toContain("readSpotifyLibrarySnapshot()");
+    expect(exploreSource).toContain("readCombinedSceneMusicLibrary()");
     expect(exploreSource).toContain("rankExploreScenes(");
     expect(exploreSource).toContain("rankExploreStages(");
     expect(exploreSource).toContain("item.creator.isVerified || item.creator.isCanal");

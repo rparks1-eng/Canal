@@ -16,6 +16,12 @@ import type {
 } from "./spotify-library";
 
 import {
+  getCanalTrackProvider,
+  getCanalTrackProviderId,
+  getCanalTrackProviderUrl,
+} from "./combined-music-library";
+
+import {
   upsertSceneForScope,
 } from "./scenes";
 
@@ -27,10 +33,12 @@ import {
   generateCreativeSceneName,
 } from "./creative-names";
 
-import type {
-  SceneTrack,
-  StoredScene,
+import {
+  normalizeSceneTrackGenreEvidence,
+  type SceneTrack,
+  type StoredScene,
 } from "./scenes";
+import type { MusicProviderGenreEvidence } from "./music-provider-model";
 
 import {
   EMPTY_SCENE_REASON_BIAS,
@@ -294,7 +302,7 @@ export const SCENE_FAMILIARITY_OPTIONS = [
     value: "discovery",
     label: "Discovery",
     description:
-      "Diversify within your imported Spotify library.",
+      "Diversify within your imported music libraries.",
   },
 ] as const;
 
@@ -438,6 +446,7 @@ export type GeneratedTrackSignal = {
   score: number;
   intensity: number;
   genres: string[];
+  genreEvidence?: readonly MusicProviderGenreEvidence[];
   genreMatch?: GeneratedTrackGenreMatch;
 };
 
@@ -2307,6 +2316,9 @@ function getSelectedArtists(
 function buildSceneTrack(
   signal: GeneratedTrackSignal,
 ): SceneTrack {
+  const providerId = getCanalTrackProvider(signal.track);
+  const providerUrl = getCanalTrackProviderUrl(signal.track);
+
   return {
     id:
       signal.track.id,
@@ -2328,12 +2340,24 @@ function buildSceneTrack(
       ),
 
     spotifyUri:
-      signal.track.uri,
+      providerId === "spotify" ? signal.track.uri : undefined,
 
     spotifyUrl:
-      signal.track
-        .external_urls
-        ?.spotify,
+      providerId === "spotify" ? signal.track.external_urls?.spotify : undefined,
+
+    providerId,
+
+    providerTrackId:
+      getCanalTrackProviderId(signal.track),
+
+    ...(providerUrl ? { providerUrl } : {}),
+
+    genreEvidence:
+      normalizeSceneTrackGenreEvidence(signal.genreEvidence),
+
+    ...(signal.track.album?.imageUrl || signal.track.album?.images?.[0]?.url
+      ? { imageUrl: signal.track.album?.imageUrl ?? signal.track.album?.images?.[0]?.url }
+      : {}),
 
     durationMs:
       getTrackDurationMs(
@@ -2674,6 +2698,19 @@ export async function readGeneratedScenePreview(): Promise<
     return {
       ...parsed,
 
+      scene: {
+        ...parsed.scene,
+        tracks: (Array.isArray(parsed.scene.tracks) ? parsed.scene.tracks : []).map((track) => ({
+          ...track,
+          genreEvidence: normalizeSceneTrackGenreEvidence(track.genreEvidence),
+        })),
+      },
+
+      trackSignals: parsed.trackSignals.map((signal) => ({
+        ...signal,
+        genreEvidence: normalizeSceneTrackGenreEvidence(signal.genreEvidence),
+      })),
+
       draft: {
         ...DEFAULT_SCENE_STUDIO_DRAFT,
         ...parsed.draft,
@@ -2835,6 +2872,16 @@ export function generateSceneFromSpotify(
 
         genres:
           candidate.genres,
+
+        genreEvidence:
+          normalizeSceneTrackGenreEvidence(
+            ((snapshot as SpotifyLibrarySnapshot & {
+              trackGenreEvidence?: Record<string, MusicProviderGenreEvidence[]>;
+            }).trackGenreEvidence?.[candidate.track.id]) ?? [{
+              provider: getCanalTrackProvider(candidate.track),
+              genres: candidate.genres,
+            }],
+          ),
 
         genreMatch:
           getSceneTrackGenreMatch(
@@ -3028,7 +3075,7 @@ export function generateSceneWithSpotifyGenreFallback(
       genres: draft.preferredGenres.join(", "),
     },
     rationale: [
-      `Spotify supplied no verifiable ${draft.preferredGenres.join(", ")} matches, so Canal kept the genre filter instead of adding unrelated tracks.`,
+      `Your connected music services supplied no verifiable ${draft.preferredGenres.join(", ")} matches, so Canal kept the genre filter instead of adding unrelated tracks.`,
       ...generated.rationale,
     ],
   };

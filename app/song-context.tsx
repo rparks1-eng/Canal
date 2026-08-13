@@ -17,9 +17,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CanalAmbientBackground } from "../components/canal-ui/canal-ambient-background";
 import { useLinerNotesContext } from "../components/liner-notes/useLinerNotesContext";
 import type { GeniusSongContext } from "../lib/genius-context-contract";
-import { getSceneById, type SceneTrack, type StoredScene } from "../lib/scenes";
+import { getSceneById, normalizeSceneTrackGenreEvidence, type SceneTrack, type StoredScene } from "../lib/scenes";
 import { captureSceneStudioScope } from "../lib/scene-studio-scope";
-import { classifyCanalSongDna, type SongSceneMoodEvidence } from "../lib/song-dna";
+import {
+  classifyCanalSongDna,
+  type SongGenreEvidence,
+  type SongSceneMoodEvidence,
+} from "../lib/song-dna";
+import { readProviderSongMetadata, type ProviderSongMetadata } from "../lib/provider-song-metadata";
 import { persistSongDna, readSongDisliked, readSongLiked, readSongSceneMoodEvidence, setSongDisliked, setSongLiked } from "../lib/song-preferences";
 import {
   normalizeSongSceneActionInput,
@@ -32,7 +37,7 @@ import { canalDynamicColors } from "../theme/canal-dynamic-colors";
 type FieldState = "loading" | "empty" | "error" | "offline" | "ready";
 
 export default function SongContextScreen(): React.JSX.Element {
-  const params = useLocalSearchParams<{ sceneId?: string; trackId?: string; trackTitle?: string; artistName?: string; artworkUrl?: string; spotifyUrl?: string; genreHints?: string }>();
+  const params = useLocalSearchParams<{ sceneId?: string; trackId?: string; trackTitle?: string; artistName?: string; artworkUrl?: string; spotifyUrl?: string; providerId?: string; providerTrackId?: string; providerUrl?: string; genreHints?: string; genreSources?: string; providerGenreEvidence?: string }>();
   const sceneId = typeof params.sceneId === "string" ? params.sceneId : "";
   const trackId = typeof params.trackId === "string" ? params.trackId : "";
   const trackTitle = typeof params.trackTitle === "string" ? params.trackTitle.slice(0, 300) : "";
@@ -40,6 +45,14 @@ export default function SongContextScreen(): React.JSX.Element {
   const requestedArtworkUrl = typeof params.artworkUrl === "string" && /^https:\/\//u.test(params.artworkUrl)
     ? params.artworkUrl
     : undefined;
+  const requestedGenreEvidence = useMemo(() => {
+    if (typeof params.providerGenreEvidence !== "string" || params.providerGenreEvidence.length > 2_400) return undefined;
+    try {
+      return normalizeSceneTrackGenreEvidence(JSON.parse(params.providerGenreEvidence));
+    } catch {
+      return undefined;
+    }
+  }, [params.providerGenreEvidence]);
   const { accountEpoch, sessionGeneration, user } = useAuth();
   const { refresh, status: connectivityStatus } = useConnectivity();
   const [scene, setScene] = useState<StoredScene | null>(null);
@@ -50,6 +63,7 @@ export default function SongContextScreen(): React.JSX.Element {
   const [likeBusy, setLikeBusy] = useState(false);
   const [likeError, setLikeError] = useState("");
   const [sceneMoodEvidence, setSceneMoodEvidence] = useState<SongSceneMoodEvidence[]>([]);
+  const [providerMetadata, setProviderMetadata] = useState<ProviderSongMetadata>({ genreEvidence: [] });
   const scope = useMemo(() => captureSceneStudioScope({ userId: user?.id, accountEpoch, sessionGeneration }), [accountEpoch, sessionGeneration, user?.id]);
   const currentScopeRef = useRef(scope);
   const persistedDnaKeyRef = useRef("");
@@ -62,7 +76,16 @@ export default function SongContextScreen(): React.JSX.Element {
     setTrack(null);
 
     if (!sceneId && trackId && trackTitle && artistName) {
-      setTrack({ id: trackId, title: trackTitle, artist: artistName, imageUrl: requestedArtworkUrl });
+      setTrack({
+        id: trackId,
+        title: trackTitle,
+        artist: artistName,
+        imageUrl: requestedArtworkUrl,
+        providerId: params.providerId === "apple-music" ? "apple-music" : params.providerId === "spotify" ? "spotify" : undefined,
+        providerTrackId: typeof params.providerTrackId === "string" ? params.providerTrackId : undefined,
+        providerUrl: typeof params.providerUrl === "string" ? params.providerUrl : undefined,
+        genreEvidence: requestedGenreEvidence,
+      });
       setTrackLoading(false);
       return () => { active = false; };
     }
@@ -78,7 +101,7 @@ export default function SongContextScreen(): React.JSX.Element {
       setTrackLoading(false);
     });
     return () => { active = false; };
-  }, [artistName, requestedArtworkUrl, sceneId, trackId, trackTitle, user?.id]);
+  }, [artistName, params.providerId, params.providerTrackId, params.providerUrl, requestedArtworkUrl, requestedGenreEvidence, sceneId, trackId, trackTitle, user?.id]);
 
   const linerNotesTrack = useMemo(() => track ? {
     title: track.title,
@@ -93,25 +116,53 @@ export default function SongContextScreen(): React.JSX.Element {
   });
   const song = genius.context?.song;
   const state: FieldState = trackLoading ? "loading" : track ? genius.state : "error";
-  const artworkUrl = song?.artworkUrl ?? track?.imageUrl;
+  const artworkUrl = providerMetadata.artworkUrl ?? track?.imageUrl ?? requestedArtworkUrl ?? song?.artworkUrl;
   const songAction = useMemo(() => normalizeSongSceneActionInput({
     trackId: track?.id,
     title: track?.title,
     artist: track?.artist,
     artworkUrl,
     spotifyUrl: track?.spotifyUrl ?? params.spotifyUrl,
-  }), [artworkUrl, params.spotifyUrl, track]);
+    providerId: providerMetadata.providerId ?? track?.providerId ?? (params.providerId === "apple-music" ? "apple-music" : params.providerId === "spotify" ? "spotify" : undefined),
+    providerTrackId: providerMetadata.providerTrackId ?? track?.providerTrackId ?? params.providerTrackId,
+    providerUrl: providerMetadata.providerUrl ?? track?.providerUrl ?? params.providerUrl,
+  }), [artworkUrl, params.providerId, params.providerTrackId, params.providerUrl, params.spotifyUrl, providerMetadata, track]);
   const genreHints = useMemo(() => typeof params.genreHints === "string"
     ? params.genreHints.slice(0, 1_000).split("|").map((value) => value.trim()).filter(Boolean).slice(0, 12)
     : [], [params.genreHints]);
+  const genreEvidence = useMemo((): SongGenreEvidence[] => {
+    const routeProvider = params.genreSources === "apple-music" ? "apple-music" as const : "spotify" as const;
+    return [
+      ...(track?.genreEvidence ?? []),
+      ...(genreHints.length ? [{ provider: routeProvider, genres: genreHints }] : []),
+      ...providerMetadata.genreEvidence,
+      ...(song?.genres?.length ? [{ provider: "genius" as const, genres: song.genres }] : []),
+    ];
+  }, [genreHints, params.genreSources, providerMetadata.genreEvidence, song?.genres, track?.genreEvidence]);
   const songDna = useMemo(() => classifyCanalSongDna({
     title: track?.title,
     artist: track?.artist,
     album: song?.album,
-    genreHints,
+    genreEvidence,
     story: song?.description,
     sceneMoodEvidence,
-  }), [genreHints, sceneMoodEvidence, song?.album, song?.description, track?.artist, track?.title]);
+  }), [genreEvidence, sceneMoodEvidence, song?.album, song?.description, track?.artist, track?.title]);
+
+  useEffect(() => {
+    let active = true;
+    setProviderMetadata({ genreEvidence: [] });
+    if (!track) return () => { active = false; };
+    void readProviderSongMetadata({
+      trackId: track.id,
+      providerId: track.providerId,
+      providerTrackId: track.providerTrackId,
+      title: track.title,
+      artist: track.artist,
+    }).then((metadata) => {
+      if (active) setProviderMetadata(metadata);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [track]);
 
   useEffect(() => {
     let active = true;
@@ -125,7 +176,7 @@ export default function SongContextScreen(): React.JSX.Element {
 
   useEffect(() => {
     if (!songAction || !scope) return;
-    const persistenceKey = `${scope.userId}:${songAction.trackId}:${songDna.taxonomyVersion}:${songDna.genres.join("|")}:${songDna.moods.join("|")}:${songDna.confidence}`;
+    const persistenceKey = `${scope.userId}:${songAction.trackId}:${songDna.taxonomyVersion}:${songDna.genres.join("|")}:${songDna.moods.join("|")}:${songDna.confidence}:${songDna.sources.join("|")}`;
     if (persistedDnaKeyRef.current === persistenceKey) return;
     persistedDnaKeyRef.current = persistenceKey;
     void persistSongDna(songAction, songDna, scope, () => currentScopeRef.current).catch(() => {

@@ -169,13 +169,29 @@ function appleTrack():
         "album-a",
       name:
         "Neutral Album",
+      imageUrl:
+        "https://is1-ssl.mzstatic.com/image/thumb/neutral/600x600bb.jpg",
     },
+    genres: ["Alternative", "Dream Pop"],
   };
 }
 
 describe(
   "Scene preview provider boundary",
   () => {
+    it("persists bounded provider genre evidence on tracks without storing Genius", () => {
+      const scenesSource = readFileSync("lib/scenes.ts", "utf8");
+      const studioSource = readFileSync("lib/scene-studio.ts", "utf8");
+      const contextSource = readFileSync("app/song-context.tsx", "utf8");
+
+      expect(scenesSource).toContain("normalizeSceneTrackGenreEvidence");
+      expect(scenesSource).toContain("normalized.size < 12");
+      expect(scenesSource).toContain("genre.length > 80");
+      expect(studioSource).toContain("genreEvidence:");
+      expect(contextSource).toContain("...(track?.genreEvidence ?? [])");
+      expect(scenesSource).not.toContain('provider === "genius"');
+    });
+
     it(
       "adds a neutral track without mislabeling non-Spotify links",
       () => {
@@ -201,7 +217,23 @@ describe(
             "apple-music-search",
           durationMs:
             240_000,
+          imageUrl:
+            "https://is1-ssl.mzstatic.com/image/thumb/neutral/600x600bb.jpg",
+          providerId:
+            "apple-music",
+          providerTrackId:
+            "apple-track-a",
+          providerUrl:
+            "https://music.apple.com/us/song/apple-track-a",
+          genreEvidence: [{
+            provider: "apple-music",
+            genres: ["Alternative", "Dream Pop"],
+          }],
         });
+        expect(updated.trackSignals[1]?.genreEvidence).toEqual([{
+          provider: "apple-music",
+          genres: ["Alternative", "Dream Pop"],
+        }]);
         expect(
           updated.trackSignals[1]
             ?.track,
@@ -211,7 +243,7 @@ describe(
           name:
             "Neutral Track",
           uri:
-            "apple-music:track:apple-track-a",
+            "apple-music:song:apple-track-a",
           duration_ms:
             240_000,
         });
@@ -283,14 +315,14 @@ describe(
         expect(
           previewSource,
         ).toContain(
-          "spotifyMusicProvider",
+          "musicProviders",
         );
         expect(
           previewSource,
         ).toContain(
           "createSceneStudioRepository",
         );
-        expect(previewSource).toContain("readSpotifyLibrarySnapshot");
+        expect(previewSource).toContain("readCombinedSceneMusicLibrary");
         expect(previewSource).toContain("generateSceneWithSpotifyGenreFallback");
         expect(previewSource).not.toMatch(
           /SpotifySceneSearchTrack|searchSpotifySceneTracks|getSpotifyLibraryTrackSuggestions|spotifyAuthenticatedFetch/,
@@ -339,7 +371,7 @@ describe(
 
         expect(studioSource).toContain('"Generate editable preview"');
         expect(studioSource).toContain("readSpotifyConnectionStateForAccount");
-        expect(studioSource).toContain("readSpotifyLibrarySnapshot");
+        expect(studioSource).toContain("readCombinedSceneMusicLibrary");
         expect(studioSource).toContain("generateSceneWithSpotifyGenreFallback");
         expect(studioSource).toContain("savePreview");
         expect(studioSource).toContain('router.push("/scene-preview")');
@@ -348,15 +380,15 @@ describe(
         );
         expect(studioSource).not.toContain('router.push("/now-playing")');
         expect(previewSource).toContain("Return to Scene Studio");
-        expect(previewSource).toContain("spotifyMusicProvider.searchCatalog");
+        expect(previewSource).toContain('musicProviders.require(providerId, "catalog-search")');
         expect(previewSource).toContain("addMusicTrackToGeneratedScene");
-        expect(previewSource).toContain("Canal generated this private draft from your synced Spotify library");
+        expect(previewSource).toContain("Canal generated this private draft from your connected Apple Music and Spotify libraries");
         expect(previewSource).toContain(">Swap</Text>");
         expect(previewSource).toContain("replaceTrackInGeneratedSceneEditor");
         expect(previewSource).toContain("createSceneStudioRepository");
         expect(previewSource).toContain('pathname: "/scenes/[sceneId]"');
         expect(previewSource).toContain("sceneId: savedScene.id");
-        expect(previewSource).not.toContain("readLibrarySnapshot");
+        expect(previewSource).not.toContain("MusicTasteProfile");
         expect(previewSource).not.toContain("MusicTasteProfile");
       },
     );

@@ -3,6 +3,10 @@ import {
 } from "./live-stages";
 
 import {
+  readAccountOwnedSoundscapeHistory,
+} from "./canal-session";
+
+import {
   readScenes,
 } from "./scenes";
 
@@ -14,13 +18,13 @@ import {
   readSnapshots,
 } from "./snapshots";
 
-import {
-  readSpotifyLibrarySnapshot,
-} from "./spotify-library";
-
 import type {
   SpotifyLibrarySnapshot,
 } from "./spotify-library";
+
+import {
+  readCombinedSceneMusicLibrary,
+} from "./combined-music-library";
 
 import {
   supabase,
@@ -55,18 +59,18 @@ async function assertCurrentAccount(expectedUserId: string): Promise<void> {
 
 export function deriveSoundscapeSongDna(
   scenes: StoredScene[],
-  spotify: SpotifyLibrarySnapshot | null,
+  musicLibrary: SpotifyLibrarySnapshot | null,
   observedAt: string,
 ): SoundscapeAggregationInput["songDna"] {
-  if (!spotify) return [];
-  const spotifyTracks = [
-    ...spotify.discoveryTracks,
-    ...spotify.recentTracks,
-    ...spotify.savedTracks,
-    ...spotify.playlistTracks,
+  if (!musicLibrary) return [];
+  const libraryTracks = [
+    ...musicLibrary.discoveryTracks,
+    ...musicLibrary.recentTracks,
+    ...musicLibrary.savedTracks,
+    ...musicLibrary.playlistTracks,
   ];
   const uniqueTracks = Array.from(
-    new Map(spotifyTracks.filter((track) => track.id).map((track) => [track.id, track])).values(),
+    new Map(libraryTracks.filter((track) => track.id).map((track) => [track.id, track])).values(),
   ).slice(0, 1000);
 
   return uniqueTracks.map((track) => {
@@ -77,7 +81,7 @@ export function deriveSoundscapeSongDna(
       trackId: track.id,
       title: track.name,
       artist: track.artists.map((artist) => artist.name).filter(Boolean).join(", "),
-      genres: Array.from(new Set([...(spotify.trackGenres[track.id] ?? []), ...sceneGenres])).slice(0, 12),
+      genres: Array.from(new Set([...(musicLibrary.trackGenres[track.id] ?? []), ...sceneGenres])).slice(0, 12),
       moods: Array.from(new Set(sceneMoods)).slice(0, 12),
       decade: track.album?.release_date?.slice(0, 4).match(/^\d{4}$/u)
         ? `${track.album.release_date.slice(0, 3)}0s`
@@ -97,11 +101,11 @@ export async function collectSoundscapeAggregationInput(
   if (!accountId) throw new Error("A signed-in Canal account is required.");
   await assertCurrentAccount(accountId);
 
-  const [scenes, stages, snapshots, spotify, sessionHistory] = await Promise.all([
+  const [scenes, stages, snapshots, combinedMusicLibrary, sessionHistory] = await Promise.all([
     readScenes(),
     readLiveStages(),
     readSnapshots(),
-    readSpotifyLibrarySnapshot(),
+    readCombinedSceneMusicLibrary(),
     readAccountOwnedSoundscapeHistory(accountId),
   ]);
   await assertCurrentAccount(accountId);
@@ -137,7 +141,11 @@ export async function collectSoundscapeAggregationInput(
       })),
     /* Candidate-pool membership is not evidence that the user discovered a track. */
     discoveries: [],
-    songDna: deriveSoundscapeSongDna(scenes, spotify, spotify?.syncedAt ?? generatedAt),
+    songDna: deriveSoundscapeSongDna(
+      scenes,
+      combinedMusicLibrary?.snapshot ?? null,
+      combinedMusicLibrary?.snapshot.syncedAt ?? generatedAt,
+    ),
     listening: sessionHistory.listening.slice(0, 500).map((entry) => ({
       id: entry.id,
       sceneId: entry.sceneId,
@@ -167,4 +175,3 @@ export async function collectSoundscapeAggregationInput(
   await assertCurrentAccount(accountId);
   return input;
 }
-import { readAccountOwnedSoundscapeHistory } from "./canal-session";

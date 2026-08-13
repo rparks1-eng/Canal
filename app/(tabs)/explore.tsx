@@ -100,8 +100,8 @@ import {
   rankExploreStages,
 } from "../../lib/explore-personalization";
 import {
-  readSpotifyLibrarySnapshot,
-} from "../../lib/spotify-library";
+  readCombinedSceneMusicLibrary,
+} from "../../lib/combined-music-library";
 
 type ExploreContent =
   | "scenes"
@@ -886,7 +886,7 @@ export default function ExploreScreen() {
           await Promise.allSettled([
             loadExploreScenes({ force: isPullRefresh }),
             readPublicLiveStages({ force: isPullRefresh }),
-            readSpotifyLibrarySnapshot(),
+            readCombinedSceneMusicLibrary(),
           ]);
 
         if (
@@ -899,7 +899,7 @@ export default function ExploreScreen() {
         const tasteSnapshot =
           tasteResult.status ===
           "fulfilled"
-            ? tasteResult.value
+            ? tasteResult.value?.snapshot ?? null
             : null;
 
         if (

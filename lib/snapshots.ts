@@ -27,6 +27,8 @@ import {
 import type {
   SnapshotTemplateTheme,
 } from "./snapshot-templates";
+import type { MusicProviderGenreEvidence } from "./music-provider-model";
+import { normalizeSceneTrackGenreEvidence } from "./scenes";
 
 export type SnapshotVisibility =
   | "public"
@@ -46,6 +48,10 @@ export type Snapshot = {
   trackArtist?: string;
   trackImageUrl?: string;
   spotifyUrl?: string;
+  providerId?: "spotify" | "apple-music";
+  providerTrackId?: string;
+  providerUrl?: string;
+  genreEvidence?: readonly MusicProviderGenreEvidence[];
   mediaType?: SnapshotMediaType;
   mediaUri?: string;
   mediaPath?: string;
@@ -78,6 +84,10 @@ export type CreateSnapshotInput = {
   trackArtist?: string;
   trackImageUrl?: string;
   spotifyUrl?: string;
+  providerId?: "spotify" | "apple-music";
+  providerTrackId?: string;
+  providerUrl?: string;
+  genreEvidence?: readonly MusicProviderGenreEvidence[];
   mediaType?: SnapshotMediaType;
   mediaUri?: string;
   mediaMimeType?: string;
@@ -94,6 +104,10 @@ export type UpdateSnapshotInput = {
   note?: string;
   mood?: string;
   spotifyUrl?: string;
+  providerId?: "spotify" | "apple-music";
+  providerTrackId?: string;
+  providerUrl?: string;
+  genreEvidence?: readonly MusicProviderGenreEvidence[];
   visibility?: SnapshotVisibility;
 };
 
@@ -610,6 +624,27 @@ export async function createSnapshotWithStatus(
       ) ??
       undefined,
 
+    providerId:
+      cleanSnapshotProviderId(
+        input.providerId,
+      ),
+
+    providerTrackId:
+      cleanOptionalString(
+        input.providerTrackId,
+      ),
+
+    providerUrl:
+      cleanSnapshotProviderUrl(
+        input.providerId,
+        input.providerUrl,
+      ),
+
+    genreEvidence:
+      normalizeSceneTrackGenreEvidence(
+        input.genreEvidence,
+      ),
+
     mediaType:
       input.mediaType === "photo" ||
       input.mediaType === "video"
@@ -794,6 +829,37 @@ export async function updateSnapshotWithStatus(
           ) ??
           undefined
         : existingSnapshot.spotifyUrl,
+
+    providerId:
+      changes.providerId !== undefined
+        ? cleanSnapshotProviderId(
+            changes.providerId,
+          )
+        : existingSnapshot.providerId,
+
+    providerTrackId:
+      changes.providerTrackId !== undefined
+        ? cleanOptionalString(
+            changes.providerTrackId,
+          )
+        : existingSnapshot.providerTrackId,
+
+    providerUrl:
+      changes.providerUrl !== undefined ||
+      changes.providerId !== undefined
+        ? cleanSnapshotProviderUrl(
+            changes.providerId ??
+            existingSnapshot.providerId,
+            changes.providerUrl,
+          )
+        : existingSnapshot.providerUrl,
+
+    genreEvidence:
+      changes.genreEvidence !== undefined
+        ? normalizeSceneTrackGenreEvidence(
+            changes.genreEvidence,
+          )
+        : existingSnapshot.genreEvidence,
 
     visibility:
       changes.visibility ===
@@ -1538,6 +1604,28 @@ function normalizeSnapshot(
       ) ??
       undefined,
 
+    providerId:
+      cleanSnapshotProviderId(
+        record.providerId,
+      ),
+
+    providerTrackId:
+      readOptionalString(
+        record.providerTrackId,
+      ),
+
+    providerUrl:
+      cleanSnapshotProviderUrl(
+        record.providerId,
+        record.providerUrl,
+      ),
+
+    genreEvidence:
+      normalizeSceneTrackGenreEvidence(
+        record.genreEvidence ??
+        record.genre_evidence,
+      ),
+
     positionMs:
       typeof record.positionMs ===
         "number" &&
@@ -1695,19 +1783,94 @@ function cleanSnapshotArtworkUrl(
 
   try {
     const url = new URL(value);
+    const host =
+      url.hostname.toLowerCase();
+    const isAppleArtwork =
+      host === "mzstatic.com" ||
+      host.endsWith(".mzstatic.com");
+    const isGeniusArtwork =
+      host === "images.genius.com" ||
+      host === "t2.genius.com";
     const allowedHost =
-      url.hostname === "i.scdn.co" ||
-      url.hostname === "image-cdn-ak.spotifycdn.com" ||
-      url.hostname === "image-cdn-fa.spotifycdn.com";
+      host === "i.scdn.co" ||
+      host === "image-cdn-ak.spotifycdn.com" ||
+      host === "image-cdn-fa.spotifycdn.com" ||
+      isAppleArtwork ||
+      isGeniusArtwork;
 
     return url.protocol === "https:" &&
       allowedHost &&
       !url.username &&
       !url.password &&
       !url.port &&
-      !url.search &&
       !url.hash &&
-      /^\/image\/[A-Za-z0-9]{16,128}$/u.test(url.pathname)
+      (
+        !isGeniusArtwork ||
+        (
+          !url.search &&
+          url.pathname.length > 1
+        )
+      ) &&
+      (
+        isAppleArtwork ||
+        isGeniusArtwork ||
+        (
+          !url.search &&
+          /^\/image\/[A-Za-z0-9]{16,128}$/u.test(url.pathname)
+        )
+      )
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function cleanSnapshotProviderId(
+  value: unknown,
+): Snapshot["providerId"] {
+  return value === "spotify" ||
+    value === "apple-music"
+    ? value
+    : undefined;
+}
+
+function cleanSnapshotProviderUrl(
+  providerValue: unknown,
+  value: unknown,
+): string | undefined {
+  const providerId =
+    cleanSnapshotProviderId(
+      providerValue,
+    );
+
+  if (
+    !providerId ||
+    typeof value !== "string" ||
+    value.length > 2_048
+  ) {
+    return undefined;
+  }
+
+  if (providerId === "spotify") {
+    return canonicalSpotifyTrackUrl(value) ??
+      undefined;
+  }
+
+  try {
+    const url = new URL(value);
+    const host =
+      url.hostname.toLowerCase();
+
+    return url.protocol === "https:" &&
+      (
+        host === "music.apple.com" ||
+        host === "geo.music.apple.com"
+      ) &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.hash
       ? url.toString()
       : undefined;
   } catch {

@@ -77,9 +77,11 @@ describe("Soundscape backend contract", () => {
     expect(cloud).toMatch(/row[.]schema_version !== 1[\s\S]*!isRecord\(row[.]content\)[\s\S]*!isRecord\(row[.]share_projection\)/u);
   });
 
-  it("collects from existing caches without a Spotify provider refresh", () => {
-    expect(collector).toContain("readSpotifyLibrarySnapshot");
+  it("collects from every connected provider cache without refreshing either provider", () => {
+    expect(collector).toContain("readCombinedSceneMusicLibrary");
+    expect(collector).not.toContain("readSpotifyLibrarySnapshot");
     expect(collector).not.toContain("syncSpotifyLibrary");
+    expect(collector).not.toContain("syncCombinedSceneMusicLibrary");
     expect(collector).not.toContain("getLatestSpotifyLibrarySnapshot");
     expect(collector).toMatch(/await assertCurrentAccount\(accountId\)[\s\S]*Promise[.]all[\s\S]*await assertCurrentAccount\(accountId\)/u);
     expect(collector).toContain('compositionState: "none"');

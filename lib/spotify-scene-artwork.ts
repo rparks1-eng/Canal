@@ -13,6 +13,11 @@ import type {
   LiveStage,
 } from "./live-stages";
 import type { Snapshot } from "./snapshots";
+import { loadAppleMusicCatalogArtwork } from "./apple-music";
+import {
+  loadGeniusArtworkFallback,
+  readCachedGeniusArtwork,
+} from "./genius-context-client";
 
 const SPOTIFY_TRACK_ID =
   /^[A-Za-z0-9]+$/u;
@@ -95,8 +100,45 @@ function trackWithArtwork(
       uri: track.album?.uri ?? "",
       ...track.album,
       imageUrl,
+      images: [{ url: imageUrl }],
     },
   };
+}
+
+function isGeniusArtworkUrl(value: string | undefined): boolean {
+  return Boolean(value && /^https:\/\/(?:images|t2)\.genius\.com\//u.test(value));
+}
+
+export function isAppleArtworkUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return host === "mzstatic.com" || host.endsWith(".mzstatic.com");
+  } catch {
+    return false;
+  }
+}
+
+async function loadPreferredArtwork(input: {
+  trackId: string;
+  title: string;
+  artist: string;
+  existingUrl?: string;
+  fetcher: FetchLike;
+}): Promise<string | null> {
+  if (isAppleArtworkUrl(input.existingUrl)) return input.existingUrl ?? null;
+  const appleArtwork = await loadAppleMusicCatalogArtwork(input.title, input.artist);
+  if (appleArtwork) return appleArtwork;
+
+  if (input.existingUrl && !isGeniusArtworkUrl(input.existingUrl)) {
+    return input.existingUrl;
+  }
+
+  const spotifyArtwork = await loadCachedSpotifyArtworkUrl(input.trackId, input.fetcher);
+  if (spotifyArtwork) return spotifyArtwork;
+
+  return input.existingUrl ?? readCachedGeniusArtwork(input.title, input.artist) ??
+    loadGeniusArtworkFallback(input.title, input.artist);
 }
 
 function loadCachedSpotifyArtworkUrl(
@@ -122,9 +164,15 @@ export async function addSpotifyArtworkToTracks(
   fetcher: FetchLike = fetch,
 ): Promise<SpotifyTrack[]> {
   return Promise.all(tracks.slice(0, 12).map(async (track) => {
-    if (track.album?.imageUrl || track.album?.images?.[0]?.url) return track;
     try {
-      const imageUrl = await loadCachedSpotifyArtworkUrl(track.id, fetcher);
+      const currentArtwork = track.album?.imageUrl ?? track.album?.images?.[0]?.url;
+      const imageUrl = await loadPreferredArtwork({
+        trackId: track.id,
+        title: track.name,
+        artist: track.artists[0]?.name ?? "",
+        ...(currentArtwork ? { existingUrl: currentArtwork } : {}),
+        fetcher,
+      });
       return imageUrl ? trackWithArtwork(track, imageUrl) : track;
     } catch {
       orbitArtworkCache.delete(track.id);
@@ -147,18 +195,15 @@ export async function addSpotifyArtworkToGeneratedScene(
     const batch = signals.slice(offset, offset + ARTWORK_CONCURRENCY);
     const updated = await Promise.all(
       batch.map(async (signal) => {
-        if (
-          signal.track.album?.imageUrl ||
-          signal.track.album?.images?.[0]?.url
-        ) {
-          return signal;
-        }
-
         try {
-          const imageUrl = await loadCachedSpotifyArtworkUrl(
-            signal.track.id,
+          const currentArtwork = signal.track.album?.imageUrl ?? signal.track.album?.images?.[0]?.url;
+          const imageUrl = await loadPreferredArtwork({
+            trackId: signal.track.id,
+            title: signal.track.name,
+            artist: signal.track.artists[0]?.name ?? "",
+            ...(currentArtwork ? { existingUrl: currentArtwork } : {}),
             fetcher,
-          );
+          });
 
           return imageUrl
             ? {
@@ -202,9 +247,18 @@ export async function addSpotifyArtworkToSnapshot<T extends Snapshot>(
   snapshot: T,
   fetcher: FetchLike = fetch,
 ): Promise<T> {
-  if (snapshot.trackImageUrl || !snapshot.trackId) {
+  if (!snapshot.trackId || !snapshot.trackTitle || !snapshot.trackArtist) {
     return snapshot;
   }
+
+  if (isAppleArtworkUrl(snapshot.trackImageUrl)) return snapshot;
+
+  const appleArtwork = await loadAppleMusicCatalogArtwork(
+    snapshot.trackTitle,
+    snapshot.trackArtist,
+  );
+  if (appleArtwork) return { ...snapshot, trackImageUrl: appleArtwork };
+  if (snapshot.trackImageUrl && !isGeniusArtworkUrl(snapshot.trackImageUrl)) return snapshot;
 
   let artworkRequest = snapshotArtworkCache.get(snapshot.trackId);
   if (!artworkRequest) {
@@ -218,7 +272,9 @@ export async function addSpotifyArtworkToSnapshot<T extends Snapshot>(
   }
 
   try {
-    const trackImageUrl = await artworkRequest;
+    const trackImageUrl = await artworkRequest ?? snapshot.trackImageUrl ??
+      readCachedGeniusArtwork(snapshot.trackTitle, snapshot.trackArtist) ??
+      await loadGeniusArtworkFallback(snapshot.trackTitle, snapshot.trackArtist);
     return trackImageUrl ? { ...snapshot, trackImageUrl } : snapshot;
   } catch {
     snapshotArtworkCache.delete(snapshot.trackId);
@@ -259,12 +315,14 @@ export async function addSpotifyArtworkToStoredScene(
     const batch = tracks.slice(offset, offset + ARTWORK_CONCURRENCY);
     const updated = await Promise.all(
       batch.map(async (track) => {
-        if (track.imageUrl) {
-          return track;
-        }
-
         try {
-          const imageUrl = await loadCachedSpotifyArtworkUrl(track.id, fetcher);
+          const imageUrl = await loadPreferredArtwork({
+            trackId: track.id,
+            title: track.title,
+            artist: track.artist,
+            ...(track.imageUrl ? { existingUrl: track.imageUrl } : {}),
+            fetcher,
+          });
 
           return imageUrl
             ? { ...track, imageUrl }
@@ -305,15 +363,23 @@ export async function addSpotifyArtworkToLiveStage(
     const updated = await Promise.all(
       batch.map(async (index) => {
         const track = tracks[index];
-        if (!track || track.imageUrl) return { index, track };
+        if (!track) return { index, track };
 
         try {
+          if (isAppleArtworkUrl(track.imageUrl)) return { index, track };
+          const appleArtwork = await loadAppleMusicCatalogArtwork(track.title, track.artist);
+          if (appleArtwork) {
+            return { index, track: { ...track, imageUrl: appleArtwork } };
+          }
+          if (track.imageUrl && !isGeniusArtworkUrl(track.imageUrl)) return { index, track };
           let artworkRequest = liveStageArtworkCache.get(track.id);
           if (!artworkRequest) {
             artworkRequest = loadSpotifyArtworkUrl(track.id, fetcher);
             liveStageArtworkCache.set(track.id, artworkRequest);
           }
-          const imageUrl = await artworkRequest;
+          const imageUrl = await artworkRequest ?? track.imageUrl ??
+            readCachedGeniusArtwork(track.title, track.artist) ??
+            await loadGeniusArtworkFallback(track.title, track.artist);
           return { index, track: imageUrl ? { ...track, imageUrl } : track };
         } catch {
           return { index, track };

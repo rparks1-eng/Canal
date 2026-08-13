@@ -33,7 +33,8 @@ describe("Scene Studio account-scoped provider-unavailable route", () => {
     expect(source).toContain("readSpotifyConnectionStateForAccount");
     expect(source).not.toContain("getLatestSpotifyLibrarySnapshot");
     expect(source).not.toContain("syncSpotifyLibrary");
-    expect(source).toContain("readSpotifyLibrarySnapshot");
+    expect(source).toContain("readCombinedSceneMusicLibrary");
+    expect(source).not.toContain("syncCombinedSceneMusicLibrary");
     expect(source).toContain("generateSceneWithSpotifyGenreFallback");
     expect(source).toContain("sameSpotifyAccountGuard");
     expect(source).not.toContain("readSceneStudioDraft");

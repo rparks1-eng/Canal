@@ -215,7 +215,12 @@ describe(
         expect(
           stageDetail,
         ).toContain(
-          "Linking.openURL( currentTrackSpotifyUrl, )",
+          "getLiveStageTrackProviderUrl( currentTrack, )",
+        );
+        expect(
+          stageDetail,
+        ).toContain(
+          "Linking.openURL( currentTrackProviderUrl, )",
         );
         expect(
           stageDetail,

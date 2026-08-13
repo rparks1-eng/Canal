@@ -473,7 +473,7 @@ describe("Living Editorial Scene playback interactions", () => {
 
     expect(
       renderer.root.findByProps({
-        accessibilityLabel: "First Light album artwork from Spotify",
+        accessibilityLabel: "First Light album artwork",
       }).props.source,
     ).toEqual({
       uri: "https://i.scdn.co/image/track-1",
@@ -481,7 +481,7 @@ describe("Living Editorial Scene playback interactions", () => {
 
     expect(
       renderer.root.findByProps({
-        accessibilityLabel: "Second Light album artwork from Spotify",
+        accessibilityLabel: "Second Light album artwork",
       }).props.source,
     ).toEqual({
       uri: "https://i.scdn.co/image/track-2",

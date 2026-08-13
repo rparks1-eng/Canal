@@ -52,9 +52,53 @@ describe("Apple account and music integration", () => {
     expect(swift).toContain("MusicSubscription.current");
     expect(swift).toContain("MusicCatalogSearchRequest");
     expect(swift).toContain("MusicLibraryRequest<Song>");
+    expect(swift).toContain("MusicLibraryRequest<Album>");
+    expect(swift).toContain("MusicLibraryRequest<Artist>");
+    expect(swift).toContain("MusicRecentlyPlayedRequest<Song>");
+    expect(swift).toContain("playlist.with(");
+    expect(swift).toContain("preferredSource: .library");
+    expect(swift).toContain("collection.nextBatch(");
+    expect(swift).toContain("withTaskGroup(");
+    expect(swift).toContain('"playlistTracks":');
+    expect(swift).toContain('"playlistTracksTruncated":');
+    expect(swift).toContain('"albumsTruncated":');
+    expect(swift).toContain('"artistsTruncated":');
+    expect(swift).toContain("libraryAddedDate");
+    expect(swift).toContain("lastPlayedDate");
+    expect(swift).toContain("playCount");
     expect(swift).toContain("MusicLibrary.shared.createPlaylist");
     expect(podspec).toContain("MusicKit");
     expect(swift).not.toMatch(/developerToken|privateKey|AuthKey_/u);
+  });
+
+  it("normalizes bounded Apple playlist tracks and reports every truncated library window", () => {
+    const nativeTypes = read("modules/canal-apple-music/index.ts");
+    const library = read("lib/apple-music.ts");
+
+    expect(nativeTypes).toContain("playlistTracks?: CanalAppleMusicTrack[]");
+    expect(nativeTypes).toContain("playlistTracksTruncated?: boolean");
+    expect(nativeTypes).toContain("albumsTruncated?: boolean");
+    expect(nativeTypes).toContain("artistsTruncated?: boolean");
+    expect(library).toContain("(library.playlistTracks ?? []).map(normalizeAppleMusicTrack)");
+    expect(library).toContain("playlistTracks,");
+    expect(library).toContain("library.playlistTracksTruncated");
+    expect(library).toContain("library.albumsTruncated");
+    expect(library).toContain("library.artistsTruncated");
+    expect(library).not.toContain("playlistTracks: [],");
+  });
+
+  it("lets either connected service power creation and combines both when available", () => {
+    const studio = read("app/scene-studio.tsx");
+    const preview = read("app/scene-preview.tsx");
+    const combined = read("lib/combined-music-library.ts");
+
+    expect(studio).toContain("readCombinedSceneMusicLibrary");
+    expect(studio).toContain("readyProviderIds.length === 0");
+    expect(studio).toContain("addUserSelectedGenreCatalogTracksFromProviders");
+    expect(preview).toContain("readCombinedSceneMusicLibrary");
+    expect(preview).toContain("Sync Spotify or Apple Music");
+    expect(combined).toContain("applyAppleArtwork");
+    expect(combined).toContain('"apple-music" as const');
   });
 
   it("registers Apple Music and scopes its cache to an exact Canal session", () => {

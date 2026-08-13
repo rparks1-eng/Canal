@@ -20,11 +20,18 @@ declare const Deno: {
 const GENIUS_API_ORIGIN = "https://api.genius.com";
 const MAX_REQUEST_BYTES = 4_096;
 const UPSTREAM_TIMEOUT_MS = 6_000;
+const CORS_HEADERS = {
+  "access-control-allow-headers":
+    "authorization, x-client-info, apikey, content-type, x-retry-count, traceparent, tracestate, baggage",
+  "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-allow-origin": "*",
+};
 
 function jsonResponse(body: unknown, status = 200, headers?: HeadersInit): Response {
   return Response.json(body, {
     status,
     headers: {
+      ...CORS_HEADERS,
       "cache-control": "private, no-store, max-age=0",
       "content-type": "application/json; charset=utf-8",
       "x-content-type-options": "nosniff",
@@ -263,6 +270,13 @@ async function readJsonBody(request: Request): Promise<unknown> {
 }
 
 export async function handleGeniusContextRequest(request: Request): Promise<Response> {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: CORS_HEADERS,
+    });
+  }
+
   try {
     if (request.method !== "POST") {
       throw new GeniusContextHttpError(

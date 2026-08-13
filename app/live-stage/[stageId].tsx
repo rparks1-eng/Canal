@@ -62,6 +62,7 @@ import {
   endLiveStage,
   getCurrentLiveStageTrack,
   getLiveStageTrackImageUrl,
+  getLiveStageTrackProviderUrl,
   getLiveStageTrackSpotifyUrl,
   joinLiveStage,
   joinLiveStageByCode,
@@ -84,6 +85,7 @@ import {
 } from "../../lib/recovery-issue";
 import {
   addSpotifyArtworkToLiveStage,
+  isAppleArtworkUrl,
 } from "../../lib/spotify-scene-artwork";
 import {
   loadPublicSourceSnapshots,
@@ -536,6 +538,9 @@ export default function LiveStageScreen() {
     useRef(
       roomKey,
     );
+
+  const artworkWindowRef =
+    useRef("");
 
   const roomRequestIdRef =
     useRef(0);
@@ -1058,6 +1063,20 @@ export default function LiveStageScreen() {
       [currentTrack],
     );
 
+  const currentTrackProviderUrl =
+    useMemo(
+      () =>
+        getLiveStageTrackProviderUrl(
+          currentTrack,
+        ),
+      [currentTrack],
+    );
+
+  const currentTrackProviderName =
+    currentTrack?.providerId === "apple-music"
+      ? "Apple Music"
+      : "Spotify";
+
   const currentTrackImageUrl =
     useMemo(
       () =>
@@ -1071,8 +1090,11 @@ export default function LiveStageScreen() {
   useEffect(() => {
     if (!stage) return;
     const indexes = [0, 1, 2, 3].map((offset) => stage.currentTrackIndex + offset);
-    const missing = indexes.some((index) => stage.tracks[index] && !stage.tracks[index].imageUrl);
-    if (!missing) return;
+    const windowTracks = indexes.flatMap((index) => stage.tracks[index] ? [stage.tracks[index]] : []);
+    const artworkWindowKey = `${stage.id}:${stage.currentTrackIndex}:${windowTracks.map((track) => track.id).join(":")}`;
+    if (artworkWindowRef.current === artworkWindowKey) return;
+    artworkWindowRef.current = artworkWindowKey;
+    if (windowTracks.every((track) => isAppleArtworkUrl(track.imageUrl))) return;
 
     const requestedRoomKey = roomKey;
     void addSpotifyArtworkToLiveStage(stage, indexes).then((hydrated) => {
@@ -1086,6 +1108,8 @@ export default function LiveStageScreen() {
             return imageUrl ? { ...track, imageUrl } : track;
           }) }
         : current);
+    }).catch(() => {
+      if (artworkWindowRef.current === artworkWindowKey) artworkWindowRef.current = "";
     });
   }, [roomKey, stage]);
 
@@ -2126,6 +2150,10 @@ export default function LiveStageScreen() {
         trackArtist: currentTrack?.artist ?? "",
         trackImageUrl: currentTrack?.imageUrl ?? "",
         spotifyUrl: currentTrackSpotifyUrl ?? "",
+        providerId: currentTrack?.providerId ?? "",
+        providerTrackId: currentTrack?.providerTrackId ?? "",
+        providerUrl: currentTrackProviderUrl ?? "",
+        genreEvidence: JSON.stringify(currentTrack?.genreEvidence ?? []),
         mood: stage.activity,
       },
     });
@@ -2133,18 +2161,18 @@ export default function LiveStageScreen() {
 
   async function openCurrentTrack() {
     if (
-      !currentTrackSpotifyUrl
+      !currentTrackProviderUrl
     ) {
       return;
     }
 
     try {
       await Linking.openURL(
-        currentTrackSpotifyUrl,
+        currentTrackProviderUrl,
       );
     } catch {
       setError(
-        "Canal could not open this track in Spotify.",
+        `Canal could not open this track in ${currentTrackProviderName}.`,
       );
     }
   }
@@ -2578,10 +2606,10 @@ export default function LiveStageScreen() {
           ) : null}
           </View>
 
-          {currentTrackSpotifyUrl ? (
+          {currentTrackProviderUrl ? (
             <Pressable
               accessibilityRole="link"
-              accessibilityLabel="Open current track in Spotify"
+              accessibilityLabel={`Open current track in ${currentTrackProviderName}`}
               onPress={() => {
                 void openCurrentTrack();
               }}

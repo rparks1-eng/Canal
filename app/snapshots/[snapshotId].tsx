@@ -677,14 +677,20 @@ function SnapshotDetailContent() {
     }
   }
 
-  async function openSpotify() {
-    const spotifyUrl = canonicalSpotifyTrackUrl(snapshot?.spotifyUrl);
-    if (!spotifyUrl) return;
+  const trackProviderUrl = snapshot?.providerId === "apple-music"
+    ? snapshot.providerUrl
+    : canonicalSpotifyTrackUrl(snapshot?.spotifyUrl) ?? snapshot?.providerUrl;
+  const trackProviderName = snapshot?.providerId === "apple-music"
+    ? "Apple Music"
+    : "Spotify";
+
+  async function openTrackProvider() {
+    if (!trackProviderUrl) return;
 
     try {
-      await Linking.openURL(spotifyUrl);
+      await Linking.openURL(trackProviderUrl);
     } catch {
-      CanalAlert.alert("Unable to open Spotify", "Canal could not open this track.");
+      CanalAlert.alert(`Unable to open ${trackProviderName}`, "Canal could not open this track.");
     }
   }
 
@@ -993,11 +999,11 @@ function SnapshotDetailContent() {
             <Text style={styles.socialActionCount}>{social.summary.commentCount}</Text>
           </Pressable>
 
-          {canonicalSpotifyTrackUrl(snapshot.spotifyUrl) ? (
+          {trackProviderUrl ? (
             <Pressable
-              accessibilityLabel="Open captured track in Spotify"
+              accessibilityLabel={`Open captured track in ${trackProviderName}`}
               accessibilityRole="link"
-              onPress={() => { void openSpotify(); }}
+              onPress={() => { void openTrackProvider(); }}
               style={({ pressed }) => [styles.socialActionButton, pressed && styles.pressed]}
             >
               <Ionicons name="musical-notes-outline" size={22} color={canalDynamicColors.text} />

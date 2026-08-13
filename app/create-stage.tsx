@@ -86,6 +86,14 @@ function sceneTracks(
         track.spotifyUri,
       spotifyUrl:
         track.spotifyUrl,
+      providerId:
+        track.providerId,
+      providerTrackId:
+        track.providerTrackId,
+      providerUrl:
+        track.providerUrl,
+      genreEvidence:
+        track.genreEvidence,
       durationMs:
         track.durationMs,
       imageUrl:

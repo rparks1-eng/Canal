@@ -1,6 +1,7 @@
 import type { SceneStudioScope } from "./scene-studio-scope";
 import type { SceneTrack, StoredScene } from "./scenes";
 import { upsertSceneForScope } from "./scenes";
+import { canonicalMusicProviderUrl } from "./music-provider-links";
 
 const TRACK_ID_PATTERN = /^[A-Za-z0-9._:-]{1,160}$/u;
 const HTTPS_URL_PATTERN = /^https:\/\//u;
@@ -11,6 +12,9 @@ export type SongSceneActionInput = Readonly<{
   artist: string;
   artworkUrl?: string;
   spotifyUrl?: string;
+  providerId?: "spotify" | "apple-music";
+  providerTrackId?: string;
+  providerUrl?: string;
 }>;
 
 export function normalizeSongSceneActionInput(
@@ -27,8 +31,18 @@ export function normalizeSongSceneActionInput(
   const spotifyUrl = typeof input.spotifyUrl === "string" && HTTPS_URL_PATTERN.test(input.spotifyUrl)
     ? input.spotifyUrl.slice(0, 2048)
     : undefined;
+  const providerId = input.providerId === "spotify" || input.providerId === "apple-music"
+    ? input.providerId
+    : undefined;
+  const providerTrackId = typeof input.providerTrackId === "string" && TRACK_ID_PATTERN.test(input.providerTrackId.trim())
+    ? input.providerTrackId.trim()
+    : undefined;
+  const providerUrl = canonicalMusicProviderUrl(
+    providerId,
+    input.providerUrl,
+  ) ?? undefined;
 
-  return Object.freeze({ trackId, title, artist, artworkUrl, spotifyUrl });
+  return Object.freeze({ trackId, title, artist, artworkUrl, spotifyUrl, providerId, providerTrackId, providerUrl });
 }
 
 export function songSceneActionParams(input: SongSceneActionInput): Record<string, string> {
@@ -38,6 +52,9 @@ export function songSceneActionParams(input: SongSceneActionInput): Record<strin
     artistName: input.artist,
     ...(input.artworkUrl ? { artworkUrl: input.artworkUrl } : {}),
     ...(input.spotifyUrl ? { spotifyUrl: input.spotifyUrl } : {}),
+    ...(input.providerId ? { providerId: input.providerId } : {}),
+    ...(input.providerTrackId ? { providerTrackId: input.providerTrackId } : {}),
+    ...(input.providerUrl ? { providerUrl: input.providerUrl } : {}),
   };
 }
 
@@ -69,10 +86,13 @@ export async function addSongToScene(
     id: song.trackId,
     title: song.title,
     artist: song.artist,
-    source: song.spotifyUrl ? "Spotify" : "Canal",
+    source: song.providerId === "apple-music" ? "Apple Music" : song.spotifyUrl ? "Spotify" : "Canal",
     spotifyUrl: song.spotifyUrl,
     spotifyUri: song.spotifyUrl ? `spotify:track:${song.trackId}` : undefined,
     imageUrl: song.artworkUrl,
+    providerId: song.providerId,
+    providerTrackId: song.providerTrackId,
+    providerUrl: song.providerUrl,
   };
 
   return upsertSceneForScope(

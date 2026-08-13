@@ -62,9 +62,7 @@ import {
   reorderTrackInGeneratedSceneEditor,
 } from "../lib/scene-preview-editor";
 
-import {
-  spotifyMusicProvider,
-} from "../lib/music-providers/spotify";
+import { musicProviders } from "../lib/music-services";
 
 import type {
   MusicCatalogTrack,
@@ -143,12 +141,12 @@ import type {
 } from "../lib/spotify-auth";
 
 import {
-  readSpotifyLibrarySnapshot,
-} from "../lib/spotify-library";
+  addUserSelectedGenreCatalogTracksFromProviders,
+} from "../lib/scene-genre-catalog";
 
 import {
-  addUserSelectedGenreCatalogTracks,
-} from "../lib/scene-genre-catalog";
+  readCombinedSceneMusicLibrary,
+} from "../lib/combined-music-library";
 
 import {
   addSpotifyArtworkToGeneratedScene,
@@ -692,7 +690,7 @@ export default function ScenePreviewScreen() {
     }
   }, [connectivityStatus, currentScope, scope, stageId]);
 
-  const searchSpotify = useCallback(async (): Promise<void> => {
+  const searchMusicCatalogs = useCallback(async (): Promise<void> => {
     if (catalogBusy || mutationInFlightRef.current || saveInFlightRef.current) {
       return;
     }
@@ -701,12 +699,12 @@ export default function ScenePreviewScreen() {
     const operationScope = scope;
 
     if (!operationScope || query.length < 2) {
-      setEditorStatus("Enter at least two characters to search Spotify.");
+      setEditorStatus("Enter at least two characters to search music catalogs.");
       return;
     }
 
     if (connectivityStatus !== "online") {
-      setEditorStatus("Connect to the internet to search Spotify.");
+      setEditorStatus("Connect to the internet to search music catalogs.");
       return;
     }
 
@@ -719,13 +717,29 @@ export default function ScenePreviewScreen() {
       ) && sameSceneStudioScope(operationScope, currentScope());
 
     setCatalogBusy(true);
-    setEditorStatus("Searching Spotify…");
+    setEditorStatus("Searching connected music services…");
 
     try {
-      const results = await spotifyMusicProvider.searchCatalog({
-        query,
-        limit: 10,
-      });
+      const combined = await readCombinedSceneMusicLibrary();
+      const providerIds = combined?.readyProviderIds ?? [];
+      const searches = await Promise.allSettled(providerIds.map(async (providerId) =>
+        musicProviders.require(providerId, "catalog-search").searchCatalog({
+          query,
+          limit: 10,
+        }),
+      ));
+      const results = searches.flatMap((result) =>
+        result.status === "fulfilled" ? result.value : [],
+      ).sort((left, right) =>
+        left.reference.providerId === right.reference.providerId
+          ? 0
+          : left.reference.providerId === "apple-music" ? -1 : 1,
+      ).filter((track, index, all) => {
+        const key = `${track.name.trim().toLowerCase()}::${track.artists[0]?.name.trim().toLowerCase() ?? ""}`;
+        return all.findIndex((candidate) =>
+          `${candidate.name.trim().toLowerCase()}::${candidate.artists[0]?.name.trim().toLowerCase() ?? ""}` === key,
+        ) === index;
+      }).slice(0, 20);
 
       if (!operationGuard()) {
         return;
@@ -734,8 +748,8 @@ export default function ScenePreviewScreen() {
       setCatalogResults(results);
       setEditorStatus(
         results.length > 0
-          ? `${results.length} Spotify result${results.length === 1 ? "" : "s"}. Choose tracks to add.`
-          : "Spotify found no matching tracks.",
+          ? `${results.length} music result${results.length === 1 ? "" : "s"}. Choose tracks to add.`
+          : "Your connected music services found no matching tracks.",
       );
     } catch (error) {
       if (operationGuard()) {
@@ -743,7 +757,7 @@ export default function ScenePreviewScreen() {
         setEditorStatus(
           error instanceof Error
             ? error.message
-            : "Canal could not search Spotify.",
+            : "Canal could not search connected music services.",
         );
       }
     } finally {
@@ -771,20 +785,22 @@ export default function ScenePreviewScreen() {
           operationGeneration,
           operationScope,
         ) && sameSceneStudioScope(operationScope, currentScope());
-      const startingSpotifyGuard =
-        await captureSpotifyCanalAccountGuard();
-      const storedSnapshot = await readSpotifyLibrarySnapshot();
+      const combined = await readCombinedSceneMusicLibrary();
+      const startingSpotifyGuard = combined?.readyProviderIds.includes("spotify")
+        ? await captureSpotifyCanalAccountGuard()
+        : null;
 
       if (
-        !storedSnapshot ||
-        storedSnapshot.importStatus?.state === "incomplete"
+        !combined ||
+        combined.readyProviderIds.length === 0
       ) {
-        throw new Error("Sync your Spotify Library before regenerating this Scene.");
+        throw new Error("Sync Spotify or Apple Music before regenerating this Scene.");
       }
 
-      const snapshot = await addUserSelectedGenreCatalogTracks(
+      const snapshot = await addUserSelectedGenreCatalogTracksFromProviders(
         current.draft,
-        storedSnapshot,
+        combined.snapshot,
+        combined.readyProviderIds,
       );
       const learning = await readSceneRecommendationLearning(
         operationScope,
@@ -795,12 +811,14 @@ export default function ScenePreviewScreen() {
         (scene) => scene.name,
       );
       existingSceneNames.push(current.scene.name);
-      const endingSpotifyGuard =
-        await captureSpotifyCanalAccountGuard();
+      const endingSpotifyGuard = startingSpotifyGuard
+        ? await captureSpotifyCanalAccountGuard()
+        : null;
 
       if (
         !operationGuard() ||
-        !sameSpotifyAccountGuard(startingSpotifyGuard, endingSpotifyGuard)
+        (startingSpotifyGuard && endingSpotifyGuard &&
+          !sameSpotifyAccountGuard(startingSpotifyGuard, endingSpotifyGuard))
       ) {
         throw new Error("The active account changed. No playlist changes were saved.");
       }
@@ -1038,10 +1056,10 @@ export default function ScenePreviewScreen() {
           style={styles.notice}
         >
           <Text style={styles.noticeTitle}>
-            Spotify catalog
+            Connected music catalogs
           </Text>
           <Text style={styles.noticeText}>
-            Canal generated this private draft from your synced Spotify library. Reorder, replace, regenerate, or add tracks before saving.
+            Canal generated this private draft from your connected Apple Music and Spotify libraries. Reorder, replace, regenerate, or add tracks before saving.
           </Text>
           {visibleLoading ? (
             <Text style={styles.noticeText}>
@@ -1079,15 +1097,15 @@ export default function ScenePreviewScreen() {
             ) : null}
             <View style={styles.catalogSearch}>
               <Text accessibilityRole="header" style={styles.sectionTitle}>
-                Add Spotify tracks
+                Add tracks
               </Text>
               <TextInput
-                accessibilityLabel="Search Spotify tracks"
+                accessibilityLabel="Search connected music catalogs"
                 autoCapitalize="none"
                 editable={!controlsBusy}
                 maxLength={100}
                 onChangeText={setCatalogQuery}
-                onSubmitEditing={() => void searchSpotify()}
+                onSubmitEditing={() => void searchMusicCatalogs()}
                 placeholder="Song or artist"
                 placeholderTextColor={canalDynamicColors.muted}
                 returnKeyType="search"
@@ -1095,14 +1113,14 @@ export default function ScenePreviewScreen() {
                 value={catalogQuery}
               />
               <Pressable
-                accessibilityLabel="Search Spotify"
+                accessibilityLabel="Search music catalogs"
                 accessibilityRole="button"
                 accessibilityState={{ busy: catalogBusy, disabled: controlsBusy || catalogQuery.trim().length < 2 || connectivityStatus !== "online" }}
                 disabled={controlsBusy || catalogQuery.trim().length < 2 || connectivityStatus !== "online"}
-                onPress={() => void searchSpotify()}
+                onPress={() => void searchMusicCatalogs()}
                 style={[styles.secondaryButton, (controlsBusy || catalogQuery.trim().length < 2 || connectivityStatus !== "online") && styles.disabled]}
               >
-                <Text style={styles.secondaryButtonText}>{catalogBusy ? "Searching…" : "Search Spotify"}</Text>
+                <Text style={styles.secondaryButtonText}>{catalogBusy ? "Searching…" : "Search music"}</Text>
               </Pressable>
               {catalogResults.map((track) => {
                 const alreadyAdded = visiblePreview.trackSignals.some(
@@ -1140,7 +1158,7 @@ export default function ScenePreviewScreen() {
                 <View style={styles.trackRow}>
                   {artworkUrl ? (
                     <Image
-                      accessibilityLabel={`${signal.track.album?.name ?? signal.track.name} cover art from Spotify`}
+                      accessibilityLabel={`${signal.track.album?.name ?? signal.track.name} cover art`}
                       contentFit="cover"
                       source={{ uri: artworkUrl }}
                       style={styles.trackArtwork}
@@ -1277,7 +1295,7 @@ export default function ScenePreviewScreen() {
               );
             })}
             <Text style={styles.spotifyAttribution}>
-              Album artwork and track metadata provided by Spotify.
+              Artwork prioritizes Apple Music, with Spotify and Genius as fallbacks. Track metadata reflects connected services.
             </Text>
             <View accessibilityLiveRegion="polite" accessibilityRole="text" style={styles.editorStatus}>
               {editorStatus ? <Text style={styles.noticeText}>{editorStatus}</Text> : null}

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import {
   GeniusContextHttpError,
   normalizeGeniusContext,
@@ -32,6 +35,12 @@ const songPayload = {
       release_date_for_display: "January 16, 2026",
       song_art_image_url: "https://images.genius.com/art.jpg",
       stats: { pageviews: 18 },
+      tags: [
+        { name: "Alternative R&B" },
+        { name: "Dream Pop" },
+        { name: "Alternative R&B" },
+        { name: "" },
+      ],
       title: "First Light",
       url: "https://genius.com/Canal-artist-first-light-lyrics",
       writer_artists: [{ name: "Canal Artist" }],
@@ -98,6 +107,7 @@ describe("Genius Edge helper contract", () => {
       "credits",
       "description",
       "geniusUrl",
+      "genres",
       "id",
       "links",
       "matchConfidence",
@@ -119,6 +129,10 @@ describe("Genius Edge helper contract", () => {
       id: 707,
       verified: true,
     });
+    expect(result.song.genres).toEqual([
+      "Alternative R&B",
+      "Dream Pop",
+    ]);
   });
 
   it("does not return provider lyrics, referent fragments, tokens, or insecure URLs", () => {
@@ -134,5 +148,14 @@ describe("Genius Edge helper contract", () => {
     expect(serialized).not.toContain("This field must never cross");
     expect(serialized).not.toMatch(/access[_-]?token|client[_-]?secret|authorization/iu);
     expect(serialized).not.toContain("http://example.com/insecure");
+  });
+
+  it("accepts genres only as a bounded string array at the client boundary", () => {
+    const contract = readFileSync(
+      path.join(process.cwd(), "lib/genius-context-contract.ts"),
+      "utf8",
+    );
+    expect(contract).toContain("song.genres.every");
+    expect(contract).toContain('typeof genre === "string"');
   });
 });

@@ -42,6 +42,7 @@ import type {
 } from "../../lib/stage-collaboration";
 import {
   addSpotifyArtworkToLiveStage,
+  isAppleArtworkUrl,
 } from "../../lib/spotify-scene-artwork";
 import {
   useAuth,
@@ -62,6 +63,7 @@ export default function StageLobbyScreen() {
   const { status } = useConnectivity();
   const accountKey = `${user?.id ?? "signed-out"}:${accountEpoch}:${sessionGeneration}`;
   const accountKeyRef = useRef(accountKey);
+  const artworkWindowRef = useRef("");
   accountKeyRef.current = accountKey;
   const [stage, setStage] = useState<LiveStage | null>(null);
   const [contributions, setContributions] = useState<StageContributionStatus[]>([]);
@@ -106,10 +108,17 @@ export default function StageLobbyScreen() {
   );
 
   useEffect(() => {
-    if (!stage || stage.tracks.slice(0, 4).every((track) => track.imageUrl)) return;
+    if (!stage) return;
+    const windowTracks = stage.tracks.slice(0, 4);
+    const artworkWindowKey = `${stage.id}:${windowTracks.map((track) => track.id).join(":")}`;
+    if (artworkWindowRef.current === artworkWindowKey) return;
+    artworkWindowRef.current = artworkWindowKey;
+    if (windowTracks.every((track) => isAppleArtworkUrl(track.imageUrl))) return;
     const requestedAccount = accountKey;
     void addSpotifyArtworkToLiveStage(stage, [0, 1, 2, 3]).then((hydrated) => {
       if (accountKeyRef.current === requestedAccount) setStage(hydrated);
+    }).catch(() => {
+      if (artworkWindowRef.current === artworkWindowKey) artworkWindowRef.current = "";
     });
   }, [accountKey, stage]);
 

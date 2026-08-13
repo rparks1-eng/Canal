@@ -128,4 +128,32 @@ describe("Soundscape aggregation", () => {
       moods: ["Calm", "Dreamy"], playCount: 3,
     });
   });
+
+  it("accepts Apple Music tracks normalized into the combined cached library", () => {
+    const scene = {
+      id: "scene-apple", name: "Warm Motion", activity: "Travel", duration: "30 minutes",
+      emotions: "Warm, Hopeful", genres: "Soul", energy: "Rising",
+      familiarity: "Balanced", artists: "", songRequest: "", avoid: "", collaborators: [],
+      tracks: [{ id: "apple-music:apple-track", title: "Golden Hour", artist: "Artist" }],
+      visibility: "private", createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z", libraryType: "created", playCount: 5,
+    } as StoredScene;
+    const track = {
+      id: "apple-music:apple-track", name: "Golden Hour", uri: "apple-music:song:apple-track",
+      artists: [{ id: "apple-artist", name: "Artist", uri: "apple-music:artist:apple-artist" }],
+      canalProviderId: "apple-music", canalProviderTrackId: "apple-track",
+    };
+    const combined = {
+      syncedAt: "2026-08-01T00:00:00.000Z", profile: {}, topArtists: [], topTracks: [],
+      recentTracks: [track], savedTracks: [], playlistTracks: [], discoveryTracks: [],
+      playlists: [], topGenres: [], trackGenres: { "apple-music:apple-track": ["Neo-Soul"] }, warnings: [],
+    } as unknown as SpotifyLibrarySnapshot;
+
+    expect(deriveSoundscapeSongDna([scene], combined, combined.syncedAt)[0]).toMatchObject({
+      trackId: "apple-music:apple-track",
+      genres: ["Neo-Soul", "Soul"],
+      moods: ["Warm", "Hopeful"],
+      playCount: 5,
+    });
+  });
 });

@@ -34,6 +34,7 @@ const ALLOWED_RESPONSE_KEYS = new Set([
   "artworkUrl",
   "geniusUrl",
   "description",
+  "genres",
   "matchConfidence",
   "credits",
   "annotations",
@@ -105,6 +106,11 @@ describe("Genius context security contract", () => {
     expect(source).toMatch(/Number\.isSafeInteger|safe integer|positive integer/iu);
     expect(source).toMatch(/content-type/iu);
     expect(source).toMatch(/application\/json/iu);
+    expect(source).toMatch(/request\.method\s*===\s*["']OPTIONS["']/u);
+    expect(source).toMatch(/access-control-allow-origin/iu);
+    expect(source).toMatch(/access-control-allow-headers/iu);
+    expect(source).toMatch(/x-client-info/iu);
+    expect(source).toMatch(/x-retry-count/iu);
   });
 
   it("publishes an explicit allowlist and excludes lyrics or referent fragments", () => {

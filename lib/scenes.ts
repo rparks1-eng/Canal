@@ -26,6 +26,8 @@ import {
 import {
   deleteSceneForCurrentOwner,
 } from "./scene-sync";
+import type { MusicProviderGenreEvidence } from "./music-provider-model";
+import { canonicalMusicProviderUrl } from "./music-provider-links";
 
 export type SceneVisibility =
   | "private"
@@ -46,6 +48,10 @@ export type SceneTrack = {
   durationMs?: number;
   imageUrl?: string;
   intensity?: number;
+  providerId?: "spotify" | "apple-music";
+  providerTrackId?: string;
+  providerUrl?: string;
+  genreEvidence?: readonly MusicProviderGenreEvidence[];
 };
 
 export type SceneFeedbackSummary = {
@@ -141,6 +147,38 @@ function readNumber(
     Number.isFinite(value)
     ? value
     : fallback;
+}
+
+const SCENE_TRACK_GENRE_PROVIDERS = ["apple-music", "spotify"] as const;
+
+export function normalizeSceneTrackGenreEvidence(
+  value: unknown,
+): MusicProviderGenreEvidence[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const byProvider = new Map<"apple-music" | "spotify", Map<string, string>>();
+  for (const item of value.slice(0, 8)) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const provider = record.provider;
+    if (provider !== "apple-music" && provider !== "spotify") continue;
+    const genres = Array.isArray(record.genres) ? record.genres : [];
+    const normalized = byProvider.get(provider) ?? new Map<string, string>();
+    for (const candidate of genres) {
+      if (typeof candidate !== "string") continue;
+      const genre = candidate.replace(/\s+/gu, " ").trim();
+      if (!genre || genre.length > 80 || /[\u0000-\u001F\u007F]/u.test(genre)) continue;
+      const key = genre.normalize("NFKC").toLocaleLowerCase("en-US");
+      if (!normalized.has(key) && normalized.size < 12) normalized.set(key, genre);
+    }
+    if (normalized.size > 0) byProvider.set(provider, normalized);
+  }
+
+  const result = SCENE_TRACK_GENRE_PROVIDERS.flatMap((provider) => {
+    const genres = byProvider.get(provider);
+    return genres?.size ? [{ provider, genres: [...genres.values()] }] : [];
+  });
+  return result.length ? result : undefined;
 }
 
 function normalizeVisibility(
@@ -246,6 +284,23 @@ function normalizeTrack(
       ? track.intensity
       : undefined;
 
+  const providerId =
+    track.providerId === "apple-music"
+      ? "apple-music" as const
+      : track.providerId === "spotify"
+        ? "spotify" as const
+        : undefined;
+
+  const providerTrackId = readOptionalString(track.providerTrackId);
+  const providerUrl = canonicalMusicProviderUrl(
+    providerId,
+    track.providerUrl,
+    spotifyLinks.spotifyUri,
+  ) ?? undefined;
+  const genreEvidence = normalizeSceneTrackGenreEvidence(
+    track.genreEvidence ?? track.genre_evidence,
+  );
+
   return {
     id,
     title,
@@ -260,6 +315,10 @@ function normalizeTrack(
     durationMs,
     imageUrl,
     intensity,
+    providerId,
+    providerTrackId,
+    providerUrl,
+    genreEvidence,
   };
 }
 

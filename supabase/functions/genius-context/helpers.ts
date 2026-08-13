@@ -17,6 +17,7 @@ const MAX_ANNOTATIONS = 8;
 const MAX_MEDIA_LINKS = 8;
 const MAX_CREDIT_GROUPS = 12;
 const MAX_NAMES_PER_CREDIT = 20;
+const MAX_GENRES = 12;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -229,6 +230,20 @@ function getArtistNames(value: unknown): string[] {
   );
 }
 
+function getGenres(song: UnknownRecord): string[] {
+  const candidates: unknown[] = [
+    ...(Array.isArray(song.tags) ? song.tags : []),
+    song.primary_tag,
+    ...(isRecord(song.primary_artist) && Array.isArray(song.primary_artist.genres)
+      ? song.primary_artist.genres
+      : []),
+  ];
+  return Array.from(new Set(candidates
+    .map((value) => isRecord(value) ? cleanInlineText(value.name, 80) : cleanInlineText(value, 80))
+    .filter((value): value is string => Boolean(value))))
+    .slice(0, MAX_GENRES);
+}
+
 function getCredits(song: UnknownRecord): GeniusCreditGroup[] {
   const credits: GeniusCreditGroup[] = [];
   const append = (label: string, names: string[]) => {
@@ -387,6 +402,7 @@ export function normalizeGeniusContext(
     ? sanitizeGeniusUrl(song.primary_artist.url)
     : undefined;
   const media = getMedia(song);
+  const genres = getGenres(song);
 
   return {
     provider: GENIUS_PROVIDER,
@@ -400,6 +416,7 @@ export function normalizeGeniusContext(
       ...(artworkUrl ? { artworkUrl } : {}),
       geniusUrl,
       ...(description ? { description } : {}),
+      ...(genres.length ? { genres } : {}),
       matchConfidence: request.geniusSongId ? "provider-id" : exact ? "exact" : "likely",
       credits: getCredits(song),
       annotations: getAnnotations(referentsPayload),

@@ -23,6 +23,7 @@ import {
 import {
   isSnapshotTemplateTheme,
 } from "./snapshot-templates";
+import { normalizeSceneTrackGenreEvidence } from "./scenes";
 
 import type {
   SnapshotTemplateTheme,
@@ -39,6 +40,10 @@ type SnapshotRow = {
   track_artist: string | null;
   track_image_url: string | null;
   spotify_url: string | null;
+  provider_id: string | null;
+  provider_track_id: string | null;
+  provider_url: string | null;
+  genre_evidence: unknown;
   media_path: string | null;
   media_type: string | null;
   media_mime_type: string | null;
@@ -66,6 +71,10 @@ const SNAPSHOT_COLUMNS = [
   "track_artist",
   "track_image_url",
   "spotify_url",
+  "provider_id",
+  "provider_track_id",
+  "provider_url",
+  "genre_evidence",
   "media_path",
   "media_type",
   "media_mime_type",
@@ -327,6 +336,22 @@ export async function upsertCloudSnapshot(
             snapshot.spotifyUrl ??
             null,
 
+          provider_id:
+            snapshot.providerId ??
+            null,
+
+          provider_track_id:
+            snapshot.providerTrackId ??
+            null,
+
+          provider_url:
+            snapshot.providerUrl ??
+            null,
+
+          genre_evidence:
+            snapshot.genreEvidence ??
+            null,
+
           media_path: mediaPath ?? null,
           media_type: mediaType ?? null,
           media_mime_type: mediaMimeType ?? null,
@@ -554,6 +579,28 @@ function snapshotFromRow(
       ) ??
       undefined,
 
+    providerId:
+      row.provider_id === "spotify" ||
+      row.provider_id === "apple-music"
+        ? row.provider_id
+        : undefined,
+
+    providerTrackId:
+      cleanOptionalString(
+        row.provider_track_id,
+      ),
+
+    providerUrl:
+      normalizeSnapshotProviderUrl(
+        row.provider_id,
+        row.provider_url,
+      ),
+
+    genreEvidence:
+      normalizeSceneTrackGenreEvidence(
+        row.genre_evidence,
+      ),
+
     mediaPath: cleanOptionalString(row.media_path),
     mediaType:
       row.media_type === "photo" || row.media_type === "video"
@@ -748,6 +795,45 @@ function cleanOptionalString(
 
   return cleaned ||
     undefined;
+}
+
+function normalizeSnapshotProviderUrl(
+  providerId: unknown,
+  value: unknown,
+): string | undefined {
+  if (
+    (providerId !== "spotify" &&
+      providerId !== "apple-music") ||
+    typeof value !== "string" ||
+    value.length > 2_048
+  ) {
+    return undefined;
+  }
+
+  if (providerId === "spotify") {
+    return canonicalSpotifyTrackUrl(value) ??
+      undefined;
+  }
+
+  try {
+    const url = new URL(value);
+    const host =
+      url.hostname.toLowerCase();
+
+    return url.protocol === "https:" &&
+      (
+        host === "music.apple.com" ||
+        host === "geo.music.apple.com"
+      ) &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.hash
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function templateProvenanceFromRow(

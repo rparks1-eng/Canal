@@ -71,6 +71,7 @@ import type {
 
 import {
   getSceneById,
+  normalizeSceneTrackGenreEvidence,
   sceneDurationMinutes,
 } from "../lib/scenes";
 
@@ -102,6 +103,20 @@ type SnapshotPalette = {
   textColor: string;
   mutedTextColor: string;
 };
+
+function normalizeRouteGenreEvidence(
+  value: string | undefined,
+) {
+  if (!value) return undefined;
+
+  try {
+    return normalizeSceneTrackGenreEvidence(
+      JSON.parse(value),
+    );
+  } catch {
+    return undefined;
+  }
+}
 
 type SnapshotFormat =
   | "living-story"
@@ -197,6 +212,10 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
       trackArtist?: string;
       trackImageUrl?: string;
       spotifyUrl?: string;
+      providerId?: string;
+      providerTrackId?: string;
+      providerUrl?: string;
+      genreEvidence?: string;
       mood?: string;
       mediaUri?: string;
       mediaType?: string;
@@ -369,6 +388,23 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
               artist: typeof params.trackArtist === "string" ? params.trackArtist : "Canal",
               imageUrl: routeTrackImageUrl || undefined,
               spotifyUrl: typeof params.spotifyUrl === "string" ? params.spotifyUrl : undefined,
+              providerId:
+                params.providerId === "apple-music" ||
+                params.providerId === "spotify"
+                  ? params.providerId
+                  : undefined,
+              providerTrackId:
+                typeof params.providerTrackId === "string"
+                  ? params.providerTrackId
+                  : undefined,
+              providerUrl:
+                typeof params.providerUrl === "string"
+                  ? params.providerUrl
+                  : undefined,
+              genreEvidence:
+                normalizeRouteGenreEvidence(
+                  params.genreEvidence,
+                ),
             }] : [],
             visibility: "private",
             createdAt: new Date().toISOString(),
@@ -426,6 +462,10 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
         params.trackArtist,
         params.trackImageUrl,
         params.spotifyUrl,
+        params.providerId,
+        params.providerTrackId,
+        params.providerUrl,
+        params.genreEvidence,
       ],
     );
 
@@ -541,6 +581,10 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
                 trackArtist: selectedTrack?.artist,
                 trackImageUrl: selectedTrack?.imageUrl,
                 spotifyUrl: selectedTrack?.spotifyUrl,
+                providerId: selectedTrack?.providerId,
+                providerTrackId: selectedTrack?.providerTrackId,
+                providerUrl: selectedTrack?.providerUrl,
+                genreEvidence: selectedTrack?.genreEvidence,
                 mediaUri: mediaUri || undefined,
                 mediaType: mediaUri ? mediaType : undefined,
                 mediaMimeType:
@@ -762,6 +806,10 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
     trackArtist: selectedTrack?.artist,
     trackImageUrl: selectedTrack?.imageUrl,
     spotifyUrl: selectedTrack?.spotifyUrl,
+    providerId: selectedTrack?.providerId,
+    providerTrackId: selectedTrack?.providerTrackId,
+    providerUrl: selectedTrack?.providerUrl,
+    genreEvidence: selectedTrack?.genreEvidence,
     mediaUri: mediaUri || undefined,
     mediaType: mediaUri ? mediaType : undefined,
     positionMs: 0,

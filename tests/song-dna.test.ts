@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { classifyCanalSongDna, SONG_DNA_TAXONOMY_VERSION } from "../lib/song-dna";
 
 describe("Canal Song DNA", () => {
@@ -39,5 +42,36 @@ describe("Canal Song DNA", () => {
     expect(dna.moods[0]).toBe("Calm");
     expect(dna.moods).toContain("Reflective");
     expect(dna.moods).not.toContain("Social");
+  });
+
+  it("preserves Apple Music, Spotify, and Genius genre provenance", () => {
+    const dna = classifyCanalSongDna({
+      genreEvidence: [
+        { provider: "apple-music", genres: ["Alternative", "Indie Pop"] },
+        { provider: "spotify", genres: ["Neo Soul"] },
+        { provider: "genius", genres: ["Hip Hop"] },
+      ],
+      story: "A calm and reflective song about returning home.",
+    });
+
+    expect(dna.sources).toEqual(["apple-music", "spotify", "genius", "canal"]);
+    expect(dna.genres).toEqual(expect.arrayContaining(["Indie", "Pop", "R&B", "Hip-hop"]));
+    expect(dna.moods).toContain("Calm");
+  });
+
+  it("allows every bounded Song DNA evidence source in cloud persistence", () => {
+    const migration = readFileSync(
+      resolve(
+        process.cwd(),
+        "supabase/migrations/20260813031746_expand_song_dna_provider_sources.sql",
+      ),
+      "utf8",
+    );
+
+    expect(migration).toContain("cardinality(signal_sources) between 1 and 4");
+    expect(migration).toContain("'apple-music'");
+    expect(migration).toContain("'spotify'");
+    expect(migration).toContain("'genius'");
+    expect(migration).toContain("'canal'");
   });
 });

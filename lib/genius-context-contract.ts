@@ -47,6 +47,7 @@ export type GeniusSongContext = {
   artworkUrl?: string;
   geniusUrl: string;
   description?: string;
+  genres?: string[];
   matchConfidence: "exact" | "likely" | "provider-id";
   credits: GeniusCreditGroup[];
   annotations: GeniusAnnotationSummary[];
@@ -99,6 +100,8 @@ export function isGeniusContextResponse(
     typeof song.title === "string" &&
     typeof song.artist === "string" &&
     typeof song.geniusUrl === "string" &&
+    (song.genres === undefined ||
+      (Array.isArray(song.genres) && song.genres.every((genre) => typeof genre === "string"))) &&
     Array.isArray(song.credits) &&
     Array.isArray(song.annotations) &&
     Array.isArray(song.media) &&

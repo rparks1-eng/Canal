@@ -94,13 +94,22 @@ export function normalizeStageArtworkUrl(
   try {
     const url =
       new URL(value);
+    const host =
+      url.hostname.toLowerCase();
     const hostAllowed =
       url.hostname ===
         "i.scdn.co" ||
       url.hostname ===
         "image-cdn-ak.spotifycdn.com" ||
       url.hostname ===
-        "image-cdn-fa.spotifycdn.com";
+        "image-cdn-fa.spotifycdn.com" ||
+      host === "mzstatic.com" ||
+      host.endsWith(".mzstatic.com") ||
+      host === "images.genius.com" ||
+      host === "t2.genius.com";
+    const isGeniusArtwork =
+      host === "images.genius.com" ||
+      host === "t2.genius.com";
 
     if (
       url.protocol !== "https:" ||
@@ -108,10 +117,24 @@ export function normalizeStageArtworkUrl(
       url.username ||
       url.password ||
       url.port ||
-      url.search ||
       url.hash ||
-      !/^\/image\/[A-Za-z0-9]{16,128}$/u.test(
-        url.pathname,
+      (
+        isGeniusArtwork &&
+        (
+          Boolean(url.search) ||
+          url.pathname.length < 2
+        )
+      ) ||
+      (
+        !host.endsWith(".mzstatic.com") &&
+        host !== "mzstatic.com" &&
+        !isGeniusArtwork &&
+        (
+          url.search ||
+          !/^\/image\/[A-Za-z0-9]{16,128}$/u.test(
+            url.pathname,
+          )
+        )
       )
     ) {
       return undefined;
@@ -137,6 +160,10 @@ function sceneTracks(scene: StoredScene): LiveStageTrack[] {
       source: track.source ?? "canal-scene",
       ...(track.spotifyUri ? { spotifyUri: track.spotifyUri } : {}),
       ...(track.spotifyUrl ? { spotifyUrl: track.spotifyUrl } : {}),
+      ...(track.providerId ? { providerId: track.providerId } : {}),
+      ...(track.providerTrackId ? { providerTrackId: track.providerTrackId } : {}),
+      ...(track.providerUrl ? { providerUrl: track.providerUrl } : {}),
+      ...(track.genreEvidence ? { genreEvidence: track.genreEvidence } : {}),
       ...(track.durationMs ? { durationMs: track.durationMs } : {}),
       ...(imageUrl ? { imageUrl } : {}),
     };

@@ -69,6 +69,7 @@ import {
 import {
   canonicalSpotifyTrackUrl,
 } from "../lib/spotify-track-links";
+import { canonicalMusicProviderUrl } from "../lib/music-provider-links";
 
 import {
   addSpotifyArtworkToStoredScene,
@@ -141,15 +142,14 @@ function formatTime(
     .padStart(2, "0")}`;
 }
 
-async function openSpotify(
-  url?: string,
-  uri?: string,
+async function openTrackProvider(
+  track: StoredScene["tracks"][number],
 ): Promise<void> {
-  const target =
-    canonicalSpotifyTrackUrl(
-      url,
-      uri,
-    );
+  const target = canonicalMusicProviderUrl(
+    track.providerId,
+    track.providerUrl,
+    track.spotifyUri,
+  ) ?? canonicalSpotifyTrackUrl(track.spotifyUrl, track.spotifyUri);
 
   if (!target) {
     return;
@@ -672,12 +672,7 @@ export default function NowPlayingScreen() {
   useEffect(() => {
     if (
       !scene ||
-      scene.tracks.every(
-        (track) =>
-          Boolean(
-            track.imageUrl,
-          ),
-      )
+      scene.tracks.length === 0
     ) {
       return;
     }
@@ -689,13 +684,9 @@ export default function NowPlayingScreen() {
       accountKey,
       scene.id,
       scene.tracks
-        .filter(
-          (track) =>
-            !track.imageUrl,
-        )
         .map(
           (track) =>
-            track.id,
+            `${track.id}:${track.imageUrl ?? ""}`,
         )
         .join(","),
     ].join(":");
@@ -949,13 +940,10 @@ export default function NowPlayingScreen() {
       await saveSession(next);
 
       if (next.isPlaying) {
-        await openSpotify(
-          currentTrack.spotifyUrl,
-          currentTrack.spotifyUri,
-        );
+        await openTrackProvider(currentTrack);
 
         setMessage(
-          "Spotify is playing the audio. Canal is tracking the Scene session locally.",
+          "Your music service is playing the audio. Canal is tracking the Scene session locally.",
         );
       }
     };
@@ -1045,10 +1033,7 @@ export default function NowPlayingScreen() {
           isCurrentPlayerLoad(operationGeneration) &&
           sameSceneStudioScope(operationScope, playbackScopeRef.current)
         ) {
-          await openSpotify(
-            track.spotifyUrl,
-            track.spotifyUri,
-          );
+          await openTrackProvider(track);
         }
       } finally {
         playbackControlInFlightRef.current = false;
@@ -1516,7 +1501,7 @@ export default function NowPlayingScreen() {
       >
         {currentTrack.imageUrl && readyArtworkUrls.has(currentTrack.imageUrl) ? (
           <Image
-            accessibilityLabel={`${currentTrack.title} album artwork from Spotify`}
+            accessibilityLabel={`${currentTrack.title} album artwork`}
             cachePolicy="memory-disk"
             contentFit="cover"
             source={{ uri: currentTrack.imageUrl }}
@@ -1788,7 +1773,7 @@ export default function NowPlayingScreen() {
                 >
                   {track.imageUrl && readyArtworkUrls.has(track.imageUrl) ? (
                     <Image
-                      accessibilityLabel={`${track.title} album artwork from Spotify`}
+                      accessibilityLabel={`${track.title} album artwork`}
                       cachePolicy="memory-disk"
                       contentFit="cover"
                       source={{ uri: track.imageUrl }}

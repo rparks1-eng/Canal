@@ -29,7 +29,8 @@ describe("Scene Preview account scope", () => {
     expect(source).toContain("setLoading(false)");
     expect(source).toContain("registerSceneStudioInvalidationHandler");
     expect(source).not.toContain("readGeneratedScenePreview");
-    expect(source).not.toContain("readLibrarySnapshot");
-    expect(source).not.toContain("musicProviders");
+    expect(source).toContain("readCombinedSceneMusicLibrary");
+    expect(source).toContain("musicProviders.require(providerId, \"catalog-search\")");
+    expect(source).toContain("sameSceneStudioScope(operationScope, currentScope())");
   });
 });

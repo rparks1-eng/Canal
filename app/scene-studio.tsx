@@ -78,15 +78,19 @@ import type {
 } from "../lib/spotify-auth";
 
 import {
-  readSpotifyLibrarySnapshot,
-} from "../lib/spotify-library";
+  readCombinedSceneMusicLibrary,
+} from "../lib/combined-music-library";
+
+import type {
+  MusicProviderId,
+} from "../lib/music-provider-model";
 
 import {
   regenerateGeneratedSceneEditor,
 } from "../lib/scene-preview-editor";
 
 import {
-  addUserSelectedGenreCatalogTracks,
+  addUserSelectedGenreCatalogTracksFromProviders,
 } from "../lib/scene-genre-catalog";
 
 import {
@@ -312,7 +316,7 @@ export default function SceneStudioScreen() {
   const resetToken = params.reset;
   const quickMoodSeed = sceneMoodSeed(params.quickMood);
   const directSeed = sceneDirectionSeed(params.direct);
-  const anchorTrackId = typeof params.anchorTrackId === "string" && /^[A-Za-z0-9]+$/u.test(params.anchorTrackId)
+  const anchorTrackId = typeof params.anchorTrackId === "string" && /^[A-Za-z0-9._:-]+$/u.test(params.anchorTrackId)
     ? params.anchorTrackId
     : undefined;
   const reshootOwnerId = typeof params.reshootOwnerId === "string" && params.reshootOwnerId.length <= 64 ? params.reshootOwnerId : "";
@@ -360,8 +364,13 @@ export default function SceneStudioScreen() {
     useState<SceneStudioScope | null>(null);
   const [message, setMessage] =
     useState<string | null>(null);
-  const [spotifyConnection, setSpotifyConnection] =
-    useState<"loading" | "connected" | "disconnected" | "unknown">("loading");
+  const [musicProviderState, setMusicProviderState] = useState<{
+    status: "loading" | "ready" | "disconnected" | "unknown";
+    providerIds: readonly MusicProviderId[];
+    readyProviderIds: readonly MusicProviderId[];
+  }>({ status: "loading", providerIds: [], readyProviderIds: [] });
+  const [providerGenreCatalog, setProviderGenreCatalog] =
+    useState<readonly string[]>([]);
   const [genreQuery, setGenreQuery] =
     useState("");
   const [suggestingName, setSuggestingName] =
@@ -446,11 +455,11 @@ export default function SceneStudioScreen() {
   const genreSuggestions = useMemo(
     () => suggestSceneGenres(
       genreQuery,
-      SCENE_GENRE_OPTIONS,
+      Array.from(new Set([...SCENE_GENRE_OPTIONS, ...providerGenreCatalog])),
       visibleDraft.preferredGenres,
       genreQuery.trim() ? 14 : 18,
     ),
-    [genreQuery, visibleDraft.preferredGenres],
+    [genreQuery, providerGenreCatalog, visibleDraft.preferredGenres],
   );
 
   useEffect(() => {
@@ -643,41 +652,57 @@ export default function SceneStudioScreen() {
     let active = true;
     const operationScope = scope;
 
-    setSpotifyConnection("loading");
+    setMusicProviderState({ status: "loading", providerIds: [], readyProviderIds: [] });
+    setProviderGenreCatalog([]);
 
     if (!operationScope) {
-      setSpotifyConnection("disconnected");
+      setMusicProviderState({ status: "disconnected", providerIds: [], readyProviderIds: [] });
       return () => {
         active = false;
       };
     }
 
-    const loadSpotifyConnection = async (): Promise<void> => {
+    const loadMusicProviders = async (): Promise<void> => {
       try {
         const accountGuard = await captureSpotifyCanalAccountGuard();
-        const state = await readSpotifyConnectionStateForAccount(accountGuard);
+        const [spotifyState, combined] = await Promise.all([
+          readSpotifyConnectionStateForAccount(accountGuard),
+          readCombinedSceneMusicLibrary(),
+        ]);
 
         if (
           active &&
           sameSceneStudioScope(operationScope, currentScope())
         ) {
-          setSpotifyConnection(
-            state === "connected" || state === "disconnected"
-              ? state
-              : "unknown",
-          );
+          const providerIds = Array.from(new Set([
+            ...(combined?.providerIds ?? []),
+            ...(spotifyState === "connected" ? ["spotify" as const] : []),
+          ]));
+          const readyProviderIds = combined?.readyProviderIds ?? [];
+          setProviderGenreCatalog(combined?.genreCatalog ?? []);
+          setMusicProviderState({
+            status: readyProviderIds.length > 0
+              ? "ready"
+              : providerIds.length > 0
+                ? "disconnected"
+                : spotifyState === "unknown"
+                  ? "unknown"
+                  : "disconnected",
+            providerIds,
+            readyProviderIds,
+          });
         }
       } catch {
         if (
           active &&
           sameSceneStudioScope(operationScope, currentScope())
         ) {
-          setSpotifyConnection("unknown");
+          setMusicProviderState({ status: "unknown", providerIds: [], readyProviderIds: [] });
         }
       }
     };
 
-    void loadSpotifyConnection();
+    void loadMusicProviders();
 
     return () => {
       active = false;
@@ -853,7 +878,7 @@ export default function SceneStudioScreen() {
     if (
       !operationScope ||
       !scopeReady ||
-      spotifyConnection !== "connected" ||
+      musicProviderState.readyProviderIds.length === 0 ||
       sameSceneStudioScope(
         activationRef.current
           ?.scope,
@@ -895,8 +920,9 @@ export default function SceneStudioScreen() {
       );
 
     try {
-      const startingSpotifyGuard =
-        await captureSpotifyCanalAccountGuard();
+      const startingSpotifyGuard = musicProviderState.readyProviderIds.includes("spotify")
+        ? await captureSpotifyCanalAccountGuard()
+        : null;
       const existing =
         await repositoryRef.current.readPreview({
           scope:
@@ -910,21 +936,22 @@ export default function SceneStudioScreen() {
         return;
       }
 
-      const storedSnapshot = await readSpotifyLibrarySnapshot();
+      const combinedLibrary = await readCombinedSceneMusicLibrary();
 
       if (
-        !storedSnapshot ||
-        storedSnapshot.importStatus?.state === "incomplete"
+        !combinedLibrary ||
+        combinedLibrary.readyProviderIds.length === 0
       ) {
         setMessage(
-          "Sync your Spotify Library before creating an automatic Scene.",
+          "Connect and sync Spotify or Apple Music before creating an automatic Scene.",
         );
         return;
       }
 
-      const snapshot = await addUserSelectedGenreCatalogTracks(
+      const snapshot = await addUserSelectedGenreCatalogTracksFromProviders(
         draft,
-        storedSnapshot,
+        combinedLibrary.snapshot,
+        combinedLibrary.readyProviderIds,
       );
       const learning = await readSceneRecommendationLearning(
         operationScope,
@@ -969,15 +996,16 @@ export default function SceneStudioScreen() {
       if (!draft.name.trim()) {
         setDraft(activationDraft);
       }
-      const endingSpotifyGuard =
-        await captureSpotifyCanalAccountGuard();
+      const endingSpotifyGuard = startingSpotifyGuard
+        ? await captureSpotifyCanalAccountGuard()
+        : null;
 
       if (
         !canActivate() ||
-        !sameSpotifyAccountGuard(
+        (startingSpotifyGuard && endingSpotifyGuard && !sameSpotifyAccountGuard(
           startingSpotifyGuard,
           endingSpotifyGuard,
-        )
+        ))
       ) {
         return;
       }
@@ -1289,7 +1317,7 @@ export default function SceneStudioScreen() {
           <View style={styles.preferencesGrid}>
           <PreferenceRow
             disabled={!scopeReady}
-            helper="When off, explicit Spotify results remain visible but cannot be added."
+                helper="When off, explicit results remain visible but cannot be added."
             label="Explicit tracks"
             onValueChange={(allowExplicit) => updateDraft("allowExplicit", allowExplicit)}
             value={visibleDraft.allowExplicit}
@@ -1366,9 +1394,9 @@ export default function SceneStudioScreen() {
               <View style={styles.summaryCard}><Text style={styles.summaryLabel}>Arc</Text><Text style={styles.summaryValue}>{visibleDraft.arc}</Text></View>
             </View>
             <BlurView intensity={46} tint="dark" style={styles.sourceCard}>
-              <View style={[styles.sourceDot, spotifyConnection !== "connected" && styles.sourceDotInactive]}><Text style={styles.sourceDotText}>S</Text></View>
-              <View style={styles.sourceCopy}><Text style={styles.sourceTitle}>{spotifyConnection === "connected" ? "Spotify library connected" : spotifyConnection === "loading" ? "Checking Spotify…" : "Spotify connection needed"}</Text><Text style={styles.sourceText}>{spotifyConnection === "connected" ? "Canal will build an editable preview. Nothing saves until you choose Save." : "Connect Spotify to generate this Scene. Your choices remain saved."}</Text></View>
-              {spotifyConnection !== "connected" && spotifyConnection !== "loading" ? <Pressable accessibilityLabel="Open Music Services" onPress={() => router.push("/music-services")} style={styles.sourceAction}><Text style={styles.sourceActionText}>Fix</Text></Pressable> : null}
+              <View style={[styles.sourceDot, musicProviderState.status !== "ready" && styles.sourceDotInactive]}><Text style={styles.sourceDotText}>♫</Text></View>
+              <View style={styles.sourceCopy}><Text style={styles.sourceTitle}>{musicProviderState.status === "ready" ? `${musicProviderState.readyProviderIds.map((provider) => provider === "spotify" ? "Spotify" : "Apple Music").join(" + ")} ready` : musicProviderState.status === "loading" ? "Checking music services…" : "Music service needed"}</Text><Text style={styles.sourceText}>{musicProviderState.status === "ready" ? "Canal will build from every connected library and catalog. Nothing saves until you choose Save." : "Connect and sync Spotify or Apple Music to generate this Scene. Your choices remain saved."}</Text></View>
+              {musicProviderState.status !== "ready" && musicProviderState.status !== "loading" ? <Pressable accessibilityLabel="Open Music Services" onPress={() => router.push("/music-services")} style={styles.sourceAction}><Text style={styles.sourceActionText}>Fix</Text></Pressable> : null}
             </BlurView>
           </Animated.View>
         ) : null}
@@ -1385,15 +1413,15 @@ export default function SceneStudioScreen() {
           accessibilityHint={studioStep === "review" ? "Commits a private editable Preview." : "Moves to the next Scene creation step."}
           accessibilityLabel={studioStep === "review" ? (shouldResumePreview ? "Update Scene Preview" : "Generate editable preview") : `Continue from ${studioStep}`}
           accessibilityRole="button"
-          accessibilityState={{ busy: activationBusy, disabled: studioStep === "review" && (!scopeReady || spotifyConnection !== "connected" || activationBusy) }}
-          disabled={studioStep === "review" && (!scopeReady || spotifyConnection !== "connected" || activationBusy)}
+          accessibilityState={{ busy: activationBusy, disabled: studioStep === "review" && (!scopeReady || musicProviderState.readyProviderIds.length === 0 || activationBusy) }}
+          disabled={studioStep === "review" && (!scopeReady || musicProviderState.readyProviderIds.length === 0 || activationBusy)}
           onPress={() => {
             if (studioStep === "moment") moveToStudioStep("sound");
             else if (studioStep === "sound") moveToStudioStep("flow");
             else if (studioStep === "flow") moveToStudioStep("review");
             else void activateUserDirectedScene();
           }}
-          style={[styles.dockContinue, studioStep === "review" && (!scopeReady || spotifyConnection !== "connected" || activationBusy) && styles.disabled]}
+          style={[styles.dockContinue, studioStep === "review" && (!scopeReady || musicProviderState.readyProviderIds.length === 0 || activationBusy) && styles.disabled]}
         ><Text style={styles.dockContinueText}>{activationBusy ? "Preparing Scene…" : studioStep === "moment" ? "Continue to Sound" : studioStep === "sound" ? "Continue to Flow" : studioStep === "flow" ? "Review Scene" : shouldResumePreview ? "Update editable preview" : "Generate editable preview"}</Text></Pressable>
       </View>
     </SafeAreaView>

@@ -12,6 +12,7 @@ import {
 } from "./helpers/async-storage-mock";
 
 import {
+  normalizeSceneTrackGenreEvidence,
   readScenes,
   type StoredScene,
   writeScenes,
@@ -26,6 +27,18 @@ const CURRENT_STORAGE_KEY =
 describe(
   "Scene storage normalization",
   () => {
+    it("bounds and deterministically normalizes persisted provider genre evidence", () => {
+      const genres = Array.from({ length: 14 }, (_, index) => ` Genre ${index} `);
+      expect(normalizeSceneTrackGenreEvidence([
+        { provider: "spotify", genres: ["Indie Pop", "indie   pop", ...genres] },
+        { provider: "genius", genres: ["Should not persist"] },
+        { provider: "apple-music", genres: ["Alternative", "Bad\u0000Genre"] },
+      ])).toEqual([
+        { provider: "apple-music", genres: ["Alternative"] },
+        { provider: "spotify", genres: ["Indie Pop", ...genres.slice(0, 11).map((genre) => genre.trim())] },
+      ]);
+    });
+
     beforeEach(() => {
       mockStorage.clear();
       jest.clearAllMocks();

@@ -1270,6 +1270,14 @@ function SceneDetailContent() {
                     scene.tracks[0]?.imageUrl ?? "",
                   spotifyUrl:
                     scene.tracks[0]?.spotifyUrl ?? "",
+                  providerId:
+                    scene.tracks[0]?.providerId ?? "",
+                  providerTrackId:
+                    scene.tracks[0]?.providerTrackId ?? "",
+                  providerUrl:
+                    scene.tracks[0]?.providerUrl ?? "",
+                  genreEvidence:
+                    JSON.stringify(scene.tracks[0]?.genreEvidence ?? []),
                   mood:
                     scene.emotions,
                 },
@@ -1446,7 +1454,7 @@ function SceneDetailContent() {
                 >
                   {track.imageUrl ? (
                     <Image
-                      accessibilityLabel={`${track.title} album artwork from Spotify`}
+                      accessibilityLabel={`${track.title} album artwork`}
                       contentFit="cover"
                       source={{ uri: track.imageUrl }}
                       style={styles.trackImage}

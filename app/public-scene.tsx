@@ -251,7 +251,7 @@ export default function PublicSceneScreen() {
           if (generation !== loadGeneration.current) return;
           setItem(publicScene);
 
-          if (publicScene.scene.tracks.some((track) => !track.imageUrl)) {
+          if (publicScene.scene.tracks.length > 0) {
             void addSpotifyArtworkToStoredScene(publicScene.scene)
               .then((sceneWithArtwork) => {
                 if (generation !== loadGeneration.current) return;
@@ -1034,7 +1034,7 @@ export default function PublicSceneScreen() {
                       key={
                         `${track.id}-${index}`
                       }
-                      onPress={() => router.push({ pathname: "/song-context", params: { trackId: track.id, trackTitle: track.title, artistName: track.artist, artworkUrl: track.imageUrl ?? "", spotifyUrl: track.spotifyUrl ?? "", genreHints: item.scene.genres } } as never)}
+                      onPress={() => router.push({ pathname: "/song-context", params: { trackId: track.id, trackTitle: track.title, artistName: track.artist, artworkUrl: track.imageUrl ?? "", spotifyUrl: track.spotifyUrl ?? "", providerId: track.providerId ?? "", providerTrackId: track.providerTrackId ?? "", providerUrl: track.providerUrl ?? "", providerGenreEvidence: JSON.stringify(track.genreEvidence ?? []) } } as never)}
                       style={
                         styles.trackRow
                       }

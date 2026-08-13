@@ -30,8 +30,9 @@ describe("Home overhaul contract", () => {
   it("hydrates the home surface from the user's persisted listening state", () => {
     expect(source).toContain("useFocusEffect(load)");
     expect(compact(source)).toMatch(
-      /Promise\.all\(\[ readScenes\(\), getRecentScenes\(5\), readListeningHistory\(\), getLatestSpotifyLibrarySnapshot\(\), \]\)/u,
+      /Promise\.all\(\[ readScenes\(\), getRecentScenes\(5\), readListeningHistory\(\), getLatestSpotifyLibrarySnapshot\(\), readAppleMusicLibrarySnapshot\(\)[\s\S]*?\]\)/u,
     );
+    expect(source).toContain("combineSceneMusicLibraries");
     expect(source).toContain("rankSceneRecommendations(");
     expect(source).toContain("spotifySnapshot");
     expect(source).toContain(".slice(0, 3)");
@@ -74,7 +75,7 @@ describe("Home overhaul contract", () => {
     );
   });
 
-  it("uses real cached Spotify tracks for the orbit actions", () => {
+  it("uses real cached connected-service tracks for the orbit actions", () => {
     expect(source).toContain("...spotifySnapshot.discoveryTracks");
     expect(source).toContain("...spotifySnapshot.recentTracks");
     expect(source).toContain(".slice(0, 3)");
@@ -84,7 +85,8 @@ describe("Home overhaul contract", () => {
     expect(source).toContain("addSpotifyArtworkToTracks");
     expect(source).toContain("isUsableOrbitTrack(track)");
     expect(source).toContain("anchorTrackId: track?.id");
-    expect(source).toContain('accessibilityLabel={`Open ${track.name} in Spotify`}');
+    expect(source).toContain('getCanalTrackProvider(track) === "spotify" ? "Spotify" : "Apple Music"');
+    expect(source).toContain("getCanalTrackProviderUrl(track)");
     expect(source).toContain('accessibilityLabel={`Add ${track.name} to a Scene`}');
     expect(source).toContain('name="ellipsis-horizontal"');
     expect(source).toContain('pathname: "/add-song-to-scene"');
@@ -102,9 +104,10 @@ describe("Home overhaul contract", () => {
     expect(studioSource).toContain("Choose what you are doing before continuing.");
   });
 
-  it("keeps cached Spotify recommendations usable while recovery is available", () => {
+  it("keeps cached music recommendations usable while recovery is available", () => {
     expect(source).toContain("getLatestSpotifyLibrarySnapshot");
-    expect(source).toContain("syncSpotifyLibrary");
+    expect(source).toContain("readAppleMusicLibrarySnapshot");
+    expect(source).toContain("syncCombinedSceneMusicLibrary");
     expect(source).toContain("useReconnectReload(");
     expect(source).toContain('accessibilityLabel="Reconnect Spotify"');
     expect(source).toContain("Scenes keep working from the cached library.");

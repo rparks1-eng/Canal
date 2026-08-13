@@ -11,6 +11,7 @@ import {
   canonicalSpotifyTrackUrl,
 } from "./spotify-track-links";
 import { addSpotifyArtworkToSnapshots } from "./spotify-scene-artwork";
+import { normalizeSceneTrackGenreEvidence } from "./scenes";
 
 import {
   isSnapshotTemplateTheme,
@@ -48,6 +49,10 @@ export type PublicSnapshotRow = {
   track_artist: string | null;
   track_image_url?: string | null;
   spotify_url: string | null;
+  provider_id?: string | null;
+  provider_track_id?: string | null;
+  provider_url?: string | null;
+  genre_evidence?: unknown;
   media_path: string | null;
   media_type: string | null;
   media_mime_type: string | null;
@@ -84,6 +89,10 @@ const SNAPSHOT_COLUMNS = [
   "track_artist",
   "track_image_url",
   "spotify_url",
+  "provider_id",
+  "provider_track_id",
+  "provider_url",
+  "genre_evidence",
   "media_path",
   "media_type",
   "media_mime_type",
@@ -520,6 +529,28 @@ function normalizePublicSnapshot(
       ) ??
       undefined,
 
+    providerId:
+      row.provider_id === "spotify" ||
+      row.provider_id === "apple-music"
+        ? row.provider_id
+        : undefined,
+
+    providerTrackId:
+      cleanOptionalString(
+        row.provider_track_id,
+      ),
+
+    providerUrl:
+      normalizePublicSnapshotProviderUrl(
+        row.provider_id,
+        row.provider_url,
+      ),
+
+    genreEvidence:
+      normalizeSceneTrackGenreEvidence(
+        row.genre_evidence,
+      ),
+
     mediaPath:
       cleanOptionalString(row.media_path),
 
@@ -758,4 +789,43 @@ function cleanOptionalString(
     ) ||
     undefined
   );
+}
+
+function normalizePublicSnapshotProviderUrl(
+  providerId: unknown,
+  value: unknown,
+): string | undefined {
+  if (
+    (providerId !== "spotify" &&
+      providerId !== "apple-music") ||
+    typeof value !== "string" ||
+    value.length > 2_048
+  ) {
+    return undefined;
+  }
+
+  if (providerId === "spotify") {
+    return canonicalSpotifyTrackUrl(value) ??
+      undefined;
+  }
+
+  try {
+    const url = new URL(value);
+    const host =
+      url.hostname.toLowerCase();
+
+    return url.protocol === "https:" &&
+      (
+        host === "music.apple.com" ||
+        host === "geo.music.apple.com"
+      ) &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.hash
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }

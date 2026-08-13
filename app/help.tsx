@@ -172,8 +172,8 @@ export default function HelpScreen() {
           <View style={styles.helpCard}>
             <SimpleHelpRow
               icon="musical-notes-outline"
-              title="Connect Spotify"
-              description="Open You, choose Music Services, and connect Spotify. Canal uses the connection for artist search and playlist export."
+              title="Connect a music service"
+              description="Open You, choose Music Services, and connect Apple Music or Spotify. Canal uses every connected library for Scene generation, song search, and provider playlist export."
             />
 
             <Divider />

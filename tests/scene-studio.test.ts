@@ -189,7 +189,14 @@ describe(
         expect(
           result.scene.tracks[0]
             .imageUrl,
-        ).toBeUndefined();
+        ).toMatch(
+          /^https:\/\/example[.]com\/[0-9]+[.]jpg$/u,
+        );
+
+        expect(result.scene.tracks[0]?.genreEvidence).toEqual([{
+          provider: "spotify",
+          genres: ["jazz", "ambient"],
+        }]);
       },
     );
 

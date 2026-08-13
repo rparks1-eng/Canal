@@ -125,7 +125,12 @@ export default function SnapshotCameraScreen() {
         stageId: first(params.stageId), sceneId: first(params.sceneId), sceneName: first(params.sceneName), source: first(params.source),
         trackId: first(params.trackId), trackTitle: first(params.trackTitle), trackArtist: first(params.trackArtist),
         trackImageUrl: first(params.trackImageUrl),
-        spotifyUrl: first(params.spotifyUrl), mood: first(params.mood), mediaUri: capture.uri, mediaType: capture.type,
+        spotifyUrl: first(params.spotifyUrl),
+        providerId: first(params.providerId),
+        providerTrackId: first(params.providerTrackId),
+        providerUrl: first(params.providerUrl),
+        genreEvidence: first(params.genreEvidence),
+        mood: first(params.mood), mediaUri: capture.uri, mediaType: capture.type,
       },
     });
   }

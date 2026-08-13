@@ -37,8 +37,14 @@ import {
 } from "./apple-music-errors";
 
 const APPLE_MUSIC_LIBRARY_VERSION = 1;
-const APPLE_MUSIC_LIBRARY_SONG_LIMIT = 200;
-const APPLE_MUSIC_LIBRARY_PLAYLIST_LIMIT = 50;
+const APPLE_MUSIC_LIBRARY_SONG_LIMIT = 5_000;
+const APPLE_MUSIC_LIBRARY_PLAYLIST_LIMIT = 1_000;
+const APPLE_MUSIC_LIBRARY_ALBUM_LIMIT = 2_000;
+const APPLE_MUSIC_LIBRARY_ARTIST_LIMIT = 2_000;
+const APPLE_MUSIC_PLAYLIST_SCAN_LIMIT = 200;
+const APPLE_MUSIC_ARTWORK_CACHE_LIMIT = 256;
+
+const appleMusicArtworkCache = new Map<string, Promise<string | null>>();
 
 type PersistedAppleMusicLibrary = {
   version: typeof APPLE_MUSIC_LIBRARY_VERSION;
@@ -71,6 +77,60 @@ export function isAppleMusicNativeAvailable(): boolean {
   return isCanalAppleMusicAvailable();
 }
 
+function catalogIdentity(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .replace(/[^a-z0-9]+/giu, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Resolves Apple Music artwork without persisting catalog responses. Apple is
+ * Canal's primary artwork source, while the bounded in-memory cache prevents
+ * repeated catalog requests as the same track appears across app surfaces.
+ */
+export async function loadAppleMusicCatalogArtwork(
+  title: string,
+  artist: string,
+): Promise<string | null> {
+  const cleanTitle = title.trim();
+  const cleanArtist = artist.trim();
+  if (!cleanTitle || !cleanArtist || !isCanalAppleMusicAvailable()) return null;
+
+  const cacheKey = `${catalogIdentity(cleanTitle)}::${catalogIdentity(cleanArtist)}`;
+  let request = appleMusicArtworkCache.get(cacheKey);
+  if (!request) {
+    request = CanalAppleMusic.searchCatalog(`${cleanTitle} ${cleanArtist}`, 5)
+      .then((matches) => {
+        const titleKey = catalogIdentity(cleanTitle);
+        const artistKey = catalogIdentity(cleanArtist);
+        const exact = matches.find((match) =>
+          catalogIdentity(match.name) === titleKey &&
+          catalogIdentity(match.artistName) === artistKey,
+        );
+        const titleMatch = exact ?? matches.find((match) =>
+          catalogIdentity(match.name) === titleKey,
+        );
+        const artworkUrl = titleMatch?.artworkUrl?.trim();
+        return artworkUrl && /^https:\/\//u.test(artworkUrl) ? artworkUrl : null;
+      })
+      .catch(() => null);
+    appleMusicArtworkCache.set(cacheKey, request);
+
+    if (appleMusicArtworkCache.size > APPLE_MUSIC_ARTWORK_CACHE_LIMIT) {
+      const oldestKey = appleMusicArtworkCache.keys().next().value;
+      if (typeof oldestKey === "string") appleMusicArtworkCache.delete(oldestKey);
+    }
+  }
+  const artworkUrl = await request;
+  if (!artworkUrl && appleMusicArtworkCache.get(cacheKey) === request) {
+    appleMusicArtworkCache.delete(cacheKey);
+  }
+  return artworkUrl;
+}
+
 export async function readAppleMusicStatus(): Promise<CanalAppleMusicStatus> {
   if (!isCanalAppleMusicAvailable()) {
     return {
@@ -97,6 +157,7 @@ export async function openAppleMusicAccountSetup(): Promise<void> {
 
 export async function connectAppleMusic(): Promise<MusicLibrarySnapshot> {
   try {
+    appleMusicArtworkCache.clear();
     const guard =
       await captureCanalAccountSessionGuard();
     const status =
@@ -120,6 +181,7 @@ export async function connectAppleMusic(): Promise<MusicLibrarySnapshot> {
 
 export async function syncAppleMusicLibrary(): Promise<MusicLibrarySnapshot> {
   try {
+    appleMusicArtworkCache.clear();
     const guard =
       await captureCanalAccountSessionGuard();
     const status =
@@ -200,6 +262,7 @@ export async function readAppleMusicLibrarySnapshot(): Promise<MusicLibrarySnaps
 }
 
 export async function disconnectAppleMusic(): Promise<void> {
+  appleMusicArtworkCache.clear();
   const guard =
     await captureCanalAccountSessionGuard();
 
@@ -303,6 +366,12 @@ export function normalizeAppleMusicTrack(
       ...(track.albumName ? { name: track.albumName } : {}),
       ...(track.artworkUrl ? { imageUrl: track.artworkUrl } : {}),
     },
+    genres: track.genres,
+    ...(track.isrc ? { isrc: track.isrc } : {}),
+    ...(track.libraryAddedAt ? { libraryAddedAt: track.libraryAddedAt } : {}),
+    ...(track.lastPlayedAt ? { lastPlayedAt: track.lastPlayedAt } : {}),
+    ...(typeof track.playCount === "number" ? { playCount: track.playCount } : {}),
+    ...(typeof track.isFavorite === "boolean" ? { isFavorite: track.isFavorite } : {}),
   };
 }
 
@@ -312,13 +381,24 @@ function normalizeAppleMusicLibrary(
 ): MusicLibrarySnapshot {
   const savedTracks =
     library.songs.map(normalizeAppleMusicTrack);
+  const playlistTracks =
+    (library.playlistTracks ?? []).map(normalizeAppleMusicTrack);
+  const recentTracks =
+    (library.recentSongs ?? []).map(normalizeAppleMusicTrack);
   const genreCounts =
     new Map<string, number>();
   const artistCounts =
     new Map<string, number>();
   const trackGenres: Record<string, readonly string[]> = {};
 
-  for (const song of library.songs) {
+  const knownSongs = Array.from(
+    new Map(
+      [...library.songs, ...(library.playlistTracks ?? [])]
+        .map((song) => [song.id, song]),
+    ).values(),
+  );
+
+  for (const song of knownSongs) {
     artistCounts.set(
       song.artistName,
       (artistCounts.get(song.artistName) ?? 0) + 1,
@@ -336,6 +416,26 @@ function normalizeAppleMusicLibrary(
     }
   }
 
+  for (const album of library.albums ?? []) {
+    for (const genre of album.genres) {
+      const normalized = genre.trim();
+      if (normalized) genreCounts.set(normalized, (genreCounts.get(normalized) ?? 0) + 1);
+    }
+  }
+
+  const importedArtists = (library.artists ?? [])
+    .filter((artist) => artist.id.trim() && artist.name.trim())
+    .map((artist) => ({
+      reference: {
+        providerId: "apple-music" as const,
+        artistId: artist.id,
+      },
+      name: artist.name,
+      genres: artist.genres,
+      ...(artist.artworkUrl ? { imageUrl: artist.artworkUrl } : {}),
+      ...(typeof artist.isFavorite === "boolean" ? { isFavorite: artist.isFavorite } : {}),
+    }));
+
   return {
     providerId: "apple-music",
     syncedAt: new Date().toISOString(),
@@ -343,7 +443,7 @@ function normalizeAppleMusicLibrary(
       accountId: ownerId,
       displayName: "Apple Music",
     },
-    topArtists: Array.from(artistCounts.entries())
+    topArtists: (importedArtists.length > 0 ? importedArtists : Array.from(artistCounts.entries())
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 20)
       .map(([name]) => ({
@@ -353,11 +453,11 @@ function normalizeAppleMusicLibrary(
         },
         name,
         genres: [],
-      })),
+      }))).slice(0, 50),
     topTracks: savedTracks.slice(0, 50),
-    recentTracks: [],
+    recentTracks,
     savedTracks,
-    playlistTracks: [],
+    playlistTracks,
     discoveryTracks: [],
     playlists: library.playlists.map((playlist) => ({
       reference: {
@@ -368,13 +468,32 @@ function normalizeAppleMusicLibrary(
       name: playlist.name,
       trackCount: playlist.trackCount,
     })),
+    albums: (library.albums ?? []).map((album) => ({
+      reference: {
+        providerId: "apple-music" as const,
+        albumId: album.id,
+        ...(album.url ? { webUrl: album.url } : {}),
+      },
+      name: album.name,
+      artistName: album.artistName,
+      ...(album.artworkUrl ? { artworkUrl: album.artworkUrl } : {}),
+      genres: album.genres,
+      trackCount: album.trackCount,
+      ...(album.releaseDate ? { releaseDate: album.releaseDate } : {}),
+      ...(typeof album.isFavorite === "boolean" ? { isFavorite: album.isFavorite } : {}),
+    })),
     topGenres: Array.from(genreCounts.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
       .slice(0, 20),
     trackGenres,
     warnings: [
-      "Apple Music library sync uses a bounded selection of saved songs and playlists; it does not infer complete listening history.",
+      ...(library.songsTruncated ? [`Apple Music has more than ${APPLE_MUSIC_LIBRARY_SONG_LIMIT.toLocaleString()} saved songs; Canal imported a bounded library window.`] : []),
+      ...(library.playlistsTruncated ? [`Apple Music has more than ${APPLE_MUSIC_LIBRARY_PLAYLIST_LIMIT.toLocaleString()} playlists; Canal imported a bounded library window.`] : []),
+      ...(library.playlistTracksTruncated ? [`Canal imported a bounded playlist-track window from up to ${APPLE_MUSIC_PLAYLIST_SCAN_LIMIT.toLocaleString()} Apple Music playlists.`] : []),
+      ...(library.albumsTruncated ? [`Apple Music has more than ${APPLE_MUSIC_LIBRARY_ALBUM_LIMIT.toLocaleString()} albums; Canal imported a bounded library window.`] : []),
+      ...(library.artistsTruncated ? [`Apple Music has more than ${APPLE_MUSIC_LIBRARY_ARTIST_LIMIT.toLocaleString()} artists; Canal imported a bounded library window.`] : []),
+      "Apple Music recently played is bounded and is not a complete listening history.",
     ],
   };
 }

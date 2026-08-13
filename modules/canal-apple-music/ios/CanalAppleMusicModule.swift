@@ -30,17 +30,34 @@ public final class CanalAppleMusicModule: Module {
         throw CanalAppleMusicError.libraryRequiresIOS16
       }
 
-      var songRequest = MusicLibraryRequest<Song>()
-      songRequest.limit = min(max(songLimit, 1), 200)
-      let songResponse = try await songRequest.response()
+      let boundedSongLimit = min(max(songLimit, 1), 5_000)
+      let boundedPlaylistLimit = min(max(playlistLimit, 1), 1_000)
+      let songs = try await self.readSongs(limit: boundedSongLimit)
+      let playlists = try await self.readPlaylists(limit: boundedPlaylistLimit)
+      let albums = try await self.readAlbums(limit: 2_000)
+      let artists = try await self.readArtists(limit: 2_000)
+      let playlistTracks = await self.readPlaylistTracks(
+        playlists: playlists.items,
+        limit: boundedSongLimit
+      )
 
-      var playlistRequest = MusicLibraryRequest<Playlist>()
-      playlistRequest.limit = min(max(playlistLimit, 1), 50)
-      let playlistResponse = try await playlistRequest.response()
+      var recentRequest = MusicRecentlyPlayedRequest<Song>()
+      recentRequest.limit = 100
+      let recentResponse = try? await recentRequest.response()
+      let recentSongs = recentResponse.map { Array($0.items) } ?? []
 
       return [
-        "songs": songResponse.items.map(self.songPayload),
-        "playlists": playlistResponse.items.map(self.playlistPayload),
+        "songs": songs.items.map(self.songPayload),
+        "playlists": playlists.items.map(self.playlistPayload),
+        "playlistTracks": playlistTracks.items.map(self.songPayload),
+        "albums": albums.items.map(self.albumPayload),
+        "artists": artists.items.map(self.artistPayload),
+        "recentSongs": recentSongs.map(self.songPayload),
+        "songsTruncated": songs.truncated,
+        "playlistsTruncated": playlists.truncated,
+        "playlistTracksTruncated": playlistTracks.truncated,
+        "albumsTruncated": albums.truncated,
+        "artistsTruncated": artists.truncated,
       ]
     }
 
@@ -90,6 +107,148 @@ public final class CanalAppleMusicModule: Module {
     }
   }
 
+  @available(iOS 16.0, *)
+  private func readSongs(limit: Int) async throws -> (items: [Song], truncated: Bool) {
+    var items: [Song] = []
+    var offset = 0
+    while items.count < limit {
+      var request = MusicLibraryRequest<Song>()
+      request.limit = min(100, limit - items.count)
+      request.offset = offset
+      let response = try await request.response()
+      let page = Array(response.items)
+      items.append(contentsOf: page)
+      if page.count < request.limit { return (items, false) }
+      offset += page.count
+    }
+    var probe = MusicLibraryRequest<Song>()
+    probe.limit = 1
+    probe.offset = offset
+    return (items, !(try await probe.response()).items.isEmpty)
+  }
+
+  @available(iOS 16.0, *)
+  private func readPlaylists(limit: Int) async throws -> (items: [Playlist], truncated: Bool) {
+    var items: [Playlist] = []
+    var offset = 0
+    while items.count < limit {
+      var request = MusicLibraryRequest<Playlist>()
+      request.limit = min(50, limit - items.count)
+      request.offset = offset
+      let response = try await request.response()
+      let page = Array(response.items)
+      items.append(contentsOf: page)
+      if page.count < request.limit { return (items, false) }
+      offset += page.count
+    }
+    var probe = MusicLibraryRequest<Playlist>()
+    probe.limit = 1
+    probe.offset = offset
+    return (items, !(try await probe.response()).items.isEmpty)
+  }
+
+  @available(iOS 16.0, *)
+  private func readAlbums(limit: Int) async throws -> (items: [Album], truncated: Bool) {
+    var items: [Album] = []
+    var offset = 0
+    while items.count < limit {
+      var request = MusicLibraryRequest<Album>()
+      request.limit = min(100, limit - items.count)
+      request.offset = offset
+      let response = try await request.response()
+      let page = Array(response.items)
+      items.append(contentsOf: page)
+      if page.count < request.limit { return (items, false) }
+      offset += page.count
+    }
+    var probe = MusicLibraryRequest<Album>()
+    probe.limit = 1
+    probe.offset = offset
+    return (items, !(try await probe.response()).items.isEmpty)
+  }
+
+  @available(iOS 16.0, *)
+  private func readArtists(limit: Int) async throws -> (items: [Artist], truncated: Bool) {
+    var items: [Artist] = []
+    var offset = 0
+    while items.count < limit {
+      var request = MusicLibraryRequest<Artist>()
+      request.limit = min(100, limit - items.count)
+      request.offset = offset
+      let response = try await request.response()
+      let page = Array(response.items)
+      items.append(contentsOf: page)
+      if page.count < request.limit { return (items, false) }
+      offset += page.count
+    }
+    var probe = MusicLibraryRequest<Artist>()
+    probe.limit = 1
+    probe.offset = offset
+    return (items, !(try await probe.response()).items.isEmpty)
+  }
+
+  @available(iOS 16.0, *)
+  private func readPlaylistTracks(
+    playlists: [Playlist],
+    limit: Int
+  ) async -> (items: [Song], truncated: Bool) {
+    // Loading every relationship for a very large account can turn a normal
+    // sync into hundreds of network requests. Scan a bounded playlist window,
+    // hydrate four relationships at a time, and cap each individual playlist.
+    let playlistScanLimit = min(playlists.count, 200)
+    let perPlaylistTrackLimit = 500
+    let concurrencyLimit = 4
+    let candidates = Array(playlists.prefix(playlistScanLimit))
+    var songsById: [MusicItemID: Song] = [:]
+    var orderedIds: [MusicItemID] = []
+    var truncated = playlists.count > playlistScanLimit
+
+    for batchStart in stride(from: 0, to: candidates.count, by: concurrencyLimit) {
+      let batchEnd = min(batchStart + concurrencyLimit, candidates.count)
+      let batch = Array(candidates[batchStart..<batchEnd])
+      let results = await withTaskGroup(
+        of: PlaylistTrackLoadResult.self,
+        returning: [PlaylistTrackLoadResult].self
+      ) { group in
+        for (batchOffset, playlist) in batch.enumerated() {
+          group.addTask {
+            await loadPlaylistTracks(
+              playlist,
+              order: batchStart + batchOffset,
+              limit: perPlaylistTrackLimit
+            )
+          }
+        }
+
+        var loaded: [PlaylistTrackLoadResult] = []
+        for await result in group {
+          loaded.append(result)
+        }
+        return loaded.sorted { $0.order < $1.order }
+      }
+
+      for result in results {
+        truncated = truncated || result.truncated
+        for song in result.songs where songsById[song.id] == nil {
+          songsById[song.id] = song
+          orderedIds.append(song.id)
+          if orderedIds.count >= limit {
+            truncated = true
+            break
+          }
+        }
+        if orderedIds.count >= limit { break }
+      }
+
+      if orderedIds.count >= limit { break }
+    }
+
+    return (
+      orderedIds.compactMap { songsById[$0] },
+      truncated
+    )
+  }
+
   private func statusPayload() async throws -> [String: Any] {
     let authorizationStatus = MusicAuthorization.currentStatus
     guard authorizationStatus == .authorized else {
@@ -119,7 +278,7 @@ public final class CanalAppleMusicModule: Module {
   }
 
   private func songPayload(_ song: Song) -> [String: Any] {
-    [
+    var payload: [String: Any] = [
       "id": song.id.rawValue,
       "name": song.title,
       "artistName": song.artistName,
@@ -129,9 +288,50 @@ public final class CanalAppleMusicModule: Module {
       "explicit": song.contentRating == .explicit,
       "genres": song.genreNames,
       "url": song.url?.absoluteString as Any,
+      "isrc": song.isrc as Any,
     ]
+
+    if #available(iOS 16.0, *) {
+      payload["libraryAddedAt"] = iso8601(song.libraryAddedDate) as Any
+      payload["lastPlayedAt"] = iso8601(song.lastPlayedDate) as Any
+      payload["playCount"] = song.playCount as Any
+    }
+    return payload
   }
 
+  @available(iOS 16.0, *)
+  private func albumPayload(_ album: Album) -> [String: Any] {
+    var payload: [String: Any] = [
+      "id": album.id.rawValue,
+      "name": album.title,
+      "artistName": album.artistName,
+      "artworkUrl": album.artwork?.url(width: 600, height: 600)?.absoluteString as Any,
+      "genres": album.genreNames,
+      "trackCount": album.trackCount,
+      "releaseDate": iso8601(album.releaseDate) as Any,
+      "url": album.url?.absoluteString as Any,
+    ]
+    return payload
+  }
+
+  @available(iOS 16.0, *)
+  private func artistPayload(_ artist: Artist) -> [String: Any] {
+    var payload: [String: Any] = [
+      "id": artist.id.rawValue,
+      "name": artist.name,
+      "artworkUrl": artist.artwork?.url(width: 600, height: 600)?.absoluteString as Any,
+      "genres": artist.genreNames ?? [],
+      "url": artist.url?.absoluteString as Any,
+    ]
+    return payload
+  }
+
+  private func iso8601(_ date: Date?) -> String? {
+    guard let date else { return nil }
+    return ISO8601DateFormatter().string(from: date)
+  }
+
+  @available(iOS 16.0, *)
   private func playlistPayload(_ playlist: Playlist) -> [String: Any] {
     [
       "id": playlist.id.rawValue,
@@ -140,6 +340,76 @@ public final class CanalAppleMusicModule: Module {
       "artworkUrl": playlist.artwork?.url(width: 600, height: 600)?.absoluteString as Any,
       "url": playlist.url?.absoluteString as Any,
     ]
+  }
+}
+
+@available(iOS 16.0, *)
+private struct PlaylistTrackLoadResult: Sendable {
+  let order: Int
+  let songs: [Song]
+  let truncated: Bool
+}
+
+@available(iOS 16.0, *)
+private func loadPlaylistTracks(
+  _ playlist: Playlist,
+  order: Int,
+  limit: Int
+) async -> PlaylistTrackLoadResult {
+  do {
+    let detailed = try await playlist.with(
+      [.tracks],
+      preferredSource: .library
+    )
+    guard var collection = detailed.tracks else {
+      return PlaylistTrackLoadResult(
+        order: order,
+        songs: [],
+        truncated: false
+      )
+    }
+
+    var songs: [Song] = []
+    var inspectedTrackCount = 0
+    var hasMore = false
+
+    while true {
+      for track in collection {
+        inspectedTrackCount += 1
+        if case .song(let song) = track {
+          songs.append(song)
+        }
+        if inspectedTrackCount >= limit {
+          hasMore = collection.hasNextBatch || inspectedTrackCount < collection.count
+          break
+        }
+      }
+
+      if inspectedTrackCount >= limit || !collection.hasNextBatch {
+        break
+      }
+
+      guard let next = try await collection.nextBatch(
+        limit: min(100, limit - inspectedTrackCount)
+      ) else {
+        break
+      }
+      collection = next
+    }
+
+    return PlaylistTrackLoadResult(
+      order: order,
+      songs: songs,
+      truncated: hasMore || collection.hasNextBatch
+    )
+  } catch {
+    // A single unavailable or malformed playlist must not fail the account's
+    // complete library sync. Mark the flattened playlist pool incomplete.
+    return PlaylistTrackLoadResult(
+      order: order,
+      songs: [],
+      truncated: true
+    )
   }
 }
 

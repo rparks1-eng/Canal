@@ -23,6 +23,32 @@ export type CanalAppleMusicTrack = {
   explicit: boolean;
   genres: string[];
   url: string | null;
+  isrc?: string | null;
+  libraryAddedAt?: string | null;
+  lastPlayedAt?: string | null;
+  playCount?: number | null;
+  isFavorite?: boolean;
+};
+
+export type CanalAppleMusicAlbum = {
+  id: string;
+  name: string;
+  artistName: string;
+  artworkUrl: string | null;
+  genres: string[];
+  trackCount: number;
+  releaseDate: string | null;
+  url: string | null;
+  isFavorite?: boolean;
+};
+
+export type CanalAppleMusicArtist = {
+  id: string;
+  name: string;
+  artworkUrl: string | null;
+  genres: string[];
+  url: string | null;
+  isFavorite?: boolean;
 };
 
 export type CanalAppleMusicPlaylist = {
@@ -36,6 +62,15 @@ export type CanalAppleMusicPlaylist = {
 export type CanalAppleMusicLibrary = {
   songs: CanalAppleMusicTrack[];
   playlists: CanalAppleMusicPlaylist[];
+  playlistTracks?: CanalAppleMusicTrack[];
+  albums?: CanalAppleMusicAlbum[];
+  artists?: CanalAppleMusicArtist[];
+  recentSongs?: CanalAppleMusicTrack[];
+  songsTruncated?: boolean;
+  playlistsTruncated?: boolean;
+  playlistTracksTruncated?: boolean;
+  albumsTruncated?: boolean;
+  artistsTruncated?: boolean;
 };
 
 export type CanalAppleMusicPlaylistReceipt = {

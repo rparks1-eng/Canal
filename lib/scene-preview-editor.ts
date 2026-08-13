@@ -10,6 +10,14 @@ import type {
 import type {
   SceneTrack,
 } from "./scenes";
+import { normalizeSceneTrackGenreEvidence } from "./scenes";
+
+import {
+  getCanalTrackProvider,
+  getCanalTrackProviderId,
+  getCanalTrackProviderUrl,
+  musicCatalogTrackToSceneTrack as musicCatalogTrackToProviderTrack,
+} from "./combined-music-library";
 
 function calculateDurationMinutes(
   signals: GeneratedTrackSignal[],
@@ -117,18 +125,27 @@ function calculateArtists(
 function sceneTrackFromSignal(
   signal: GeneratedTrackSignal,
 ): SceneTrack {
+  const providerId = getCanalTrackProvider(signal.track);
+  const providerTrackId = getCanalTrackProviderId(signal.track);
+  const providerUrl = getCanalTrackProviderUrl(signal.track);
+  const imageUrl = signal.track.album?.imageUrl ?? signal.track.album?.images?.[0]?.url;
   return {
     id: signal.track.id,
     title: signal.track.name,
     artist: signal.track.artists.map((artist) => artist.name).join(", "),
     source: signal.sources[0] ?? "generated",
     durationMs: signal.track.duration_ms,
-    ...(signal.track.uri
+    ...(providerId === "spotify" && signal.track.uri
       ? { spotifyUri: signal.track.uri }
       : {}),
-    ...(signal.track.external_urls?.spotify
+    ...(providerId === "spotify" && signal.track.external_urls?.spotify
       ? { spotifyUrl: signal.track.external_urls.spotify }
       : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+    providerId,
+    providerTrackId,
+    ...(providerUrl ? { providerUrl } : {}),
+    genreEvidence: normalizeSceneTrackGenreEvidence(signal.genreEvidence),
   };
 }
 
@@ -150,10 +167,18 @@ function rebuildGeneratedScene(
   const existingTrackById = new Map(
     result.scene.tracks.map((track) => [track.id, track]),
   );
-  const tracks = signals.map(
-    (signal) =>
-      existingTrackById.get(signal.track.id) ?? sceneTrackFromSignal(signal),
-  );
+  const tracks = signals.map((signal) => {
+    const existing = existingTrackById.get(signal.track.id);
+    return existing
+      ? {
+          ...existing,
+          genreEvidence: normalizeSceneTrackGenreEvidence([
+            ...(existing.genreEvidence ?? []),
+            ...(signal.genreEvidence ?? []),
+          ]),
+        }
+      : sceneTrackFromSignal(signal);
+  });
 
   return {
     ...result,
@@ -257,82 +282,16 @@ export function musicCatalogTrackSceneId(
 function musicCatalogTrackToGeneratedTrack(
   track: MusicCatalogTrack,
 ): GeneratedTrackSignal["track"] {
-  const trackId =
-    musicCatalogTrackSceneId(
-      track,
-    );
-
-  return {
-    id:
-      trackId,
-    name:
-      track.name,
-    uri:
-      track.reference
-        .uri ??
-      "",
-    duration_ms:
-      track.durationMs,
-    explicit:
-      track.explicit,
-    artists:
-      track.artists.map(
-        (
-          artist,
-          index,
-        ) => ({
-          id:
-            artist.artistId ??
-            `${trackId}-artist-${index}`,
-          name:
-            artist.name,
-          uri:
-            "",
-        }),
-      ),
-    ...(track.album
-      ? {
-          album: {
-            id:
-              track.album
-                .albumId ??
-              `${trackId}-album`,
-            name:
-              track.album
-                .name ??
-              "",
-            uri:
-              "",
-            ...(track.album.imageUrl
-              ? {
-                  images: [{
-                    url: track.album.imageUrl,
-                    height: 300,
-                    width: 300,
-                  }],
-                }
-              : {}),
-          },
-        }
-      : {}),
-    ...(track.reference
-      .providerId ===
-      "spotify" &&
-    track.reference.webUrl
-      ? {
-          external_urls: {
-            spotify:
-              track.reference
-                .webUrl,
-          },
-        }
-      : {}),
-  };
+  const converted = musicCatalogTrackToProviderTrack(track);
+  if (!converted) throw new Error("Canal could not normalize this music result.");
+  return converted;
 }
 
 function musicCatalogTrackToSceneTrack(
   track: MusicCatalogTrack,
 ): SceneTrack {
+  const generatedTrack = musicCatalogTrackToGeneratedTrack(track);
+  const imageUrl = generatedTrack.album?.imageUrl ?? generatedTrack.album?.images?.[0]?.url;
   return {
     id:
       musicCatalogTrackSceneId(
@@ -356,6 +315,13 @@ function musicCatalogTrackToSceneTrack(
       `${track.reference.providerId}-search`,
     durationMs:
       track.durationMs,
+    ...(imageUrl ? { imageUrl } : {}),
+    providerId: track.reference.providerId,
+    providerTrackId: track.reference.itemId,
+    ...(track.reference.webUrl ? { providerUrl: track.reference.webUrl } : {}),
+    genreEvidence: normalizeSceneTrackGenreEvidence(
+      track.genres?.length ? [{ provider: track.reference.providerId, genres: track.genres }] : [],
+    ),
     ...(track.reference
       .providerId ===
       "spotify"
@@ -416,7 +382,11 @@ export function addMusicTrackToGeneratedScene(
       50,
 
     genres:
-      [],
+      [...(track.genres ?? [])],
+
+    genreEvidence: normalizeSceneTrackGenreEvidence(
+      track.genres?.length ? [{ provider: track.reference.providerId, genres: track.genres }] : [],
+    ),
   };
 
   const nextSignals = [

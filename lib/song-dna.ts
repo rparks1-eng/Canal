@@ -30,7 +30,7 @@ export type CanalSongDna = Readonly<{
   genres: readonly string[];
   moods: readonly string[];
   confidence: "low" | "medium" | "high";
-  sources: readonly ("spotify" | "genius" | "canal")[];
+  sources: readonly ("spotify" | "apple-music" | "genius" | "canal")[];
   taxonomyVersion: number;
 }>;
 
@@ -38,6 +38,11 @@ export type SongSceneMoodEvidence = Readonly<{
   label: string;
   personalCount: number;
   communityCount: number;
+}>;
+
+export type SongGenreEvidence = Readonly<{
+  provider: "spotify" | "apple-music" | "genius";
+  genres: readonly string[];
 }>;
 
 function normalized(values: readonly string[] | undefined): string[] {
@@ -76,10 +81,15 @@ export function classifyCanalSongDna(input: {
   artist?: string;
   album?: string;
   genreHints?: readonly string[];
+  genreEvidence?: readonly SongGenreEvidence[];
   story?: string;
   sceneMoodEvidence?: readonly SongSceneMoodEvidence[];
 }): CanalSongDna {
-  const genreHints = normalized(input.genreHints);
+  const genreEvidence = [
+    ...(input.genreHints?.length ? [{ provider: "spotify" as const, genres: input.genreHints }] : []),
+    ...(input.genreEvidence ?? []),
+  ];
+  const genreHints = normalized(genreEvidence.flatMap((evidence) => evidence.genres));
   const genreText = genreHints.join(" ");
   const storyText = [input.title, input.artist, input.album, input.story].filter(Boolean).join(" ").slice(0, 8_000);
   const genres = labelsFor(genreText, GENRE_RULES, 4);
@@ -87,7 +97,9 @@ export function classifyCanalSongDna(input: {
   const sceneSignalCount = (input.sceneMoodEvidence ?? []).reduce((total, item) => total + item.personalCount + item.communityCount, 0);
   const signalCount = genreHints.length + (input.story?.trim() ? 2 : 0) + (moods.length > 0 ? 1 : 0) + Math.min(3, sceneSignalCount);
   const sources = [
-    ...(genreHints.length ? ["spotify" as const] : []),
+    ...genreEvidence
+      .filter((evidence) => normalized(evidence.genres).length > 0)
+      .map((evidence) => evidence.provider),
     ...(input.story?.trim() ? ["genius" as const] : []),
     "canal" as const,
   ];
