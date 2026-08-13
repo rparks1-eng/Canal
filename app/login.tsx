@@ -578,6 +578,10 @@ export default function LoginScreen() {
             provider,
           );
 
+        if (!session) {
+          return;
+        }
+
         if (
           isFirstSocialSignIn(
             session,

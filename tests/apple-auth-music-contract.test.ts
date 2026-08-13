@@ -8,10 +8,15 @@ const read = (relativePath: string) =>
 describe("Apple account and music integration", () => {
   it("uses native Sign in with Apple on iOS and preserves web OAuth", () => {
     const auth = read("lib/canal-auth.ts");
+    const login = read("app/login.tsx");
 
     expect(auth).toContain('provider === "apple"');
     expect(auth).toContain('Platform.OS === "ios"');
     expect(auth).toContain("AppleAuthentication.signInAsync");
+    expect(auth).toContain('Platform.OS === "web"');
+    expect(auth).toContain("supabase.auth.signInWithOAuth");
+    expect(auth).toContain("return null");
+    expect(login).toContain("if (!session)");
     expect(auth).toContain("Crypto.CryptoDigestAlgorithm.SHA256");
     expect(auth).toContain("supabase.auth.signInWithIdToken");
     expect(auth).toContain('provider: "apple"');

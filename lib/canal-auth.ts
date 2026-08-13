@@ -1064,7 +1064,7 @@ export async function signInWithSocial(
   provider:
     | "google"
     | "apple",
-): Promise<Session> {
+): Promise<Session | null> {
   requireSupabaseConfiguration();
 
   if (
@@ -1076,6 +1076,32 @@ export async function signInWithSocial(
 
   const callbackUrl =
     getAuthCallbackUrl();
+
+  if (Platform.OS === "web") {
+    const {
+      error,
+    } =
+      await queueCanalSessionMutation(
+        () =>
+          supabase.auth.signInWithOAuth({
+            provider,
+
+            options: {
+              redirectTo:
+                callbackUrl,
+            },
+          }),
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    // On web Supabase owns the full-page redirect. Returning null keeps the
+    // caller from treating the in-progress navigation as an authenticated
+    // session while avoiding popup/auth-session failures on mobile browsers.
+    return null;
+  }
 
   const {
     data,
