@@ -44,6 +44,7 @@ import {
   addSpotifyArtworkToLiveStage,
   isAppleArtworkUrl,
 } from "../../lib/spotify-scene-artwork";
+import { ExplicitBadge } from "../../components/explicit-badge";
 import {
   useAuth,
 } from "../../providers/auth-provider";
@@ -194,9 +195,8 @@ export default function StageLobbyScreen() {
 
         {stage?.tracks.length ? (
           <View style={styles.artworkStrip} accessibilityLabel="Stage mix artwork">
-            {stage.tracks.slice(0, 4).map((track) => track.imageUrl ? (
+            {stage.tracks.slice(0, 4).map((track) => <View key={track.id} style={styles.artworkBadgeWrap}>{track.imageUrl ? (
               <Image
-                key={track.id}
                 accessibilityLabel={`${track.title} album artwork`}
                 contentFit="cover"
                 source={track.imageUrl}
@@ -204,10 +204,10 @@ export default function StageLobbyScreen() {
                 transition={140}
               />
             ) : (
-              <View key={track.id} style={[styles.mixArtwork, styles.mixArtworkFallback]}>
+              <View style={[styles.mixArtwork, styles.mixArtworkFallback]}>
                 <Text style={styles.mixArtworkNote}>♪</Text>
               </View>
-            ))}
+            )}<ExplicitBadge explicit={track.explicit} style={styles.artworkBadge} /></View>)}
           </View>
         ) : null}
 
@@ -287,6 +287,8 @@ const styles = StyleSheet.create({
   title: { color: canalDynamicColors.text, fontFamily: "Georgia", fontSize: 29, fontWeight: "900" },
   subtitle: { color: canalDynamicColors.muted, fontSize: 13 },
   artworkStrip: { flexDirection: "row", gap: 8 },
+  artworkBadgeWrap: { position: "relative" },
+  artworkBadge: { bottom: -3, position: "absolute", right: -3 },
   mixArtwork: { width: 64, height: 64, borderRadius: 14 },
   mixArtworkFallback: { alignItems: "center", justifyContent: "center", backgroundColor: "#293833" },
   mixArtworkNote: { color: canalDynamicColors.mint, fontSize: 20 },

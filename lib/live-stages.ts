@@ -49,6 +49,7 @@ export type LiveStageTrack = {
   spotifyUri?: string;
   spotifyUrl?: string;
   durationMs?: number;
+  explicit?: boolean;
   imageUrl?: string;
   providerId?: "spotify" | "apple-music";
   providerTrackId?: string;
@@ -3994,6 +3995,10 @@ function normalizeTracks(
           record.durationMs ??
           record.duration_ms,
         );
+      const explicit =
+        typeof record.explicit === "boolean"
+          ? record.explicit
+          : undefined;
       const imageUrl =
         normalizeTrackImageUrl(
           record.imageUrl ??
@@ -4035,6 +4040,10 @@ function normalizeTracks(
       if (durationMs) {
         track.durationMs =
           durationMs;
+      }
+
+      if (explicit !== undefined) {
+        track.explicit = explicit;
       }
 
       if (imageUrl) {
@@ -4106,6 +4115,11 @@ function serializeTrack(
   if (track.durationMs) {
     serialized.durationMs =
       track.durationMs;
+  }
+
+  if (track.explicit !== undefined) {
+    serialized.explicit =
+      track.explicit;
   }
 
   if (track.imageUrl) {

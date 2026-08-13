@@ -83,6 +83,7 @@ import { readLiveStage } from "../lib/live-stages";
 import {
   addSpotifyArtworkToStoredScene,
 } from "../lib/spotify-scene-artwork";
+import { ExplicitBadge } from "../components/explicit-badge";
 
 import {
   useAuth,
@@ -211,6 +212,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
       trackTitle?: string;
       trackArtist?: string;
       trackImageUrl?: string;
+      trackExplicit?: string;
       spotifyUrl?: string;
       providerId?: string;
       providerTrackId?: string;
@@ -387,6 +389,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
               title: typeof params.trackTitle === "string" ? params.trackTitle : "Stage moment",
               artist: typeof params.trackArtist === "string" ? params.trackArtist : "Canal",
               imageUrl: routeTrackImageUrl || undefined,
+              explicit: params.trackExplicit === "true",
               spotifyUrl: typeof params.spotifyUrl === "string" ? params.spotifyUrl : undefined,
               providerId:
                 params.providerId === "apple-music" ||
@@ -461,6 +464,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
         params.trackTitle,
         params.trackArtist,
         params.trackImageUrl,
+        params.trackExplicit,
         params.spotifyUrl,
         params.providerId,
         params.providerTrackId,
@@ -580,6 +584,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
                 trackTitle: selectedTrack?.title,
                 trackArtist: selectedTrack?.artist,
                 trackImageUrl: selectedTrack?.imageUrl,
+                trackExplicit: selectedTrack?.explicit,
                 spotifyUrl: selectedTrack?.spotifyUrl,
                 providerId: selectedTrack?.providerId,
                 providerTrackId: selectedTrack?.providerTrackId,
@@ -805,6 +810,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
     trackTitle: selectedTrack?.title,
     trackArtist: selectedTrack?.artist,
     trackImageUrl: selectedTrack?.imageUrl,
+    trackExplicit: selectedTrack?.explicit,
     spotifyUrl: selectedTrack?.spotifyUrl,
     providerId: selectedTrack?.providerId,
     providerTrackId: selectedTrack?.providerTrackId,
@@ -1095,7 +1101,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
 
             {selectedTrack ? (
               <View style={styles.snapshotTrack}>
-                {selectedTrack.imageUrl ? (
+                <View style={styles.artworkBadgeWrap}>{selectedTrack.imageUrl ? (
                   <Image
                     accessibilityLabel={`${selectedTrack.title} artwork`}
                     source={{ uri: selectedTrack.imageUrl }}
@@ -1107,7 +1113,7 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
                   <View style={styles.snapshotTrackArtworkFallback}>
                     <Text style={styles.snapshotTrackArtworkNote}>♪</Text>
                   </View>
-                )}
+                )}<ExplicitBadge explicit={selectedTrack.explicit} style={styles.artworkBadge} /></View>
                 <View style={styles.snapshotTrackCopy}>
                   <Text numberOfLines={1} style={[styles.snapshotTrackTitle, { color: palette.textColor }]}>
                     {selectedTrack.title}
@@ -1193,13 +1199,13 @@ function SceneSnapshotContent({ draftScope }: { draftScope: string }) {
                       pressed && styles.pressed,
                     ]}
                   >
-                    {track.imageUrl ? (
+                    <View style={styles.artworkBadgeWrap}>{track.imageUrl ? (
                       <Image source={{ uri: track.imageUrl }} style={styles.songChoiceArtwork} contentFit="cover" />
                     ) : (
                       <View style={[styles.songChoiceArtwork, styles.songChoiceArtworkFallback]}>
                         <Text style={styles.songChoiceNote}>♪</Text>
                       </View>
-                    )}
+                    )}<ExplicitBadge explicit={track.explicit} style={styles.artworkBadge} /></View>
                     <View style={styles.songChoiceCopy}>
                       <Text numberOfLines={1} style={styles.songChoiceTitle}>{track.title}</Text>
                       <Text numberOfLines={1} style={styles.songChoiceArtist}>{track.artist}</Text>
@@ -1835,6 +1841,8 @@ const styles =
       height: 42,
       borderRadius: 9,
     },
+    artworkBadgeWrap: { position: "relative" },
+    artworkBadge: { bottom: -3, position: "absolute", right: -3 },
 
     snapshotTrackArtworkFallback: {
       width: 42,

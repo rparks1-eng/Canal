@@ -87,6 +87,7 @@ import {
   addSpotifyArtworkToLiveStage,
   isAppleArtworkUrl,
 } from "../../lib/spotify-scene-artwork";
+import { ExplicitBadge } from "../../components/explicit-badge";
 import {
   loadPublicSourceSnapshots,
 } from "../../lib/public-snapshots";
@@ -2149,6 +2150,7 @@ export default function LiveStageScreen() {
         trackTitle: currentTrack?.title ?? "",
         trackArtist: currentTrack?.artist ?? "",
         trackImageUrl: currentTrack?.imageUrl ?? "",
+        trackExplicit: currentTrack?.explicit ? "true" : "false",
         spotifyUrl: currentTrackSpotifyUrl ?? "",
         providerId: currentTrack?.providerId ?? "",
         providerTrackId: currentTrack?.providerTrackId ?? "",
@@ -2542,6 +2544,8 @@ export default function LiveStageScreen() {
               </View>
             )}
 
+            <ExplicitBadge explicit={currentTrack?.explicit} style={styles.artworkBadge} />
+
           </View>
 
           <View style={styles.nowPlayingTextRow}>
@@ -2785,7 +2789,7 @@ export default function LiveStageScreen() {
                       styles.queueRow
                     }
                   >
-                    {track.imageUrl ? (
+                    <View style={styles.queueArtworkBadgeWrap}>{track.imageUrl ? (
                       <Image
                         accessibilityLabel={`${track.title} album artwork`}
                         contentFit="cover"
@@ -2797,7 +2801,7 @@ export default function LiveStageScreen() {
                       <View style={[styles.queueArtwork, styles.queueArtworkFallback]}>
                         <Text style={styles.queueArtworkNote}>♪</Text>
                       </View>
-                    )}
+                    )}<ExplicitBadge explicit={track.explicit} style={styles.artworkBadge} /></View>
 
                     <View
                       style={
@@ -4249,6 +4253,8 @@ const styles =
       borderRadius: 26,
       borderCurve: "continuous",
     },
+    artworkBadge: { bottom: -3, position: "absolute", right: -3 },
+    queueArtworkBadgeWrap: { position: "relative" },
 
     artwork: {
       width: "100%",

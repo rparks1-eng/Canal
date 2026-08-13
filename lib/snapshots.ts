@@ -47,6 +47,7 @@ export type Snapshot = {
   trackTitle?: string;
   trackArtist?: string;
   trackImageUrl?: string;
+  trackExplicit?: boolean;
   spotifyUrl?: string;
   providerId?: "spotify" | "apple-music";
   providerTrackId?: string;
@@ -83,6 +84,7 @@ export type CreateSnapshotInput = {
   trackTitle?: string;
   trackArtist?: string;
   trackImageUrl?: string;
+  trackExplicit?: boolean;
   spotifyUrl?: string;
   providerId?: "spotify" | "apple-music";
   providerTrackId?: string;
@@ -108,6 +110,7 @@ export type UpdateSnapshotInput = {
   providerTrackId?: string;
   providerUrl?: string;
   genreEvidence?: readonly MusicProviderGenreEvidence[];
+  trackExplicit?: boolean;
   visibility?: SnapshotVisibility;
 };
 
@@ -645,6 +648,9 @@ export async function createSnapshotWithStatus(
         input.genreEvidence,
       ),
 
+    trackExplicit:
+      input.trackExplicit,
+
     mediaType:
       input.mediaType === "photo" ||
       input.mediaType === "video"
@@ -860,6 +866,11 @@ export async function updateSnapshotWithStatus(
             changes.genreEvidence,
           )
         : existingSnapshot.genreEvidence,
+
+    trackExplicit:
+      changes.trackExplicit !== undefined
+        ? changes.trackExplicit
+        : existingSnapshot.trackExplicit,
 
     visibility:
       changes.visibility ===
@@ -1625,6 +1636,13 @@ function normalizeSnapshot(
         record.genreEvidence ??
         record.genre_evidence,
       ),
+
+    trackExplicit:
+      typeof record.trackExplicit === "boolean"
+        ? record.trackExplicit
+        : typeof record.track_explicit === "boolean"
+          ? record.track_explicit
+          : undefined,
 
     positionMs:
       typeof record.positionMs ===

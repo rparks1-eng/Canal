@@ -135,6 +135,7 @@ function sceneTrackFromSignal(
     artist: signal.track.artists.map((artist) => artist.name).join(", "),
     source: signal.sources[0] ?? "generated",
     durationMs: signal.track.duration_ms,
+    explicit: signal.track.explicit === true,
     ...(providerId === "spotify" && signal.track.uri
       ? { spotifyUri: signal.track.uri }
       : {}),
@@ -315,6 +316,8 @@ function musicCatalogTrackToSceneTrack(
       `${track.reference.providerId}-search`,
     durationMs:
       track.durationMs,
+    explicit:
+      track.explicit === true,
     ...(imageUrl ? { imageUrl } : {}),
     providerId: track.reference.providerId,
     providerTrackId: track.reference.itemId,

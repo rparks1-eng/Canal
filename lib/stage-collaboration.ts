@@ -163,6 +163,7 @@ function sceneTracks(scene: StoredScene): LiveStageTrack[] {
       ...(track.providerId ? { providerId: track.providerId } : {}),
       ...(track.providerTrackId ? { providerTrackId: track.providerTrackId } : {}),
       ...(track.providerUrl ? { providerUrl: track.providerUrl } : {}),
+      ...(track.explicit !== undefined ? { explicit: track.explicit } : {}),
       ...(track.genreEvidence ? { genreEvidence: track.genreEvidence } : {}),
       ...(track.durationMs ? { durationMs: track.durationMs } : {}),
       ...(imageUrl ? { imageUrl } : {}),

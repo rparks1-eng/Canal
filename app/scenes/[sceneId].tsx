@@ -86,6 +86,7 @@ import type {
 import {
   addSpotifyArtworkToStoredScene,
 } from "../../lib/spotify-scene-artwork";
+import { ExplicitBadge } from "../../components/explicit-badge";
 
 import {
   deleteScene,
@@ -1268,6 +1269,8 @@ function SceneDetailContent() {
                     scene.tracks[0]?.artist ?? "",
                   trackImageUrl:
                     scene.tracks[0]?.imageUrl ?? "",
+                  trackExplicit:
+                    scene.tracks[0]?.explicit ? "true" : "false",
                   spotifyUrl:
                     scene.tracks[0]?.spotifyUrl ?? "",
                   providerId:
@@ -1452,7 +1455,7 @@ function SceneDetailContent() {
                       styles.pressed,
                   ]}
                 >
-                  {track.imageUrl ? (
+                  <View style={styles.artworkBadgeWrap}>{track.imageUrl ? (
                     <Image
                       accessibilityLabel={`${track.title} album artwork`}
                       contentFit="cover"
@@ -1469,7 +1472,7 @@ function SceneDetailContent() {
                     >
                       <Text style={styles.trackNumber}>{index + 1}</Text>
                     </View>
-                  )}
+                  )}<ExplicitBadge explicit={track.explicit} style={styles.artworkBadge} /></View>
 
                   <View
                     style={
@@ -1907,6 +1910,9 @@ const styles =
       justifyContent:
         "center",
     },
+
+    artworkBadgeWrap: { position: "relative" },
+    artworkBadge: { bottom: -3, position: "absolute", right: 7 },
 
     trackText: {
       flex: 1,

@@ -72,6 +72,7 @@ describe(
                   providerId: "apple-music",
                   providerTrackId: "123456789",
                   providerUrl: appleTrackUrl,
+                  explicit: true,
                   genreEvidence: [
                     { provider: "spotify", genres: [" Alternative ", "Indie Pop"] },
                     { provider: "apple-music", genres: ["Alternative", "Indie Pop"] },
@@ -89,6 +90,7 @@ describe(
           providerId: "apple-music",
           providerTrackId: "123456789",
           providerUrl: appleTrackUrl,
+          explicit: true,
           genreEvidence: [
             { provider: "apple-music", genres: ["Alternative", "Indie Pop"] },
             { provider: "spotify", genres: ["Alternative", "Indie Pop"] },
@@ -99,6 +101,37 @@ describe(
             stage?.tracks[0],
           ),
         ).toBe(appleTrackUrl);
+      },
+    );
+
+    it(
+      "persists explicit status and renders the shared Apple-style E beside artwork",
+      () => {
+        const migration = readFileSync(
+          resolve(process.cwd(), "supabase/migrations/20260813041458_add_snapshot_explicit_status.sql"),
+          "utf8",
+        );
+        const badge = readFileSync(resolve(process.cwd(), "components/explicit-badge.tsx"), "utf8");
+        const artworkSurfaces = [
+          "app/(tabs)/index.tsx",
+          "app/scene-preview.tsx",
+          "app/scenes/[sceneId].tsx",
+          "app/now-playing.tsx",
+          "app/public-scene.tsx",
+          "app/song-context.tsx",
+          "app/live-stage/[stageId].tsx",
+          "app/stage-lobby/[stageId].tsx",
+          "components/snapshot-composition.tsx",
+        ];
+
+        expect(migration).toContain("add column if not exists track_explicit boolean");
+        expect(migration).toContain("'durationMs', 'explicit', 'imageUrl'");
+        expect(migration).toContain("jsonb_typeof(track -> 'explicit') <> 'boolean'");
+        expect(badge).toContain('accessibilityLabel="Explicit content"');
+        expect(badge).toContain(">E</Text>");
+        for (const path of artworkSurfaces) {
+          expect(readFileSync(resolve(process.cwd(), path), "utf8")).toContain("<ExplicitBadge");
+        }
       },
     );
 

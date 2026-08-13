@@ -8,6 +8,7 @@ import type { SnapshotTemplateTheme } from "../lib/snapshot-templates";
 import { SceneCardBackdrop } from "./canal-ui/scene-card-visual";
 import { scenePresentation } from "./canal-ui/scene-signature";
 import { SnapshotMediaPreview } from "./snapshot-media-preview";
+import { ExplicitBadge } from "./explicit-badge";
 
 type SnapshotCompositionProps = {
   snapshot: Snapshot;
@@ -128,7 +129,7 @@ export const SnapshotComposition = forwardRef<View, SnapshotCompositionProps>(fu
 
         {snapshot.trackTitle ? (
           <View style={[styles.track, compact && styles.compactTrack]}>
-            {snapshot.trackImageUrl ? (
+            <View style={styles.artworkBadgeWrap}>{snapshot.trackImageUrl ? (
               <Image
                 accessibilityLabel={`${snapshot.trackTitle} artwork`}
                 source={{ uri: snapshot.trackImageUrl }}
@@ -140,7 +141,7 @@ export const SnapshotComposition = forwardRef<View, SnapshotCompositionProps>(fu
               <View style={[styles.artwork, styles.artworkFallback, compact && styles.compactArtwork]}>
                 <Ionicons name="musical-note" size={compact ? 11 : 18} color={palette.accentColor} />
               </View>
-            )}
+            )}<ExplicitBadge explicit={snapshot.trackExplicit} style={styles.artworkBadge} /></View>
 
             <View style={styles.trackCopy}>
               <Text
@@ -292,6 +293,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   artwork: { width: 44, height: 44, borderRadius: 10 },
+  artworkBadgeWrap: { position: "relative" },
+  artworkBadge: { bottom: -3, position: "absolute", right: -3 },
   compactArtwork: { width: 22, height: 22, borderRadius: 5 },
   artworkFallback: {
     backgroundColor: "rgba(255, 255, 255, 0.14)",

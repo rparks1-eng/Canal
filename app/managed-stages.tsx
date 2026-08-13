@@ -18,6 +18,7 @@ import { CanalAmbientBackground } from "../components/canal-ui/canal-ambient-bac
 import { SceneCardBackdrop } from "../components/canal-ui/scene-card-visual";
 import { stagePresentation } from "../components/canal-ui/scene-signature";
 import { ProfileAvatar } from "../components/profile-avatar";
+import { ExplicitBadge } from "../components/explicit-badge";
 import {
   deleteLiveStage,
   endLiveStage,
@@ -195,7 +196,7 @@ function ManagedStageCard(props: { stage: LiveStage; busy: boolean; onMutate: (s
         </View>
 
         <View style={styles.nowPlaying}>
-          {track?.imageUrl ? <Image accessibilityLabel={`${track.title} album artwork`} contentFit="cover" source={track.imageUrl} style={styles.artwork} transition={160} /> : <View style={styles.artworkFallback} />}
+          <View style={styles.artworkBadgeWrap}>{track?.imageUrl ? <Image accessibilityLabel={`${track.title} album artwork`} contentFit="cover" source={track.imageUrl} style={styles.artwork} transition={160} /> : <View style={styles.artworkFallback} />}<ExplicitBadge explicit={track?.explicit} style={styles.artworkBadge} /></View>
           <View style={styles.trackCopy}>
             <Text style={styles.trackKicker}>{live ? "NOW PLAYING" : "LAST QUEUE"}</Text>
             <Text numberOfLines={1} style={styles.trackTitle}>{track?.title ?? `${stage.tracks.length} tracks saved`}</Text>
@@ -279,6 +280,8 @@ const styles = StyleSheet.create({
   stageMeta: { flex: 1, color: canalDynamicColors.muted, fontSize: 11 },
   nowPlaying: { minHeight: 78, flexDirection: "row", alignItems: "center", gap: 11, padding: 10, marginTop: 17, borderWidth: 1, borderColor: canalDynamicColors.line, borderRadius: 18, borderCurve: "continuous", backgroundColor: canalDynamicColors.surface },
   artwork: { width: 55, height: 55, borderRadius: 13, borderCurve: "continuous" },
+  artworkBadgeWrap: { position: "relative" },
+  artworkBadge: { bottom: -3, position: "absolute", right: -3 },
   artworkFallback: { width: 55, height: 55, borderRadius: 13, backgroundColor: canalDynamicColors.elevated },
   trackCopy: { flex: 1, minWidth: 0 },
   trackKicker: { color: canalDynamicColors.mint, fontSize: 8, fontWeight: "900", letterSpacing: 1.2 },

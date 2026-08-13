@@ -66,6 +66,7 @@ import {
 import {
   addSpotifyArtworkToStoredScene,
 } from "../lib/spotify-scene-artwork";
+import { ExplicitBadge } from "../components/explicit-badge";
 
 import type {
   PublicCanalScene,
@@ -1034,16 +1035,16 @@ export default function PublicSceneScreen() {
                       key={
                         `${track.id}-${index}`
                       }
-                      onPress={() => router.push({ pathname: "/song-context", params: { trackId: track.id, trackTitle: track.title, artistName: track.artist, artworkUrl: track.imageUrl ?? "", spotifyUrl: track.spotifyUrl ?? "", providerId: track.providerId ?? "", providerTrackId: track.providerTrackId ?? "", providerUrl: track.providerUrl ?? "", providerGenreEvidence: JSON.stringify(track.genreEvidence ?? []) } } as never)}
+                      onPress={() => router.push({ pathname: "/song-context", params: { trackId: track.id, trackTitle: track.title, artistName: track.artist, artworkUrl: track.imageUrl ?? "", explicit: track.explicit ? "true" : "false", spotifyUrl: track.spotifyUrl ?? "", providerId: track.providerId ?? "", providerTrackId: track.providerTrackId ?? "", providerUrl: track.providerUrl ?? "", providerGenreEvidence: JSON.stringify(track.genreEvidence ?? []) } } as never)}
                       style={
                         styles.trackRow
                       }
                     >
-                      {track.imageUrl ? (
+                      <View style={styles.artworkBadgeWrap}>{track.imageUrl ? (
                         <Image source={track.imageUrl} contentFit="cover" style={styles.trackArtwork} />
                       ) : (
                         <Text style={styles.trackNumber}>{index + 1}</Text>
-                      )}
+                      )}<ExplicitBadge explicit={track.explicit} style={styles.artworkBadge} /></View>
 
                       <View
                         style={
@@ -1453,6 +1454,8 @@ const styles =
       borderRadius: 11,
       marginRight: 10,
     },
+    artworkBadgeWrap: { position: "relative" },
+    artworkBadge: { bottom: -3, position: "absolute", right: 7 },
 
     trackTitle: {
       color: canalDynamicColors.text,

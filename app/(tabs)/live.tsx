@@ -32,6 +32,7 @@ import {
 } from "../../components/recovery-notice";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
 import { ProfileAvatar } from "../../components/profile-avatar";
+import { ExplicitBadge } from "../../components/explicit-badge";
 import {
   useReconnectReload,
 } from "../../hooks/use-reconnect-reload";
@@ -206,7 +207,7 @@ function StageCard(
           styles.nowPlaying
         }
       >
-        {currentTrack?.imageUrl ? (
+        <View style={styles.artworkBadgeWrap}>{currentTrack?.imageUrl ? (
           <Image
             accessibilityLabel={`${currentTrack.title} album artwork`}
             contentFit="cover"
@@ -218,7 +219,7 @@ function StageCard(
           <View style={styles.albumTile}>
             <Text style={styles.albumTileText}>♪</Text>
           </View>
-        )}
+        )}<ExplicitBadge explicit={currentTrack?.explicit} style={styles.artworkBadge} /></View>
 
         <View
           style={
@@ -1558,6 +1559,8 @@ const styles =
       backgroundColor:
         "#F47A24",
     },
+    artworkBadgeWrap: { position: "relative" },
+    artworkBadge: { bottom: -3, position: "absolute", right: -3 },
 
     albumTileText: {
       color: canalDynamicColors.text,

@@ -151,6 +151,7 @@ import {
 import {
   addSpotifyArtworkToGeneratedScene,
 } from "../lib/spotify-scene-artwork";
+import { ExplicitBadge } from "../components/explicit-badge";
 
 import {
   sceneAtmosphere,
@@ -1156,7 +1157,7 @@ export default function ScenePreviewScreen() {
               return (
                 <Fragment key={signal.track.id}>
                 <View style={styles.trackRow}>
-                  {artworkUrl ? (
+                  <View style={styles.artworkBadgeWrap}>{artworkUrl ? (
                     <Image
                       accessibilityLabel={`${signal.track.album?.name ?? signal.track.name} cover art`}
                       contentFit="cover"
@@ -1168,7 +1169,7 @@ export default function ScenePreviewScreen() {
                     <View accessibilityElementsHidden style={styles.trackArtworkFallback}>
                       <Text style={styles.trackArtworkNote}>♪</Text>
                     </View>
-                  )}
+                  )}<ExplicitBadge explicit={signal.track.explicit} style={styles.artworkBadge} /></View>
                   <View style={styles.trackBody}>
                     <Text numberOfLines={1} style={styles.trackTitle}>{signal.track.name}</Text>
                     <Text numberOfLines={1} style={styles.trackArtist}>
@@ -1569,6 +1570,8 @@ const styles = StyleSheet.create({
     height: 54,
     width: 54,
   },
+  artworkBadgeWrap: { position: "relative" },
+  artworkBadge: { bottom: -3, position: "absolute", right: -3 },
   trackArtworkFallback: {
     alignItems: "center",
     backgroundColor: "#1A2320",

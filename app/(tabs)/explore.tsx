@@ -38,6 +38,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { ProfileAvatar } from "../../components/profile-avatar";
+import { ExplicitBadge } from "../../components/explicit-badge";
 import { CanalHeaderActions } from "../../components/canal-ui/canal-header-actions";
 import { SceneCardProfile } from "../../components/canal-ui/scene-card-profile";
 import { VerifiedAccountBadge } from "../../components/verified-account-badge";
@@ -194,7 +195,7 @@ function PublicStageCard({ stage }: { stage: LiveStage }) {
         </Text>
       </View>
       <View style={styles.stageNowPlaying}>
-        {track?.imageUrl ? (
+        <View style={styles.artworkBadgeWrap}>{track?.imageUrl ? (
           <Image
             accessibilityLabel={`${track.title} album artwork`}
             contentFit="cover"
@@ -204,7 +205,7 @@ function PublicStageCard({ stage }: { stage: LiveStage }) {
           />
         ) : (
           <View style={styles.stageArtworkFallback} />
-        )}
+        )}<ExplicitBadge explicit={track?.explicit} style={styles.artworkBadge} /></View>
         <View style={styles.stageTrackCopy}>
           <Text style={styles.stageTrackKicker}>NOW PLAYING</Text>
           <Text numberOfLines={1} style={styles.stageTrackTitle}>
@@ -2312,6 +2313,8 @@ const styles =
       height: 55,
       borderRadius: 13,
     },
+    artworkBadgeWrap: { position: "relative" },
+    artworkBadge: { bottom: -3, position: "absolute", right: -3 },
 
     stageArtworkFallback: {
       width: 55,

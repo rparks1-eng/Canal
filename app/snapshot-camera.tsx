@@ -10,6 +10,7 @@ import { CanalAlert } from "../lib/canal-alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SnapshotMediaPreview } from "../components/snapshot-media-preview";
+import { ExplicitBadge } from "../components/explicit-badge";
 import {
   cleanupSnapshotMediaDraft,
   persistSnapshotCaptureDraft,
@@ -125,6 +126,7 @@ export default function SnapshotCameraScreen() {
         stageId: first(params.stageId), sceneId: first(params.sceneId), sceneName: first(params.sceneName), source: first(params.source),
         trackId: first(params.trackId), trackTitle: first(params.trackTitle), trackArtist: first(params.trackArtist),
         trackImageUrl: first(params.trackImageUrl),
+        trackExplicit: first(params.trackExplicit),
         spotifyUrl: first(params.spotifyUrl),
         providerId: first(params.providerId),
         providerTrackId: first(params.providerTrackId),
@@ -156,7 +158,7 @@ export default function SnapshotCameraScreen() {
         <SafeAreaView style={styles.preview}>
           <SnapshotMediaPreview uri={capture.uri} type={capture.type} height={520} autoPlay />
           <View style={styles.songCard}>
-            {first(params.trackImageUrl) ? (
+            <View style={styles.artworkBadgeWrap}>{first(params.trackImageUrl) ? (
               <Image
                 accessibilityLabel={`${first(params.trackTitle) || "Snapshot song"} artwork`}
                 contentFit="cover"
@@ -168,7 +170,7 @@ export default function SnapshotCameraScreen() {
               <View style={styles.songArtworkFallback}>
                 <Ionicons name="musical-note" size={17} color={canalDynamicColors.mint} />
               </View>
-            )}
+            )}<ExplicitBadge explicit={first(params.trackExplicit) === "true"} style={styles.artworkBadge} /></View>
             <View style={styles.songText}><Text style={styles.songTitle}>{first(params.trackTitle) || first(params.sceneName) || "Scene Snapshot"}</Text><Text style={styles.songArtist}>{first(params.trackArtist) || "Canal"}</Text></View>
           </View>
           <View style={styles.row}>
@@ -222,5 +224,5 @@ export default function SnapshotCameraScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:{flex:1,backgroundColor:"#090D12"},center:{flex:1,alignItems:"center",justifyContent:"center",backgroundColor:"#090D12"},permission:{flex:1,backgroundColor:"#090D12",padding:28,justifyContent:"center",alignItems:"center",gap:16},title:{fontSize:28,fontWeight:"700",color:"#F7FAFC"},copy:{fontSize:16,lineHeight:24,textAlign:"center",color:"#BCC8D5",maxWidth:360},primary:{minHeight:52,paddingHorizontal:22,borderRadius:18,backgroundColor:"#75E5CE",alignItems:"center",justifyContent:"center"},primaryText:{color:"#09201C",fontSize:16,fontWeight:"700"},secondary:{minHeight:52,paddingHorizontal:18,borderRadius:18,borderWidth:1,borderColor:"#52606D",alignItems:"center",justifyContent:"center"},cancel:{minHeight:52,paddingHorizontal:10,alignItems:"center",justifyContent:"center"},secondaryText:{color:"#F7FAFC",fontSize:16,fontWeight:"600"},camera:{flex:1},cameraChrome:{flex:1,justifyContent:"space-between",paddingHorizontal:18,paddingBottom:24},topRow:{flexDirection:"row",alignItems:"center",justifyContent:"space-between"},iconHit:{width:48,height:48,alignItems:"center",justifyContent:"center",borderRadius:24,backgroundColor:"rgba(0,0,0,.42)"},disabled:{opacity:.48},cameraTitle:{color:"white",fontSize:17,fontWeight:"700",maxWidth:"65%"},bottom:{alignItems:"center",gap:14},modeRow:{flexDirection:"row",gap:12,backgroundColor:"rgba(0,0,0,.46)",borderRadius:22,paddingHorizontal:8},modeHit:{minHeight:44,paddingHorizontal:16,justifyContent:"center"},modeText:{color:"#D2D8DF",fontSize:12,fontWeight:"700",letterSpacing:1},modeActive:{color: canalDynamicColors.mint},videoModeActive:{color:"#FF5757"},shutter:{width:78,height:78,borderRadius:39,borderWidth:5,borderColor:"white",alignItems:"center",justifyContent:"center"},videoShutter:{borderColor:"#FF5757"},shutterCore:{width:60,height:60,borderRadius:30,backgroundColor:"white"},videoShutterCore:{backgroundColor:"#FF3B30"},shutterRecording:{backgroundColor:"#FF3B30",borderColor:"white"},finishRecording:{minHeight:48,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:7,borderRadius:18,backgroundColor:"rgba(0,0,0,.58)",paddingHorizontal:18},finishRecordingText:{color:"white",fontSize:13,fontWeight:"700"},hint:{color:"white",fontSize:13,fontWeight:"600",textShadowColor:"black",textShadowRadius:4},preview:{flex:1,padding:16,gap:14,justifyContent:"center"},songCard:{minHeight:64,flexDirection:"row",alignItems:"center",gap:12,padding:10},songArtwork:{width:48,height:48,borderRadius:10},songArtworkFallback:{width:48,height:48,borderRadius:10,alignItems:"center",justifyContent:"center",backgroundColor:"rgba(255,255,255,.1)"},songText:{flex:1},songTitle:{color:"#F7FAFC",fontSize:16,fontWeight:"700"},songArtist:{color:"#AEBBC8",fontSize:14,marginTop:3},row:{flexDirection:"row",gap:8,justifyContent:"flex-end"},
+  root:{flex:1,backgroundColor:"#090D12"},center:{flex:1,alignItems:"center",justifyContent:"center",backgroundColor:"#090D12"},permission:{flex:1,backgroundColor:"#090D12",padding:28,justifyContent:"center",alignItems:"center",gap:16},title:{fontSize:28,fontWeight:"700",color:"#F7FAFC"},copy:{fontSize:16,lineHeight:24,textAlign:"center",color:"#BCC8D5",maxWidth:360},primary:{minHeight:52,paddingHorizontal:22,borderRadius:18,backgroundColor:"#75E5CE",alignItems:"center",justifyContent:"center"},primaryText:{color:"#09201C",fontSize:16,fontWeight:"700"},secondary:{minHeight:52,paddingHorizontal:18,borderRadius:18,borderWidth:1,borderColor:"#52606D",alignItems:"center",justifyContent:"center"},cancel:{minHeight:52,paddingHorizontal:10,alignItems:"center",justifyContent:"center"},secondaryText:{color:"#F7FAFC",fontSize:16,fontWeight:"600"},camera:{flex:1},cameraChrome:{flex:1,justifyContent:"space-between",paddingHorizontal:18,paddingBottom:24},topRow:{flexDirection:"row",alignItems:"center",justifyContent:"space-between"},iconHit:{width:48,height:48,alignItems:"center",justifyContent:"center",borderRadius:24,backgroundColor:"rgba(0,0,0,.42)"},disabled:{opacity:.48},cameraTitle:{color:"white",fontSize:17,fontWeight:"700",maxWidth:"65%"},bottom:{alignItems:"center",gap:14},modeRow:{flexDirection:"row",gap:12,backgroundColor:"rgba(0,0,0,.46)",borderRadius:22,paddingHorizontal:8},modeHit:{minHeight:44,paddingHorizontal:16,justifyContent:"center"},modeText:{color:"#D2D8DF",fontSize:12,fontWeight:"700",letterSpacing:1},modeActive:{color: canalDynamicColors.mint},videoModeActive:{color:"#FF5757"},shutter:{width:78,height:78,borderRadius:39,borderWidth:5,borderColor:"white",alignItems:"center",justifyContent:"center"},videoShutter:{borderColor:"#FF5757"},shutterCore:{width:60,height:60,borderRadius:30,backgroundColor:"white"},videoShutterCore:{backgroundColor:"#FF3B30"},shutterRecording:{backgroundColor:"#FF3B30",borderColor:"white"},finishRecording:{minHeight:48,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:7,borderRadius:18,backgroundColor:"rgba(0,0,0,.58)",paddingHorizontal:18},finishRecordingText:{color:"white",fontSize:13,fontWeight:"700"},hint:{color:"white",fontSize:13,fontWeight:"600",textShadowColor:"black",textShadowRadius:4},preview:{flex:1,padding:16,gap:14,justifyContent:"center"},songCard:{minHeight:64,flexDirection:"row",alignItems:"center",gap:12,padding:10},artworkBadgeWrap:{position:"relative"},artworkBadge:{bottom:-3,position:"absolute",right:-3},songArtwork:{width:48,height:48,borderRadius:10},songArtworkFallback:{width:48,height:48,borderRadius:10,alignItems:"center",justifyContent:"center",backgroundColor:"rgba(255,255,255,.1)"},songText:{flex:1},songTitle:{color:"#F7FAFC",fontSize:16,fontWeight:"700"},songArtist:{color:"#AEBBC8",fontSize:14,marginTop:3},row:{flexDirection:"row",gap:8,justifyContent:"flex-end"},
 });

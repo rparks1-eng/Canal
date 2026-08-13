@@ -53,6 +53,7 @@ export type PublicSnapshotRow = {
   provider_track_id?: string | null;
   provider_url?: string | null;
   genre_evidence?: unknown;
+  track_explicit?: boolean | null;
   media_path: string | null;
   media_type: string | null;
   media_mime_type: string | null;
@@ -93,6 +94,7 @@ const SNAPSHOT_COLUMNS = [
   "provider_track_id",
   "provider_url",
   "genre_evidence",
+  "track_explicit",
   "media_path",
   "media_type",
   "media_mime_type",
@@ -550,6 +552,11 @@ function normalizePublicSnapshot(
       normalizeSceneTrackGenreEvidence(
         row.genre_evidence,
       ),
+
+    trackExplicit:
+      typeof row.track_explicit === "boolean"
+        ? row.track_explicit
+        : undefined,
 
     mediaPath:
       cleanOptionalString(row.media_path),

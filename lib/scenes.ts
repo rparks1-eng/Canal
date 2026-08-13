@@ -46,6 +46,7 @@ export type SceneTrack = {
   spotifyUri?: string;
   spotifyUrl?: string;
   durationMs?: number;
+  explicit?: boolean;
   imageUrl?: string;
   intensity?: number;
   providerId?: "spotify" | "apple-music";
@@ -270,6 +271,11 @@ function normalizeTrack(
         ? track.duration_ms
         : undefined;
 
+  const explicit =
+    typeof track.explicit === "boolean"
+      ? track.explicit
+      : undefined;
+
   const imageUrl =
     readOptionalString(
       track.imageUrl,
@@ -313,6 +319,7 @@ function normalizeTrack(
 
     ...spotifyLinks,
     durationMs,
+    explicit,
     imageUrl,
     intensity,
     providerId,

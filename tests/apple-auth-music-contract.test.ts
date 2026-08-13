@@ -66,6 +66,7 @@ describe("Apple account and music integration", () => {
     expect(swift).toContain("libraryAddedDate");
     expect(swift).toContain("lastPlayedDate");
     expect(swift).toContain("playCount");
+    expect(swift).toContain('"explicit": song.contentRating == .explicit');
     expect(swift).toContain("MusicLibrary.shared.createPlaylist");
     expect(podspec).toContain("MusicKit");
     expect(swift).not.toMatch(/developerToken|privateKey|AuthKey_/u);
@@ -85,6 +86,7 @@ describe("Apple account and music integration", () => {
     expect(library).toContain("library.albumsTruncated");
     expect(library).toContain("library.artistsTruncated");
     expect(library).not.toContain("playlistTracks: [],");
+    expect(library).toContain("explicit: track.explicit");
   });
 
   it("lets either connected service power creation and combines both when available", () => {

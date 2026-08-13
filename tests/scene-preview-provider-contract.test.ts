@@ -217,6 +217,8 @@ describe(
             "apple-music-search",
           durationMs:
             240_000,
+          explicit:
+            false,
           imageUrl:
             "https://is1-ssl.mzstatic.com/image/thumb/neutral/600x600bb.jpg",
           providerId:

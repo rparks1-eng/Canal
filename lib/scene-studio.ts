@@ -2364,6 +2364,9 @@ function buildSceneTrack(
         signal.track,
       ),
 
+    explicit:
+      signal.track.explicit === true,
+
     intensity:
       signal.intensity,
   };

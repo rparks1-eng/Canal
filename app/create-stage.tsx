@@ -96,6 +96,8 @@ function sceneTracks(
         track.genreEvidence,
       durationMs:
         track.durationMs,
+      explicit:
+        track.explicit,
       imageUrl:
         track.imageUrl,
     }),

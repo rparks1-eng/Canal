@@ -74,6 +74,7 @@ import { canonicalMusicProviderUrl } from "../lib/music-provider-links";
 import {
   addSpotifyArtworkToStoredScene,
 } from "../lib/spotify-scene-artwork";
+import { ExplicitBadge } from "../components/explicit-badge";
 
 import {
   recordListeningHistory,
@@ -1499,7 +1500,7 @@ export default function NowPlayingScreen() {
           false
         }
       >
-        {currentTrack.imageUrl && readyArtworkUrls.has(currentTrack.imageUrl) ? (
+        {currentTrack.imageUrl && readyArtworkUrls.has(currentTrack.imageUrl) ? (<View style={styles.artworkBadgeWrap}>
           <Image
             accessibilityLabel={`${currentTrack.title} album artwork`}
             cachePolicy="memory-disk"
@@ -1507,7 +1508,7 @@ export default function NowPlayingScreen() {
             source={{ uri: currentTrack.imageUrl }}
             style={[styles.artwork, { borderColor: `${presentation.accent}55` }]}
             transition={180}
-          />
+          /><ExplicitBadge explicit={currentTrack.explicit} style={styles.artworkBadge} /></View>
         ) : null}
 
         <Text
@@ -1771,7 +1772,7 @@ export default function NowPlayingScreen() {
                   key={`${track.id}-${index}`}
                   style={[styles.queueRow, { borderTopColor: `${presentation.accent}24` }]}
                 >
-                  {track.imageUrl && readyArtworkUrls.has(track.imageUrl) ? (
+                  {track.imageUrl && readyArtworkUrls.has(track.imageUrl) ? (<View style={styles.queueArtworkBadgeWrap}>
                     <Image
                       accessibilityLabel={`${track.title} album artwork`}
                       cachePolicy="memory-disk"
@@ -1779,7 +1780,7 @@ export default function NowPlayingScreen() {
                       source={{ uri: track.imageUrl }}
                       style={styles.queueImage}
                       transition={120}
-                    />
+                    /><ExplicitBadge explicit={track.explicit} style={styles.artworkBadge} /></View>
                   ) : null}
 
                   <Text
@@ -1988,6 +1989,9 @@ const styles =
       marginTop: 2,
       boxShadow: "0 18px 34px rgba(7, 32, 48, 0.22)",
     },
+    artworkBadgeWrap: { alignSelf: "center", position: "relative" },
+    queueArtworkBadgeWrap: { position: "relative" },
+    artworkBadge: { bottom: -3, position: "absolute", right: -3 },
 
     trackTitle: {
       ...canalTypography.title,

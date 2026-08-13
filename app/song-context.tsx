@@ -33,11 +33,12 @@ import {
 import { useAuth } from "../providers/auth-provider";
 import { useConnectivity } from "../providers/connectivity-provider";
 import { canalDynamicColors } from "../theme/canal-dynamic-colors";
+import { ExplicitBadge } from "../components/explicit-badge";
 
 type FieldState = "loading" | "empty" | "error" | "offline" | "ready";
 
 export default function SongContextScreen(): React.JSX.Element {
-  const params = useLocalSearchParams<{ sceneId?: string; trackId?: string; trackTitle?: string; artistName?: string; artworkUrl?: string; spotifyUrl?: string; providerId?: string; providerTrackId?: string; providerUrl?: string; genreHints?: string; genreSources?: string; providerGenreEvidence?: string }>();
+  const params = useLocalSearchParams<{ sceneId?: string; trackId?: string; trackTitle?: string; artistName?: string; artworkUrl?: string; explicit?: string; spotifyUrl?: string; providerId?: string; providerTrackId?: string; providerUrl?: string; genreHints?: string; genreSources?: string; providerGenreEvidence?: string }>();
   const sceneId = typeof params.sceneId === "string" ? params.sceneId : "";
   const trackId = typeof params.trackId === "string" ? params.trackId : "";
   const trackTitle = typeof params.trackTitle === "string" ? params.trackTitle.slice(0, 300) : "";
@@ -81,6 +82,7 @@ export default function SongContextScreen(): React.JSX.Element {
         title: trackTitle,
         artist: artistName,
         imageUrl: requestedArtworkUrl,
+        explicit: params.explicit === "true",
         providerId: params.providerId === "apple-music" ? "apple-music" : params.providerId === "spotify" ? "spotify" : undefined,
         providerTrackId: typeof params.providerTrackId === "string" ? params.providerTrackId : undefined,
         providerUrl: typeof params.providerUrl === "string" ? params.providerUrl : undefined,
@@ -101,7 +103,7 @@ export default function SongContextScreen(): React.JSX.Element {
       setTrackLoading(false);
     });
     return () => { active = false; };
-  }, [artistName, params.providerId, params.providerTrackId, params.providerUrl, requestedArtworkUrl, requestedGenreEvidence, sceneId, trackId, trackTitle, user?.id]);
+  }, [artistName, params.explicit, params.providerId, params.providerTrackId, params.providerUrl, requestedArtworkUrl, requestedGenreEvidence, sceneId, trackId, trackTitle, user?.id]);
 
   const linerNotesTrack = useMemo(() => track ? {
     title: track.title,
@@ -270,13 +272,13 @@ export default function SongContextScreen(): React.JSX.Element {
 
       <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic" showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          {artworkUrl ? (
+          <View style={styles.artworkBadgeWrap}>{artworkUrl ? (
             <Image accessibilityLabel={`${track?.title ?? "Song"} artwork`} contentFit="cover" source={{ uri: artworkUrl }} style={styles.artwork} transition={160} />
           ) : (
             <View style={[styles.artwork, styles.artworkEmpty]}>
               <Ionicons color={canalDynamicColors.muted} name="musical-note-outline" size={38} />
             </View>
-          )}
+          )}<ExplicitBadge explicit={track?.explicit} style={styles.artworkBadge} /></View>
           <View style={styles.heroCopy}>
             <Text accessibilityRole="header" style={styles.title}>{track?.title ?? "Song unavailable"}</Text>
             <Text style={styles.artist}>{track?.artist ?? "Unknown artist"}</Text>
@@ -434,6 +436,8 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 18, paddingBottom: 150, gap: 14 },
   hero: { paddingHorizontal: 4, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 16 },
   artwork: { width: 112, height: 112, borderRadius: 18, borderCurve: "continuous" },
+  artworkBadgeWrap: { position: "relative" },
+  artworkBadge: { bottom: -3, position: "absolute", right: -3 },
   artworkEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: canalDynamicColors.elevated },
   heroCopy: { flex: 1, gap: 6 },
   songPreferenceActions: { alignItems: "center" },

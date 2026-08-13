@@ -89,6 +89,7 @@ import {
 import { readAppleMusicLibrarySnapshot } from "../../lib/apple-music";
 import type { MusicProviderId } from "../../lib/music-provider-model";
 import { addSpotifyArtworkToTracks } from "../../lib/spotify-scene-artwork";
+import { ExplicitBadge } from "../../components/explicit-badge";
 import { classifyCanalSongDna } from "../../lib/song-dna";
 import { readProviderSongMetadata } from "../../lib/provider-song-metadata";
 import { readTemporarilyDislikedTrackIds, setSongDisliked, setSongLiked } from "../../lib/song-preferences";
@@ -604,6 +605,7 @@ export default function HomeScreen() {
     });
     return song ? {
       ...songSceneActionParams(song),
+      explicit: track.explicit ? "true" : "false",
       genreHints: (spotifySnapshot?.trackGenres[track.id] ?? []).slice(0, 4).join("|"),
       genreSources: providerId,
     } : null;
@@ -1026,7 +1028,7 @@ export default function HomeScreen() {
                       onPress={() => openOrbitContext(track)}
                       style={({ pressed }) => [styles.orbitRow, pressed && styles.pressed]}
                     >
-                      {trackArtwork(track) ? <Image accessibilityLabel={`${track.name} artwork`} contentFit="cover" source={{ uri: trackArtwork(track) }} style={styles.orbitArtwork} transition={180} /> : null}
+                      {trackArtwork(track) ? <View style={styles.artworkBadgeWrap}><Image accessibilityLabel={`${track.name} artwork`} contentFit="cover" source={{ uri: trackArtwork(track) }} style={styles.orbitArtwork} transition={180} /><ExplicitBadge explicit={track.explicit} style={styles.artworkBadge} /></View> : null}
                       <View style={styles.orbitCopy}>
                         <Text numberOfLines={1} style={styles.orbitTitle}>{track.name}</Text>
                         <Text numberOfLines={1} style={styles.orbitArtist}>{track.artists.map((artist) => artist.name).join(", ")}</Text>
@@ -1500,6 +1502,9 @@ const styles =
       height: 48,
       borderRadius: 11,
     },
+
+    artworkBadgeWrap: { position: "relative" },
+    artworkBadge: { bottom: -3, position: "absolute", right: -3 },
 
     orbitCopy: {
       flex: 1,
